@@ -1,0 +1,441 @@
+import 'dart:convert';
+
+import 'package:ebt_engenharia/api.dart';
+import 'package:ebt_engenharia/screens/deliveries.dart';
+import 'package:ebt_engenharia/screens/sales_common.dart';
+import 'package:ebt_engenharia/screens/sales_orders.dart';
+import 'package:ebt_engenharia/screens/sales_pipeline.dart';
+import 'package:ebt_engenharia/screens/sales_quotes.dart';
+import 'package:ebt_engenharia/screens/shell.dart';
+import 'package:ebt_engenharia/session.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+http.Response json(Object? body, [int status = 200]) => http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json; charset=utf-8'});
+
+Map<String, dynamic> page(List<Map<String, dynamic>> items) => {'items': items, 'total': items.length, 'skip': 0, 'take': 50};
+
+class SalesFake {
+  final log = <http.Request>[];
+  String role = 'Sales';
+  String quoteStatus = 'Draft';
+  bool needsApproval = false;
+  String orderStatus = 'Created';
+  bool ready = false;
+  String deliveryStatus = 'Planned';
+
+  List<Map<String, dynamic>> history(String action) => [
+    {'id': 2, 'action': action, 'fromStatus': 'Draft', 'toStatus': 'Sent', 'note': null, 'user': 'ana', 'at': '2026-10-26T12:00:00Z'},
+    {'id': 1, 'action': 'created', 'fromStatus': null, 'toStatus': 'Draft', 'note': null, 'user': 'ana', 'at': '2026-10-25T12:00:00Z'},
+  ];
+
+  Map<String, dynamic> quote() => {
+    'id': 5,
+    'number': 31,
+    'revision': 0,
+    'reference': 'PROP 31',
+    'customerId': 2,
+    'customerName': 'BTS Tubos',
+    'addressId': 3,
+    'addressText': 'Av. Brasil, 100, Embu - SP',
+    'contactName': 'Edilto',
+    'contactEmail': 'compras@bts.com',
+    'customerReference': 'RFQ-77',
+    'paymentTermId': 1,
+    'paymentTermName': '28 DDL',
+    'freight': 'Cif',
+    'validityDays': 15,
+    'validUntil': quoteStatus == 'Sent' ? '2026-11-10' : null,
+    'conditions': 'Faturamento mínimo R\$ 300',
+    'notes': null,
+    'status': quoteStatus,
+    'needsApproval': needsApproval,
+    'approvedBy': null,
+    'approvedAt': null,
+    'sentAt': quoteStatus == 'Sent' ? '2026-10-26T12:00:00Z' : null,
+    'sentTo': quoteStatus == 'Sent' ? 'compras@bts.com' : null,
+    'decidedAt': null,
+    'decisionBy': null,
+    'decisionNote': null,
+    'customerPo': null,
+    'salesOrderId': quoteStatus == 'Converted' ? 9 : null,
+    'salesOrderReference': quoteStatus == 'Converted' ? 'PV 9' : null,
+    'createdBy': 'ana',
+    'createdAt': '2026-10-25T12:00:00Z',
+    'totals': {'products': 10900, 'ipi': 500, 'total': 11400, 'maxDiscountPercent': needsApproval ? 10 : 0},
+    'lines': [
+      {
+        'id': 1,
+        'sequence': 10,
+        'productId': 7,
+        'productCode': 'TB-25',
+        'customerPartNumber': 'BTS-001',
+        'description': 'Tubo 25,4 x 1,5',
+        'quantity': 100,
+        'unit': 'PC',
+        'unitPrice': 100,
+        'listPrice': 100,
+        'discountPercent': 0,
+        'ipiPercent': 5,
+        'icmsPercent': 18,
+        'leadTimeDays': 20,
+        'deliveryDate': null,
+        'total': 10000,
+      },
+    ],
+    'history': history('sent'),
+  };
+
+  Map<String, dynamic> order() => {
+    'id': 9,
+    'number': 9,
+    'reference': 'PV 9',
+    'customerId': 2,
+    'customerName': 'BTS Tubos',
+    'addressId': 3,
+    'addressText': 'Av. Brasil, 100, Embu - SP',
+    'customerPo': 'PO-4521',
+    'paymentTermId': 1,
+    'paymentTermName': '28 DDL',
+    'freight': 'Cif',
+    'status': orderStatus,
+    'statusReason': null,
+    'notes': null,
+    'quoteId': 5,
+    'quoteReference': 'PROP 31',
+    'createdBy': 'ana',
+    'createdAt': '2026-10-26T12:00:00Z',
+    'releasedBy': null,
+    'releasedAt': null,
+    'products': 10000,
+    'ipi': 500,
+    'total': 10500,
+    'progress': ready ? 1 : 0.3,
+    'ready': ready,
+    'late': false,
+    'credit': {'limit': 50000, 'open': 10500, 'thisOrder': 0, 'exceeded': false},
+    'lines': [
+      {
+        'id': 40,
+        'sequence': 10,
+        'productId': 7,
+        'productCode': 'TB-25',
+        'customerPartNumber': 'BTS-001',
+        'description': 'Tubo 25,4 x 1,5',
+        'quantity': 100,
+        'unit': 'PC',
+        'unitPrice': 100,
+        'ipiPercent': 5,
+        'icmsPercent': 18,
+        'dueDate': '2026-11-15',
+        'total': 10000,
+        'fromStock': orderStatus == 'Created' ? 0 : 30,
+        'productionOrderId': orderStatus == 'Created' ? null : 12,
+        'productionReference': orderStatus == 'Created' ? null : 'OF 500',
+        'productionStatus': orderStatus == 'Created' ? null : 'Released',
+        'produced': 0,
+        'shipped': 0,
+        'planned': 0,
+        'remaining': 100,
+        'available': 30,
+        'ready': ready,
+      },
+    ],
+    'deliveries': [],
+    'history': history('created'),
+  };
+
+  Map<String, dynamic> delivery() => {
+    'id': 15,
+    'number': 15,
+    'reference': 'ENT 15',
+    'orderId': 9,
+    'orderReference': 'PV 9',
+    'customerId': 2,
+    'customerName': 'BTS Tubos',
+    'addressId': 3,
+    'addressText': 'Av. Brasil, 100',
+    'plannedDate': '2026-10-28',
+    'status': deliveryStatus,
+    'carrier': 'Próprio',
+    'vehiclePlate': null,
+    'invoiceNumber': null,
+    'packages': 1,
+    'grossWeightKg': 85.5,
+    'stockDocumentId': null,
+    'notes': null,
+    'createdBy': 'ana',
+    'createdAt': '2026-10-26T12:00:00Z',
+    'shippedBy': null,
+    'shippedAt': null,
+    'deliveredAt': null,
+    'receivedBy': null,
+    'lines': [
+      {
+        'id': 1,
+        'orderLineId': 40,
+        'sequence': 10,
+        'productId': 7,
+        'productCode': 'TB-25',
+        'description': 'Tubo 25,4 x 1,5',
+        'quantity': 30,
+        'unit': 'PC',
+        'packages': 1,
+      },
+    ],
+    'history': history('created'),
+  };
+
+  Map<String, dynamic> pipeline() => {
+    'kpis': {
+      'openQuotesValue': 11400,
+      'openQuotes': 1,
+      'winRate': 0.5,
+      'openOrdersValue': 10500,
+      'openOrders': 1,
+      'lateOrders': 0,
+      'readyToShip': 0,
+      'pendingApprovals': 0,
+    },
+    'stages': [
+      for (final k in ['quote', 'sent', 'accepted', 'order', 'production', 'ready', 'shipped', 'delivered'])
+        {
+          'key': k,
+          'count': k == 'sent' || k == 'order' ? 1 : 0,
+          'value': k == 'sent' ? 11400 : (k == 'order' ? 10500 : 0),
+          'cards': [
+            if (k == 'sent')
+              {
+                'kind': 'Quote',
+                'id': 5,
+                'reference': 'PROP 31',
+                'customerId': 2,
+                'customerName': 'BTS Tubos',
+                'value': 11400,
+                'status': 'Sent',
+                'date': '2026-11-10',
+                'progress': null,
+                'badges': ['expiring'],
+              },
+            if (k == 'order')
+              {
+                'kind': 'Order',
+                'id': 9,
+                'reference': 'PV 9',
+                'customerId': 2,
+                'customerName': 'BTS Tubos',
+                'value': 10500,
+                'status': 'Created',
+                'date': '2026-11-15',
+                'progress': 0,
+                'badges': <String>[],
+              },
+          ],
+        },
+    ],
+  };
+
+  Map<String, dynamic> body(http.Request r) => jsonDecode(r.body) as Map<String, dynamic>;
+
+  http.Request last(String method, String path) => log.lastWhere((r) => r.method == method && r.url.path == path);
+
+  MockClient get client => MockClient((r) async {
+    log.add(r);
+    final p = r.url.path;
+    final m = r.method;
+    if (p == '/api/sales/pipeline') return json(pipeline());
+    if (p == '/api/sales/settings') {
+      return json({'maxDiscountPercent': 5, 'defaultValidityDays': 15, 'minimumOrderValue': 0, 'shippingLocationId': null, 'defaultConditions': null});
+    }
+    if (p == '/api/sales/quotes/5' && m == 'GET') return json(quote());
+    if (p == '/api/sales/quotes/5/send') {
+      quoteStatus = needsApproval && quoteStatus == 'Draft' ? 'PendingApproval' : 'Sent';
+      return json(quote());
+    }
+    if (p == '/api/sales/quotes/5/approve') {
+      quoteStatus = 'Approved';
+      return json(quote());
+    }
+    if (p == '/api/sales/quotes/5/accept') {
+      quoteStatus = 'Accepted';
+      return json(quote());
+    }
+    if (p == '/api/sales/quotes/5/convert') {
+      quoteStatus = 'Converted';
+      return json(order(), 201);
+    }
+    if (p == '/api/sales/orders/9' && m == 'GET') return json(order());
+    if (p == '/api/sales/orders/9/release') {
+      orderStatus = 'Released';
+      return json(order());
+    }
+    if (p == '/api/sales/orders/9/deliveries') return json(delivery(), 201);
+    if (p == '/api/sales/deliveries/15' && m == 'GET') return json(delivery());
+    if (p == '/api/sales/deliveries/15/ship') {
+      deliveryStatus = 'Shipped';
+      return json({...delivery(), 'invoiceNumber': body(r)['invoiceNumber'], 'shippedAt': '2026-10-28T10:00:00Z'});
+    }
+    if (p == '/api/sales/quotes' || p == '/api/sales/orders' || p == '/api/sales/deliveries') return json(page([]));
+    return json(page([]));
+  });
+}
+
+Future<Session> pumpScreen(WidgetTester tester, SalesFake fake, Widget Function(Session s) screen) async {
+  SharedPreferences.setMockInitialValues({});
+  tester.view.physicalSize = const Size(1700, 1800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  final session =
+      Session(
+          api: ApiClient(baseUrl: 'http://api.test', client: fake.client, token: 'tok'),
+        )
+        ..username = 'ana'
+        ..role = fake.role;
+  await tester.pumpWidget(
+    MaterialApp(
+      locale: const Locale('pt', 'BR'),
+      supportedLocales: const [Locale('pt', 'BR')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      home: Scaffold(body: screen(session)),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return session;
+}
+
+void main() {
+  test('sales roles open on the pipeline and map statuses onto the flow path', () {
+    final s = Session(api: ApiClient(baseUrl: 'http://x'))..role = 'Sales';
+    expect(startPage(s, desktop: true), 'sales-pipeline');
+    expect(s.canSell, isTrue);
+    expect(s.canApproveSales, isFalse);
+    expect(s.canShip, isTrue);
+    expect(quotePath('Sent'), (1, null));
+    expect(quotePath('Rejected'), (2, 'Recusada'));
+    expect(orderPath('Released'), (4, null));
+    expect(orderPath('Delivered'), (6, null));
+    expect(deliveryPath('Cancelled'), (5, 'Cancelada'));
+  });
+
+  testWidgets('pipeline shows the stages and advances a sent proposal to accepted', (tester) async {
+    final fake = SalesFake()..quoteStatus = 'Sent';
+    await pumpScreen(tester, fake, (s) => SalesPipelineScreen(session: s));
+    expect(find.text('Propostas em aberto'), findsOneWidget);
+    expect(find.text('50%'), findsOneWidget);
+    expect(find.byKey(const ValueKey('stage-production')), findsOneWidget);
+    expect(find.text('PROP 31'), findsOneWidget);
+    expect(find.text('Vence em breve'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('advance-Quote-5')));
+    await tester.pumpAndSettle();
+    expect(find.text('Cliente aprovou PROP 31'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'PO-4521');
+    await tester.tap(find.text('Registrar aprovação'));
+    await tester.pumpAndSettle();
+    expect(fake.body(fake.last('POST', '/api/sales/quotes/5/accept'))['customerPo'], 'PO-4521');
+  });
+
+  testWidgets('dragging an order card onto production releases it', (tester) async {
+    final fake = SalesFake();
+    await pumpScreen(tester, fake, (s) => SalesPipelineScreen(session: s));
+    final card = find.byKey(const ValueKey('card-Order-9'));
+    final target = tester.getCenter(find.byKey(const ValueKey('stage-production')));
+    final gesture = await tester.startGesture(tester.getCenter(card));
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.moveTo(target);
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(find.text('Liberar PV 9 para produção?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('confirm-step')));
+    await tester.pumpAndSettle();
+    expect(fake.body(fake.last('POST', '/api/sales/orders/9/release'))['useStock'], isTrue);
+  });
+
+  testWidgets('discounted draft goes to approval and a manager approves it', (tester) async {
+    final fake = SalesFake()..needsApproval = true;
+    await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+    expect(find.text('Desconto acima do limite'), findsOneWidget);
+    expect(find.byKey(const ValueKey('path-0')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('quote-send')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-step')));
+    await tester.pumpAndSettle();
+    expect(fake.last('POST', '/api/sales/quotes/5/send'), isNotNull);
+    expect(find.text('Aguardando aprovação do gerente'), findsOneWidget);
+    expect(find.byKey(const ValueKey('quote-approve')), findsNothing);
+
+    final manager = SalesFake()
+      ..role = 'SalesManager'
+      ..needsApproval = true
+      ..quoteStatus = 'PendingApproval';
+    await pumpScreen(tester, manager, (s) => QuoteScreen(session: s, id: 5));
+    await tester.tap(find.byKey(const ValueKey('quote-approve')));
+    await tester.pumpAndSettle();
+    expect(manager.last('POST', '/api/sales/quotes/5/approve'), isNotNull);
+    expect(find.text('Desconto aprovado'), findsWidgets);
+  });
+
+  testWidgets('accepted proposal becomes a sales order', (tester) async {
+    final fake = SalesFake()..quoteStatus = 'Accepted';
+    await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+    await tester.tap(find.byKey(const ValueKey('quote-convert')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-step')));
+    await tester.pumpAndSettle();
+    expect(fake.last('POST', '/api/sales/quotes/5/convert'), isNotNull);
+    expect(find.text('PV 9 · BTS Tubos'), findsOneWidget);
+    expect(find.byKey(const ValueKey('order-release')), findsOneWidget);
+  });
+
+  testWidgets('order release without stock, then plan a delivery', (tester) async {
+    final fake = SalesFake();
+    await pumpScreen(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
+    await tester.tap(find.byKey(const ValueKey('order-release')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('use-stock')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-step')));
+    await tester.pumpAndSettle();
+    expect(fake.body(fake.last('POST', '/api/sales/orders/9/release'))['useStock'], isFalse);
+    expect(find.text('OF 500 · Liberada'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('order-deliver')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('dl-qty-40')), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('dl-qty-40')), '30');
+    await tester.tap(find.byKey(const ValueKey('delivery-ok')));
+    await tester.pumpAndSettle();
+    final b = fake.body(fake.last('POST', '/api/sales/orders/9/deliveries'));
+    expect(b['lines'], [
+      {'orderLineId': 40, 'quantity': 30},
+    ]);
+    expect(find.text('ENT 15 · BTS Tubos'), findsOneWidget);
+  });
+
+  testWidgets('stock user ships a planned delivery with the invoice number', (tester) async {
+    final fake = SalesFake()..role = 'Stock';
+    await pumpScreen(tester, fake, (s) => DeliveryScreen(session: s, id: 15));
+    await tester.tap(find.byKey(const ValueKey('delivery-ship')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('field-invoiceNumber')), '2581');
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['invoiceNumber'], '2581');
+    expect(find.byKey(const ValueKey('delivery-confirm')), findsOneWidget);
+  });
+
+  testWidgets('reader sees the pipeline without actions', (tester) async {
+    final fake = SalesFake()..role = 'Reader';
+    await pumpScreen(tester, fake, (s) => Shell(session: s));
+    await tester.tap(find.text('Funil de vendas'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('pipeline-new')), findsNothing);
+    await tester.tap(find.text('PROP 31'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('quote-send')), findsNothing);
+  });
+}

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../entities.dart';
 import '../session.dart';
 import 'dashboard.dart';
+import 'deliveries.dart';
 import 'entity_list.dart';
 import 'orders.dart';
 import 'production_floor.dart';
@@ -11,6 +12,9 @@ import 'production_orders.dart';
 import 'quotations.dart';
 import 'receipts.dart';
 import 'requisitions.dart';
+import 'sales_orders.dart';
+import 'sales_pipeline.dart';
+import 'sales_quotes.dart';
 import 'stock_balances.dart';
 import 'stock_closing.dart';
 import 'stock_documents.dart';
@@ -29,6 +33,11 @@ class NavItem {
 
 List<NavItem> navItems() => [
   NavItem('dashboard', Icons.dashboard_outlined, 'Painel', '', (s) => DashboardScreen(session: s)),
+  NavItem('sales-pipeline', Icons.view_kanban_outlined, 'Funil de vendas', 'Comercial', (s) => SalesPipelineScreen(session: s)),
+  NavItem('sales-quotes', Icons.request_quote_outlined, 'Propostas', 'Comercial', (s) => QuotesScreen(session: s)),
+  NavItem('sales-orders', Icons.receipt_long_outlined, 'Pedidos de venda', 'Comercial', (s) => SalesOrdersScreen(session: s)),
+  NavItem('deliveries', Icons.local_shipping_outlined, 'Entregas', 'Comercial', (s) => DeliveriesScreen(session: s)),
+  for (final spec in salesMasters) NavItem(spec.path, spec.icon, spec.title, 'Comercial', (s) => EntityListScreen(session: s, spec: spec)),
   for (final spec in masterData) NavItem(spec.path, spec.icon, spec.title, 'Engenharia', (s) => EntityListScreen(session: s, spec: spec)),
   NavItem('balances', Icons.inventory_outlined, 'Saldos', 'Estoque', (s) => BalancesScreen(session: s)),
   NavItem('documents', Icons.swap_horiz, 'Movimentações', 'Estoque', (s) => DocumentsScreen(session: s)),
@@ -57,6 +66,7 @@ String startPage(Session s, {bool? desktop}) {
     'Stock' => 'balances',
     'Purchasing' => 'orders',
     'Production' => 'production-orders',
+    'Sales' || 'SalesManager' => 'sales-pipeline',
     _ => products.path,
   };
 }

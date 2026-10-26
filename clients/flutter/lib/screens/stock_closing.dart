@@ -224,9 +224,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     FieldSpec('receiptLocationId', 'Local de entrada de acabado', type: FieldType.lookup, lookup: LookupSpec('/api/stock-locations'), hint: 'Vazio = PA'),
   ];
 
+  static const salesFields = [
+    FieldSpec('maxDiscountPercent', 'Desconto máximo sem aprovação (%)', type: FieldType.decimal, required: true),
+    FieldSpec('defaultValidityDays', 'Validade padrão da proposta (dias)', type: FieldType.integer, required: true),
+    FieldSpec('minimumOrderValue', 'Faturamento mínimo (R\$)', type: FieldType.decimal, required: true),
+    FieldSpec(
+      'shippingLocationId',
+      'Local de expedição',
+      type: FieldType.lookup,
+      lookup: LookupSpec('/api/stock-locations'),
+      hint: 'Vazio = local de acabado do PCP',
+    ),
+    FieldSpec('defaultConditions', 'Condições gerais padrão'),
+  ];
+
   Future<List<dynamic>> _fetch() async {
     final api = widget.session.api;
-    final r = await Future.wait([api.get('/api/stock/settings'), api.get('/api/purchasing/settings'), api.get('/api/production/settings')]);
+    final r = await Future.wait([
+      api.get('/api/stock/settings'),
+      api.get('/api/purchasing/settings'),
+      api.get('/api/production/settings'),
+      api.get('/api/sales/settings'),
+    ]);
+    final sa = r[3] as Map<String, dynamic>;
+    if (sa['shippingLocationId'] is int) sa['shippingLocation'] = await NameCache.name(api, '/api/stock-locations', sa['shippingLocationId'] as int);
     final p = r[1] as Map<String, dynamic>;
     if (p['receivingLocationId'] is int) p['receivingLocation'] = await NameCache.name(api, '/api/stock-locations', p['receivingLocationId'] as int);
     final pr = r[2] as Map<String, dynamic>;
@@ -274,6 +295,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final st = r[0] as Map<String, dynamic>;
       final pu = r[1] as Map<String, dynamic>;
       final pr = r[2] as Map<String, dynamic>;
+      final sa = r[3] as Map<String, dynamic>;
       return ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -296,6 +318,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ('Jornada', '${fmt(pr['hoursPerDay'])} h/dia${pr['workSaturdays'] == true ? ' · inclui sábado' : ''}'),
             ('Local de requisição', fmt(pr['issueLocation'] ?? 'ALM (padrão)')),
             ('Entrada de acabado', fmt(pr['receiptLocation'] ?? 'PA (padrão)')),
+          ]),
+          const SizedBox(height: 12),
+          _card('Comercial', '/api/sales/settings', salesFields, sa, [
+            ('Desconto sem aprovação', 'até ${fmt(sa['maxDiscountPercent'])} %'),
+            ('Validade da proposta', '${fmt(sa['defaultValidityDays'])} dias'),
+            ('Faturamento mínimo', fmtMoney(sa['minimumOrderValue'])),
+            ('Local de expedição', fmt(sa['shippingLocation'] ?? 'Acabado do PCP (padrão)')),
+            ('Condições gerais', fmt(sa['defaultConditions'])),
           ]),
         ],
       );

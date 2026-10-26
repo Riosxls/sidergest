@@ -51,7 +51,7 @@ public class SalesTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.Forbidden, (await reader.Post("/api/sales/quotes", Quote(s))).StatusCode);
         var quote = await (await sales.Post("/api/sales/quotes", Quote(s))).Read<QuoteOut>();
         Assert.Equal(QuoteStatus.Draft, quote.Status);
-        Assert.StartsWith("COT ", quote.Reference);
+        Assert.StartsWith("PROP ", quote.Reference);
         Assert.Equal(100m, quote.Lines[0].UnitPrice);
         Assert.Equal(5m, quote.Lines[0].IpiPercent);
         Assert.Equal(10m, quote.Lines[1].DiscountPercent);

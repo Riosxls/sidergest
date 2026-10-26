@@ -13,7 +13,7 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
     private static readonly QuoteStatus[] Revisable = [QuoteStatus.PendingApproval, QuoteStatus.Approved, QuoteStatus.Sent, QuoteStatus.Rejected, QuoteStatus.Expired];
     private static readonly ProductionOrderStatus[] ProductionDone = [ProductionOrderStatus.Finished, ProductionOrderStatus.Closed];
 
-    public static string QuoteReference(int number, int revision) => revision == 0 ? $"COT {number}" : $"COT {number}/R{revision}";
+    public static string QuoteReference(int number, int revision) => revision == 0 ? $"PROP {number}" : $"PROP {number}/R{revision}";
     public static string OrderReference(int number) => $"PV {number}";
     public static string DeliveryReference(int number) => $"ENT {number}";
 
