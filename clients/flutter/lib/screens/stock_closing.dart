@@ -216,11 +216,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     FieldSpec('receivingLocationId', 'Local de recebimento', type: FieldType.lookup, lookup: LookupSpec('/api/stock-locations'), hint: 'Vazio = ALM'),
   ];
 
+  static const productionFields = [
+    FieldSpec('overrunTolerancePercent', 'Tolerância de excedente (%)', type: FieldType.decimal, required: true),
+    FieldSpec('hoursPerDay', 'Horas por dia', type: FieldType.decimal, required: true),
+    FieldSpec('workSaturdays', 'Trabalha aos sábados', type: FieldType.boolean),
+    FieldSpec('issueLocationId', 'Local de requisição', type: FieldType.lookup, lookup: LookupSpec('/api/stock-locations'), hint: 'Vazio = ALM'),
+    FieldSpec('receiptLocationId', 'Local de entrada de acabado', type: FieldType.lookup, lookup: LookupSpec('/api/stock-locations'), hint: 'Vazio = PA'),
+  ];
+
   Future<List<dynamic>> _fetch() async {
     final api = widget.session.api;
-    final r = await Future.wait([api.get('/api/stock/settings'), api.get('/api/purchasing/settings')]);
+    final r = await Future.wait([api.get('/api/stock/settings'), api.get('/api/purchasing/settings'), api.get('/api/production/settings')]);
     final p = r[1] as Map<String, dynamic>;
     if (p['receivingLocationId'] is int) p['receivingLocation'] = await NameCache.name(api, '/api/stock-locations', p['receivingLocationId'] as int);
+    final pr = r[2] as Map<String, dynamic>;
+    for (final k in ['issueLocation', 'receiptLocation']) {
+      if (pr['${k}Id'] is int) pr[k] = await NameCache.name(api, '/api/stock-locations', pr['${k}Id'] as int);
+    }
     return r;
   }
 
@@ -261,6 +273,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     builder: (context, r) {
       final st = r[0] as Map<String, dynamic>;
       final pu = r[1] as Map<String, dynamic>;
+      final pr = r[2] as Map<String, dynamic>;
       return ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -276,6 +289,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ('Tolerância de recebimento', '${fmt(pu['receivingTolerancePercent'])} %'),
             ('Entrega antecipada', pu['allowEarlyReceipt'] == true ? 'Aceita até ${pu['earlyReceiptGraceDays']} dias' : 'Não aceita'),
             ('Local de recebimento', fmt(pu['receivingLocation'] ?? 'ALM (padrão)')),
+          ]),
+          const SizedBox(height: 12),
+          _card('PCP', '/api/production/settings', productionFields, pr, [
+            ('Tolerância de excedente', '${fmt(pr['overrunTolerancePercent'])} %'),
+            ('Jornada', '${fmt(pr['hoursPerDay'])} h/dia${pr['workSaturdays'] == true ? ' · inclui sábado' : ''}'),
+            ('Local de requisição', fmt(pr['issueLocation'] ?? 'ALM (padrão)')),
+            ('Entrada de acabado', fmt(pr['receiptLocation'] ?? 'PA (padrão)')),
           ]),
         ],
       );

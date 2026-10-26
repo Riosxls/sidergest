@@ -23,6 +23,8 @@ class Session extends ChangeNotifier {
   bool get canRequest => hasRole(const ['Admin', 'Engineering', 'Stock', 'Purchasing']);
   bool get canBuy => hasRole(const ['Admin', 'Purchasing']);
   bool get canReceive => hasRole(const ['Admin', 'Purchasing', 'Stock']);
+  bool get canProduce => hasRole(const ['Admin', 'Production']);
+  bool get canMoveProduction => hasRole(const ['Admin', 'Production', 'Stock']);
   String get baseUrl => api.baseUrl;
 
   Future<void> restore() async {

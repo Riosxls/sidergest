@@ -52,3 +52,14 @@ const requisitionStatuses = {
 const quotationStatuses = {'Open': 'Aberta', 'Closed': 'Encerrada', 'Cancelled': 'Cancelada'};
 const bidStatuses = {'Pending': 'Pendente', 'Approved': 'Vencedora', 'Rejected': 'Reprovada'};
 const orderStatuses = {'Open': 'Aberto', 'PartiallyReceived': 'Recebido parcial', 'Received': 'Recebido', 'Closed': 'Encerrado', 'Cancelled': 'Cancelado'};
+
+const productionStatuses = {
+  'Created': 'Criada',
+  'Released': 'Liberada',
+  'Stopped': 'Parada',
+  'InProduction': 'Em produção',
+  'Cancelled': 'Cancelada',
+  'Finished': 'Finalizada',
+  'Closed': 'Encerrada',
+};
+const productionKinds = {'Standard': 'OF', 'Internal': 'OPI (interna)'};

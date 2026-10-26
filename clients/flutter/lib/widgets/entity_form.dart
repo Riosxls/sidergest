@@ -69,7 +69,8 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
   String? _message;
   bool _busy = false;
 
-  bool _isText(FieldSpec f) => f.type == FieldType.text || f.type == FieldType.integer || f.type == FieldType.decimal || f.type == FieldType.date;
+  bool _isText(FieldSpec f) =>
+      f.type == FieldType.text || f.type == FieldType.integer || f.type == FieldType.decimal || f.type == FieldType.date || f.type == FieldType.time;
 
   @override
   void initState() {
@@ -77,7 +78,9 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
     for (final f in widget.fields) {
       final v = widget.initial?[f.key] ?? (widget.initial == null ? f.defaultValue : null);
       if (_isText(f)) {
-        _text[f.key] = TextEditingController(text: f.type == FieldType.text ? (v as String? ?? '') : (f.type == FieldType.date ? fmtDay(v) : fmt(v)));
+        _text[f.key] = TextEditingController(
+          text: f.type == FieldType.text ? (v as String? ?? '') : (f.type == FieldType.date ? fmtDay(v) : (f.type == FieldType.time ? fmtTime(v) : fmt(v))),
+        );
       } else {
         _values[f.key] = f.type == FieldType.boolean ? (v as bool? ?? false) : v;
       }
@@ -112,6 +115,9 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
         } else if (f.type == FieldType.date) {
           v = parseDate(s);
           if (v == null) _clientErrors[f.key] = 'Data inválida (dd/mm/aaaa)';
+        } else if (f.type == FieldType.time) {
+          v = parseTime(s);
+          if (v == null) _clientErrors[f.key] = 'Hora inválida (hh:mm)';
         } else {
           v = s;
         }
@@ -188,20 +194,21 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
       case FieldType.integer:
       case FieldType.decimal:
       case FieldType.date:
+      case FieldType.time:
         return TextField(
           key: ValueKey('field-${f.key}'),
           controller: _text[f.key],
           readOnly: widget.readOnly,
           keyboardType: f.type == FieldType.text
               ? TextInputType.text
-              : (f.type == FieldType.date ? TextInputType.datetime : const TextInputType.numberWithOptions(decimal: true)),
+              : (f.type == FieldType.date || f.type == FieldType.time ? TextInputType.datetime : const TextInputType.numberWithOptions(decimal: true)),
           decoration: InputDecoration(
             labelText: label,
             helperText: f.hint,
             errorText: error,
             border: const OutlineInputBorder(),
             isDense: true,
-            hintText: f.type == FieldType.date ? 'dd/mm/aaaa' : null,
+            hintText: f.type == FieldType.date ? 'dd/mm/aaaa' : (f.type == FieldType.time ? 'hh:mm' : null),
             suffixIcon: f.type == FieldType.date && !widget.readOnly
                 ? IconButton(tooltip: 'Calendário', icon: const Icon(Icons.calendar_today, size: 18), onPressed: () => _pickDate(f))
                 : null,
