@@ -13,11 +13,11 @@ Prerequisites: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 | `start.bat` | DB + API (Docker) + Flutter Windows app |
 | `start.bat -Web` | same, app in Chrome at http://localhost:8081 (`-Device edge` for Edge) |
 | `start.bat -ApiOnly` | DB + API only |
-| `start.bat -NoDocker` | API via `dotnet run` against a local PostgreSQL 16 on 5432 (needs .NET 8 SDK; creates role/db `ebt` via `psql` if missing) |
+| `start.bat -NoDocker` | API via `dotnet run` against a local PostgreSQL 16 on 5432 or `EBT_DB_PORT` (needs .NET 8 SDK; creates role/db `ebt` via `psql` if missing) |
 | `stop.bat` | stop API and containers, data kept |
 | `stop.bat -Purge` | also delete the database volume |
 
-API http://localhost:8080, Swagger http://localhost:8080/swagger. Dev defaults (DB password `ebt-dev-password`, JWT key, admin password) are built in, so no `.env` is needed for development. The admin user is only created when the database has no users. Ports: `EBT_API_PORT`, `EBT_DB_PORT` environment variables. For production copy `.env.example` to `.env` and set real secrets.
+API http://localhost:8080, Swagger http://localhost:8080/swagger. Dev defaults (DB password `ebt-dev-password`, JWT key, admin password) are built in, so no `.env` is needed for development. The admin user is only created when the database has no users. Ports: API 8080, Postgres 25432 (Docker, bound to 127.0.0.1), web app 8081. If one is taken or reserved by Windows, `start.bat` picks the next free one and prints the URLs; the app and CORS follow it. Override with `EBT_API_PORT`, `EBT_DB_PORT`, `EBT_WEB_PORT`. For production copy `.env.example` to `.env` and set real secrets.
 
 ASP.NET Core 8 + EF Core + PostgreSQL 16. First module of the HDS "Emissor NF" replacement (see `system-map.md` §9). Clients (Flutter: Windows, Android, Web) live in `clients/flutter` and talk to this REST API.
 
