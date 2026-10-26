@@ -21,6 +21,25 @@ API http://localhost:8080, Swagger http://localhost:8080/swagger. Dev defaults (
 
 ASP.NET Core 8 + EF Core + PostgreSQL 16. First module of the HDS "Emissor NF" replacement (see `system-map.md` §9). Clients (Flutter: Windows, Android, Web) live in `clients/flutter` and talk to this REST API.
 
+## Running the Windows app
+
+`start.bat` launches it automatically when Flutter and Visual Studio's C++ workload are installed; otherwise it says what is missing and opens the app in Edge or prints the command. One-time setup:
+
+1. Flutter SDK: download the zip from https://docs.flutter.dev/get-started/install/windows/desktop, extract to `C:\src\flutter`, add `C:\src\flutter\bin` to PATH.
+2. Visual Studio 2022 with "Desktop development with C++":
+   `winget install Microsoft.VisualStudio.2022.Community --override "--add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended --passive"`
+3. New terminal: `flutter doctor` (Windows line must be ✓).
+
+Manual run (API already up):
+
+```
+cd clients\flutter
+flutter pub get
+flutter run -d windows --dart-define=API_URL=http://localhost:8080
+```
+
+The first build takes a few minutes; the window opens on the login screen. `http://localhost:8080` itself is the API (it redirects to Swagger), not the app. Standalone exe: `flutter build windows --release --dart-define=API_URL=http://localhost:8080` → `build\windows\x64\runner\Release\ebt_engenharia.exe`.
+
 ## Layout
 
 ```

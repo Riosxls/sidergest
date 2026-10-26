@@ -86,6 +86,7 @@ using (var scope = app.Services.CreateScope())
     await AuthEndpoints.EnsureBootstrapAdminAsync(db, app.Configuration, app.Logger);
 }
 
+app.MapGet("/", (IConfiguration c, IWebHostEnvironment e) => Results.Redirect(c.GetValue("Swagger:Enabled", e.IsDevelopment()) ? "/swagger" : "/health")).AllowAnonymous().ExcludeFromDescription();
 app.MapGet("/health", async (EbtDbContext db) => await db.Database.CanConnectAsync() ? Results.Ok(new { status = "ok" }) : Results.StatusCode(503)).AllowAnonymous();
 app.MapAuth();
 app.MapMasterData();

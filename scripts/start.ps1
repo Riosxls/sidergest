@@ -73,9 +73,26 @@ function Test-DockerRunning {
     return $LASTEXITCODE -eq 0
 }
 
-if (-not $ApiOnly -and -not (Has 'flutter')) {
-    Fail "Flutter not found in PATH. Install it from https://docs.flutter.dev/get-started/install/windows/desktop and reopen the terminal (or run with -ApiOnly)."
+function Test-VsCpp {
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    if (-not (Test-Path $vswhere)) { return $false }
+    $path = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Workload.NativeDesktop -property installationPath
+    return [bool]$path
 }
+
+function Show-AppHelp([string]$Reason) {
+    Write-Host ""
+    Write-Host "Windows app NOT launched: $Reason" -ForegroundColor Yellow
+    Write-Host "The API keeps running. To run the app yourself:" -ForegroundColor Yellow
+    Write-Host "  cd `"$(Join-Path $Root 'clients\flutter')`""
+    Write-Host "  flutter pub get"
+    Write-Host "  flutter run -d windows --dart-define=API_URL=$ApiUrl"
+    Write-Host "Or in the browser:"
+    Write-Host "  flutter run -d edge --web-port $WebPort --dart-define=API_URL=$ApiUrl"
+    Write-Host ""
+}
+
+$FlutterMissing = -not (Has 'flutter')
 
 if (-not $NoDocker) {
     if (-not (Has 'docker')) {
@@ -162,8 +179,26 @@ Write-Host ""
 
 if ($ApiOnly) { exit 0 }
 
+if ($FlutterMissing) {
+    Write-Host "Flutter is not installed (or not in PATH)." -ForegroundColor Yellow
+    Write-Host "  1. Download the Flutter SDK zip: https://docs.flutter.dev/get-started/install/windows/desktop"
+    Write-Host "  2. Extract to C:\src\flutter and add C:\src\flutter\bin to PATH (Start > 'environment variables')"
+    Write-Host "  3. Install Visual Studio 2022 Community with 'Desktop development with C++':"
+    Write-Host "     winget install Microsoft.VisualStudio.2022.Community --override `"--add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended --passive`""
+    Write-Host "  4. Open a new terminal, run: flutter doctor   then start.bat again"
+    Show-AppHelp "Flutter not found."
+    exit 0
+}
+
 if (-not $Device) {
     if ($Web -or -not $OnWindows) { $Device = 'chrome' } else { $Device = 'windows' }
+}
+
+if ($Device -eq 'windows' -and -not (Test-VsCpp)) {
+    Write-Host "Visual Studio 'Desktop development with C++' not found; it is required to build the Windows app. Install with:" -ForegroundColor Yellow
+    Write-Host "  winget install Microsoft.VisualStudio.2022.Community --override `"--add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended --passive`""
+    Write-Host "Opening the app in Edge instead." -ForegroundColor Yellow
+    $Device = 'edge'
 }
 
 Push-Location (Join-Path $Root 'clients/flutter')
@@ -173,13 +208,13 @@ if ($LASTEXITCODE -ne 0) { Pop-Location; Fail "flutter pub get failed." }
 
 $flutterArgs = @('run', '-d', $Device, "--dart-define=API_URL=$ApiUrl")
 if ($Device -in @('chrome', 'edge', 'web-server')) { $flutterArgs += @('--web-port', $WebPort) }
+if ($Device -eq 'windows') { Step "Launching the Windows app (first build takes a few minutes; press q here to quit it)" } else { Step "Launching the app in $Device at http://localhost:$WebPort (press q here to quit it)" }
 Step "flutter $($flutterArgs -join ' ')"
 & flutter @flutterArgs
 $code = $LASTEXITCODE
 Pop-Location
 if ($code -ne 0) {
-    if ($Device -eq 'windows') {
-        Fail "flutter run failed. The Windows app needs Visual Studio 2022 with 'Desktop development with C++' (check: flutter doctor). Or run: start.bat -Web"
-    }
-    Fail "flutter run failed (device '$Device'). Check: flutter devices. Try -Device edge or -Device web-server."
+    if ($Device -eq 'windows') { Show-AppHelp "flutter run failed (see above; check: flutter doctor)." } else { Show-AppHelp "flutter run -d $Device failed (check: flutter devices)." }
+    exit 1
 }
+Write-Host "App closed. The API is still running at $ApiUrl; stop it with stop.bat." -ForegroundColor Green
