@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum FieldType { text, integer, decimal, boolean, choice, lookup, date }
+enum FieldType { text, integer, decimal, boolean, choice, lookup, date, time }
 
 class LookupSpec {
   const LookupSpec(this.path, {this.fill = const {}, this.query = const {}, this.fetchById = true});
@@ -382,3 +382,104 @@ final suppliers = EntitySpec(
 );
 
 final masterData = [products, materials, machines, standardOperations, workCenters, tools, materialClasses, materialGroups, materialSubgroups];
+
+const occurrenceKindLabels = {'Downtime': 'Parada', 'Scrap': 'Refugo'};
+
+const productionWriters = ['Admin', 'Production'];
+
+final shifts = EntitySpec(
+  title: 'Turnos',
+  singular: 'Turno',
+  path: '/api/production/shifts',
+  icon: Icons.schedule_outlined,
+  fields: const [
+    ...codeName,
+    FieldSpec('startsAt', 'Início', type: FieldType.time),
+    FieldSpec('endsAt', 'Fim', type: FieldType.time),
+    FieldSpec('hours', 'Horas', type: FieldType.decimal),
+  ],
+  columns: [
+    col('Código', 'code'),
+    col('Nome', 'name'),
+    ColumnSpec('Início', (e) => fmtTime(e['startsAt'])),
+    ColumnSpec('Fim', (e) => fmtTime(e['endsAt'])),
+    col('Horas', 'hours', numeric: true),
+  ],
+  searchable: false,
+  writeRoles: productionWriters,
+);
+
+final employees = EntitySpec(
+  title: 'Funcionários',
+  singular: 'Funcionário',
+  path: '/api/production/employees',
+  icon: Icons.badge_outlined,
+  fields: const [
+    FieldSpec('code', 'Matrícula', required: true),
+    FieldSpec('name', 'Nome', required: true),
+    FieldSpec('nickname', 'Apelido'),
+    FieldSpec('function', 'Função'),
+    FieldSpec('workCenterId', 'Centro de trabalho', type: FieldType.lookup, lookup: LookupSpec('/api/work-centers')),
+    FieldSpec('shiftId', 'Turno', type: FieldType.lookup, lookup: LookupSpec('/api/production/shifts')),
+    FieldSpec('active', 'Ativo', type: FieldType.boolean, defaultValue: true),
+  ],
+  columns: [
+    col('Matrícula', 'code'),
+    col('Nome', 'name'),
+    col('Apelido', 'nickname'),
+    col('Função', 'function'),
+    ColumnSpec('Ativo', (e) => e['active'] == true ? 'Sim' : 'Não'),
+  ],
+  writeRoles: productionWriters,
+);
+
+final occurrences = EntitySpec(
+  title: 'Ocorrências',
+  singular: 'Ocorrência',
+  path: '/api/production/occurrences',
+  icon: Icons.report_problem_outlined,
+  fields: const [
+    FieldSpec('code', 'Código', required: true),
+    FieldSpec('description', 'Descrição', required: true),
+    FieldSpec('kind', 'Tipo', type: FieldType.choice, choices: occurrenceKindLabels, required: true, defaultValue: 'Downtime'),
+    FieldSpec('stopsOrder', 'Para a OF', type: FieldType.boolean, defaultValue: false),
+  ],
+  columns: [
+    col('Código', 'code'),
+    col('Descrição', 'description'),
+    labelCol('Tipo', 'kind', occurrenceKindLabels),
+    ColumnSpec('Para a OF', (e) => e['stopsOrder'] == true ? 'Sim' : ''),
+  ],
+  searchable: false,
+  writeRoles: productionWriters,
+);
+
+final holidays = EntitySpec(
+  title: 'Feriados',
+  singular: 'Feriado',
+  path: '/api/production/holidays',
+  icon: Icons.event_busy_outlined,
+  fields: const [
+    FieldSpec('date', 'Data', type: FieldType.date, required: true),
+    FieldSpec('name', 'Descrição', required: true),
+  ],
+  columns: [dateCol('Data', 'date'), col('Descrição', 'name')],
+  searchable: false,
+  writeRoles: productionWriters,
+);
+
+final productionMasters = [employees, shifts, occurrences, holidays];
+
+String fmtTime(Object? v) {
+  final s = v == null ? '' : '$v';
+  return s.length >= 5 ? s.substring(0, 5) : s;
+}
+
+String? parseTime(Object? v) {
+  final m = RegExp(r'^(\d{1,2})[:h.]?(\d{2})?$').firstMatch('${v ?? ''}'.trim());
+  if (m == null) return null;
+  final h = int.parse(m[1]!);
+  final min = int.parse(m[2] ?? '0');
+  if (h > 23 || min > 59) return null;
+  return '${_two(h)}:${_two(min)}:00';
+}

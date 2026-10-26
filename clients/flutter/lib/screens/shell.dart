@@ -6,6 +6,8 @@ import '../session.dart';
 import 'dashboard.dart';
 import 'entity_list.dart';
 import 'orders.dart';
+import 'production_floor.dart';
+import 'production_orders.dart';
 import 'quotations.dart';
 import 'receipts.dart';
 import 'requisitions.dart';
@@ -40,6 +42,11 @@ List<NavItem> navItems() => [
   NavItem('receipts', Icons.move_to_inbox_outlined, 'Recebimentos', 'Suprimentos', (s) => ReceiptsView(session: s, allowNew: true)),
   NavItem('overdue', Icons.schedule, 'Entregas em atraso', 'Suprimentos', (s) => OverdueScreen(session: s)),
   NavItem('suppliers', Icons.local_shipping_outlined, 'Fornecedores', 'Suprimentos', (s) => SuppliersScreen(session: s)),
+  NavItem('production-orders', Icons.assignment_outlined, 'Ordens de fabricação', 'PCP', (s) => ProductionOrdersScreen(session: s)),
+  NavItem('production-reports', Icons.edit_note, 'Apontamentos', 'PCP', (s) => ReportsScreen(session: s)),
+  NavItem('outside-processing', Icons.local_shipping_outlined, 'Beneficiamento externo', 'PCP', (s) => OutsideProcessingScreen(session: s)),
+  NavItem('planning', Icons.view_timeline_outlined, 'Programação e carga', 'PCP', (s) => PlanningScreen(session: s)),
+  for (final spec in productionMasters) NavItem(spec.path, spec.icon, spec.title, 'PCP', (s) => EntityListScreen(session: s, spec: spec)),
   NavItem('settings', Icons.tune, 'Parâmetros', 'Sistema', (s) => SettingsScreen(session: s)),
 ];
 
@@ -49,6 +56,7 @@ String startPage(Session s, {bool? desktop}) {
   return switch (s.role) {
     'Stock' => 'balances',
     'Purchasing' => 'orders',
+    'Production' => 'production-orders',
     _ => products.path,
   };
 }

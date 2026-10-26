@@ -4,6 +4,7 @@ import '../entities.dart';
 import '../session.dart';
 import '../api.dart';
 import 'orders.dart';
+import 'production_orders.dart';
 import 'product_detail.dart';
 import 'stock_lots.dart';
 
@@ -61,6 +62,26 @@ class PurchasingDashboard {
   }
 }
 
+class ProductionDashboard {
+  ProductionDashboard({required this.orders, required this.shipments, required this.load});
+
+  final List<Map<String, dynamic>> orders;
+  final List<Map<String, dynamic>> shipments;
+  final List<Map<String, dynamic>> load;
+
+  int count(String status) => orders.where((o) => o['status'] == status).length;
+  List<Map<String, dynamic>> get late => orders.where(productionLate).toList();
+
+  Map<String, num> get peakLoad {
+    final m = <String, num>{};
+    for (final r in load) {
+      final pct = r['loadPercent'] as num;
+      m.update('${r['code']}', (v) => pct > v ? pct : v, ifAbsent: () => pct);
+    }
+    return Map.fromEntries((m.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(8));
+  }
+}
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, required this.session});
 
@@ -74,6 +95,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late Future<DashboardData> _eng = _fetchEngineering();
   late Future<StockDashboard> _stock = _fetchStock();
   late Future<PurchasingDashboard> _purchasing = _fetchPurchasing();
+  late Future<ProductionDashboard> _production = _fetchProduction();
 
   static final _counted = [products, materials, machines, standardOperations, workCenters, tools];
 
@@ -127,13 +149,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Future<ProductionDashboard> _fetchProduction() async {
+    final api = widget.session.api;
+    final now = DateTime.now();
+    final r = await Future.wait([
+      api.listAll('/api/production/orders', query: {'open': true}),
+      api.get('/api/production/outside-shipments', {'open': true}),
+      api.get('/api/production/load', {'from': isoDate(now), 'to': isoDate(now.add(const Duration(days: 27)))}),
+    ]);
+    return ProductionDashboard(
+      orders: r[0] as List<Map<String, dynamic>>,
+      shipments: (r[1] as List).cast<Map<String, dynamic>>(),
+      load: (r[2] as List).cast<Map<String, dynamic>>(),
+    );
+  }
+
   Future<void> _refresh() async {
     setState(() {
       _eng = _fetchEngineering();
       _stock = _fetchStock();
       _purchasing = _fetchPurchasing();
+      _production = _fetchProduction();
     });
-    await Future.wait([_eng, _stock, _purchasing].map((f) => f.then((_) => null, onError: (_) => null)));
+    await Future.wait([_eng, _stock, _purchasing, _production].map((f) => f.then((_) => null, onError: (_) => null)));
   }
 
   void _openProduct(Map<String, dynamic> p) => Navigator.of(context)
@@ -246,6 +284,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ];
   }
 
+  List<Widget> _productionPanels(ProductionDashboard d, double w) {
+    final late = d.late..sort((a, b) => '${a['dueDate']}'.compareTo('${b['dueDate']}'));
+    return [
+      _StatCard(icon: Icons.assignment_outlined, label: 'OFs a liberar', value: '${d.count('Created')}'),
+      _StatCard(icon: Icons.play_circle_outline, label: 'Liberadas', value: '${d.count('Released')}'),
+      _StatCard(icon: Icons.precision_manufacturing_outlined, label: 'Em produção', value: '${d.count('InProduction')}'),
+      _StatCard(icon: Icons.pause_circle_outline, label: 'Paradas', value: '${d.count('Stopped')}', alert: d.count('Stopped') > 0),
+      _StatCard(icon: Icons.schedule, label: 'OFs atrasadas', value: '${late.length}', alert: late.isNotEmpty),
+      _StatCard(icon: Icons.local_shipping_outlined, label: 'Remessas em terceiros', value: '${d.shipments.length}'),
+      SizedBox(
+        width: w,
+        child: _BarPanel(title: 'Pico de carga 4 semanas (%)', data: d.peakLoad),
+      ),
+      SizedBox(
+        width: w,
+        child: _ListPanel(
+          title: 'OFs atrasadas',
+          items: late,
+          label: (o) => '${o['reference']} · ${o['productCode']} · ${fmt(o['quantity'])} · ${fmtDay(o['dueDate'])}',
+          onTap: (o) => openProductionOrder(context, widget.session, o['id'] as int).then((_) => _refresh()),
+        ),
+      ),
+      SizedBox(
+        width: w,
+        child: _ListPanel(
+          title: 'Paradas',
+          items: d.orders.where((o) => o['status'] == 'Stopped').toList(),
+          label: (o) => '${o['reference']} · ${o['productCode']}',
+          onTap: (o) => openProductionOrder(context, widget.session, o['id'] as int).then((_) => _refresh()),
+        ),
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final role = widget.session.role;
@@ -253,11 +325,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _section('Engenharia', _eng, _engineering),
       _section('Estoque', _stock, _stockPanels),
       _section('Suprimentos', _purchasing, _purchasingPanels),
+      _section('PCP', _production, _productionPanels),
     ];
     final order = switch (role) {
-      'Stock' => [1, 2, 0],
-      'Purchasing' => [2, 1, 0],
-      _ => [0, 1, 2],
+      'Stock' => [1, 3, 2, 0],
+      'Purchasing' => [2, 1, 3, 0],
+      'Production' => [3, 1, 2, 0],
+      _ => [0, 3, 1, 2],
     };
     return RefreshIndicator(
       onRefresh: _refresh,
