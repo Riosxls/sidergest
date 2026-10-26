@@ -17,3 +17,4 @@ legacy/
 *.p12
 *.jks
 key.properties
+.run/

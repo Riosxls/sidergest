@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "br.com.ebt" "\0"
-            VALUE "FileDescription", "EBT Engenharia" "\0"
+            VALUE "FileDescription", "SiderGest" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "ebt_engenharia" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 br.com.ebt. All rights reserved." "\0"
             VALUE "OriginalFilename", "ebt_engenharia.exe" "\0"
-            VALUE "ProductName", "EBT Engenharia" "\0"
+            VALUE "ProductName", "SiderGest" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

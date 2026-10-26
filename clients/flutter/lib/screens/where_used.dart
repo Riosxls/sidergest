@@ -44,7 +44,9 @@ class _WhereUsedViewState extends State<WhereUsedView> {
                     builder: (_) => ProductDetailScreen(session: widget.session, productId: r['productId'] as int),
                   ),
                 );
-                setState(() => _future = _fetch());
+                setState(() {
+                  _future = _fetch();
+                });
               },
             );
           },

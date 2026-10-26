@@ -5,6 +5,53 @@ import '../entities.dart';
 import '../session.dart';
 import 'dashboard.dart';
 import 'entity_list.dart';
+import 'orders.dart';
+import 'quotations.dart';
+import 'receipts.dart';
+import 'requisitions.dart';
+import 'stock_balances.dart';
+import 'stock_closing.dart';
+import 'stock_documents.dart';
+import 'stock_lots.dart';
+import 'suppliers.dart';
+
+class NavItem {
+  const NavItem(this.id, this.icon, this.title, this.section, this.build);
+
+  final String id;
+  final IconData icon;
+  final String title;
+  final String section;
+  final Widget Function(Session s) build;
+}
+
+List<NavItem> navItems() => [
+  NavItem('dashboard', Icons.dashboard_outlined, 'Painel', '', (s) => DashboardScreen(session: s)),
+  for (final spec in masterData) NavItem(spec.path, spec.icon, spec.title, 'Engenharia', (s) => EntityListScreen(session: s, spec: spec)),
+  NavItem('balances', Icons.inventory_outlined, 'Saldos', 'Estoque', (s) => BalancesScreen(session: s)),
+  NavItem('documents', Icons.swap_horiz, 'Movimentações', 'Estoque', (s) => DocumentsScreen(session: s)),
+  NavItem('lots', Icons.verified_outlined, 'Lotes e inspeção', 'Estoque', (s) => LotsView(session: s, initialStatus: s.canStock ? 'Quarantine' : null)),
+  NavItem('reservations', Icons.bookmark_border, 'Reservas', 'Estoque', (s) => ReservationsView(session: s)),
+  NavItem('closing', Icons.calculate_outlined, 'Fechamento e custo médio', 'Estoque', (s) => ClosingScreen(session: s)),
+  NavItem('locations', stockLocations.icon, stockLocations.title, 'Estoque', (s) => EntityListScreen(session: s, spec: stockLocations)),
+  NavItem('requisitions', Icons.assignment_outlined, 'Requisições', 'Suprimentos', (s) => RequisitionsScreen(session: s)),
+  NavItem('quotations', Icons.request_quote_outlined, 'Cotações', 'Suprimentos', (s) => QuotationsScreen(session: s)),
+  NavItem('orders', Icons.receipt_long_outlined, 'Pedidos de compra', 'Suprimentos', (s) => OrdersScreen(session: s)),
+  NavItem('receipts', Icons.move_to_inbox_outlined, 'Recebimentos', 'Suprimentos', (s) => ReceiptsView(session: s, allowNew: true)),
+  NavItem('overdue', Icons.schedule, 'Entregas em atraso', 'Suprimentos', (s) => OverdueScreen(session: s)),
+  NavItem('suppliers', Icons.local_shipping_outlined, 'Fornecedores', 'Suprimentos', (s) => SuppliersScreen(session: s)),
+  NavItem('settings', Icons.tune, 'Parâmetros', 'Sistema', (s) => SettingsScreen(session: s)),
+];
+
+String startPage(Session s, {bool? desktop}) {
+  final isDesktop = desktop ?? (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows);
+  if (!isDesktop) return 'dashboard';
+  return switch (s.role) {
+    'Stock' => 'balances',
+    'Purchasing' => 'orders',
+    _ => products.path,
+  };
+}
 
 class Shell extends StatefulWidget {
   const Shell({super.key, required this.session});
@@ -16,40 +63,51 @@ class Shell extends StatefulWidget {
 }
 
 class _ShellState extends State<Shell> {
-  int _index = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows ? 1 : 0;
+  final _items = navItems();
+  late String _current = startPage(widget.session);
 
-  List<(IconData, String)> get _destinations => [(Icons.dashboard_outlined, 'Painel'), for (final s in masterData) (s.icon, s.title)];
+  NavItem get _item => _items.firstWhere((i) => i.id == _current);
 
-  Widget _page() => _index == 0
-      ? DashboardScreen(key: const ValueKey('dashboard'), session: widget.session)
-      : EntityListScreen(key: ValueKey(masterData[_index - 1].path), session: widget.session, spec: masterData[_index - 1]);
-
-  Widget _menu({bool closeDrawer = false}) => ListView(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    children: [
-      for (final (i, d) in _destinations.indexed) ...[
-        if (i == 3 || i == 5 || i == 7) const Divider(),
+  Widget _menu({bool closeDrawer = false}) {
+    final children = <Widget>[];
+    String? section;
+    for (final d in _items) {
+      if (d.section != section) {
+        section = d.section;
+        if (section.isNotEmpty) {
+          children.add(const Divider());
+          children.add(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: Text(section, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: Theme.of(context).colorScheme.primary)),
+            ),
+          );
+        }
+      }
+      children.add(
         ListTile(
           dense: true,
-          leading: Icon(d.$1),
-          title: Text(d.$2),
-          selected: i == _index,
+          leading: Icon(d.icon),
+          title: Text(d.title),
+          selected: d.id == _current,
           onTap: () {
-            setState(() => _index = i);
+            setState(() => _current = d.id);
             if (closeDrawer) Navigator.pop(context);
           },
         ),
-      ],
-    ],
-  );
+      );
+    }
+    return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
+  }
 
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final s = widget.session;
+    final page = KeyedSubtree(key: ValueKey(_current), child: _item.build(s));
     return Scaffold(
       appBar: AppBar(
-        title: Text(_destinations[_index].$2),
+        title: Text(_item.title),
         actions: [
           Center(child: Text('${s.username} · ${s.role}')),
           IconButton(tooltip: 'Sair', onPressed: s.logout, icon: const Icon(Icons.logout)),
@@ -59,12 +117,12 @@ class _ShellState extends State<Shell> {
       body: wide
           ? Row(
               children: [
-                SizedBox(width: 240, child: _menu()),
+                SizedBox(width: 248, child: _menu()),
                 const VerticalDivider(width: 1),
-                Expanded(child: _page()),
+                Expanded(child: page),
               ],
             )
-          : _page(),
+          : page,
     );
   }
 }

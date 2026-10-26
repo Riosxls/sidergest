@@ -58,7 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   Icon(Icons.precision_manufacturing, size: 56, color: theme.colorScheme.primary),
                   const SizedBox(height: 8),
-                  Text('EBT Engenharia', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall),
+                  Text('SiderGest', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall),
                   const SizedBox(height: 24),
                   TextField(
                     key: const ValueKey('login-user'),

@@ -4,11 +4,11 @@ services:
     environment:
       POSTGRES_DB: ebt
       POSTGRES_USER: ebt
-      POSTGRES_PASSWORD: ${EBT_DB_PASSWORD:?set EBT_DB_PASSWORD in .env}
+      POSTGRES_PASSWORD: ${EBT_DB_PASSWORD:-ebt-dev-password}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${EBT_DB_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ebt -d ebt"]
       interval: 5s
@@ -22,15 +22,15 @@ services:
       db:
         condition: service_healthy
     environment:
-      ConnectionStrings__Ebt: Host=db;Database=ebt;Username=ebt;Password=${EBT_DB_PASSWORD}
-      Jwt__SigningKey: ${EBT_JWT_KEY:?set EBT_JWT_KEY in .env (32+ chars)}
+      ConnectionStrings__Ebt: Host=db;Database=ebt;Username=ebt;Password=${EBT_DB_PASSWORD:-ebt-dev-password}
+      Jwt__SigningKey: ${EBT_JWT_KEY:-sidergest-dev-only-signing-key-not-for-production}
       Database__MigrateOnStartup: "true"
       Bootstrap__AdminUser: ${EBT_ADMIN_USER:-admin}
-      Bootstrap__AdminPassword: ${EBT_ADMIN_PASSWORD:?set EBT_ADMIN_PASSWORD in .env (10+ chars)}
+      Bootstrap__AdminPassword: ${EBT_ADMIN_PASSWORD:-sidergest123}
       Swagger__Enabled: ${EBT_SWAGGER:-true}
       Cors__Origins__0: ${EBT_CORS_ORIGIN:-http://localhost:8081}
     ports:
-      - "8080:8080"
+      - "${EBT_API_PORT:-8080}:8080"
 
   dbf-import:
     build:
@@ -41,7 +41,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      ConnectionStrings__Ebt: Host=db;Database=ebt;Username=ebt;Password=${EBT_DB_PASSWORD}
+      ConnectionStrings__Ebt: Host=db;Database=ebt;Username=ebt;Password=${EBT_DB_PASSWORD:-ebt-dev-password}
     volumes:
       - ${EBT_DBF_DIR:-./legacy}:/legacy:ro
     command: ["--dir", "/legacy", "--migrate"]

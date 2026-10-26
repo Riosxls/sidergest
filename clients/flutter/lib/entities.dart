@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 
-enum FieldType { text, integer, decimal, boolean, choice, lookup }
+enum FieldType { text, integer, decimal, boolean, choice, lookup, date }
 
 class LookupSpec {
-  const LookupSpec(this.path, {this.fill = const {}});
+  const LookupSpec(this.path, {this.fill = const {}, this.query = const {}, this.fetchById = true});
 
   final String path;
   final Map<String, String> fill;
+  final Map<String, dynamic> query;
+  final bool fetchById;
 
   static String display(Map<String, dynamic> e) {
-    final code = e['code'];
-    final name = e['name'] ?? e['description'];
-    return [code, name].whereType<Object>().join(' · ');
+    final code = e['code'] ?? e['number'];
+    final name = e['name'] ?? e['description'] ?? e['itemCode'] ?? e['reference'];
+    final extra = e['remaining'] != null ? '${fmt(e['remaining'])} disp.' : (e['quantity'] != null && e['itemCode'] != null ? fmt(e['quantity']) : null);
+    return [code, name, extra].whereType<Object>().join(' · ');
   }
 }
 
@@ -55,6 +58,7 @@ class EntitySpec {
     required this.columns,
     this.whereUsed = false,
     this.searchable = true,
+    this.writeRoles = const ['Admin', 'Engineering'],
   });
 
   final String title;
@@ -65,6 +69,7 @@ class EntitySpec {
   final List<ColumnSpec> columns;
   final bool whereUsed;
   final bool searchable;
+  final List<String> writeRoles;
 }
 
 String fmt(Object? v) {
@@ -77,9 +82,61 @@ String fmt(Object? v) {
   return '$v';
 }
 
+String _two(int n) => n.toString().padLeft(2, '0');
+
+String fmtDate(Object? v) {
+  if (v == null) return '';
+  final s = '$v';
+  final d = DateTime.tryParse(s);
+  if (d == null) return s;
+  if (s.length <= 10) return '${_two(d.day)}/${_two(d.month)}/${d.year}';
+  final l = d.toLocal();
+  return '${_two(l.day)}/${_two(l.month)}/${l.year} ${_two(l.hour)}:${_two(l.minute)}';
+}
+
+String fmtDay(Object? v) {
+  final s = fmtDate(v);
+  return s.length > 10 ? s.substring(0, 10) : s;
+}
+
+String isoDate(DateTime d) => '${d.year}-${_two(d.month)}-${_two(d.day)}';
+
+String? parseDate(String s) {
+  final m = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{2,4})$').firstMatch(s.trim());
+  if (m != null) {
+    var y = int.parse(m[3]!);
+    if (y < 100) y += 2000;
+    final d = DateTime(y, int.parse(m[2]!), int.parse(m[1]!));
+    if (d.day != int.parse(m[1]!) || d.month != int.parse(m[2]!)) return null;
+    return isoDate(d);
+  }
+  final d = DateTime.tryParse(s.trim());
+  return d == null ? null : isoDate(d);
+}
+
+String fmtNum(Object? v, [int decimals = 2]) {
+  if (v is! num) return fmt(v);
+  final neg = v < 0;
+  final parts = v.abs().toStringAsFixed(decimals).split('.');
+  final digits = parts[0];
+  final b = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) b.write('.');
+    b.write(digits[i]);
+  }
+  return '${neg ? '-' : ''}$b${parts.length > 1 ? ',${parts[1]}' : ''}';
+}
+
+String fmtMoney(Object? v) => v == null ? '' : 'R\$ ${fmtNum(v)}';
+
+String fmtPeriod(Object? p) => p is int ? '${_two(p % 100)}/${p ~/ 100}' : fmt(p);
+
 num? parseDecimal(String s) => num.tryParse(s.contains(',') ? s.replaceAll('.', '').replaceAll(',', '.') : s);
 
 ColumnSpec col(String label, String key, {bool numeric = false}) => ColumnSpec(label, (e) => fmt(e[key]), numeric: numeric);
+ColumnSpec dateCol(String label, String key) => ColumnSpec(label, (e) => fmtDay(e[key]));
+ColumnSpec moneyCol(String label, String key) => ColumnSpec(label, (e) => fmtMoney(e[key]), numeric: true);
+ColumnSpec labelCol(String label, String key, Map<String, String> labels) => ColumnSpec(label, (e) => labels[e[key]] ?? fmt(e[key]));
 
 const kinds = {'Part': 'Peça', 'Component': 'Componente'};
 const shapes = {'Circular': 'Circular', 'Rectangular': 'Retangular'};
@@ -281,5 +338,47 @@ const revisionFields = [
   FieldSpec('code', 'Revisão', required: true),
   FieldSpec('reason', 'Motivo'),
 ];
+
+const locationKinds = {'Internal': 'Interno', 'Quarantine': 'Quarentena', 'ThirdParty': 'Terceiros', 'Shipping': 'Expedição'};
+
+final stockLocations = EntitySpec(
+  title: 'Locais de estoque',
+  singular: 'Local',
+  path: '/api/stock-locations',
+  icon: Icons.place_outlined,
+  fields: const [
+    ...codeName,
+    FieldSpec('kind', 'Tipo', type: FieldType.choice, choices: locationKinds, required: true, defaultValue: 'Internal'),
+    FieldSpec('active', 'Ativo', type: FieldType.boolean, defaultValue: true),
+  ],
+  columns: [
+    col('Código', 'code'),
+    col('Nome', 'name'),
+    labelCol('Tipo', 'kind', locationKinds),
+    ColumnSpec('Ativo', (e) => e['active'] == true ? 'Sim' : 'Não'),
+  ],
+  writeRoles: const ['Admin', 'Stock'],
+);
+
+final suppliers = EntitySpec(
+  title: 'Fornecedores',
+  singular: 'Fornecedor',
+  path: '/api/suppliers',
+  icon: Icons.local_shipping_outlined,
+  fields: const [
+    FieldSpec('name', 'Razão social', required: true),
+    FieldSpec('tradeName', 'Nome fantasia'),
+    FieldSpec('legacyCode', 'Código antigo'),
+    FieldSpec('groupCode', 'Grupo'),
+    FieldSpec('active', 'Ativo', type: FieldType.boolean, defaultValue: true),
+  ],
+  columns: [
+    col('Razão social', 'name'),
+    col('Fantasia', 'tradeName'),
+    col('Código antigo', 'legacyCode'),
+    col('Grupo', 'groupCode'),
+    ColumnSpec('Ativo', (e) => e['active'] == true ? 'Sim' : 'Não'),
+  ],
+);
 
 final masterData = [products, materials, machines, standardOperations, workCenters, tools, materialClasses, materialGroups, materialSubgroups];

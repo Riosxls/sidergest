@@ -1,4 +1,23 @@
-# EBT ERP — Engenharia + Estoque + Suprimentos backend
+# SiderGest — Engenharia, Estoque, Suprimentos, PCP
+
+## Quick start (Windows)
+
+Prerequisites: [Docker Desktop](https://www.docker.com/products/docker-desktop/) (running) and [Flutter](https://docs.flutter.dev/get-started/install/windows/desktop) with Visual Studio 2022 "Desktop development with C++" for the Windows app.
+
+1. `git clone https://github.com/Riosxls/sidergest` (or `git pull`)
+2. Double-click `start.bat` (or run it in a terminal). It starts PostgreSQL + API in Docker, applies migrations, creates the admin user and opens the Windows app.
+3. Log in with `admin` / `sidergest123`. Stop everything with `stop.bat`.
+
+| Command | What it does |
+|---------|--------------|
+| `start.bat` | DB + API (Docker) + Flutter Windows app |
+| `start.bat -Web` | same, app in Chrome at http://localhost:8081 (`-Device edge` for Edge) |
+| `start.bat -ApiOnly` | DB + API only |
+| `start.bat -NoDocker` | API via `dotnet run` against a local PostgreSQL 16 on 5432 (needs .NET 8 SDK; creates role/db `ebt` via `psql` if missing) |
+| `stop.bat` | stop API and containers, data kept |
+| `stop.bat -Purge` | also delete the database volume |
+
+API http://localhost:8080, Swagger http://localhost:8080/swagger. Dev defaults (DB password `ebt-dev-password`, JWT key, admin password) are built in, so no `.env` is needed for development. The admin user is only created when the database has no users. Ports: `EBT_API_PORT`, `EBT_DB_PORT` environment variables. For production copy `.env.example` to `.env` and set real secrets.
 
 ASP.NET Core 8 + EF Core + PostgreSQL 16. First module of the HDS "Emissor NF" replacement (see `system-map.md` §9). Clients (Flutter: Windows, Android, Web) live in `clients/flutter` and talk to this REST API.
 
@@ -7,9 +26,9 @@ ASP.NET Core 8 + EF Core + PostgreSQL 16. First module of the HDS "Emissor NF" r
 ```
 Ebt.sln
 src/
-  Ebt.Core/          Entities, EbtDbContext, EF migrations, BomService, TubeWeight, Inventory/, Purchasing/
+  Ebt.Core/          Entities, EbtDbContext, EF migrations, BomService, TubeWeight, Inventory/, Purchasing/, Production/
   Ebt.Api/           Minimal API: auth (JWT), master data, products, routing, BOM
-    Endpoints/       MasterDataEndpoints.cs, ProductEndpoints.cs, InventoryEndpoints.cs, PurchasingEndpoints.cs
+    Endpoints/       MasterDataEndpoints.cs, ProductEndpoints.cs, InventoryEndpoints.cs, PurchasingEndpoints.cs, ProductionEndpoints.cs
     Infrastructure/  Crud.cs (generic CRUD), Auth.cs, Errors.cs
   Ebt.DbfImport/     CLI that migrates legacy DBF master data into Postgres
 tests/
@@ -23,7 +42,7 @@ compose.yaml         db + api (+ dbf-import under the "tools" profile)
 ## Run with Docker
 
 ```
-cp .env.example .env          # set real passwords / JWT key
+cp .env.example .env          # production: set real passwords / JWT key (optional for dev)
 docker compose up -d --build
 ```
 
@@ -45,6 +64,8 @@ Without Docker:
 dotnet run --project src/Ebt.DbfImport -- --dir C:\EBT\dados --conn "Host=localhost;Database=ebt;Username=ebt;Password=..." [--dry-run] [--migrate]
 ```
 
+PCP (field names taken from PCP.EXE / APONT.EXE strings, untested on live data): `CACONTR` → overrun tolerance (`TOL_APONTA`) and OF/OPI counters, `G29` shifts, `G28` employees, `G27` occurrences (`G27STATOF` → stops order), `X09` (`XY090`) orders with status, dates, parent/previous OF, `X31` (`XY310`) OPIs, `X06` (`XY060`) committed materials (replace the BOM snapshot; `X06QTMATER` read as the order total), `X28` overrun releases, `X13` reports (+ `X14` employee and `X15` machine by PK), `E24` scrap. Operations missing from today's routing are created from the legacy data. Imported open orders get no stock reservations.
+
 Suprimentos (field names taken from GSC.EXE): `SGCONTRO` → purchasing settings and number counters, `E37` → supplier × material (last price, qualification), `G06`/`G07` → quotations, items and bids (`G07PENDENC` P/A/R), `G19`/`G12` → purchase orders and lines, `G09` → due date (earliest) and received quantity (Σ `G09QTDIGIT`) per line, `G20` → cancelled orders, `G02` → requisitions (`G02PK` number, `G02STATUS` 0–8, links to quotation item and order line). Orders that already have receipts in the new system are left untouched. Legacy receipts (E11/E12) are not imported as receipts. The purchasing step runs inside the master-data transaction, so `--dry-run` covers it.
 
 Stock: `SHCONTR`/`ESCONTR` → stock settings, `SG280` → average-cost history per thickness (imported rows never overwrite months the new system closed), `SALDOEST` → one opening-balance document per location (`SALDO` → ALM, `SALDOTER` → TER, lot `INICIAL`, cost = SG280 average before `--opening-date`). Opening balances import once; reverse the document to redo it. E50/E51/E43 (locations, balances per location, lots) are not in the project copy, so they are not mapped yet.
@@ -53,18 +74,15 @@ Files are recognised by their field prefix (E10*, F06*, X04* …), so names may 
 
 ## Run locally (dev)
 
-Needs .NET 8 SDK and Postgres 16.
+Needs .NET 8 SDK and Postgres 16 (or just `start.bat -NoDocker`).
 
 ```
 createuser -P ebt   # password: ebt-dev-password
 createdb -O ebt ebt
-dotnet user-secrets set Jwt:SigningKey "<32+ chars>" --project src/Ebt.Api
-dotnet user-secrets set Bootstrap:AdminUser admin --project src/Ebt.Api
-dotnet user-secrets set Bootstrap:AdminPassword "<10+ chars>" --project src/Ebt.Api
 dotnet run --project src/Ebt.Api
 ```
 
-`appsettings.Development.json` points at `localhost/ebt`, migrates on start and enables Swagger.
+`appsettings.Development.json` points at `localhost/ebt`, listens on http://localhost:8080, migrates on start, enables Swagger, uses a dev JWT key and creates `admin` / `sidergest123`.
 
 ## Tests
 
@@ -84,11 +102,14 @@ Each run creates a throw-away database `ebt_test_<guid>` and drops it afterwards
 | Engineering | ✓    | ✓                 |              |
 | Stock       | ✓    |                   |              |
 | Purchasing  | ✓    |                   |              |
+| Production  | ✓    |                   |              |
 | Reader      | ✓    |                   |              |
 
 Stock writes (locations, documents, lots, reservations, monthly close) need Admin or Stock. Stock settings and reopening a closed month need Admin.
 
 Suprimentos: create/cancel requisitions → Admin, Engineering, Stock, Purchasing. Approve requisitions, quotations, purchase orders, supplier materials → Admin, Purchasing. Goods receipts → Admin, Purchasing, Stock. Purchasing settings → Admin.
+
+PCP: orders, status changes, scheduling, shop-floor reports, outside processing, overrun releases, employees/shifts/occurrences/holidays → Admin, Production. Material issue/return and finished-goods receipt → Admin, Production, Stock. Production settings → Admin.
 
 ## Endpoints
 
@@ -112,6 +133,12 @@ Suprimentos: create/cancel requisitions → Admin, Engineering, Stock, Purchasin
 | Receiving | `/api/goods-receipts` (`supplierId`, `purchaseOrderId`, `from`, `to`), `/{id}` |
 | Supplier tracking | `/api/purchasing/overdue?asOf=&supplierId=`, `/api/suppliers/{id}/materials` (+ `PUT/DELETE /{materialId}`), `/api/suppliers/{id}/performance?from=&to=`, `/api/purchasing/materials/{id}/history` |
 | Purchasing settings | `/api/purchasing/settings` (tolerance %, early receipt, grace days, receiving location) |
+| Production orders | `/api/production/orders` (`status`, `open`, `kind`, `productId`, `parentOrderId`, `dueFrom`, `dueTo`, `q`), `/{id}`, `POST /{id}/release` (`force`), `/stop`, `/resume`, `/finish`, `/reopen`, `/close`, `/close-cost`, `/cancel` (`reason`, `technical`), `/refresh-structure`, `/child-orders`, `/schedule`, `GET /{id}/availability`, `/reconciliation`, `/stock-documents`, `/overrun-releases` |
+| Order material / FG | `POST /api/production/orders/{id}/issues`, `/material-returns`, `/receipts` |
+| Outside processing | `PUT/DELETE /api/production/orders/{id}/operations/{seq}/outsource`, `POST /{id}/operations/{seq}/outside-shipments`, `/api/production/outside-shipments` (`orderId`, `supplierId`, `open`), `POST /{id}/returns` |
+| Shop floor (APONT) | `/api/production/reports` (`orderId`, `employeeId`, `machineId`, `from`, `to`), `DELETE /{id}`, `POST /api/production/orders/{id}/operations/{seq}/overrun-releases` |
+| PCP masters | `/api/production/employees`, `/shifts`, `/occurrences`, `/holidays`, `/settings` |
+| Planning | `POST /api/production/availability` (what-if BOM explosion vs free stock + open POs), `POST /api/production/schedule` (all open orders), `GET /api/production/load?from=&to=&groupBy=machine\|workCenter` |
 | Average cost | `/api/stock/settings`, `/api/stock/closings`, `POST/DELETE /api/stock/closings/{yyyymm}`, `/api/stock/average-costs`, `/api/stock/average-costs/preview?period=` |
 
 Lists take `q`, `skip`, `take` (≤500) and return `{items, total, skip, take}`.
@@ -167,6 +194,26 @@ Flow (GSC.EXE): requisition → approval → quotation → bids → award → pu
 - A receipt creates payable installments from the order's payment terms (`30/60/90` → 3 dues from the invoice date; no digits → one due on the invoice date) and updates supplier × material last price (E37).
 - Stock hook: after saving, `ReceiveAsync` calls every `IGoodsReceiptHandler` inside the same transaction with `GoodsReceived` (quantities converted to the stock unit via `purchaseFactor`, unit cost net of discount, ICMS/IPI %, lot, inspection flag). `StockReceiptHandler` posts a `Receipt` document at `receivingLocationId` (fallback: location `ALM`). Any handler failure rolls the receipt back.
 - Numbers come from Postgres sequences; the DBF import moves them past the legacy counters.
+
+## PCP + Apontamento
+
+Flow (PCP.EXE / APONT.EXE): order → release (reserve) → issue material → report per operation → finished goods in → finish → close → close cost.
+
+| Status | Legacy `X09STATUS` |
+|---|---|
+| Created, Released, Stopped, InProduction, Cancelled, Finished | 0 Cadastrada, 1 Impressa, 2 Parada, 3 Em produção, 4 Cancelada, 5 Fim processo |
+| Closed (+ `costClosedAt`) | `X09DTENCER` / `X09DTENCUS` |
+
+- Orders (OF, reference `OF n`) and internal orders (OPI, `OPI n`, bales) have separate Postgres sequences; the DBF import moves them past `CA_NROP` / `CA_NROPI`.
+- Creating an order snapshots the product's routing and first-level BOM (quantity × factor × order quantity). Component products are first-level lines: issue them from stock or create subassembly orders (`/child-orders` creates one per short component, linked through `parentOrderId`, legacy `CDOPPAI`). `refresh-structure` re-reads engineering while the order is still Created.
+- Release reserves remaining material per line in Estoque (reference = order reference). Missing stock → 409 listing shortages, unless `force` (reserves what is free). Finish/cancel release open reservations.
+- Issue/return/receipt post Estoque documents with the order reference. Issued quantity and material value are read from the ledger, so reversing a document in Estoque is reflected. Issues consume the order's reservation first. Material returns post `AdjustmentIn` at the issued average cost. Finished goods post `ProductionReceipt` with lot = reference and unit cost = (issued material value + outside service) ÷ max(planned, received). Component products issue at cost 0 (Estoque has no product average).
+- Shop floor: each report has good/scrap (scrap needs a scrap occurrence), hours (or start/end time, across midnight), setup, operators, downtime + occurrence, employee, shift, machine (defaults to the operation's), weight. A downtime occurrence flagged `stopsOrder` (`G27STATOF`) stops the order. Limits: op 1 ≤ order × (1 + `TOL_APONTA`%, default 3) + released overruns (`X28`); op n ≤ good of op n−1 + released overruns. Finished goods ≤ good at the last operation. Deleting a report is refused if later operations or receipts already used it. Reports on one order are serialised with a row lock.
+- Outside processing: mark an operation external with supplier + lead days, send quantities (`OutsideShipment`), record returns (good, scrap, service price per piece). A return creates the operation's report; manual reports on external operations are refused. Service value goes into order cost. Closing needs nothing left at the supplier. WIP at the third party is tracked on the order, not in the stock ledger.
+- Cancel needs a reason; orders with movements or reports need `technical: true` (`gep166`). Delete only for never-released orders without activity. Close needs Finished and no open subassembly order.
+- Scheduling (`gep137` "Data Mais Tarde"): backward from the due date in working hours (`hoursPerDay`, weekends off unless `workSaturdays`, holidays). Hours = setup (if not started) + remaining ÷ pieces/hour; external operations take lead days. Late orders also get a forward `adjustedStart/End` from today (`AJUSTARATRASO`). Subassemblies are scheduled to end before the parent operation that consumes them. Warnings: Sem operação, Produto sem materiais, sem máquina, sem peças/hora. Load = scheduled hours per machine or work center per week vs capacity.
+- Reconciliation (`GEPMATCO`): per item, issued − (scrap × per-unit for operations at or after the consuming one + received × per-unit), valued at the last purchase price (E37) or current average. `close-cost` freezes material cost, service cost and actual unit cost.
+- Not built yet: customer orders/delivery programs (P15/P13) and their netting, labor cost rates, OF/OPI print layouts.
 
 ## Rules carried over from the legacy system
 

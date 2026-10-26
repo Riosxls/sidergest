@@ -23,6 +23,7 @@ builder.Services.AddDbContext<EbtDbContext>(o => o
 builder.Services.AddScoped<BomService>();
 builder.Services.AddScoped<StockService>();
 builder.Services.AddPurchasing();
+builder.Services.AddProduction();
 builder.Services.AddSingleton(jwt);
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddExceptionHandler<StockExceptionHandler>();
@@ -91,6 +92,7 @@ app.MapMasterData();
 app.MapProducts();
 app.MapInventory();
 app.MapPurchasing();
+app.MapProduction();
 
 app.Run();
 

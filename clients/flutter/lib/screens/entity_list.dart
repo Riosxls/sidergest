@@ -31,6 +31,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
   ApiClient get api => widget.session.api;
   EntitySpec get spec => widget.spec;
   bool get isProduct => spec.path == products.path;
+  bool get canWrite => widget.session.hasRole(spec.writeRoles);
 
   @override
   void initState() {
@@ -77,7 +78,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
       title: item == null ? 'Novo: ${spec.singular}' : '${spec.singular} ${item['code'] ?? ''}',
       fields: spec.fields,
       initial: item,
-      readOnly: !widget.session.canWrite,
+      readOnly: !canWrite,
       onSubmit: (body) async => (item == null ? await api.post(spec.path, body) : await api.put('${spec.path}/${item['id']}', body)) as Map<String, dynamic>?,
       onDelete: item == null ? null : () => api.delete('${spec.path}/${item['id']}'),
     );
@@ -107,9 +108,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final page = _page;
     return Scaffold(
-      floatingActionButton: widget.session.canWrite
-          ? FloatingActionButton.extended(onPressed: () => _edit(), icon: const Icon(Icons.add), label: const Text('Novo'))
-          : null,
+      floatingActionButton: canWrite ? FloatingActionButton.extended(onPressed: () => _edit(), icon: const Icon(Icons.add), label: const Text('Novo')) : null,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

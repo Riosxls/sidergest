@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
 
-const defaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://localhost:5241');
+const defaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://localhost:8080');
 
 class Session extends ChangeNotifier {
   Session({ApiClient? api}) : api = api ?? ApiClient(baseUrl: defaultApiUrl) {
@@ -16,7 +16,13 @@ class Session extends ChangeNotifier {
   DateTime? expiresAt;
 
   bool get loggedIn => api.token != null && (expiresAt == null || expiresAt!.isAfter(DateTime.now()));
-  bool get canWrite => role == 'Admin' || role == 'Engineering';
+  bool hasRole(Iterable<String> roles) => roles.contains(role);
+  bool get canWrite => hasRole(const ['Admin', 'Engineering']);
+  bool get isAdmin => role == 'Admin';
+  bool get canStock => hasRole(const ['Admin', 'Stock']);
+  bool get canRequest => hasRole(const ['Admin', 'Engineering', 'Stock', 'Purchasing']);
+  bool get canBuy => hasRole(const ['Admin', 'Purchasing']);
+  bool get canReceive => hasRole(const ['Admin', 'Purchasing', 'Stock']);
   String get baseUrl => api.baseUrl;
 
   Future<void> restore() async {

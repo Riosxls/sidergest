@@ -20,7 +20,7 @@ class EbtApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'EBT Engenharia',
+      title: 'SiderGest',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorSchemeSeed: const Color(0xFF1F5F99), visualDensity: VisualDensity.compact),
       darkTheme: ThemeData(colorSchemeSeed: const Color(0xFF1F5F99), brightness: Brightness.dark, visualDensity: VisualDensity.compact),

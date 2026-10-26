@@ -49,14 +49,17 @@ class ApiClient {
 
   Future<dynamic> delete(String path) => _send(() => _http.delete(_uri(path), headers: _headers));
 
-  Future<PageResult> list(String path, {String? q, int skip = 0, int take = 50}) async =>
-      PageResult.fromJson(await get(path, {'q': q, 'skip': skip, 'take': take}) as Map<String, dynamic>);
+  Future<PageResult> list(String path, {String? q, int skip = 0, int take = 50, Map<String, dynamic> query = const {}}) async {
+    final r = await get(path, {...query, 'q': q, 'skip': skip, 'take': take});
+    if (r is List) return PageResult(r.cast<Map<String, dynamic>>(), r.length, 0, r.length);
+    return PageResult.fromJson(r as Map<String, dynamic>);
+  }
 
-  Future<List<Map<String, dynamic>>> listAll(String path) async {
+  Future<List<Map<String, dynamic>>> listAll(String path, {Map<String, dynamic> query = const {}}) async {
     final all = <Map<String, dynamic>>[];
     var skip = 0;
     while (true) {
-      final page = await list(path, skip: skip, take: 500);
+      final page = await list(path, skip: skip, take: 500, query: query);
       all.addAll(page.items);
       skip += page.items.length;
       if (page.items.isEmpty || skip >= page.total) return all;

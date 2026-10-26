@@ -4,7 +4,7 @@ public enum ConsumerType { Normal = 0, FinalConsumer = 1 }
 public enum ProductKind { Part = 0, Component = 1 }
 public enum TubeShape { Circular = 0, Rectangular = 1 }
 public enum RevisionKind { Structure = 0, Process = 1, Drawing = 2 }
-public enum UserRole { Admin = 0, Engineering = 1, Reader = 2, Stock = 3, Purchasing = 4 }
+public enum UserRole { Admin = 0, Engineering = 1, Reader = 2, Stock = 3, Purchasing = 4, Production = 5 }
 
 public class Customer
 {

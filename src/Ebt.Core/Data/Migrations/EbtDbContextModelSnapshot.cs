@@ -24,6 +24,10 @@ namespace Ebt.Core.Data.Migrations
 
             modelBuilder.HasSequence<int>("goods_receipt_numbers");
 
+            modelBuilder.HasSequence<int>("internal_order_numbers");
+
+            modelBuilder.HasSequence<int>("production_order_numbers");
+
             modelBuilder.HasSequence<int>("purchase_order_numbers");
 
             modelBuilder.HasSequence<int>("purchase_requisition_numbers");
@@ -347,6 +351,63 @@ namespace Ebt.Core.Data.Migrations
                     b.ToTable("customer_addresses", (string)null);
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.Employee", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean")
+                        .HasColumnName("active");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("Function")
+                        .HasColumnType("text")
+                        .HasColumnName("function");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Nickname")
+                        .HasColumnType("text")
+                        .HasColumnName("nickname");
+
+                    b.Property<int?>("ShiftId")
+                        .HasColumnType("integer")
+                        .HasColumnName("shift_id");
+
+                    b.Property<int?>("WorkCenterId")
+                        .HasColumnType("integer")
+                        .HasColumnName("work_center_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_employees");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_employees_code");
+
+                    b.HasIndex("ShiftId")
+                        .HasDatabaseName("ix_employees_shift_id");
+
+                    b.HasIndex("WorkCenterId")
+                        .HasDatabaseName("ix_employees_work_center_id");
+
+                    b.ToTable("employees", (string)null);
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.GoodsReceipt", b =>
                 {
                     b.Property<int>("Id")
@@ -500,6 +561,34 @@ namespace Ebt.Core.Data.Migrations
                         {
                             t.HasCheckConstraint("ck_goods_receipt_lines_quantity", "quantity > 0");
                         });
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.Holiday", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_holidays");
+
+                    b.HasIndex("Date")
+                        .IsUnique()
+                        .HasDatabaseName("ix_holidays_date");
+
+                    b.ToTable("holidays", (string)null);
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.Machine", b =>
@@ -749,6 +838,118 @@ namespace Ebt.Core.Data.Migrations
                     b.ToTable("material_subgroups", (string)null);
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.OutsideShipment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("InvoiceNumber")
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("invoice_number");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("OperationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("operation_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("quantity");
+
+                    b.Property<decimal>("ReturnedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("returned_quantity");
+
+                    b.Property<decimal>("ScrapQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("scrap_quantity");
+
+                    b.Property<DateOnly>("SentOn")
+                        .HasColumnType("date")
+                        .HasColumnName("sent_on");
+
+                    b.Property<decimal>("ServiceValue")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("service_value");
+
+                    b.Property<int>("SupplierId")
+                        .HasColumnType("integer")
+                        .HasColumnName("supplier_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_outside_shipments");
+
+                    b.HasIndex("OperationId")
+                        .HasDatabaseName("ix_outside_shipments_operation_id");
+
+                    b.HasIndex("SupplierId")
+                        .HasDatabaseName("ix_outside_shipments_supplier_id");
+
+                    b.ToTable("outside_shipments", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_outside_shipments_quantities", "quantity > 0 AND returned_quantity >= 0 AND scrap_quantity >= 0 AND returned_quantity + scrap_quantity <= quantity");
+                        });
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.OverrunRelease", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Justification")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("justification");
+
+                    b.Property<int>("OperationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("operation_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("quantity");
+
+                    b.Property<DateTimeOffset>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("released_at");
+
+                    b.Property<string>("ReleasedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("released_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_overrun_releases");
+
+                    b.HasIndex("OperationId")
+                        .HasDatabaseName("ix_overrun_releases_operation_id");
+
+                    b.ToTable("overrun_releases", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_overrun_releases_quantity", "quantity > 0");
+                        });
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.PayableInstallment", b =>
                 {
                     b.Property<int>("Id")
@@ -917,6 +1118,567 @@ namespace Ebt.Core.Data.Migrations
                         .HasDatabaseName("ix_product_customers_customer_id");
 
                     b.ToTable("product_customers", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProductionOccurrence", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<bool>("StopsOrder")
+                        .HasColumnType("boolean")
+                        .HasColumnName("stops_order");
+
+                    b.HasKey("Id")
+                        .HasName("pk_production_occurrences");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_production_occurrences_code");
+
+                    b.ToTable("production_occurrences", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProductionOrder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateOnly?>("AdjustedEnd")
+                        .HasColumnType("date")
+                        .HasColumnName("adjusted_end");
+
+                    b.Property<DateOnly?>("AdjustedStart")
+                        .HasColumnType("date")
+                        .HasColumnName("adjusted_start");
+
+                    b.Property<int?>("Bales")
+                        .HasColumnType("integer")
+                        .HasColumnName("bales");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<string>("ClosedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("closed_by");
+
+                    b.Property<DateTimeOffset?>("CostClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cost_closed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<int?>("CustomerId")
+                        .HasColumnType("integer")
+                        .HasColumnName("customer_id");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("due_date");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<decimal?>("MaterialCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("material_cost");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer")
+                        .HasColumnName("number");
+
+                    b.Property<int?>("ParentOrderId")
+                        .HasColumnType("integer")
+                        .HasColumnName("parent_order_id");
+
+                    b.Property<DateOnly?>("PlannedEnd")
+                        .HasColumnType("date")
+                        .HasColumnName("planned_end");
+
+                    b.Property<DateOnly?>("PlannedStart")
+                        .HasColumnType("date")
+                        .HasColumnName("planned_start");
+
+                    b.Property<int?>("PreviousOrderId")
+                        .HasColumnType("integer")
+                        .HasColumnName("previous_order_id");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer")
+                        .HasColumnName("product_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("reference");
+
+                    b.Property<DateTimeOffset?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("released_at");
+
+                    b.Property<decimal?>("ServiceCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("service_cost");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StatusReason")
+                        .HasColumnType("text")
+                        .HasColumnName("status_reason");
+
+                    b.Property<decimal?>("UnitCost")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("unit_cost");
+
+                    b.HasKey("Id")
+                        .HasName("pk_production_orders");
+
+                    b.HasIndex("CustomerId")
+                        .HasDatabaseName("ix_production_orders_customer_id");
+
+                    b.HasIndex("DueDate")
+                        .HasDatabaseName("ix_production_orders_due_date");
+
+                    b.HasIndex("ParentOrderId")
+                        .HasDatabaseName("ix_production_orders_parent_order_id");
+
+                    b.HasIndex("PreviousOrderId")
+                        .HasDatabaseName("ix_production_orders_previous_order_id");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_production_orders_product_id");
+
+                    b.HasIndex("Reference")
+                        .IsUnique()
+                        .HasDatabaseName("ix_production_orders_reference");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_production_orders_status");
+
+                    b.HasIndex("Kind", "Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_production_orders_kind_number");
+
+                    b.ToTable("production_orders", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_production_orders_quantity", "quantity > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProductionOrderMaterial", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ComponentProductId")
+                        .HasColumnType("integer")
+                        .HasColumnName("component_product_id");
+
+                    b.Property<int?>("MaterialId")
+                        .HasColumnType("integer")
+                        .HasColumnName("material_id");
+
+                    b.Property<int>("OperationSequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("operation_sequence");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_id");
+
+                    b.Property<decimal>("QuantityPerUnit")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("quantity_per_unit");
+
+                    b.Property<decimal>("RequiredQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("required_quantity");
+
+                    b.Property<int?>("ReservationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("reservation_id");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("unit");
+
+                    b.HasKey("Id")
+                        .HasName("pk_production_order_materials");
+
+                    b.HasIndex("ComponentProductId")
+                        .HasDatabaseName("ix_production_order_materials_component_product_id");
+
+                    b.HasIndex("MaterialId")
+                        .HasDatabaseName("ix_production_order_materials_material_id");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("ix_production_order_materials_order_id");
+
+                    b.HasIndex("ReservationId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_production_order_materials_reservation_id");
+
+                    b.ToTable("production_order_materials", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_production_order_materials_one_item", "(material_id IS NULL) <> (component_product_id IS NULL)");
+
+                            t.HasCheckConstraint("ck_production_order_materials_quantity", "required_quantity >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProductionOrderOperation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("External")
+                        .HasColumnType("boolean")
+                        .HasColumnName("external");
+
+                    b.Property<int?>("ExternalLeadDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("external_lead_days");
+
+                    b.Property<int?>("MachineId")
+                        .HasColumnType("integer")
+                        .HasColumnName("machine_id");
+
+                    b.Property<decimal?>("Operators")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("operators");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_id");
+
+                    b.Property<decimal>("OverrunReleased")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("overrun_released");
+
+                    b.Property<decimal?>("PiecesPerHour")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("pieces_per_hour");
+
+                    b.Property<DateOnly?>("PlannedEnd")
+                        .HasColumnType("date")
+                        .HasColumnName("planned_end");
+
+                    b.Property<decimal>("PlannedHours")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("planned_hours");
+
+                    b.Property<DateOnly?>("PlannedStart")
+                        .HasColumnType("date")
+                        .HasColumnName("planned_start");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence");
+
+                    b.Property<decimal?>("SetupHours")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("setup_hours");
+
+                    b.Property<int?>("SupplierId")
+                        .HasColumnType("integer")
+                        .HasColumnName("supplier_id");
+
+                    b.Property<int?>("WorkCenterId")
+                        .HasColumnType("integer")
+                        .HasColumnName("work_center_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_production_order_operations");
+
+                    b.HasIndex("MachineId")
+                        .HasDatabaseName("ix_production_order_operations_machine_id");
+
+                    b.HasIndex("SupplierId")
+                        .HasDatabaseName("ix_production_order_operations_supplier_id");
+
+                    b.HasIndex("WorkCenterId")
+                        .HasDatabaseName("ix_production_order_operations_work_center_id");
+
+                    b.HasIndex("OrderId", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ix_production_order_operations_order_id_sequence");
+
+                    b.ToTable("production_order_operations", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_production_order_operations_external", "NOT external OR supplier_id IS NOT NULL");
+                        });
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProductionReport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<decimal?>("DowntimeHours")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("downtime_hours");
+
+                    b.Property<int?>("DowntimeOccurrenceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("downtime_occurrence_id");
+
+                    b.Property<int?>("EmployeeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("employee_id");
+
+                    b.Property<TimeOnly?>("EndTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("end_time");
+
+                    b.Property<decimal>("GoodQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("good_quantity");
+
+                    b.Property<decimal?>("Hours")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("hours");
+
+                    b.Property<string>("LegacyKey")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("legacy_key");
+
+                    b.Property<int?>("MachineId")
+                        .HasColumnType("integer")
+                        .HasColumnName("machine_id");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("OperationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("operation_id");
+
+                    b.Property<decimal?>("Operators")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("operators");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_id");
+
+                    b.Property<int?>("OutsideShipmentId")
+                        .HasColumnType("integer")
+                        .HasColumnName("outside_shipment_id");
+
+                    b.Property<DateTimeOffset>("ReportedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reported_at");
+
+                    b.Property<string>("ReportedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("reported_by");
+
+                    b.Property<int?>("ScrapOccurrenceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("scrap_occurrence_id");
+
+                    b.Property<decimal>("ScrapQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("scrap_quantity");
+
+                    b.Property<decimal?>("SetupHours")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("setup_hours");
+
+                    b.Property<int?>("ShiftId")
+                        .HasColumnType("integer")
+                        .HasColumnName("shift_id");
+
+                    b.Property<TimeOnly?>("StartTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("start_time");
+
+                    b.Property<decimal?>("WeightKg")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("weight_kg");
+
+                    b.HasKey("Id")
+                        .HasName("pk_production_reports");
+
+                    b.HasIndex("Date")
+                        .HasDatabaseName("ix_production_reports_date");
+
+                    b.HasIndex("DowntimeOccurrenceId")
+                        .HasDatabaseName("ix_production_reports_downtime_occurrence_id");
+
+                    b.HasIndex("EmployeeId")
+                        .HasDatabaseName("ix_production_reports_employee_id");
+
+                    b.HasIndex("LegacyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_production_reports_legacy_key");
+
+                    b.HasIndex("MachineId")
+                        .HasDatabaseName("ix_production_reports_machine_id");
+
+                    b.HasIndex("OperationId")
+                        .HasDatabaseName("ix_production_reports_operation_id");
+
+                    b.HasIndex("OutsideShipmentId")
+                        .HasDatabaseName("ix_production_reports_outside_shipment_id");
+
+                    b.HasIndex("ScrapOccurrenceId")
+                        .HasDatabaseName("ix_production_reports_scrap_occurrence_id");
+
+                    b.HasIndex("ShiftId")
+                        .HasDatabaseName("ix_production_reports_shift_id");
+
+                    b.HasIndex("OrderId", "OperationId")
+                        .HasDatabaseName("ix_production_reports_order_id_operation_id");
+
+                    b.ToTable("production_reports", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_production_reports_quantities", "good_quantity >= 0 AND scrap_quantity >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProductionSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("HoursPerDay")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("hours_per_day");
+
+                    b.Property<int?>("IssueLocationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("issue_location_id");
+
+                    b.Property<decimal>("OverrunTolerancePercent")
+                        .HasPrecision(7, 4)
+                        .HasColumnType("numeric(7,4)")
+                        .HasColumnName("overrun_tolerance_percent");
+
+                    b.Property<int?>("ReceiptLocationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("receipt_location_id");
+
+                    b.Property<bool>("WorkSaturdays")
+                        .HasColumnType("boolean")
+                        .HasColumnName("work_saturdays");
+
+                    b.HasKey("Id")
+                        .HasName("pk_production_settings");
+
+                    b.HasIndex("IssueLocationId")
+                        .HasDatabaseName("ix_production_settings_issue_location_id");
+
+                    b.HasIndex("ReceiptLocationId")
+                        .HasDatabaseName("ix_production_settings_receipt_location_id");
+
+                    b.ToTable("production_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_production_settings_hours", "hours_per_day > 0 AND hours_per_day <= 24");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            HoursPerDay = 8m,
+                            OverrunTolerancePercent = 3m,
+                            WorkSaturdays = false
+                        });
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.PurchaseOrder", b =>
@@ -1531,6 +2293,49 @@ namespace Ebt.Core.Data.Migrations
                         {
                             t.HasCheckConstraint("ck_routing_operations_sequence", "sequence > 0 AND sequence % 10 = 0");
                         });
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.Shift", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("code");
+
+                    b.Property<TimeOnly?>("EndsAt")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("ends_at");
+
+                    b.Property<decimal?>("Hours")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("hours");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<TimeOnly?>("StartsAt")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("starts_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_shifts");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_shifts_code");
+
+                    b.ToTable("shifts", (string)null);
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.StandardOperation", b =>
@@ -2324,6 +3129,25 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Customer");
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.Employee", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.Shift", "Shift")
+                        .WithMany()
+                        .HasForeignKey("ShiftId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_employees_shifts_shift_id");
+
+                    b.HasOne("Ebt.Core.Entities.WorkCenter", "WorkCenter")
+                        .WithMany()
+                        .HasForeignKey("WorkCenterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_employees_work_centers_work_center_id");
+
+                    b.Navigation("Shift");
+
+                    b.Navigation("WorkCenter");
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.GoodsReceipt", b =>
                 {
                     b.HasOne("Ebt.Core.Entities.Supplier", "Supplier")
@@ -2403,6 +3227,39 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Subgroup");
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.OutsideShipment", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.ProductionOrderOperation", "Operation")
+                        .WithMany()
+                        .HasForeignKey("OperationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_outside_shipments_production_order_operations_operation_id");
+
+                    b.HasOne("Ebt.Core.Entities.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_outside_shipments_suppliers_supplier_id");
+
+                    b.Navigation("Operation");
+
+                    b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.OverrunRelease", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.ProductionOrderOperation", "Operation")
+                        .WithMany()
+                        .HasForeignKey("OperationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_overrun_releases_production_order_operations_operation_id");
+
+                    b.Navigation("Operation");
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.PayableInstallment", b =>
                 {
                     b.HasOne("Ebt.Core.Entities.GoodsReceipt", "GoodsReceipt")
@@ -2434,6 +3291,202 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Customer");
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProductionOrder", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_orders_customers_customer_id");
+
+                    b.HasOne("Ebt.Core.Entities.ProductionOrder", "ParentOrder")
+                        .WithMany()
+                        .HasForeignKey("ParentOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_orders_production_orders_parent_order_id");
+
+                    b.HasOne("Ebt.Core.Entities.ProductionOrder", "PreviousOrder")
+                        .WithMany()
+                        .HasForeignKey("PreviousOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_orders_production_orders_previous_order_id");
+
+                    b.HasOne("Ebt.Core.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_production_orders_products_product_id");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("ParentOrder");
+
+                    b.Navigation("PreviousOrder");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProductionOrderMaterial", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.Product", "ComponentProduct")
+                        .WithMany()
+                        .HasForeignKey("ComponentProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_order_materials_products_component_product_id");
+
+                    b.HasOne("Ebt.Core.Entities.Material", "Material")
+                        .WithMany()
+                        .HasForeignKey("MaterialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_order_materials_materials_material_id");
+
+                    b.HasOne("Ebt.Core.Entities.ProductionOrder", "Order")
+                        .WithMany("Materials")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_production_order_materials_production_orders_order_id");
+
+                    b.HasOne("Ebt.Core.Entities.StockReservation", "Reservation")
+                        .WithMany()
+                        .HasForeignKey("ReservationId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_production_order_materials_stock_reservations_reservation_id");
+
+                    b.Navigation("ComponentProduct");
+
+                    b.Navigation("Material");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Reservation");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProductionOrderOperation", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.Machine", "Machine")
+                        .WithMany()
+                        .HasForeignKey("MachineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_order_operations_machines_machine_id");
+
+                    b.HasOne("Ebt.Core.Entities.ProductionOrder", "Order")
+                        .WithMany("Operations")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_production_order_operations_production_orders_order_id");
+
+                    b.HasOne("Ebt.Core.Entities.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_order_operations_suppliers_supplier_id");
+
+                    b.HasOne("Ebt.Core.Entities.WorkCenter", "WorkCenter")
+                        .WithMany()
+                        .HasForeignKey("WorkCenterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_order_operations_work_centers_work_center_id");
+
+                    b.Navigation("Machine");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Supplier");
+
+                    b.Navigation("WorkCenter");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProductionReport", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.ProductionOccurrence", "DowntimeOccurrence")
+                        .WithMany()
+                        .HasForeignKey("DowntimeOccurrenceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_reports_production_occurrences_downtime_occurren");
+
+                    b.HasOne("Ebt.Core.Entities.Employee", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_reports_employees_employee_id");
+
+                    b.HasOne("Ebt.Core.Entities.Machine", "Machine")
+                        .WithMany()
+                        .HasForeignKey("MachineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_reports_machines_machine_id");
+
+                    b.HasOne("Ebt.Core.Entities.ProductionOrderOperation", "Operation")
+                        .WithMany()
+                        .HasForeignKey("OperationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_production_reports_production_order_operations_operation_id");
+
+                    b.HasOne("Ebt.Core.Entities.ProductionOrder", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_production_reports_production_orders_order_id");
+
+                    b.HasOne("Ebt.Core.Entities.OutsideShipment", "OutsideShipment")
+                        .WithMany()
+                        .HasForeignKey("OutsideShipmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_production_reports_outside_shipments_outside_shipment_id");
+
+                    b.HasOne("Ebt.Core.Entities.ProductionOccurrence", "ScrapOccurrence")
+                        .WithMany()
+                        .HasForeignKey("ScrapOccurrenceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_reports_production_occurrences_scrap_occurrence_");
+
+                    b.HasOne("Ebt.Core.Entities.Shift", "Shift")
+                        .WithMany()
+                        .HasForeignKey("ShiftId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_reports_shifts_shift_id");
+
+                    b.Navigation("DowntimeOccurrence");
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Machine");
+
+                    b.Navigation("Operation");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("OutsideShipment");
+
+                    b.Navigation("ScrapOccurrence");
+
+                    b.Navigation("Shift");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProductionSettings", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.StockLocation", "IssueLocation")
+                        .WithMany()
+                        .HasForeignKey("IssueLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_settings_stock_locations_issue_location_id");
+
+                    b.HasOne("Ebt.Core.Entities.StockLocation", "ReceiptLocation")
+                        .WithMany()
+                        .HasForeignKey("ReceiptLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_production_settings_stock_locations_receipt_location_id");
+
+                    b.Navigation("IssueLocation");
+
+                    b.Navigation("ReceiptLocation");
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.PurchaseOrder", b =>
@@ -2829,6 +3882,13 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Customers");
 
                     b.Navigation("Routing");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProductionOrder", b =>
+                {
+                    b.Navigation("Materials");
+
+                    b.Navigation("Operations");
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.PurchaseOrder", b =>

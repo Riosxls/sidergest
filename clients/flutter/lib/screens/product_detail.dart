@@ -477,7 +477,9 @@ class _RevisionsTabState extends State<RevisionsTab> {
       onSubmit: (body) async => await widget.session.api.post(path, body) as Map<String, dynamic>?,
     );
     if (r == null) return;
-    setState(() => _future = _fetch());
+    setState(() {
+      _future = _fetch();
+    });
     widget.onChanged();
   }
 

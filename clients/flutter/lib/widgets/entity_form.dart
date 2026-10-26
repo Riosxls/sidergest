@@ -63,12 +63,13 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
   final _text = <String, TextEditingController>{};
   final _values = <String, Object?>{};
   final _lookupKeys = <String, int>{};
+  final _labels = <String, String>{};
   Map<String, List<String>> _serverErrors = {};
   final _clientErrors = <String, String>{};
   String? _message;
   bool _busy = false;
 
-  bool _isText(FieldSpec f) => f.type == FieldType.text || f.type == FieldType.integer || f.type == FieldType.decimal;
+  bool _isText(FieldSpec f) => f.type == FieldType.text || f.type == FieldType.integer || f.type == FieldType.decimal || f.type == FieldType.date;
 
   @override
   void initState() {
@@ -76,11 +77,13 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
     for (final f in widget.fields) {
       final v = widget.initial?[f.key] ?? (widget.initial == null ? f.defaultValue : null);
       if (_isText(f)) {
-        _text[f.key] = TextEditingController(text: f.type == FieldType.text ? (v as String? ?? '') : fmt(v));
+        _text[f.key] = TextEditingController(text: f.type == FieldType.text ? (v as String? ?? '') : (f.type == FieldType.date ? fmtDay(v) : fmt(v)));
       } else {
         _values[f.key] = f.type == FieldType.boolean ? (v as bool? ?? false) : v;
       }
     }
+    final labels = widget.initial?['_labels'];
+    if (labels is Map) _labels.addAll(labels.cast<String, String>());
   }
 
   @override
@@ -106,6 +109,9 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
         } else if (f.type == FieldType.decimal) {
           v = parseDecimal(s);
           if (v == null) _clientErrors[f.key] = 'Número inválido';
+        } else if (f.type == FieldType.date) {
+          v = parseDate(s);
+          if (v == null) _clientErrors[f.key] = 'Data inválida (dd/mm/aaaa)';
         } else {
           v = s;
         }
@@ -128,7 +134,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
     setState(() => _busy = true);
     try {
       final result = await widget.onSubmit(body);
-      if (mounted) Navigator.pop(context, result ?? body);
+      if (mounted) Navigator.pop(context, result ?? {...body, '_labels': Map<String, String>.of(_labels)});
     } on ApiException catch (e) {
       setState(() {
         _serverErrors = e.fieldErrors.map((k, v) => MapEntry(k.isEmpty ? k : k[0].toLowerCase() + k.substring(1), v));
@@ -150,6 +156,12 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _pickDate(FieldSpec f) async {
+    final current = DateTime.tryParse(parseDate(_text[f.key]!.text) ?? '') ?? DateTime.now();
+    final d = await showDatePicker(context: context, initialDate: current, firstDate: DateTime(2000), lastDate: DateTime(2100));
+    if (d != null) setState(() => _text[f.key]!.text = fmtDay(isoDate(d)));
   }
 
   String? _errorFor(String key) => _clientErrors[key] ?? _serverErrors[key]?.join('; ');
@@ -175,12 +187,25 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
       case FieldType.text:
       case FieldType.integer:
       case FieldType.decimal:
+      case FieldType.date:
         return TextField(
           key: ValueKey('field-${f.key}'),
           controller: _text[f.key],
           readOnly: widget.readOnly,
-          keyboardType: f.type == FieldType.text ? TextInputType.text : const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: label, helperText: f.hint, errorText: error, border: const OutlineInputBorder(), isDense: true),
+          keyboardType: f.type == FieldType.text
+              ? TextInputType.text
+              : (f.type == FieldType.date ? TextInputType.datetime : const TextInputType.numberWithOptions(decimal: true)),
+          decoration: InputDecoration(
+            labelText: label,
+            helperText: f.hint,
+            errorText: error,
+            border: const OutlineInputBorder(),
+            isDense: true,
+            hintText: f.type == FieldType.date ? 'dd/mm/aaaa' : null,
+            suffixIcon: f.type == FieldType.date && !widget.readOnly
+                ? IconButton(tooltip: 'Calendário', icon: const Icon(Icons.calendar_today, size: 18), onPressed: () => _pickDate(f))
+                : null,
+          ),
           onSubmitted: (_) => widget.readOnly ? null : _save(),
           onChanged: (_) => _serverErrors.containsKey(f.key) || _clientErrors.containsKey(f.key)
               ? setState(() {
@@ -226,8 +251,14 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
           enabled: !widget.readOnly,
           onChanged: (id, entity) => setState(() {
             _values[f.key] = id;
+            if (entity == null) {
+              _labels.remove(f.key);
+            } else {
+              _labels[f.key] = LookupSpec.display(entity);
+            }
             _applyFill(f.lookup!, entity);
           }),
+          initialDisplay: _labels[f.key],
         );
     }
   }
@@ -309,9 +340,11 @@ class LookupField extends StatefulWidget {
     this.hint,
     this.error,
     this.enabled = true,
+    this.initialDisplay,
   });
 
   final ApiClient api;
+  final String? initialDisplay;
   final LookupSpec spec;
   final String label;
   final String? hint;
@@ -335,6 +368,14 @@ class _LookupFieldState extends State<LookupField> {
 
   Future<void> _load() async {
     if (widget.value == null) return;
+    if (widget.initialDisplay != null) {
+      _display = widget.initialDisplay;
+      return;
+    }
+    if (!widget.spec.fetchById) {
+      _display = '#${widget.value}';
+      return;
+    }
     try {
       final e = await widget.api.get('${widget.spec.path}/${widget.value}') as Map<String, dynamic>;
       if (mounted) setState(() => _display = LookupSpec.display(e));
@@ -346,7 +387,7 @@ class _LookupFieldState extends State<LookupField> {
   Future<void> _pick() async {
     final picked = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => LookupPicker(api: widget.api, path: widget.spec.path, title: widget.label),
+      builder: (_) => LookupPicker(api: widget.api, path: widget.spec.path, title: widget.label, query: widget.spec.query),
     );
     if (picked == null) return;
     setState(() => _display = LookupSpec.display(picked));
@@ -383,9 +424,10 @@ class _LookupFieldState extends State<LookupField> {
 }
 
 class LookupPicker extends StatefulWidget {
-  const LookupPicker({super.key, required this.api, required this.path, required this.title});
+  const LookupPicker({super.key, required this.api, required this.path, required this.title, this.query = const {}});
 
   final ApiClient api;
+  final Map<String, dynamic> query;
   final String path;
   final String title;
 
@@ -409,7 +451,7 @@ class _LookupPickerState extends State<LookupPicker> {
     final r = ++_request;
     setState(() => _loading = true);
     try {
-      final page = await widget.api.list(widget.path, q: q, take: 100);
+      final page = await widget.api.list(widget.path, q: q, take: 100, query: widget.query);
       if (r != _request || !mounted) return;
       setState(() {
         _items = page.items;

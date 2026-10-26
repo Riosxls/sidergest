@@ -22,6 +22,11 @@ if (dir is null || conn is null || args.Contains("--help"))
         Then imports stock: settings (SHCONTR/ESCONTR), monthly average cost per
         thickness (SG280) and opening balances (SALDOEST: SALDO -> ALM, SALDOTER -> TER)
         dated --opening-date (default today). Opening balances are imported once.
+
+        Then PCP/Apontamento: CACONTR settings and OF counters, shifts (G29),
+        employees (G28), occurrences (G27), production orders (XY090), OPIs (XY310),
+        committed materials (XY060), overrun releases (XY280), shop-floor reports
+        (XY130 with XY140 labor and XY150 machine) and scrap (E24).
         """);
     return args.Contains("--help") ? 0 : 2;
 }
@@ -37,7 +42,7 @@ var options = new ImportOptions
     CodePage = int.TryParse(Arg("--codepage"), out var cp) ? cp : 850,
     DefaultNcm = Arg("--default-ncm") ?? "73063010",
     DryRun = args.Contains("--dry-run"),
-    Steps = [new PurchasingImport()]
+    Steps = [new PurchasingImport(), new ProductionImport()]
 };
 
 await using var db = new EbtDbContext(DesignTimeFactory.Create(conn));
