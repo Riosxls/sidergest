@@ -22,6 +22,8 @@ namespace Ebt.Core.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.HasSequence<int>("delivery_numbers");
+
             modelBuilder.HasSequence<int>("goods_receipt_numbers");
 
             modelBuilder.HasSequence<int>("internal_order_numbers");
@@ -33,6 +35,10 @@ namespace Ebt.Core.Data.Migrations
             modelBuilder.HasSequence<int>("purchase_requisition_numbers");
 
             modelBuilder.HasSequence<int>("quotation_numbers");
+
+            modelBuilder.HasSequence<int>("sales_order_numbers");
+
+            modelBuilder.HasSequence<int>("sales_quote_numbers");
 
             modelBuilder.HasSequence("stock_lot_numbers");
 
@@ -349,6 +355,164 @@ namespace Ebt.Core.Data.Migrations
                         .HasDatabaseName("ix_customer_addresses_customer_id_legacy_code");
 
                     b.ToTable("customer_addresses", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.Delivery", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AddressId")
+                        .HasColumnType("integer")
+                        .HasColumnName("address_id");
+
+                    b.Property<string>("Carrier")
+                        .HasColumnType("text")
+                        .HasColumnName("carrier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeliveredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("delivered_at");
+
+                    b.Property<decimal?>("GrossWeightKg")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("gross_weight_kg");
+
+                    b.Property<string>("InvoiceNumber")
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("invoice_number");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer")
+                        .HasColumnName("number");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_id");
+
+                    b.Property<int>("Packages")
+                        .HasColumnType("integer")
+                        .HasColumnName("packages");
+
+                    b.Property<DateOnly>("PlannedDate")
+                        .HasColumnType("date")
+                        .HasColumnName("planned_date");
+
+                    b.Property<string>("ReceivedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("received_by");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("reference");
+
+                    b.Property<DateTimeOffset?>("ShippedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("shipped_at");
+
+                    b.Property<string>("ShippedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("shipped_by");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<int?>("StockDocumentId")
+                        .HasColumnType("integer")
+                        .HasColumnName("stock_document_id");
+
+                    b.Property<string>("VehiclePlate")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("vehicle_plate");
+
+                    b.HasKey("Id")
+                        .HasName("pk_deliveries");
+
+                    b.HasIndex("AddressId")
+                        .HasDatabaseName("ix_deliveries_address_id");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_deliveries_number");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("ix_deliveries_order_id");
+
+                    b.HasIndex("Reference")
+                        .IsUnique()
+                        .HasDatabaseName("ix_deliveries_reference");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_deliveries_status");
+
+                    b.HasIndex("StockDocumentId")
+                        .HasDatabaseName("ix_deliveries_stock_document_id");
+
+                    b.ToTable("deliveries", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.DeliveryLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DeliveryId")
+                        .HasColumnType("integer")
+                        .HasColumnName("delivery_id");
+
+                    b.Property<int>("OrderLineId")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_line_id");
+
+                    b.Property<int>("Packages")
+                        .HasColumnType("integer")
+                        .HasColumnName("packages");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("quantity");
+
+                    b.HasKey("Id")
+                        .HasName("pk_delivery_lines");
+
+                    b.HasIndex("OrderLineId")
+                        .HasDatabaseName("ix_delivery_lines_order_line_id");
+
+                    b.HasIndex("DeliveryId", "OrderLineId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_delivery_lines_delivery_id_order_line_id");
+
+                    b.ToTable("delivery_lines", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_delivery_lines_values", "quantity > 0 AND packages >= 0");
+                        });
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.Employee", b =>
@@ -987,6 +1151,109 @@ namespace Ebt.Core.Data.Migrations
                         .HasDatabaseName("ix_payable_installments_goods_receipt_id_sequence");
 
                     b.ToTable("payable_installments", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.PaymentTerm", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean")
+                        .HasColumnName("active");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("code");
+
+                    b.Property<decimal?>("CreditLimit")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("credit_limit");
+
+                    b.Property<string>("Days")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("days");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_payment_terms");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_payment_terms_code");
+
+                    b.ToTable("payment_terms", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.PriceListEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("CustomerId")
+                        .HasColumnType("integer")
+                        .HasColumnName("customer_id");
+
+                    b.Property<decimal?>("IcmsPercent")
+                        .HasPrecision(7, 4)
+                        .HasColumnType("numeric(7,4)")
+                        .HasColumnName("icms_percent");
+
+                    b.Property<decimal?>("IpiPercent")
+                        .HasPrecision(7, 4)
+                        .HasColumnType("numeric(7,4)")
+                        .HasColumnName("ipi_percent");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer")
+                        .HasColumnName("product_id");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("unit_price");
+
+                    b.Property<DateOnly>("ValidFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("valid_from");
+
+                    b.Property<DateOnly?>("ValidTo")
+                        .HasColumnType("date")
+                        .HasColumnName("valid_to");
+
+                    b.HasKey("Id")
+                        .HasName("pk_price_list");
+
+                    b.HasIndex("CustomerId")
+                        .HasDatabaseName("ix_price_list_customer_id");
+
+                    b.HasIndex("ProductId", "CustomerId", "ValidFrom")
+                        .IsUnique()
+                        .HasDatabaseName("ix_price_list_product_id_customer_id_valid_from");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("ProductId", "CustomerId", "ValidFrom"), false);
+
+                    b.ToTable("price_list", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_price_list_values", "unit_price >= 0 AND (valid_to IS NULL OR valid_to >= valid_from)");
+                        });
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.Product", b =>
@@ -2167,6 +2434,234 @@ namespace Ebt.Core.Data.Migrations
                     b.ToTable("quotation_items", (string)null);
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.Quote", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AddressId")
+                        .HasColumnType("integer")
+                        .HasColumnName("address_id");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("approved_by");
+
+                    b.Property<string>("Conditions")
+                        .HasColumnType("text")
+                        .HasColumnName("conditions");
+
+                    b.Property<string>("ContactEmail")
+                        .HasColumnType("text")
+                        .HasColumnName("contact_email");
+
+                    b.Property<string>("ContactName")
+                        .HasColumnType("text")
+                        .HasColumnName("contact_name");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("integer")
+                        .HasColumnName("customer_id");
+
+                    b.Property<string>("CustomerPo")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("customer_po");
+
+                    b.Property<string>("CustomerReference")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("customer_reference");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<string>("DecisionBy")
+                        .HasColumnType("text")
+                        .HasColumnName("decision_by");
+
+                    b.Property<string>("DecisionNote")
+                        .HasColumnType("text")
+                        .HasColumnName("decision_note");
+
+                    b.Property<int>("Freight")
+                        .HasColumnType("integer")
+                        .HasColumnName("freight");
+
+                    b.Property<bool>("NeedsApproval")
+                        .HasColumnType("boolean")
+                        .HasColumnName("needs_approval");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer")
+                        .HasColumnName("number");
+
+                    b.Property<int?>("PaymentTermId")
+                        .HasColumnType("integer")
+                        .HasColumnName("payment_term_id");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("reference");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<int?>("SalesOrderId")
+                        .HasColumnType("integer")
+                        .HasColumnName("sales_order_id");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<string>("SentTo")
+                        .HasColumnType("text")
+                        .HasColumnName("sent_to");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<DateOnly?>("ValidUntil")
+                        .HasColumnType("date")
+                        .HasColumnName("valid_until");
+
+                    b.Property<int>("ValidityDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("validity_days");
+
+                    b.HasKey("Id")
+                        .HasName("pk_quotes");
+
+                    b.HasIndex("AddressId")
+                        .HasDatabaseName("ix_quotes_address_id");
+
+                    b.HasIndex("CustomerId")
+                        .HasDatabaseName("ix_quotes_customer_id");
+
+                    b.HasIndex("PaymentTermId")
+                        .HasDatabaseName("ix_quotes_payment_term_id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_quotes_status");
+
+                    b.HasIndex("Number", "Revision")
+                        .IsUnique()
+                        .HasDatabaseName("ix_quotes_number_revision");
+
+                    b.ToTable("quotes", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.QuoteLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CustomerPartNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("customer_part_number");
+
+                    b.Property<DateOnly?>("DeliveryDate")
+                        .HasColumnType("date")
+                        .HasColumnName("delivery_date");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<decimal>("IcmsPercent")
+                        .HasPrecision(7, 4)
+                        .HasColumnType("numeric(7,4)")
+                        .HasColumnName("icms_percent");
+
+                    b.Property<decimal>("IpiPercent")
+                        .HasPrecision(7, 4)
+                        .HasColumnType("numeric(7,4)")
+                        .HasColumnName("ipi_percent");
+
+                    b.Property<int?>("LeadTimeDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("lead_time_days");
+
+                    b.Property<decimal?>("ListPrice")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("list_price");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer")
+                        .HasColumnName("product_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("quantity");
+
+                    b.Property<int>("QuoteId")
+                        .HasColumnType("integer")
+                        .HasColumnName("quote_id");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("unit");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("unit_price");
+
+                    b.HasKey("Id")
+                        .HasName("pk_quote_lines");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_quote_lines_product_id");
+
+                    b.HasIndex("QuoteId", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ix_quote_lines_quote_id_sequence");
+
+                    b.ToTable("quote_lines", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_quote_lines_values", "quantity > 0 AND unit_price >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.Revision", b =>
                 {
                     b.Property<int>("Id")
@@ -2292,6 +2787,309 @@ namespace Ebt.Core.Data.Migrations
                     b.ToTable("routing_operations", null, t =>
                         {
                             t.HasCheckConstraint("ck_routing_operations_sequence", "sequence > 0 AND sequence % 10 = 0");
+                        });
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SalesEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("action");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<string>("FromStatus")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("from_status");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
+                    b.Property<int>("RecordId")
+                        .HasColumnType("integer")
+                        .HasColumnName("record_id");
+
+                    b.Property<string>("ToStatus")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("to_status");
+
+                    b.Property<string>("User")
+                        .HasColumnType("text")
+                        .HasColumnName("user");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sales_events");
+
+                    b.HasIndex("Kind", "RecordId")
+                        .HasDatabaseName("ix_sales_events_kind_record_id");
+
+                    b.ToTable("sales_events", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SalesOrder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AddressId")
+                        .HasColumnType("integer")
+                        .HasColumnName("address_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("integer")
+                        .HasColumnName("customer_id");
+
+                    b.Property<string>("CustomerPo")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("customer_po");
+
+                    b.Property<int>("Freight")
+                        .HasColumnType("integer")
+                        .HasColumnName("freight");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer")
+                        .HasColumnName("number");
+
+                    b.Property<int?>("PaymentTermId")
+                        .HasColumnType("integer")
+                        .HasColumnName("payment_term_id");
+
+                    b.Property<int?>("QuoteId")
+                        .HasColumnType("integer")
+                        .HasColumnName("quote_id");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("reference");
+
+                    b.Property<DateTimeOffset?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("released_at");
+
+                    b.Property<string>("ReleasedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("released_by");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StatusReason")
+                        .HasColumnType("text")
+                        .HasColumnName("status_reason");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sales_orders");
+
+                    b.HasIndex("AddressId")
+                        .HasDatabaseName("ix_sales_orders_address_id");
+
+                    b.HasIndex("CustomerId")
+                        .HasDatabaseName("ix_sales_orders_customer_id");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sales_orders_number");
+
+                    b.HasIndex("PaymentTermId")
+                        .HasDatabaseName("ix_sales_orders_payment_term_id");
+
+                    b.HasIndex("QuoteId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sales_orders_quote_id");
+
+                    b.HasIndex("Reference")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sales_orders_reference");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_sales_orders_status");
+
+                    b.ToTable("sales_orders", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SalesOrderLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CustomerPartNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("customer_part_number");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("due_date");
+
+                    b.Property<decimal>("FromStock")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("from_stock");
+
+                    b.Property<decimal>("IcmsPercent")
+                        .HasPrecision(7, 4)
+                        .HasColumnType("numeric(7,4)")
+                        .HasColumnName("icms_percent");
+
+                    b.Property<decimal>("IpiPercent")
+                        .HasPrecision(7, 4)
+                        .HasColumnType("numeric(7,4)")
+                        .HasColumnName("ipi_percent");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_id");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer")
+                        .HasColumnName("product_id");
+
+                    b.Property<int?>("ProductionOrderId")
+                        .HasColumnType("integer")
+                        .HasColumnName("production_order_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("quantity");
+
+                    b.Property<int?>("ReservationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("reservation_id");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("unit");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("unit_price");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sales_order_lines");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_sales_order_lines_product_id");
+
+                    b.HasIndex("ProductionOrderId")
+                        .HasDatabaseName("ix_sales_order_lines_production_order_id");
+
+                    b.HasIndex("ReservationId")
+                        .HasDatabaseName("ix_sales_order_lines_reservation_id");
+
+                    b.HasIndex("OrderId", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sales_order_lines_order_id_sequence");
+
+                    b.ToTable("sales_order_lines", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_sales_order_lines_values", "quantity > 0 AND unit_price >= 0 AND from_stock >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SalesSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("DefaultConditions")
+                        .HasColumnType("text")
+                        .HasColumnName("default_conditions");
+
+                    b.Property<int>("DefaultValidityDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("default_validity_days");
+
+                    b.Property<decimal>("MaxDiscountPercent")
+                        .HasPrecision(7, 4)
+                        .HasColumnType("numeric(7,4)")
+                        .HasColumnName("max_discount_percent");
+
+                    b.Property<decimal>("MinimumOrderValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("minimum_order_value");
+
+                    b.Property<int?>("ShippingLocationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("shipping_location_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sales_settings");
+
+                    b.HasIndex("ShippingLocationId")
+                        .HasDatabaseName("ix_sales_settings_shipping_location_id");
+
+                    b.ToTable("sales_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_sales_settings_values", "max_discount_percent >= 0 AND max_discount_percent <= 100 AND default_validity_days > 0 AND minimum_order_value >= 0");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            DefaultValidityDays = 15,
+                            MaxDiscountPercent = 5m,
+                            MinimumOrderValue = 0m
                         });
                 });
 
@@ -3129,6 +3927,56 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Customer");
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.Delivery", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.CustomerAddress", "Address")
+                        .WithMany()
+                        .HasForeignKey("AddressId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_deliveries_customer_addresses_address_id");
+
+                    b.HasOne("Ebt.Core.Entities.SalesOrder", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_deliveries_sales_orders_order_id");
+
+                    b.HasOne("Ebt.Core.Entities.StockDocument", "StockDocument")
+                        .WithMany()
+                        .HasForeignKey("StockDocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_deliveries_stock_documents_stock_document_id");
+
+                    b.Navigation("Address");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("StockDocument");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.DeliveryLine", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.Delivery", "Delivery")
+                        .WithMany("Lines")
+                        .HasForeignKey("DeliveryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_delivery_lines_deliveries_delivery_id");
+
+                    b.HasOne("Ebt.Core.Entities.SalesOrderLine", "OrderLine")
+                        .WithMany()
+                        .HasForeignKey("OrderLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_delivery_lines_sales_order_lines_order_line_id");
+
+                    b.Navigation("Delivery");
+
+                    b.Navigation("OrderLine");
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.Employee", b =>
                 {
                     b.HasOne("Ebt.Core.Entities.Shift", "Shift")
@@ -3270,6 +4118,26 @@ namespace Ebt.Core.Data.Migrations
                         .HasConstraintName("fk_payable_installments_goods_receipts_goods_receipt_id");
 
                     b.Navigation("GoodsReceipt");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.PriceListEntry", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_price_list_customers_customer_id");
+
+                    b.HasOne("Ebt.Core.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_price_list_products_product_id");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.ProductCustomer", b =>
@@ -3608,6 +4476,55 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Quotation");
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.Quote", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.CustomerAddress", "Address")
+                        .WithMany()
+                        .HasForeignKey("AddressId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_quotes_customer_addresses_address_id");
+
+                    b.HasOne("Ebt.Core.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_quotes_customers_customer_id");
+
+                    b.HasOne("Ebt.Core.Entities.PaymentTerm", "PaymentTerm")
+                        .WithMany()
+                        .HasForeignKey("PaymentTermId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_quotes_payment_terms_payment_term_id");
+
+                    b.Navigation("Address");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("PaymentTerm");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.QuoteLine", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_quote_lines_products_product_id");
+
+                    b.HasOne("Ebt.Core.Entities.Quote", "Quote")
+                        .WithMany("Lines")
+                        .HasForeignKey("QuoteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_quote_lines_quotes_quote_id");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("Quote");
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.Revision", b =>
                 {
                     b.HasOne("Ebt.Core.Entities.Product", "Product")
@@ -3662,6 +4579,91 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Tool");
 
                     b.Navigation("WorkCenter");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SalesOrder", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.CustomerAddress", "Address")
+                        .WithMany()
+                        .HasForeignKey("AddressId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_orders_customer_addresses_address_id");
+
+                    b.HasOne("Ebt.Core.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_orders_customers_customer_id");
+
+                    b.HasOne("Ebt.Core.Entities.PaymentTerm", "PaymentTerm")
+                        .WithMany()
+                        .HasForeignKey("PaymentTermId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_sales_orders_payment_terms_payment_term_id");
+
+                    b.HasOne("Ebt.Core.Entities.Quote", "Quote")
+                        .WithMany()
+                        .HasForeignKey("QuoteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_sales_orders_quotes_quote_id");
+
+                    b.Navigation("Address");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("PaymentTerm");
+
+                    b.Navigation("Quote");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SalesOrderLine", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.SalesOrder", "Order")
+                        .WithMany("Lines")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_order_lines_sales_orders_order_id");
+
+                    b.HasOne("Ebt.Core.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_order_lines_products_product_id");
+
+                    b.HasOne("Ebt.Core.Entities.ProductionOrder", "ProductionOrder")
+                        .WithMany()
+                        .HasForeignKey("ProductionOrderId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_sales_order_lines_production_orders_production_order_id");
+
+                    b.HasOne("Ebt.Core.Entities.StockReservation", "Reservation")
+                        .WithMany()
+                        .HasForeignKey("ReservationId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_sales_order_lines_stock_reservations_reservation_id");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("ProductionOrder");
+
+                    b.Navigation("Reservation");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SalesSettings", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.StockLocation", "ShippingLocation")
+                        .WithMany()
+                        .HasForeignKey("ShippingLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_sales_settings_stock_locations_shipping_location_id");
+
+                    b.Navigation("ShippingLocation");
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.StockBalance", b =>
@@ -3870,6 +4872,11 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Addresses");
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.Delivery", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.GoodsReceipt", b =>
                 {
                     b.Navigation("Installments");
@@ -3913,9 +4920,19 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Requisitions");
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.Quote", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.RoutingOperation", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SalesOrder", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.StockDocument", b =>
