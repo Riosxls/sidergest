@@ -295,7 +295,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ordens de fabricação').first);
     await tester.pumpAndSettle();
-    expect(find.text('Nova OF'), findsNothing);
+    expect(find.text('Nova Ordem de Fabricação'), findsNothing);
     await tester.tap(find.text('OF 12'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('of-release')), findsNothing);

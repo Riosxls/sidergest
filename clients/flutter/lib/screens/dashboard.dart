@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../entities.dart';
 import '../session.dart';
@@ -13,6 +14,8 @@ import 'production_orders.dart';
 import 'product_detail.dart';
 import 'production_floor.dart';
 import 'quick_actions.dart';
+import 'sales_orders.dart';
+import 'sales_quotes.dart';
 import 'requisitions.dart';
 
 class DashboardData {
@@ -166,6 +169,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DateTime? _updated;
   final _focus = FocusNode();
   Timer? _timer;
+  bool? _tutorialHidden;
+  static const _tutorialKey = 'tutorialDismissed';
 
   bool _need(String m) => widget.module == null || widget.module == m;
 
@@ -175,6 +180,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focus.requestFocus();
     });
+    _loadTutorialPref();
     _settle();
     _timer = Timer.periodic(const Duration(minutes: 2), (_) => _refresh());
   }
@@ -184,6 +190,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _timer?.cancel();
     _focus.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadTutorialPref() async {
+    var hidden = false;
+    try {
+      hidden = (await SharedPreferences.getInstance()).getBool(_tutorialKey) ?? false;
+    } catch (_) {}
+    if (mounted) setState(() => _tutorialHidden = hidden);
+  }
+
+  Future<void> _dismissTutorial() async {
+    setState(() => _tutorialHidden = true);
+    try {
+      await (await SharedPreferences.getInstance()).setBool(_tutorialKey, true);
+    } catch (_) {}
   }
 
   static final _counted = [products, materials, machines, standardOperations, workCenters, tools];
@@ -465,6 +486,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _updatedLabel() =>
       _updated == null ? const SizedBox.shrink() : Text('Atualizado às ${_hhmm(_updated!)}', style: Theme.of(context).textTheme.bodySmall);
 
+  List<QuickAction> _painelActions() {
+    final s = widget.session;
+    return [
+      if (s.canSell) QuickAction(Icons.receipt_long_outlined, 'Novo pedido', (c) => newSalesOrder(c, s)),
+      if (s.canSell) QuickAction(Icons.request_quote_outlined, 'Novo Orçamento', (c) => newQuote(c, s)),
+      if (s.canProduce) QuickAction(Icons.add_task, 'Nova Ordem de Fabricação', (c) => newProductionOrder(c, s)),
+      if (s.canRequest) QuickAction(Icons.post_add, 'Nova requisição de compra', (c) => newRequisition(c, s)),
+    ];
+  }
+
+  Widget _quickActionsCard() {
+    final actions = _painelActions();
+    if (actions.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        key: const ValueKey('quick-actions'),
+        margin: EdgeInsets.zero,
+        shape: _cardShape(context),
+        color: theme.colorScheme.surfaceContainerHigh,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Ações rápidas', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [for (final a in actions) FilledButton.tonalIcon(onPressed: () => a.run(context), icon: Icon(a.icon), label: Text(a.label))],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _onboarding(List<Object?> d) {
     final e = _e(d), st = _s(d), pu = _p(d), pr = _o(d);
     final steps = [
@@ -479,7 +540,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ('Criar a primeira ordem de fabricação', 'production', pr == null || pr.orders.isNotEmpty || pr.shipments.isNotEmpty, 'production-orders'),
     ];
     final done = steps.where((s) => s.$3).length;
-    if (done == steps.length) return const SizedBox.shrink();
+    if (done == steps.length || _tutorialHidden != false) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return Padding(
@@ -506,6 +567,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Text('$done de ${steps.length}', style: theme.textTheme.bodySmall),
               const SizedBox(width: 8),
               const Icon(Icons.expand_more),
+              IconButton(key: const ValueKey('tutorial-dismiss'), tooltip: 'Dispensar', onPressed: _dismissTutorial, icon: const Icon(Icons.close)),
             ],
           ),
           children: [
@@ -573,6 +635,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _onboarding(d),
+          _quickActionsCard(),
           _heading(
             'Módulos',
             trailing: Row(
@@ -597,7 +660,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (s.canBuy) QuickAction(Icons.add_shopping_cart, 'Novo pedido', (c) => newPurchaseOrder(c, s)),
       ],
       'production' => [
-        if (s.canProduce) QuickAction(Icons.add_task, 'Nova OF', (c) => newProductionOrder(c, s)),
+        if (s.canProduce) QuickAction(Icons.add_task, 'Nova Ordem de Fabricação', (c) => newProductionOrder(c, s)),
         if (s.canProduce) QuickAction(Icons.edit_note, 'Novo apontamento', (c) => newReport(c, s)),
       ],
       _ => const [],

@@ -89,6 +89,7 @@ Future<void> openPalette(WidgetTester tester) async {
 
 void main() {
   backArrowTests();
+  painelExtrasTests();
   testWidgets('Painel shows one card per module with metric and alert badge; no module content', (tester) async {
     final (_, log) = await pumpShell(tester, 'Production');
     expect(find.text('Primeiros passos'), findsOneWidget);
@@ -119,7 +120,7 @@ void main() {
     expect(find.text('OFs em produção'), findsOneWidget);
     expect(find.text('Pedidos atrasados'), findsNothing);
     expect(find.text('Itens abaixo do mínimo'), findsNothing);
-    expect(find.text('Nova OF'), findsOneWidget);
+    expect(find.text('Nova Ordem de Fabricação'), findsOneWidget);
     expect(find.text('Novo pedido'), findsNothing);
     expect(find.text('Telas de PCP'), findsOneWidget);
     expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'Painel')).selected, isTrue);
@@ -158,13 +159,13 @@ void main() {
     await pumpShell(tester, 'Production');
     await tester.tap(find.byKey(const ValueKey('module-card-production')));
     await tester.pumpAndSettle();
-    expect(find.text('Nova OF'), findsOneWidget);
+    expect(find.text('Nova Ordem de Fabricação'), findsOneWidget);
     await tester.tap(find.byTooltip('Voltar ao Painel'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('module-card-purchasing')));
     await tester.pumpAndSettle();
     expect(find.text('Novo pedido'), findsNothing);
-    expect(find.text('Nova OF'), findsNothing);
+    expect(find.text('Nova Ordem de Fabricação'), findsNothing);
   });
 
   testWidgets('admin module quick actions open the creation forms', (tester) async {
@@ -178,7 +179,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('module-card-production')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Nova OF'));
+    await tester.tap(find.text('Nova Ordem de Fabricação'));
     await tester.pumpAndSettle();
     expect(find.text('Nova ordem de fabricação'), findsOneWidget);
   });
@@ -225,7 +226,7 @@ void main() {
   testWidgets('command palette: keyboard navigation, actions, products and recents', (tester) async {
     final (_, log) = await pumpShell(tester, 'Admin');
     await openPalette(tester);
-    expect(find.text('Nova OF'), findsWidgets);
+    expect(find.text('Nova Ordem de Fabricação'), findsWidgets);
     await tester.enterText(find.descendant(of: find.byType(Dialog), matching: find.byType(TextField)), 'saldo');
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -301,5 +302,34 @@ void backArrowTests() {
     await tester.tap(find.byTooltip('Voltar para Painel'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('module-card-sales')), findsOneWidget);
+  });
+}
+
+void painelExtrasTests() {
+  testWidgets('Primeiros passos can be dismissed for good', (tester) async {
+    await pumpShell(tester, 'Admin');
+    expect(find.text('Primeiros passos'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('tutorial-dismiss')));
+    await tester.pumpAndSettle();
+    expect(find.text('Primeiros passos'), findsNothing);
+    final p = await SharedPreferences.getInstance();
+    expect(p.getBool('tutorialDismissed'), isTrue);
+    await pumpShell(tester, 'Admin', prefs: {'tutorialDismissed': true});
+    expect(find.text('Primeiros passos'), findsNothing);
+  });
+
+  testWidgets('Painel quick actions follow the role and open the forms', (tester) async {
+    await pumpShell(tester, 'Admin');
+    for (final l in ['Novo pedido', 'Novo Orçamento', 'Nova Ordem de Fabricação', 'Nova requisição de compra']) {
+      expect(find.widgetWithText(FilledButton, l), findsOneWidget);
+    }
+    await tester.tap(find.widgetWithText(FilledButton, 'Nova Ordem de Fabricação'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nova ordem de fabricação'), findsOneWidget);
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    await pumpShell(tester, 'Reader');
+    expect(find.byKey(const ValueKey('quick-actions')), findsNothing);
   });
 }

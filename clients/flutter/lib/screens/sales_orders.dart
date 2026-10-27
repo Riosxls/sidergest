@@ -23,19 +23,20 @@ class SalesOrdersScreen extends StatefulWidget {
   State<SalesOrdersScreen> createState() => _SalesOrdersScreenState();
 }
 
+Future<void> newSalesOrder(BuildContext context, Session session, {VoidCallback? onSaved}) async {
+  final o = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => QuoteEditorScreen(session: session, asOrder: true)));
+  onSaved?.call();
+  if (o == null || !context.mounted) return;
+  await openSalesOrder(context, session, o['id'] as int);
+  onSaved?.call();
+}
+
 class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
   final _list = GlobalKey<RecordListState>();
   String? _status;
   bool _open = true;
 
-  Future<void> _new() async {
-    final o = await Navigator.of(context)
-        .push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => QuoteEditorScreen(session: widget.session, asOrder: true)));
-    _list.currentState?.reload();
-    if (o == null || !mounted) return;
-    await openSalesOrder(context, widget.session, o['id'] as int);
-    _list.currentState?.reload();
-  }
+  Future<void> _new() => newSalesOrder(context, widget.session, onSaved: () => _list.currentState?.reload());
 
   @override
   Widget build(BuildContext context) => RecordList(

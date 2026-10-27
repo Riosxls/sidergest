@@ -218,7 +218,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
                 ),
                 IconButton(tooltip: 'Atualizar', onPressed: _reload, icon: const Icon(Icons.refresh)),
                 if (s.canSell)
-                  FilledButton.icon(key: const ValueKey('pipeline-new'), onPressed: _new, icon: const Icon(Icons.add), label: const Text('Nova proposta')),
+                  FilledButton.icon(key: const ValueKey('pipeline-new'), onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo orçamento')),
                 Text('Arraste um cartão para a próxima etapa ou use a seta do cartão.', style: Theme.of(context).textTheme.bodySmall),
               ],
             ),

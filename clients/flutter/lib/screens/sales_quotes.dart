@@ -41,18 +41,20 @@ class QuotesScreen extends StatefulWidget {
   State<QuotesScreen> createState() => _QuotesScreenState();
 }
 
+Future<void> newQuote(BuildContext context, Session session, {VoidCallback? onSaved}) async {
+  final q = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => QuoteEditorScreen(session: session)));
+  onSaved?.call();
+  if (q == null || !context.mounted) return;
+  await openQuote(context, session, q['id'] as int);
+  onSaved?.call();
+}
+
 class _QuotesScreenState extends State<QuotesScreen> {
   final _list = GlobalKey<RecordListState>();
   String? _status;
   bool _open = true;
 
-  Future<void> _new() async {
-    final q = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => QuoteEditorScreen(session: widget.session)));
-    _list.currentState?.reload();
-    if (q == null || !mounted) return;
-    await openQuote(context, widget.session, q['id'] as int);
-    _list.currentState?.reload();
-  }
+  Future<void> _new() => newQuote(context, widget.session, onSaved: () => _list.currentState?.reload());
 
   @override
   Widget build(BuildContext context) => RecordList(
@@ -66,7 +68,7 @@ class _QuotesScreenState extends State<QuotesScreen> {
       FilterChip(label: const Text('Somente abertas'), selected: _open, onSelected: (v) => setState(() => _open = v)),
     ],
     fab: widget.session.canSell
-        ? FloatingActionButton.extended(heroTag: 'new-quote', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Nova proposta'))
+        ? FloatingActionButton.extended(heroTag: 'new-quote', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo orçamento'))
         : null,
     columns: [
       col('Proposta', 'reference'),
@@ -203,7 +205,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     final estimate = _lines.fold<num>(0, (a, l) => a + _n(l['quantity']) * _n(l['unitPrice']) * (1 + _n(l['ipiPercent']) / 100));
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.quote != null ? 'Editar ${widget.quote!['reference']}' : (widget.asOrder ? 'Novo pedido de venda' : 'Nova proposta comercial')),
+        title: Text(widget.quote != null ? 'Editar ${widget.quote!['reference']}' : (widget.asOrder ? 'Novo pedido de venda' : 'Novo orçamento')),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
