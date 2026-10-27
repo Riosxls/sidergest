@@ -53,6 +53,12 @@ Future<(Session, List<http.Request>)> pumpShell(
         ]),
       );
     }
+    if (p == '/api/sales/pipeline') {
+      return json({
+        'kpis': {'openQuotes': 2, 'openOrders': 5, 'lateOrders': 1, 'readyToShip': 0, 'pendingApprovals': 0},
+        'stages': [],
+      });
+    }
     if (p == '/api/production/orders') return json(page(r.url.queryParameters['status'] == 'Created' ? [] : [stopped]));
     return json(page([]));
   });
@@ -82,58 +88,91 @@ Future<void> openPalette(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('onboarding card replaces empty sections, alert tile opens filtered orders, F5 refreshes', (tester) async {
+  testWidgets('Painel shows one card per module with metric and alert badge; no module content', (tester) async {
     final (_, log) = await pumpShell(tester, 'Production');
     expect(find.text('Primeiros passos'), findsOneWidget);
-    expect(find.text('Cadastrar produtos'), findsOneWidget);
-    expect(find.text('Nenhum local de estoque'), findsNothing);
-    expect(find.text('Estoque'), findsWidgets);
     expect(find.textContaining('Atualizado às'), findsOneWidget);
-    final card = find.ancestor(of: find.text('Primeiros passos'), matching: find.byType(Card)).first;
-    expect(tester.getSize(card).width, lessThanOrEqualTo(1280));
-
+    for (final id in ['sales', 'engineering', 'stock', 'purchasing', 'production']) {
+      expect(find.byKey(ValueKey('module-card-$id')), findsOneWidget);
+    }
+    expect(find.descendant(of: find.byKey(const ValueKey('module-card-sales')), matching: find.text('5')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('module-badge-sales')), matching: find.text('1')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('module-badge-production')), matching: find.text('1')), findsOneWidget);
+    expect(find.text('OFs paradas'), findsNothing);
+    expect(find.text('Atenção'), findsNothing);
     final before = log.length;
     await tester.sendKeyEvent(LogicalKeyboardKey.f5);
     await tester.pumpAndSettle();
     expect(log.length, greaterThan(before));
+  });
+
+  testWidgets('module card opens a screen with only that module', (tester) async {
+    final (_, log) = await pumpShell(tester, 'Admin');
+    await tester.tap(find.byKey(const ValueKey('module-card-production')));
+    await tester.pumpAndSettle();
+    expect(find.text('OFs paradas'), findsOneWidget);
+    expect(find.text('OFs em produção'), findsOneWidget);
+    expect(find.text('Pedidos atrasados'), findsNothing);
+    expect(find.text('Itens abaixo do mínimo'), findsNothing);
+    expect(find.text('Nova OF'), findsOneWidget);
+    expect(find.text('Novo pedido'), findsNothing);
+    expect(find.text('Telas de PCP'), findsOneWidget);
+    expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'Painel')).selected, isTrue);
 
     await tester.tap(find.text('OFs paradas'));
     await tester.pumpAndSettle();
-    expect(log.last.url.path, '/api/production/orders');
     expect(log.last.url.queryParameters['status'], 'Stopped');
     expect(find.text('OF-7'), findsOneWidget);
   });
 
-  testWidgets('empty sections are hidden and their tabs removed', (tester) async {
-    await pumpShell(tester, 'Production');
-    final tabs = find.byWidgetPredicate((w) => w is InkWell && w.key is GlobalKey);
-    expect(tabs, findsNWidgets(2));
-    expect(find.descendant(of: tabs, matching: find.text('PCP')), findsOneWidget);
-    expect(find.descendant(of: tabs, matching: find.text('Estoque')), findsNothing);
+  testWidgets('module screen only fetches its own data and goes back to the Painel', (tester) async {
+    final (_, log) = await pumpShell(tester, 'Admin');
+    log.clear();
+    await tester.tap(find.byKey(const ValueKey('module-card-sales')));
+    await tester.pumpAndSettle();
+    expect(find.text('Pedidos abertos'), findsOneWidget);
+    expect(find.text('Propostas pendentes'), findsOneWidget);
+    expect(find.text('Entregas atrasadas'), findsOneWidget);
+    expect(log.every((r) => r.url.path.startsWith('/api/sales')), isTrue);
+    await tester.tap(find.byTooltip('Voltar ao Painel'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('module-card-stock')), findsOneWidget);
   });
 
   testWidgets('bell shows the Atenção total and jumps to the filtered list', (tester) async {
     final (_, log) = await pumpShell(tester, 'Production');
-    expect(find.byTooltip('Notificações (1)'), findsOneWidget);
-    await tester.tap(find.byTooltip('Notificações (1)'));
+    expect(find.byTooltip('Notificações (2)'), findsOneWidget);
+    await tester.tap(find.byTooltip('Notificações (2)'));
     await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(PopupMenuItem<AlertInfo>), matching: find.text('OFs paradas')));
     await tester.pumpAndSettle();
     expect(log.last.url.queryParameters['status'], 'Stopped');
   });
 
-  testWidgets('quick actions follow the role', (tester) async {
+  testWidgets('module quick actions follow the role', (tester) async {
     await pumpShell(tester, 'Production');
+    await tester.tap(find.byKey(const ValueKey('module-card-production')));
+    await tester.pumpAndSettle();
     expect(find.text('Nova OF'), findsOneWidget);
+    await tester.tap(find.byTooltip('Voltar ao Painel'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('module-card-purchasing')));
+    await tester.pumpAndSettle();
     expect(find.text('Novo pedido'), findsNothing);
-    expect(find.text('Novo produto'), findsNothing);
+    expect(find.text('Nova OF'), findsNothing);
   });
 
-  testWidgets('admin quick actions open the creation forms', (tester) async {
+  testWidgets('admin module quick actions open the creation forms', (tester) async {
     await pumpShell(tester, 'Admin');
-    for (final l in ['Novo produto', 'Nova OF', 'Nova requisição', 'Novo pedido']) {
+    await tester.tap(find.byKey(const ValueKey('module-card-purchasing')));
+    await tester.pumpAndSettle();
+    for (final l in ['Nova requisição', 'Novo pedido']) {
       expect(find.text(l), findsOneWidget);
     }
+    await tester.tap(find.byTooltip('Voltar ao Painel'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('module-card-production')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Nova OF'));
     await tester.pumpAndSettle();
     expect(find.text('Nova ordem de fabricação'), findsOneWidget);
@@ -227,20 +266,6 @@ void main() {
     expect(session.themeMode, ThemeMode.dark);
     final p = await SharedPreferences.getInstance();
     expect(p.getString('themeMode'), 'dark');
-  });
-
-  testWidgets('section tabs scroll and follow the scroll position', (tester) async {
-    await pumpShell(tester, 'Production', size: const Size(1600, 500));
-    final tab = find.descendant(of: find.byWidgetPredicate((w) => w is InkWell && w.key is GlobalKey), matching: find.text('PCP'));
-    TextStyle? style() => tester.widget<Text>(tab).style;
-    expect(style()?.fontWeight, FontWeight.w400);
-    await tester.tap(tab);
-    await tester.pumpAndSettle();
-    expect(style()?.fontWeight, FontWeight.w600);
-    final scrollable = find.ancestor(of: find.text('OFs a liberar'), matching: find.byType(Scrollable)).first;
-    await tester.drag(scrollable, const Offset(0, 3000));
-    await tester.pumpAndSettle();
-    expect(style()?.fontWeight, FontWeight.w400);
   });
 
   test('cards use a higher-contrast surface and an outline', () {

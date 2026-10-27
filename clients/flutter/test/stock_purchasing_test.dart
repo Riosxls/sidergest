@@ -584,11 +584,13 @@ void main() {
     await tester.pumpWidget(EbtApp(session: session));
     await tester.pumpAndSettle();
     expect(find.text('Suprimentos'), findsWidgets);
-    expect(find.text('Entregas em atraso'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('module-card-purchasing')));
+    await tester.pumpAndSettle();
+    expect(find.text('Entregas em atraso'), findsNWidgets(2));
     await tester.scrollUntilVisible(find.text('75,0'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.text('75,0'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Entregas em atraso'), -200, scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('Entregas em atraso'));
+    await tester.scrollUntilVisible(find.text('Entregas em atraso').first, -200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Entregas em atraso').first);
     await tester.pumpAndSettle();
     expect(find.textContaining('16 d · ped. 900'), findsOneWidget);
   });
