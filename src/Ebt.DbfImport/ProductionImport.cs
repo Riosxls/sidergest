@@ -13,9 +13,9 @@ public sealed class ProductionImport : IImportStep
 {
     public static readonly (string Prefix, string Preferred, string Name)[] Sources =
     [
-        ("G29", "", "shifts"),
-        ("G28", "", "employees"),
-        ("G27", "", "occurrences"),
+        ("G29", "GE290", "shifts"),
+        ("G28", "GE280", "employees"),
+        ("G27", "GE270", "occurrences"),
         ("X09", "XY090", "production orders"),
         ("X31", "XY310", "internal orders"),
         ("X06", "XY060", "order materials"),
