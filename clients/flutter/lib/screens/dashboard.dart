@@ -11,7 +11,9 @@ import '../widgets/alerts.dart';
 import 'orders.dart';
 import 'production_orders.dart';
 import 'product_detail.dart';
+import 'production_floor.dart';
 import 'quick_actions.dart';
+import 'requisitions.dart';
 
 class DashboardData {
   DashboardData(this.counts, this.products);
@@ -32,13 +34,21 @@ class DashboardData {
 }
 
 class StockDashboard {
-  StockDashboard({required this.quarantine, required this.quarantineLots, required this.openReservations, required this.lastClosing, required this.locations});
+  StockDashboard({
+    required this.quarantine,
+    required this.quarantineLots,
+    required this.openReservations,
+    required this.lastClosing,
+    required this.locations,
+    this.belowMinimum = const [],
+  });
 
   final int quarantine;
   final List<Map<String, dynamic>> quarantineLots;
   final int openReservations;
   final Map<String, dynamic>? lastClosing;
   final int locations;
+  final List<Map<String, dynamic>> belowMinimum;
 }
 
 class PurchasingDashboard {
@@ -89,11 +99,57 @@ class ProductionDashboard {
 
 typedef Navigate = void Function(String id, [String? filter]);
 
+class SalesDashboard {
+  SalesDashboard({required this.openOrders, required this.openQuotes, required this.lateOrders, required this.readyToShip, required this.pendingApprovals});
+
+  factory SalesDashboard.fromJson(Map<String, dynamic> k) => SalesDashboard(
+    openOrders: (k['openOrders'] as num?)?.toInt() ?? 0,
+    openQuotes: (k['openQuotes'] as num?)?.toInt() ?? 0,
+    lateOrders: (k['lateOrders'] as num?)?.toInt() ?? 0,
+    readyToShip: (k['readyToShip'] as num?)?.toInt() ?? 0,
+    pendingApprovals: (k['pendingApprovals'] as num?)?.toInt() ?? 0,
+  );
+
+  final int openOrders;
+  final int openQuotes;
+  final int lateOrders;
+  final int readyToShip;
+  final int pendingApprovals;
+}
+
+class ModuleInfo {
+  const ModuleInfo(this.id, this.title, this.icon);
+
+  final String id;
+  final String title;
+  final IconData icon;
+
+  String get navId => 'module-$id';
+}
+
+const moduleInfos = [
+  ModuleInfo('sales', 'Comercial', Icons.storefront_outlined),
+  ModuleInfo('engineering', 'Engenharia', Icons.architecture),
+  ModuleInfo('stock', 'Estoque', Icons.inventory_outlined),
+  ModuleInfo('purchasing', 'Suprimentos', Icons.shopping_cart_outlined),
+  ModuleInfo('production', 'PCP', Icons.precision_manufacturing_outlined),
+];
+
+class ModuleLink {
+  const ModuleLink(this.id, this.icon, this.title);
+
+  final String id;
+  final IconData icon;
+  final String title;
+}
+
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key, required this.session, this.onNavigate});
+  const DashboardScreen({super.key, required this.session, this.onNavigate, this.module, this.links = const []});
 
   final Session session;
   final Navigate? onNavigate;
+  final String? module;
+  final List<ModuleLink> links;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -105,22 +161,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late Future<StockDashboard> _stock = _fetchStock();
   late Future<PurchasingDashboard> _purchasing = _fetchPurchasing();
   late Future<ProductionDashboard> _production = _fetchProduction();
+  late Future<SalesDashboard> _sales = _fetchSales();
   late Future<List<Object?>> _all = _combine();
   DateTime? _updated;
-  final _anchors = [for (var i = 0; i < 5; i++) GlobalKey()];
-  final _scroll = ScrollController();
   final _focus = FocusNode();
-  final _viewport = GlobalKey();
-  final _tabKeys = [for (var i = 0; i < 5; i++) GlobalKey()];
-  int _anchor = 0;
-  bool _loaded = false;
-  Set<int> _hasData = {};
   Timer? _timer;
+
+  bool _need(String m) => widget.module == null || widget.module == m;
 
   @override
   void initState() {
     super.initState();
-    _scroll.addListener(_spy);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focus.requestFocus();
     });
@@ -131,33 +182,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _timer?.cancel();
-    _scroll.dispose();
     _focus.dispose();
     super.dispose();
-  }
-
-  List<int> get _visible => [
-    0,
-    ...[1, 2, 3, 4].where(_hasData.contains),
-  ];
-
-  void _spy() {
-    final box = _viewport.currentContext?.findRenderObject();
-    if (box is! RenderBox || !box.attached || !_scroll.hasClients) return;
-    final top = box.localToGlobal(Offset.zero).dy;
-    var active = 0;
-    for (final i in _visible) {
-      final r = _anchors[i].currentContext?.findRenderObject();
-      if (r is RenderBox && r.attached && r.localToGlobal(Offset.zero).dy - top <= 24) active = i;
-    }
-    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 4 && _scroll.position.maxScrollExtent > 0) active = _visible.last;
-    if (active != _anchor) setState(() => _anchor = active);
-  }
-
-  void _jump(int i) {
-    setState(() => _anchor = i);
-    final ctx = _anchors[i].currentContext;
-    if (ctx != null) Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
   static final _counted = [products, materials, machines, standardOperations, workCenters, tools];
@@ -176,15 +202,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
       api.list('/api/stock/reservations', take: 1, query: {'status': 'Open'}),
       api.get('/api/stock/closings'),
       api.list('/api/stock-locations', take: 1),
+      api.listAll(materials.path),
+      api.listAll('/api/stock/balances'),
     ]);
     final lots = r[0] as PageResult;
     final closings = (r[2] as List).cast<Map<String, dynamic>>();
+    final onHand = <int, num>{};
+    for (final b in r[5] as List<Map<String, dynamic>>) {
+      final id = b['materialId'];
+      if (id is int && b['locationKind'] != 'ThirdParty') onHand.update(id, (v) => v + (b['quantity'] as num), ifAbsent: () => b['quantity'] as num);
+    }
+    final below = [
+      for (final m in r[4] as List<Map<String, dynamic>>)
+        if (m['active'] != false && m['minStock'] is num && (m['minStock'] as num) > 0 && (onHand[m['id']] ?? 0) < (m['minStock'] as num)) m,
+    ];
     return StockDashboard(
       quarantine: lots.total,
       quarantineLots: lots.items,
       openReservations: (r[1] as PageResult).total,
       lastClosing: closings.isEmpty ? null : closings.first,
       locations: (r[3] as PageResult).total,
+      belowMinimum: below,
     );
   }
 
@@ -227,33 +265,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Future<List<Object?>> _combine() =>
-      Future.wait<Object?>([_eng, _stock, _purchasing, _production].map((f) => f.then<Object?>((v) => v, onError: (_) => null)));
+  Future<SalesDashboard> _fetchSales() async {
+    final r = await widget.session.api.get('/api/sales/pipeline') as Map<String, dynamic>;
+    return SalesDashboard.fromJson((r['kpis'] as Map).cast<String, dynamic>());
+  }
+
+  Future<Object?> _opt<T>(String m, Future<T> f) => _need(m) ? f.then<Object?>((v) => v, onError: (_) => null) : Future<Object?>.value(null);
+
+  Future<List<Object?>> _combine() => Future.wait<Object?>([
+    _opt('engineering', _need('engineering') ? _eng : Future.value(null)),
+    _opt('stock', _need('stock') ? _stock : Future.value(null)),
+    _opt('purchasing', _need('purchasing') ? _purchasing : Future.value(null)),
+    _opt('production', _need('production') ? _production : Future.value(null)),
+    _opt('sales', _need('sales') ? _sales : Future.value(null)),
+  ]);
 
   Future<void> _settle() async {
     final d = await _all;
     if (!mounted) return;
-    final e = d[0] as DashboardData?, st = d[1] as StockDashboard?, pu = d[2] as PurchasingDashboard?, pr = d[3] as ProductionDashboard?;
-    final alerts = _alerts(e, st, pu, pr);
-    widget.session.alerts.value = [for (final a in alerts) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter)];
-    setState(() {
-      _updated = DateTime.now();
-      _loaded = true;
-      _hasData = {
-        if (e == null || e.counts.values.any((v) => v > 0)) 1,
-        if (st == null || st.locations > 0) 2,
-        if (pu == null || pu.pendingApproval + pu.approved + pu.openQuotations + pu.openOrders + pu.overdue.length > 0) 3,
-        if (pr == null || pr.orders.isNotEmpty || pr.shipments.isNotEmpty) 4,
-      };
-    });
+    if (widget.module == null) {
+      final alerts = _alerts(d);
+      widget.session.alerts.value = [for (final a in alerts) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter)];
+    }
+    setState(() => _updated = DateTime.now());
   }
 
   Future<void> _refresh() {
     setState(() {
-      _eng = _fetchEngineering();
-      _stock = _fetchStock();
-      _purchasing = _fetchPurchasing();
-      _production = _fetchProduction();
+      if (_need('engineering')) _eng = _fetchEngineering();
+      if (_need('stock')) _stock = _fetchStock();
+      if (_need('purchasing')) _purchasing = _fetchPurchasing();
+      if (_need('production')) _production = _fetchProduction();
+      if (_need('sales')) _sales = _fetchSales();
       _all = _combine();
     });
     return _settle();
@@ -308,13 +351,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
 
-  List<_Alert> _alerts(DashboardData? e, StockDashboard? s, PurchasingDashboard? p, ProductionDashboard? o) {
+  DashboardData? _e(List<Object?> d) => d[0] as DashboardData?;
+  StockDashboard? _s(List<Object?> d) => d[1] as StockDashboard?;
+  PurchasingDashboard? _p(List<Object?> d) => d[2] as PurchasingDashboard?;
+  ProductionDashboard? _o(List<Object?> d) => d[3] as ProductionDashboard?;
+  SalesDashboard? _c(List<Object?> d) => d[4] as SalesDashboard?;
+
+  List<_Alert> _alerts(List<Object?> d) {
+    final e = _e(d), s = _s(d), p = _p(d), o = _o(d), c = _c(d);
     final late = o == null ? <Map<String, dynamic>>[] : (o.late..sort((a, b) => '${a['dueDate']}'.compareTo('${b['dueDate']}')));
     final overdue = p == null ? <Map<String, dynamic>>[] : ([...p.overdue]..sort((a, b) => (b['daysLate'] as num).compareTo(a['daysLate'] as num)));
     String productLabel(Map<String, dynamic> x) => '${x['code']}  ${x['name']}';
     return [
+      if (c != null) ...[
+        _Alert('sales', Icons.event_busy_outlined, 'Pedidos atrasados', c.lateOrders, 'sales-orders', null, _go('sales-orders')),
+        _Alert('sales', Icons.gavel_outlined, 'Propostas a aprovar', c.pendingApprovals, 'sales-quotes', null, _go('sales-quotes')),
+      ],
       if (o != null) ...[
         _Alert(
+          'production',
           Icons.schedule,
           'OFs atrasadas',
           late.length,
@@ -328,10 +383,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
             all: 'production-orders',
           ),
         ),
-        _Alert(Icons.pause_circle_outline, 'OFs paradas', o.count('Stopped'), 'production-orders', 'Stopped', _go('production-orders', 'Stopped')),
+        _Alert(
+          'production',
+          Icons.pause_circle_outline,
+          'OFs paradas',
+          o.count('Stopped'),
+          'production-orders',
+          'Stopped',
+          _go('production-orders', 'Stopped'),
+        ),
       ],
       if (p != null) ...[
         _Alert(
+          'purchasing',
           Icons.local_shipping_outlined,
           'Entregas em atraso',
           overdue.length,
@@ -346,6 +410,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
         _Alert(
+          'purchasing',
           Icons.assignment_late_outlined,
           'Requisições a aprovar',
           p.pendingApproval,
@@ -354,9 +419,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _go('requisitions', 'PendingApproval'),
         ),
       ],
-      if (s != null) _Alert(Icons.verified_outlined, 'Lotes em quarentena', s.quarantine, 'lots', 'Quarantine', _go('lots', 'Quarantine')),
+      if (s != null) ...[
+        _Alert(
+          'stock',
+          Icons.trending_down,
+          'Itens abaixo do mínimo',
+          s.belowMinimum.length,
+          'balances',
+          null,
+          _showList(
+            'Itens abaixo do mínimo',
+            s.belowMinimum,
+            (m) => '${m['code']}  ${m['description']} · mín. ${fmt(m['minStock'])}',
+            (m) => widget.onNavigate?.call('balances'),
+            all: 'balances',
+          ),
+        ),
+        _Alert('stock', Icons.verified_outlined, 'Lotes em quarentena', s.quarantine, 'lots', 'Quarantine', _go('lots', 'Quarantine')),
+      ],
       if (e != null) ...[
         _Alert(
+          'engineering',
           Icons.block,
           'Produtos bloqueados',
           e.blocked.length,
@@ -365,6 +448,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _showList('Produtos bloqueados', e.blocked, productLabel, _openProduct),
         ),
         _Alert(
+          'engineering',
           Icons.warning_amber,
           'Produtos sem roteiro',
           e.withoutRouting.length,
@@ -376,320 +460,323 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ].where((a) => a.count > 0).toList();
   }
 
-  Widget _onboarding() => FutureBuilder<List<Object?>>(
+  static String _hhmm(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  Widget _updatedLabel() =>
+      _updated == null ? const SizedBox.shrink() : Text('Atualizado às ${_hhmm(_updated!)}', style: Theme.of(context).textTheme.bodySmall);
+
+  Widget _onboarding(List<Object?> d) {
+    final e = _e(d), st = _s(d), pu = _p(d), pr = _o(d);
+    final steps = [
+      ('Cadastrar produtos', 'products', e == null || (e.counts[products] ?? 0) > 0, products.path),
+      ('Cadastrar locais de estoque', 'locations', st == null || st.locations > 0, 'locations'),
+      (
+        'Registrar a primeira requisição ou pedido de compra',
+        'purchasing',
+        pu == null || pu.pendingApproval + pu.approved + pu.openQuotations + pu.openOrders + pu.overdue.length > 0,
+        'requisitions',
+      ),
+      ('Criar a primeira ordem de fabricação', 'production', pr == null || pr.orders.isNotEmpty || pr.shipments.isNotEmpty, 'production-orders'),
+    ];
+    final done = steps.where((s) => s.$3).length;
+    if (done == steps.length) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        margin: EdgeInsets.zero,
+        shape: _cardShape(context),
+        color: cs.surfaceContainerHigh,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.rocket_launch_outlined, color: cs.primary),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text('Primeiros passos', style: theme.textTheme.titleMedium)),
+                  Text('$done de ${steps.length}', style: theme.textTheme.bodySmall),
+                ],
+              ),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(value: done / steps.length),
+              const SizedBox(height: 8),
+              for (final s in steps)
+                ListTile(
+                  key: ValueKey('step-${s.$2}'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(s.$3 ? Icons.check_circle : Icons.radio_button_unchecked, color: s.$3 ? cs.primary : cs.onSurfaceVariant),
+                  title: Text(
+                    s.$1,
+                    style: s.$3 ? TextStyle(decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant) : null,
+                  ),
+                  trailing: s.$3 || widget.onNavigate == null ? null : FilledButton.tonal(onPressed: _go(s.$4), child: const Text('Abrir')),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _heading(String text, {Widget? trailing}) => Padding(
+    padding: const EdgeInsets.only(top: 8, bottom: 8),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(text, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+        ),
+        ?trailing,
+      ],
+    ),
+  );
+
+  List<_ModuleCard> _cards(List<Object?> d) {
+    final alerts = _alerts(d);
+    int badge(String m) => alerts.where((a) => a.module == m).fold(0, (n, a) => n + a.count);
+    final e = _e(d), s = _s(d), p = _p(d), o = _o(d), c = _c(d);
+    return [
+      for (final m in moduleInfos)
+        switch (m.id) {
+          'sales' => _ModuleCard(m, c?.openOrders, 'pedidos abertos', badge(m.id), _go(m.navId)),
+          'engineering' => _ModuleCard(m, e == null ? null : e.products.length - e.blocked.length, 'produtos ativos', badge(m.id), _go(m.navId)),
+          'stock' => _ModuleCard(m, s?.belowMinimum.length, 'itens abaixo do mínimo', badge(m.id), _go(m.navId)),
+          'purchasing' => _ModuleCard(m, p?.openOrders, 'OCs pendentes', badge(m.id), _go(m.navId)),
+          _ => _ModuleCard(m, o?.count('InProduction'), 'OFs em produção', badge(m.id), _go(m.navId)),
+        },
+    ];
+  }
+
+  List<String> get _order => switch (widget.session.role) {
+    'Stock' => ['stock', 'purchasing', 'production', 'engineering', 'sales'],
+    'Purchasing' => ['purchasing', 'stock', 'production', 'engineering', 'sales'],
+    'Production' => ['production', 'stock', 'purchasing', 'engineering', 'sales'],
+    'Sales' || 'SalesManager' => ['sales', 'production', 'stock', 'purchasing', 'engineering'],
+    _ => ['sales', 'engineering', 'stock', 'purchasing', 'production'],
+  };
+
+  Widget _painel() => FutureBuilder<List<Object?>>(
     future: _all,
     builder: (context, snap) {
-      if (!snap.hasData) return const SizedBox.shrink();
+      if (!snap.hasData) return const LinearProgressIndicator();
       final d = snap.data!;
-      final e = d[0] as DashboardData?, st = d[1] as StockDashboard?, pu = d[2] as PurchasingDashboard?, pr = d[3] as ProductionDashboard?;
-      final steps = [
-        ('Cadastrar produtos', 'products', e == null || (e.counts[products] ?? 0) > 0, products.path),
-        ('Cadastrar locais de estoque', 'locations', st == null || st.locations > 0, 'locations'),
-        (
-          'Registrar a primeira requisição ou pedido de compra',
-          'purchasing',
-          pu == null || pu.pendingApproval + pu.approved + pu.openQuotations + pu.openOrders + pu.overdue.length > 0,
-          'requisitions',
-        ),
-        ('Criar a primeira ordem de fabricação', 'production', pr == null || pr.orders.isNotEmpty || pr.shipments.isNotEmpty, 'production-orders'),
-      ];
-      final done = steps.where((s) => s.$3).length;
-      if (done == steps.length) return const SizedBox.shrink();
-      final theme = Theme.of(context);
-      final cs = theme.colorScheme;
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Card(
-          margin: EdgeInsets.zero,
-          shape: _cardShape(context),
-          color: cs.surfaceContainerHigh,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+      final cards = _cards(d)..sort((a, b) => _order.indexOf(a.info.id).compareTo(_order.indexOf(b.info.id)));
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _onboarding(d),
+          _heading(
+            'Módulos',
+            trailing: Row(
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.rocket_launch_outlined, color: cs.primary),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text('Primeiros passos', style: theme.textTheme.titleMedium)),
-                    Text('$done de ${steps.length}', style: theme.textTheme.bodySmall),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(value: done / steps.length),
-                const SizedBox(height: 8),
-                for (final s in steps)
-                  ListTile(
-                    key: ValueKey('step-${s.$2}'),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(s.$3 ? Icons.check_circle : Icons.radio_button_unchecked, color: s.$3 ? cs.primary : cs.onSurfaceVariant),
-                    title: Text(
-                      s.$1,
-                      style: s.$3 ? TextStyle(decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant) : null,
-                    ),
-                    trailing: s.$3 || widget.onNavigate == null ? null : FilledButton.tonal(onPressed: _go(s.$4), child: const Text('Abrir')),
-                  ),
+                _updatedLabel(),
+                IconButton(tooltip: 'Atualizar (F5)', onPressed: _refresh, icon: const Icon(Icons.refresh)),
               ],
             ),
           ),
-        ),
+          _Grid(minColumn: 260, items: [for (final c in cards) _GridItem.sized(c, _ModuleCard.height)]),
+        ],
       );
     },
   );
 
-  Widget _attention() {
-    return FutureBuilder<List<Object?>>(
-      future: _all,
-      builder: (context, snap) {
-        final theme = Theme.of(context);
-        final updated = _updated;
-        final header = Row(
-          children: [
-            Expanded(
-              child: Text('Atenção', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
-            ),
-            if (updated != null) Text('Atualizado às ${_hhmm(updated)}', style: theme.textTheme.bodySmall),
-            IconButton(tooltip: 'Atualizar (F5)', onPressed: _refresh, icon: const Icon(Icons.refresh)),
-          ],
-        );
-        final Widget content;
-        if (!snap.hasData) {
-          content = const LinearProgressIndicator();
-        } else {
-          final d = snap.data!;
-          final alerts = _alerts(d[0] as DashboardData?, d[1] as StockDashboard?, d[2] as PurchasingDashboard?, d[3] as ProductionDashboard?);
-          content = alerts.isEmpty
-              ? _Notice(icon: Icons.check_circle_outline, title: 'Nada pendente', subtitle: 'Nenhuma OF atrasada, entrega em atraso, aprovação ou bloqueio.')
-              : _Grid(
-                  items: [for (final a in alerts) _GridItem(_Tile(icon: a.icon, label: a.label, value: '${a.count}', alert: true, onTap: a.onTap))],
-                );
-        }
-        return Column(key: _anchors[0], crossAxisAlignment: CrossAxisAlignment.stretch, children: [header, content, const SizedBox(height: 16)]);
-      },
-    );
-  }
-
-  static String _hhmm(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-
-  Widget _section<T>(int index, String title, IconData icon, Future<T> future, List<Widget> Function(T data) build) {
-    final theme = Theme.of(context);
-    if (_loaded && !_hasData.contains(index)) return SizedBox.shrink(key: _anchors[index]);
-    return Column(
-      key: _anchors[index],
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              Icon(icon, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ),
-        FutureBuilder<T>(
-          future: future,
-          builder: (context, snap) {
-            if (snap.hasError) return Text('${snap.error}', style: TextStyle(color: theme.colorScheme.error));
-            if (snap.connectionState != ConnectionState.done) return const LinearProgressIndicator();
-            final children = build(snap.data as T);
-            if (children.isEmpty) return const SizedBox.shrink();
-            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
-          },
-        ),
-        const SizedBox(height: 16),
+  List<QuickAction> _moduleActions(String m) {
+    final s = widget.session;
+    return switch (m) {
+      'engineering' => [if (s.canWrite) QuickAction(Icons.add_box_outlined, 'Novo produto', (c) => newProduct(c, s))],
+      'purchasing' => [
+        if (s.canRequest) QuickAction(Icons.post_add, 'Nova requisição', (c) => newRequisition(c, s)),
+        if (s.canBuy) QuickAction(Icons.add_shopping_cart, 'Novo pedido', (c) => newPurchaseOrder(c, s)),
       ],
-    );
-  }
-
-  List<Widget> _engineering(DashboardData d) {
-    final masters = Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final e in d.counts.entries) ActionChip(avatar: Icon(e.key.icon, size: 18), label: Text('${e.value} ${e.key.title}'), onPressed: _go(e.key.path)),
+      'production' => [
+        if (s.canProduce) QuickAction(Icons.add_task, 'Nova OF', (c) => newProductionOrder(c, s)),
+        if (s.canProduce) QuickAction(Icons.edit_note, 'Novo apontamento', (c) => newReport(c, s)),
       ],
-    );
-    if (d.counts.values.every((v) => v == 0)) return [];
-    return [
-      masters,
-      const SizedBox(height: 12),
-      _Grid(
-        items: [
-          _GridItem.panel(_BarPanel(title: 'Produtos por tipo', data: d.countBy((p) => kinds[p['kind']] ?? '—'))),
-          _GridItem.panel(_BarPanel(title: 'Produtos por formato', data: d.countBy((p) => shapes[p['shape']] ?? 'Sem formato'))),
-          _GridItem.panel(_BarPanel(title: 'Operações por produto', data: d.countBy((p) => _bucket(p['operationCount'] as int? ?? 0)))),
-        ],
-      ),
-    ];
+      _ => const [],
+    };
   }
 
-  List<Widget> _stockPanels(StockDashboard d) {
-    if (d.locations == 0) return [];
-    return [
-      _Grid(
-        items: [
-          _GridItem(_Tile(icon: Icons.bookmark_border, label: 'Reservas abertas', value: '${d.openReservations}', onTap: _go('reservations'))),
+  List<_GridItem> _kpis(String m, List<Object?> d) {
+    switch (m) {
+      case 'sales':
+        final c = _c(d)!;
+        return [
+          _GridItem(_Tile(icon: Icons.receipt_long_outlined, label: 'Pedidos abertos', value: '${c.openOrders}', onTap: _go('sales-orders'))),
+          _GridItem(_Tile(icon: Icons.request_quote_outlined, label: 'Propostas pendentes', value: '${c.openQuotes}', onTap: _go('sales-quotes'))),
+          _GridItem(_Tile(icon: Icons.event_busy_outlined, label: 'Entregas atrasadas', value: '${c.lateOrders}', onTap: _go('sales-orders'))),
+          _GridItem(_Tile(icon: Icons.local_shipping_outlined, label: 'Prontos para entregar', value: '${c.readyToShip}', onTap: _go('deliveries'))),
+        ];
+      case 'engineering':
+        final e = _e(d)!;
+        final pendingRevision = e.products.where((p) => p['drawingRevision'] == null || p['processRevision'] == null).length;
+        return [
+          _GridItem(_Tile(icon: Icons.architecture, label: 'Produtos ativos', value: '${e.products.length - e.blocked.length}', onTap: _go(products.path))),
+          _GridItem(_Tile(icon: Icons.rate_review_outlined, label: 'Revisões pendentes', value: '$pendingRevision', onTap: _go(products.path))),
+          _GridItem(_Tile(icon: Icons.warning_amber, label: 'Sem roteiro', value: '${e.withoutRouting.length}', onTap: _go(products.path))),
+          for (final x in e.counts.entries.where((x) => x.key != products))
+            _GridItem(_Tile(icon: x.key.icon, label: x.key.title, value: '${x.value}', onTap: _go(x.key.path))),
+          _GridItem.panel(_BarPanel(title: 'Produtos por tipo', data: e.countBy((p) => kinds[p['kind']] ?? '—'))),
+          _GridItem.panel(_BarPanel(title: 'Produtos por formato', data: e.countBy((p) => shapes[p['shape']] ?? 'Sem formato'))),
+          _GridItem.panel(_BarPanel(title: 'Operações por produto', data: e.countBy((p) => _bucket(p['operationCount'] as int? ?? 0)))),
+        ];
+      case 'stock':
+        final s = _s(d)!;
+        return [
+          _GridItem(_Tile(icon: Icons.trending_down, label: 'Itens abaixo do mínimo', value: '${s.belowMinimum.length}', onTap: _go('balances'))),
+          _GridItem(_Tile(icon: Icons.verified_outlined, label: 'Lotes em quarentena', value: '${s.quarantine}', onTap: _go('lots', 'Quarantine'))),
+          _GridItem(_Tile(icon: Icons.bookmark_border, label: 'Reservas abertas', value: '${s.openReservations}', onTap: _go('reservations'))),
           _GridItem(
             _Tile(
               icon: Icons.lock_outline,
               label: 'Último mês fechado',
-              value: d.lastClosing == null ? '—' : fmtPeriod(d.lastClosing!['period']),
+              value: s.lastClosing == null ? '—' : fmtPeriod(s.lastClosing!['period']),
               onTap: _go('closing'),
             ),
           ),
-          _GridItem(_Tile(icon: Icons.place_outlined, label: 'Locais de estoque', value: '${d.locations}', onTap: _go('locations'))),
-        ],
-      ),
-    ];
-  }
-
-  List<Widget> _purchasingPanels(PurchasingDashboard d) {
-    if (d.pendingApproval + d.approved + d.openQuotations + d.openOrders + d.overdue.length == 0) return [];
-    final perf = {for (final p in d.performance.where((p) => (p['receivedLines'] as num) > 0)) '${p['supplierName']}': p['onTimePercent'] as num};
-    return [
-      _Grid(
-        items: [
+          _GridItem(_Tile(icon: Icons.place_outlined, label: 'Locais de estoque', value: '${s.locations}', onTap: _go('locations'))),
+        ];
+      case 'purchasing':
+        final p = _p(d)!;
+        final perf = {for (final x in p.performance.where((x) => (x['receivedLines'] as num) > 0)) '${x['supplierName']}': x['onTimePercent'] as num};
+        return [
           _GridItem(
-            _Tile(icon: Icons.assignment_turned_in_outlined, label: 'Aprovadas sem cotação', value: '${d.approved}', onTap: _go('requisitions', 'Approved')),
+            _Tile(icon: Icons.assignment_outlined, label: 'Requisições abertas', value: '${p.pendingApproval + p.approved}', onTap: _go('requisitions')),
           ),
-          _GridItem(_Tile(icon: Icons.request_quote_outlined, label: 'Cotações abertas', value: '${d.openQuotations}', onTap: _go('quotations'))),
-          _GridItem(_Tile(icon: Icons.receipt_long_outlined, label: 'Pedidos abertos', value: '${d.openOrders}', onTap: _go('orders'))),
-          _GridItem.panel(_BarPanel(title: 'Atrasos por fornecedor', data: d.overdueBySupplier)),
+          _GridItem(_Tile(icon: Icons.receipt_long_outlined, label: 'OCs pendentes', value: '${p.openOrders}', onTap: _go('orders'))),
+          _GridItem(
+            _Tile(icon: Icons.assignment_turned_in_outlined, label: 'Aprovadas sem cotação', value: '${p.approved}', onTap: _go('requisitions', 'Approved')),
+          ),
+          _GridItem(_Tile(icon: Icons.request_quote_outlined, label: 'Cotações abertas', value: '${p.openQuotations}', onTap: _go('quotations'))),
+          _GridItem.panel(_BarPanel(title: 'Atrasos por fornecedor', data: p.overdueBySupplier)),
           _GridItem.panel(_BarPanel(title: 'Pontualidade 12 meses (%)', data: perf, max: 100)),
-        ],
-      ),
-    ];
-  }
-
-  List<Widget> _productionPanels(ProductionDashboard d) {
-    if (d.orders.isEmpty && d.shipments.isEmpty) return [];
-    return [
-      _Grid(
-        items: [
-          _GridItem(_Tile(icon: Icons.assignment_outlined, label: 'OFs a liberar', value: '${d.count('Created')}', onTap: _go('production-orders', 'Created'))),
-          _GridItem(_Tile(icon: Icons.play_circle_outline, label: 'Liberadas', value: '${d.count('Released')}', onTap: _go('production-orders', 'Released'))),
+        ];
+      default:
+        final o = _o(d)!;
+        return [
           _GridItem(
             _Tile(
               icon: Icons.precision_manufacturing_outlined,
-              label: 'Em produção',
-              value: '${d.count('InProduction')}',
+              label: 'OFs em produção',
+              value: '${o.count('InProduction')}',
               onTap: _go('production-orders', 'InProduction'),
             ),
           ),
+          _GridItem(_Tile(icon: Icons.schedule, label: 'OFs atrasadas', value: '${o.late.length}', onTap: _go('production-orders'))),
+          _GridItem(_Tile(icon: Icons.assignment_outlined, label: 'OFs a liberar', value: '${o.count('Created')}', onTap: _go('production-orders', 'Created'))),
+          _GridItem(_Tile(icon: Icons.play_circle_outline, label: 'Liberadas', value: '${o.count('Released')}', onTap: _go('production-orders', 'Released'))),
           _GridItem(
-            _Tile(icon: Icons.local_shipping_outlined, label: 'Remessas em terceiros', value: '${d.shipments.length}', onTap: _go('outside-processing')),
+            _Tile(icon: Icons.local_shipping_outlined, label: 'Remessas em terceiros', value: '${o.shipments.length}', onTap: _go('outside-processing')),
           ),
-          _GridItem.panel(_BarPanel(title: 'Pico de carga 4 semanas (%)', data: d.peakLoad)),
-        ],
-      ),
-    ];
+          _GridItem.panel(_BarPanel(title: 'Pico de carga 4 semanas (%)', data: o.peakLoad)),
+        ];
+    }
+  }
+
+  Widget _module(ModuleInfo m) {
+    final theme = Theme.of(context);
+    final actions = _moduleActions(m.id);
+    return FutureBuilder<List<Object?>>(
+      future: _all,
+      builder: (context, snap) {
+        final header = Row(
+          children: [
+            IconButton(tooltip: 'Voltar ao Painel', onPressed: _go('dashboard'), icon: const Icon(Icons.arrow_back)),
+            Icon(m.icon, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(m.title, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
+            ),
+            _updatedLabel(),
+            IconButton(tooltip: 'Atualizar (F5)', onPressed: _refresh, icon: const Icon(Icons.refresh)),
+          ],
+        );
+        final body = <Widget>[];
+        if (!snap.hasData) {
+          body.add(const LinearProgressIndicator());
+        } else {
+          final d = snap.data!;
+          final idx = moduleInfos.indexWhere((x) => x.id == m.id);
+          const slot = {'engineering': 0, 'stock': 1, 'purchasing': 2, 'production': 3, 'sales': 4};
+          if (d[slot[m.id]!] == null) {
+            body.add(
+              const _Notice(
+                icon: Icons.cloud_off_outlined,
+                title: 'Indicadores indisponíveis',
+                subtitle: 'Não foi possível carregar os dados deste módulo. Tente atualizar.',
+              ),
+            );
+          } else {
+            final alerts = _alerts(d).where((a) => a.module == m.id).toList();
+            body.addAll([
+              _heading('Atenção'),
+              alerts.isEmpty
+                  ? const _Notice(icon: Icons.check_circle_outline, title: 'Nada pendente', subtitle: 'Nenhum alerta neste módulo.')
+                  : _Grid(
+                      items: [for (final a in alerts) _GridItem(_Tile(icon: a.icon, label: a.label, value: '${a.count}', alert: true, onTap: a.onTap))],
+                    ),
+              const SizedBox(height: 16),
+              _heading('Indicadores'),
+              _Grid(items: _kpis(m.id, d)),
+            ]);
+          }
+          assert(idx >= 0);
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            header,
+            if (actions.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final a in actions)
+                      FilledButton.tonalIcon(onPressed: () => a.run(context).then((_) => _refresh()), icon: Icon(a.icon), label: Text(a.label)),
+                  ],
+                ),
+              ),
+            ...body,
+            if (widget.links.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _heading('Telas de ${m.title}'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [for (final l in widget.links) ActionChip(avatar: Icon(l.icon, size: 18), label: Text(l.title), onPressed: _go(l.id))],
+              ),
+            ],
+            const SizedBox(height: 16),
+          ],
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final sections = [
-      _section(1, 'Engenharia', Icons.architecture, _eng, _engineering),
-      _section(2, 'Estoque', Icons.inventory_outlined, _stock, _stockPanels),
-      _section(3, 'Suprimentos', Icons.shopping_cart_outlined, _purchasing, _purchasingPanels),
-      _section(4, 'PCP', Icons.precision_manufacturing_outlined, _production, _productionPanels),
-    ];
-    final order = switch (widget.session.role) {
-      'Stock' => [1, 3, 2, 0],
-      'Purchasing' => [2, 1, 3, 0],
-      'Production' => [3, 1, 2, 0],
-      _ => [0, 3, 1, 2],
-    };
-    final actions = quickActionsFor(widget.session);
-    final labels = ['Atenção', 'Engenharia', 'Estoque', 'Suprimentos', 'PCP'];
-    final tabs = [0, ...order.map((i) => i + 1).where((i) => !_loaded || _hasData.contains(i))];
-    final cs = Theme.of(context).colorScheme;
+    final module = widget.module == null ? null : moduleInfos.firstWhere((m) => m.id == widget.module);
     return CallbackShortcuts(
       bindings: {const SingleActivator(LogicalKeyboardKey.f5): _refresh},
       child: Focus(
         focusNode: _focus,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Material(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: cs.outlineVariant)),
-                ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: _maxWidth),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: [
-                          for (final i in tabs)
-                            InkWell(
-                              key: _tabKeys[i],
-                              onTap: () => _jump(i),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                decoration: BoxDecoration(
-                                  border: Border(bottom: BorderSide(color: _anchor == i ? cs.primary : Colors.transparent, width: 2)),
-                                ),
-                                child: Text(
-                                  labels[i],
-                                  style: TextStyle(
-                                    fontWeight: _anchor == i ? FontWeight.w600 : FontWeight.w400,
-                                    color: _anchor == i ? cs.primary : cs.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _maxWidth),
+                child: module == null ? _painel() : _module(module),
               ),
             ),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _refresh,
-                child: SingleChildScrollView(
-                  key: _viewport,
-                  controller: _scroll,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: _maxWidth),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (actions.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  for (final a in actions)
-                                    FilledButton.tonalIcon(onPressed: () => a.run(context).then((_) => _refresh()), icon: Icon(a.icon), label: Text(a.label)),
-                                ],
-                              ),
-                            ),
-                          _onboarding(),
-                          _attention(),
-                          for (final i in order) sections[i],
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -705,8 +792,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 class _Alert {
-  const _Alert(this.icon, this.label, this.count, this.navId, this.filter, this.onTap);
+  const _Alert(this.module, this.icon, this.label, this.count, this.navId, this.filter, this.onTap);
 
+  final String module;
   final IconData icon;
   final String label;
   final int count;
@@ -715,9 +803,97 @@ class _Alert {
   final void Function()? onTap;
 }
 
+class _ModuleCard extends StatelessWidget {
+  const _ModuleCard(this.info, this.metric, this.metricLabel, this.badge, this.onTap);
+
+  static const height = 160.0;
+
+  final ModuleInfo info;
+  final int? metric;
+  final String metricLabel;
+  final int badge;
+  final void Function()? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Semantics(
+      button: true,
+      label: '${info.title}: ${metric ?? 'indisponível'} $metricLabel',
+      excludeSemantics: true,
+      child: Card(
+        key: ValueKey('module-card-${info.id}'),
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        shape: _cardShape(context),
+        color: cs.surfaceContainerHigh,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(info.icon, size: 28, color: cs.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(info.title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+                    ),
+                    if (badge > 0)
+                      Container(
+                        key: ValueKey('module-badge-${info.id}'),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(12)),
+                        child: Text(
+                          '$badge',
+                          style: TextStyle(color: cs.onErrorContainer, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
+                  ],
+                ),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: metric == null
+                        ? Text('Indisponível', style: TextStyle(color: cs.onSurfaceVariant))
+                        : FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.bottomLeft,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '$metric',
+                                  style: theme.textTheme.headlineMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    fontFeatures: const [FontFeature.tabularFigures()],
+                                  ),
+                                ),
+                                Text(metricLabel, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                              ],
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _GridItem {
   const _GridItem(this.child) : span = 1, height = _Tile.height;
   const _GridItem.panel(this.child) : span = 2, height = _BarPanel.height;
+  const _GridItem.sized(this.child, this.height) : span = 1;
 
   final Widget child;
   final int span;
@@ -725,11 +901,11 @@ class _GridItem {
 }
 
 class _Grid extends StatelessWidget {
-  const _Grid({required this.items});
+  const _Grid({required this.items, this.minColumn = 180});
 
   static const gap = 12.0;
-  static const minColumn = 180.0;
 
+  final double minColumn;
   final List<_GridItem> items;
 
   @override

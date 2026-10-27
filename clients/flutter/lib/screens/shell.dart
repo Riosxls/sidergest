@@ -28,17 +28,35 @@ import 'stock_lots.dart';
 import 'suppliers.dart';
 
 class NavItem {
-  const NavItem(this.id, this.icon, this.title, this.section, this.build);
+  const NavItem(this.id, this.icon, this.title, this.section, this.build, {this.hidden = false});
 
   final String id;
   final IconData icon;
   final String title;
   final String section;
   final Widget Function(Session s, String? filter, Navigate go) build;
+  final bool hidden;
 }
 
 List<NavItem> navItems() => [
   NavItem('dashboard', Icons.dashboard_outlined, 'Painel', '', (s, f, go) => DashboardScreen(session: s, onNavigate: go)),
+  for (final m in moduleInfos)
+    NavItem(
+      m.navId,
+      m.icon,
+      m.title,
+      '',
+      (s, f, go) => DashboardScreen(
+        session: s,
+        onNavigate: go,
+        module: m.id,
+        links: [
+          for (final i in navItems())
+            if (i.section == m.title) ModuleLink(i.id, i.icon, i.title),
+        ],
+      ),
+      hidden: true,
+    ),
   NavItem('sales-pipeline', Icons.view_kanban_outlined, 'Funil de vendas', 'Comercial', (s, f, go) => SalesPipelineScreen(session: s)),
   NavItem('sales-quotes', Icons.request_quote_outlined, 'Propostas', 'Comercial', (s, f, go) => QuotesScreen(session: s)),
   NavItem('sales-orders', Icons.receipt_long_outlined, 'Pedidos de venda', 'Comercial', (s, f, go) => SalesOrdersScreen(session: s)),
@@ -164,7 +182,7 @@ class _ShellState extends State<Shell> {
   Future<void> _showPalette() => showCommandPalette(
     context,
     session: widget.session,
-    targets: [for (final i in _items) SearchTarget(i.id, i.icon, i.title, i.section)],
+    targets: [for (final i in _items.where((i) => !i.hidden)) SearchTarget(i.id, i.icon, i.title, i.section)],
     actions: [for (final a in quickActionsFor(widget.session)) PaletteAction(a.icon, a.label, () => a.run(context))],
     onNavigate: _go,
     onOpenProduct: _openProduct,
@@ -173,7 +191,7 @@ class _ShellState extends State<Shell> {
   NavItem get _item => _items.firstWhere((i) => i.id == _current);
 
   Widget _railItem(NavItem d, ColorScheme cs, VoidCallback tap) {
-    final active = d.id == _current;
+    final active = d.id == _current || (d.id == 'dashboard' && _current.startsWith('module-'));
     return Tooltip(
       message: d.title,
       child: Padding(
@@ -192,7 +210,7 @@ class _ShellState extends State<Shell> {
   }
 
   Widget _tile(NavItem d, ColorScheme cs, VoidCallback tap) {
-    final active = d.id == _current;
+    final active = d.id == _current || (d.id == 'dashboard' && _current.startsWith('module-'));
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: ListTile(
@@ -219,7 +237,7 @@ class _ShellState extends State<Shell> {
     final cs = theme.colorScheme;
     final children = <Widget>[];
     final sections = <String, List<NavItem>>{};
-    for (final d in _items) {
+    for (final d in _items.where((i) => !i.hidden)) {
       sections.putIfAbsent(d.section, () => []).add(d);
     }
     for (final entry in sections.entries) {
