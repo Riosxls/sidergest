@@ -7,6 +7,7 @@ import '../session.dart';
 import '../widgets/alerts.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/user_menu.dart';
+import 'access_placeholder.dart';
 import 'dashboard.dart';
 import 'deliveries.dart';
 import 'entity_list.dart';
@@ -86,8 +87,28 @@ List<NavItem> navItems() => [
   NavItem('outside-processing', Icons.local_shipping_outlined, 'Beneficiamento externo', 'PCP', (s, f, go) => OutsideProcessingScreen(session: s)),
   NavItem('planning', Icons.view_timeline_outlined, 'Programação e carga', 'PCP', (s, f, go) => PlanningScreen(session: s)),
   for (final spec in productionMasters) NavItem(spec.path, spec.icon, spec.title, 'PCP', (s, f, go) => EntityListScreen(session: s, spec: spec)),
+  NavItem('report-portfolio', Icons.assessment_outlined, 'Carteira de pedidos', 'Relatórios', (s, f, go) => SalesOrdersScreen(session: s)),
+  NavItem('report-abc', Icons.bar_chart, 'Curva ABC', 'Relatórios', (s, f, go) => BalancesScreen(session: s)),
+  NavItem('report-balance', Icons.inventory_outlined, 'Saldo de estoque', 'Relatórios', (s, f, go) => BalancesScreen(session: s)),
   NavItem('settings', Icons.tune, 'Parâmetros', 'Sistema', (s, f, go) => SettingsScreen(session: s)),
+  NavItem(
+    'users',
+    Icons.group_outlined,
+    'Usuários',
+    'Sistema',
+    (s, f, go) => const AccessPlaceholderScreen(icon: Icons.group_outlined, title: 'Usuários', description: 'Gestão de usuários em breve.'),
+  ),
+  NavItem(
+    'permissions',
+    Icons.lock_outline,
+    'Permissões',
+    'Sistema',
+    (s, f, go) => const AccessPlaceholderScreen(icon: Icons.lock_outline, title: 'Permissões', description: 'Gestão de permissões por perfil em breve.'),
+  ),
 ];
+
+/// Sections shown in the global sidebar; any other section belongs to a module.
+const globalSections = {'', 'Relatórios', 'Sistema'};
 
 class Shell extends StatefulWidget {
   const Shell({super.key, required this.session});
@@ -190,6 +211,13 @@ class _ShellState extends State<Shell> {
 
   NavItem get _item => _items.firstWhere((i) => i.id == _current);
 
+  ModuleInfo? get _currentModule {
+    for (final m in moduleInfos) {
+      if (m.navId == _current || m.title == _item.section) return m;
+    }
+    return null;
+  }
+
   Widget _railItem(NavItem d, ColorScheme cs, VoidCallback tap) {
     final active = d.id == _current || (d.id == 'dashboard' && _current.startsWith('module-'));
     return Tooltip(
@@ -237,20 +265,52 @@ class _ShellState extends State<Shell> {
     final cs = theme.colorScheme;
     final children = <Widget>[];
     final sections = <String, List<NavItem>>{};
-    for (final d in _items.where((i) => !i.hidden)) {
-      sections.putIfAbsent(d.section, () => []).add(d);
-    }
-    for (final entry in sections.entries) {
-      final section = entry.key;
-      Widget one(NavItem d) {
-        void tap() {
-          _go(d.id);
-          if (closeDrawer) Navigator.pop(context);
-        }
-
-        return rail ? _railItem(d, cs, tap) : _tile(d, cs, tap);
+    final module = _currentModule;
+    Widget one(NavItem d) {
+      void tap() {
+        _go(d.id);
+        if (closeDrawer) Navigator.pop(context);
       }
 
+      return rail ? _railItem(d, cs, tap) : _tile(d, cs, tap);
+    }
+
+    if (module != null) {
+      // Inside a module: Painel (back) + module home + that module's screens only.
+      final home = _items.firstWhere((i) => i.id == module.navId);
+      children.add(one(_items.firstWhere((i) => i.id == 'dashboard')));
+      children.add(one(NavItem(home.id, module.icon, module.title, '', home.build)));
+      children.add(rail ? const Divider() : const Divider(height: 16));
+      children.addAll(_items.where((i) => !i.hidden && i.section == module.title).map(one));
+      return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
+    }
+    for (final d in _items.where((i) => !i.hidden && globalSections.contains(i.section))) {
+      sections.putIfAbsent(d.section, () => []).add(d);
+    }
+    // Favoritos sits between Painel and Relatórios; empty until the user pins screens.
+    final ordered = <MapEntry<String, List<NavItem>>>[
+      ...sections.entries.where((e) => e.key.isEmpty),
+      const MapEntry('Favoritos', <NavItem>[]),
+      ...sections.entries.where((e) => e.key.isNotEmpty),
+    ];
+    for (final entry in ordered) {
+      final section = entry.key;
+      if (entry.value.isEmpty) {
+        if (rail) continue;
+        children.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Text(section, style: theme.textTheme.labelMedium?.copyWith(color: cs.primary)),
+          ),
+        );
+        children.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text('Nenhum favorito ainda', style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          ),
+        );
+        continue;
+      }
       if (section.isEmpty) {
         children.addAll(entry.value.map(one));
       } else if (rail) {
