@@ -13,6 +13,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'nav.dart';
+
 http.Response json(Object body) => http.Response(jsonEncode(body), 200, headers: {'content-type': 'application/json; charset=utf-8'});
 
 Map<String, dynamic> page(List<Map<String, dynamic>> items) => {'items': items, 'total': items.length, 'skip': 0, 'take': 50};
@@ -104,12 +106,50 @@ void main() {
     expect(find.text('OF-7'), findsOneWidget);
   });
 
-  testWidgets('empty sections are hidden and their tabs removed', (tester) async {
+  testWidgets('Painel shows one card per module and keeps module details out', (tester) async {
     await pumpShell(tester, 'Production');
-    final tabs = find.byWidgetPredicate((w) => w is InkWell && w.key is GlobalKey);
-    expect(tabs, findsNWidgets(2));
-    expect(find.descendant(of: tabs, matching: find.text('PCP')), findsOneWidget);
-    expect(find.descendant(of: tabs, matching: find.text('Estoque')), findsNothing);
+    for (final m in ['Comercial', 'Engenharia', 'Estoque', 'Suprimentos', 'PCP']) {
+      expect(find.byKey(ValueKey('module-$m')), findsOneWidget);
+    }
+    expect(find.text('Pico de carga 4 semanas (%)'), findsNothing);
+    expect(find.text('Saldos'), findsNothing);
+    expect(find.text('Funil de vendas'), findsNothing);
+    final cards = find.byWidgetPredicate((w) => w is Card && w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('module-'));
+    expect(tester.widget<Card>(cards.first).key, const ValueKey('module-PCP'));
+  });
+
+  testWidgets('a module card opens a screen with only that subject', (tester) async {
+    await pumpShell(tester, 'Admin');
+    await openModule(tester, 'PCP');
+    expect(find.text('Telas'), findsOneWidget);
+    expect(find.byKey(const ValueKey('link-production-orders')), findsOneWidget);
+    expect(find.byKey(const ValueKey('link-balances')), findsNothing);
+    expect(find.text('OFs a liberar'), findsOneWidget);
+    expect(find.text('Reservas abertas'), findsNothing);
+    expect(find.widgetWithText(ListTile, 'Visão geral'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Ordens de fabricação'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Saldos'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('link-production-orders')));
+    await tester.pumpAndSettle();
+    expect(find.text('PCP › Ordens de fabricação'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ListTile, 'Visão geral'));
+    await tester.pumpAndSettle();
+    expect(find.text('Telas'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ListTile, 'Painel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Módulos'), findsOneWidget);
+  });
+
+  testWidgets('Comercial and Estoque modules expose the new screens', (tester) async {
+    await pumpShell(tester, 'Admin');
+    await openModule(tester, 'Comercial');
+    expect(find.byKey(const ValueKey('link-viability')), findsOneWidget);
+    await openModule(tester, 'Estoque');
+    expect(find.byKey(const ValueKey('link-steel')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('link-steel')));
+    await tester.pumpAndSettle();
+    expect(find.text('Bobinas e lotes'), findsOneWidget);
   });
 
   testWidgets('bell shows the Atenção total and jumps to the filtered list', (tester) async {
@@ -141,6 +181,7 @@ void main() {
 
   testWidgets('sidebar collapses to icons, remembers it, and marks the active page', (tester) async {
     await pumpShell(tester, 'Admin');
+    await openScreen(tester, 'Estoque', 'balances');
     await tester.tap(find.byTooltip('Recolher menu'));
     await tester.pumpAndSettle();
     expect(find.text('Saldos'), findsNothing);
@@ -154,28 +195,21 @@ void main() {
 
   testWidgets('collapsed state is restored', (tester) async {
     await pumpShell(tester, 'Admin', prefs: {'navCollapsed': true});
-    expect(find.text('Saldos'), findsNothing);
     expect(find.byTooltip('Expandir menu'), findsOneWidget);
+    expect(find.byTooltip('Painel'), findsOneWidget);
   });
 
-  testWidgets('sidebar groups collapse and the choice is remembered', (tester) async {
+  testWidgets('sidebar lists only Painel until a module is opened', (tester) async {
     await pumpShell(tester, 'Admin');
-    expect(find.text('Saldos'), findsOneWidget);
-    await tester.tap(find.descendant(of: find.byType(ExpansionTile), matching: find.text('Estoque')));
-    await tester.pumpAndSettle();
-    expect(find.text('Saldos'), findsNothing);
-    final p = await SharedPreferences.getInstance();
-    expect(p.getStringList('navClosedGroups'), ['Estoque']);
-    await pumpShell(
-      tester,
-      'Admin',
-      prefs: {
-        'navClosedGroups': <String>['Estoque'],
-      },
-    );
-    expect(find.text('Saldos'), findsNothing);
-    expect(find.text('Movimentações'), findsNothing);
-    expect(find.text('Funil de vendas'), findsOneWidget);
+    for (final t in ['Saldos', 'Movimentações', 'Funil de vendas', 'Requisições', 'Ordens de fabricação']) {
+      expect(find.widgetWithText(ListTile, t), findsNothing);
+    }
+    expect(find.widgetWithText(ListTile, 'Painel'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Parâmetros'), findsOneWidget);
+    await openModule(tester, 'Estoque');
+    expect(find.widgetWithText(ListTile, 'Saldos'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Controle de aço'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Funil de vendas'), findsNothing);
   });
 
   testWidgets('command palette: keyboard navigation, actions, products and recents', (tester) async {
@@ -227,20 +261,6 @@ void main() {
     expect(session.themeMode, ThemeMode.dark);
     final p = await SharedPreferences.getInstance();
     expect(p.getString('themeMode'), 'dark');
-  });
-
-  testWidgets('section tabs scroll and follow the scroll position', (tester) async {
-    await pumpShell(tester, 'Production', size: const Size(1600, 500));
-    final tab = find.descendant(of: find.byWidgetPredicate((w) => w is InkWell && w.key is GlobalKey), matching: find.text('PCP'));
-    TextStyle? style() => tester.widget<Text>(tab).style;
-    expect(style()?.fontWeight, FontWeight.w400);
-    await tester.tap(tab);
-    await tester.pumpAndSettle();
-    expect(style()?.fontWeight, FontWeight.w600);
-    final scrollable = find.ancestor(of: find.text('OFs a liberar'), matching: find.byType(Scrollable)).first;
-    await tester.drag(scrollable, const Offset(0, 3000));
-    await tester.pumpAndSettle();
-    expect(style()?.fontWeight, FontWeight.w400);
   });
 
   test('cards use a higher-contrast surface and an outline', () {

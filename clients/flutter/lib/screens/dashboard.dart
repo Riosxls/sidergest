@@ -6,266 +6,76 @@ import 'package:flutter/services.dart';
 
 import '../entities.dart';
 import '../session.dart';
-import '../api.dart';
 import '../widgets/alerts.dart';
+import '../widgets/dash.dart';
+import 'dashboard_data.dart';
 import 'orders.dart';
-import 'production_orders.dart';
 import 'product_detail.dart';
+import 'production_orders.dart';
 import 'quick_actions.dart';
-
-class DashboardData {
-  DashboardData(this.counts, this.products);
-
-  final Map<EntitySpec, int> counts;
-  final List<Map<String, dynamic>> products;
-
-  List<Map<String, dynamic>> get withoutRouting => products.where((p) => (p['operationCount'] ?? 0) == 0).toList();
-  List<Map<String, dynamic>> get blocked => products.where((p) => p['blocked'] == true).toList();
-
-  Map<String, int> countBy(String Function(Map<String, dynamic>) key) {
-    final m = <String, int>{};
-    for (final p in products) {
-      m.update(key(p), (v) => v + 1, ifAbsent: () => 1);
-    }
-    return Map.fromEntries(m.entries.toList()..sort((a, b) => b.value.compareTo(a.value)));
-  }
-}
-
-class StockDashboard {
-  StockDashboard({required this.quarantine, required this.quarantineLots, required this.openReservations, required this.lastClosing, required this.locations});
-
-  final int quarantine;
-  final List<Map<String, dynamic>> quarantineLots;
-  final int openReservations;
-  final Map<String, dynamic>? lastClosing;
-  final int locations;
-}
-
-class PurchasingDashboard {
-  PurchasingDashboard({
-    required this.pendingApproval,
-    required this.approved,
-    required this.openQuotations,
-    required this.openOrders,
-    required this.overdue,
-    required this.performance,
-  });
-
-  final int pendingApproval;
-  final int approved;
-  final int openQuotations;
-  final int openOrders;
-  final List<Map<String, dynamic>> overdue;
-  final List<Map<String, dynamic>> performance;
-
-  Map<String, num> get overdueBySupplier {
-    final m = <String, num>{};
-    for (final l in overdue) {
-      m.update('${l['supplierName']}', (v) => v + 1, ifAbsent: () => 1);
-    }
-    return Map.fromEntries(m.entries.toList()..sort((a, b) => b.value.compareTo(a.value)));
-  }
-}
-
-class ProductionDashboard {
-  ProductionDashboard({required this.orders, required this.shipments, required this.load});
-
-  final List<Map<String, dynamic>> orders;
-  final List<Map<String, dynamic>> shipments;
-  final List<Map<String, dynamic>> load;
-
-  int count(String status) => orders.where((o) => o['status'] == status).length;
-  List<Map<String, dynamic>> get late => orders.where(productionLate).toList();
-
-  Map<String, num> get peakLoad {
-    final m = <String, num>{};
-    for (final r in load) {
-      final pct = r['loadPercent'] as num;
-      m.update('${r['code']}', (v) => pct > v ? pct : v, ifAbsent: () => pct);
-    }
-    return Map.fromEntries((m.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(8));
-  }
-}
 
 typedef Navigate = void Function(String id, [String? filter]);
 
-class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key, required this.session, this.onNavigate});
+class ModuleInfo {
+  const ModuleInfo(this.section, this.icon, this.blurb);
 
-  final Session session;
-  final Navigate? onNavigate;
+  final String section;
+  final IconData icon;
+  final String blurb;
 
-  @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  String get id => 'module:$section';
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
-  static const _maxWidth = 1280.0;
-  late Future<DashboardData> _eng = _fetchEngineering();
-  late Future<StockDashboard> _stock = _fetchStock();
-  late Future<PurchasingDashboard> _purchasing = _fetchPurchasing();
-  late Future<ProductionDashboard> _production = _fetchProduction();
-  late Future<List<Object?>> _all = _combine();
-  DateTime? _updated;
-  final _anchors = [for (var i = 0; i < 5; i++) GlobalKey()];
-  final _scroll = ScrollController();
-  final _focus = FocusNode();
-  final _viewport = GlobalKey();
-  final _tabKeys = [for (var i = 0; i < 5; i++) GlobalKey()];
-  int _anchor = 0;
-  bool _loaded = false;
-  Set<int> _hasData = {};
-  Timer? _timer;
+const modules = [
+  ModuleInfo('Comercial', Icons.storefront_outlined, 'Propostas, pedidos, entregas e análises de viabilidade'),
+  ModuleInfo('Engenharia', Icons.architecture, 'Produtos, materiais, roteiros e estruturas'),
+  ModuleInfo('Estoque', Icons.inventory_outlined, 'Saldos, lotes, reservas e controle de aço'),
+  ModuleInfo('Suprimentos', Icons.shopping_cart_outlined, 'Requisições, cotações, pedidos e recebimentos'),
+  ModuleInfo('PCP', Icons.precision_manufacturing_outlined, 'Ordens de fabricação, apontamentos e carga'),
+];
 
-  @override
-  void initState() {
-    super.initState();
-    _scroll.addListener(_spy);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focus.requestFocus();
-    });
-    _settle();
-    _timer = Timer.periodic(const Duration(minutes: 2), (_) => _refresh());
-  }
+ModuleInfo moduleBySection(String section) => modules.firstWhere((m) => m.section == section);
 
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _scroll.dispose();
-    _focus.dispose();
-    super.dispose();
-  }
+List<ModuleInfo> modulesFor(String? role) {
+  final first = switch (role) {
+    'Engineering' => 'Engenharia',
+    'Stock' => 'Estoque',
+    'Purchasing' => 'Suprimentos',
+    'Production' => 'PCP',
+    _ => 'Comercial',
+  };
+  return [moduleBySection(first), ...modules.where((m) => m.section != first)];
+}
 
-  List<int> get _visible => [
-    0,
-    ...[1, 2, 3, 4].where(_hasData.contains),
-  ];
+final dashboardCounted = [products, materials, machines, standardOperations, workCenters, tools];
 
-  void _spy() {
-    final box = _viewport.currentContext?.findRenderObject();
-    if (box is! RenderBox || !box.attached || !_scroll.hasClients) return;
-    final top = box.localToGlobal(Offset.zero).dy;
-    var active = 0;
-    for (final i in _visible) {
-      final r = _anchors[i].currentContext?.findRenderObject();
-      if (r is RenderBox && r.attached && r.localToGlobal(Offset.zero).dy - top <= 24) active = i;
-    }
-    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 4 && _scroll.position.maxScrollExtent > 0) active = _visible.last;
-    if (active != _anchor) setState(() => _anchor = active);
-  }
+class DashAlert {
+  const DashAlert(this.module, this.icon, this.label, this.count, this.navId, this.filter, this.onTap);
 
-  void _jump(int i) {
-    setState(() => _anchor = i);
-    final ctx = _anchors[i].currentContext;
-    if (ctx != null) Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
-  }
+  final String module;
+  final IconData icon;
+  final String label;
+  final int count;
+  final String navId;
+  final String? filter;
+  final void Function()? onTap;
+}
 
-  static final _counted = [products, materials, machines, standardOperations, workCenters, tools];
+List<DashAlert> buildAlerts(
+  BuildContext context, {
+  required Session session,
+  required Future<void> Function() refresh,
+  Navigate? go,
+  DashboardData? eng,
+  StockDashboard? stock,
+  PurchasingDashboard? purchasing,
+  ProductionDashboard? production,
+  CommercialDashboard? commercial,
+}) {
+  void Function()? to(String id, [String? filter]) => go == null ? null : () => go(id, filter);
+  Future<void> push(Widget screen) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen)).then((_) => refresh());
 
-  Future<DashboardData> _fetchEngineering() async {
-    final api = widget.session.api;
-    final pages = await Future.wait(_counted.map((s) => api.list(s.path, take: 1)));
-    final all = await api.listAll(products.path);
-    return DashboardData({for (var i = 0; i < _counted.length; i++) _counted[i]: pages[i].total}, all);
-  }
-
-  Future<StockDashboard> _fetchStock() async {
-    final api = widget.session.api;
-    final r = await Future.wait([
-      api.list('/api/stock/lots', take: 8, query: {'status': 'Quarantine'}),
-      api.list('/api/stock/reservations', take: 1, query: {'status': 'Open'}),
-      api.get('/api/stock/closings'),
-      api.list('/api/stock-locations', take: 1),
-    ]);
-    final lots = r[0] as PageResult;
-    final closings = (r[2] as List).cast<Map<String, dynamic>>();
-    return StockDashboard(
-      quarantine: lots.total,
-      quarantineLots: lots.items,
-      openReservations: (r[1] as PageResult).total,
-      lastClosing: closings.isEmpty ? null : closings.first,
-      locations: (r[3] as PageResult).total,
-    );
-  }
-
-  Future<PurchasingDashboard> _fetchPurchasing() async {
-    final api = widget.session.api;
-    final r = await Future.wait([
-      api.list('/api/requisitions', take: 1, query: {'status': 'PendingApproval'}),
-      api.list('/api/requisitions', take: 1, query: {'status': 'Approved'}),
-      api.list('/api/quotations', take: 1, query: {'status': 'Open'}),
-      api.list('/api/purchase-orders', take: 200, query: {'open': true}),
-      api.get('/api/purchasing/overdue'),
-    ]);
-    final orders = r[3] as PageResult;
-    final now = DateTime.now();
-    final from = isoDate(DateTime(now.year - 1, now.month, now.day));
-    final supplierIds = orders.items.map((o) => o['supplierId'] as int).toSet().take(8);
-    final perf = await Future.wait(supplierIds.map((id) => api.get('/api/suppliers/$id/performance', {'from': from, 'to': isoDate(now)})));
-    return PurchasingDashboard(
-      pendingApproval: (r[0] as PageResult).total,
-      approved: (r[1] as PageResult).total,
-      openQuotations: (r[2] as PageResult).total,
-      openOrders: orders.total,
-      overdue: (r[4] as List).cast<Map<String, dynamic>>(),
-      performance: perf.cast<Map<String, dynamic>>(),
-    );
-  }
-
-  Future<ProductionDashboard> _fetchProduction() async {
-    final api = widget.session.api;
-    final now = DateTime.now();
-    final r = await Future.wait([
-      api.listAll('/api/production/orders', query: {'open': true}),
-      api.get('/api/production/outside-shipments', {'open': true}),
-      api.get('/api/production/load', {'from': isoDate(now), 'to': isoDate(now.add(const Duration(days: 27)))}),
-    ]);
-    return ProductionDashboard(
-      orders: r[0] as List<Map<String, dynamic>>,
-      shipments: (r[1] as List).cast<Map<String, dynamic>>(),
-      load: (r[2] as List).cast<Map<String, dynamic>>(),
-    );
-  }
-
-  Future<List<Object?>> _combine() =>
-      Future.wait<Object?>([_eng, _stock, _purchasing, _production].map((f) => f.then<Object?>((v) => v, onError: (_) => null)));
-
-  Future<void> _settle() async {
-    final d = await _all;
-    if (!mounted) return;
-    final e = d[0] as DashboardData?, st = d[1] as StockDashboard?, pu = d[2] as PurchasingDashboard?, pr = d[3] as ProductionDashboard?;
-    final alerts = _alerts(e, st, pu, pr);
-    widget.session.alerts.value = [for (final a in alerts) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter)];
-    setState(() {
-      _updated = DateTime.now();
-      _loaded = true;
-      _hasData = {
-        if (e == null || e.counts.values.any((v) => v > 0)) 1,
-        if (st == null || st.locations > 0) 2,
-        if (pu == null || pu.pendingApproval + pu.approved + pu.openQuotations + pu.openOrders + pu.overdue.length > 0) 3,
-        if (pr == null || pr.orders.isNotEmpty || pr.shipments.isNotEmpty) 4,
-      };
-    });
-  }
-
-  Future<void> _refresh() {
-    setState(() {
-      _eng = _fetchEngineering();
-      _stock = _fetchStock();
-      _purchasing = _fetchPurchasing();
-      _production = _fetchProduction();
-      _all = _combine();
-    });
-    return _settle();
-  }
-
-  void Function()? _go(String id, [String? filter]) => widget.onNavigate == null ? null : () => widget.onNavigate!(id, filter);
-
-  Future<void> _push(Widget screen) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen)).then((_) => _refresh());
-
-  void _openProduct(Map<String, dynamic> p) => _push(ProductDetailScreen(session: widget.session, productId: p['id'] as int));
-
-  void Function() _showList(
+  void Function() showList(
     String title,
     List<Map<String, dynamic>> items,
     String Function(Map<String, dynamic>) label,
@@ -295,11 +105,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           actions: [
-            if (all != null && widget.onNavigate != null)
+            if (all != null && go != null)
               TextButton(
                 onPressed: () {
                   Navigator.pop(ctx);
-                  widget.onNavigate!(all);
+                  go(all);
                 },
                 child: const Text('Ver todos'),
               ),
@@ -308,73 +118,189 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
 
-  List<_Alert> _alerts(DashboardData? e, StockDashboard? s, PurchasingDashboard? p, ProductionDashboard? o) {
-    final late = o == null ? <Map<String, dynamic>>[] : (o.late..sort((a, b) => '${a['dueDate']}'.compareTo('${b['dueDate']}')));
-    final overdue = p == null ? <Map<String, dynamic>>[] : ([...p.overdue]..sort((a, b) => (b['daysLate'] as num).compareTo(a['daysLate'] as num)));
-    String productLabel(Map<String, dynamic> x) => '${x['code']}  ${x['name']}';
-    return [
-      if (o != null) ...[
-        _Alert(
-          Icons.schedule,
+  final late = production == null ? <Map<String, dynamic>>[] : (production.late..sort((a, b) => '${a['dueDate']}'.compareTo('${b['dueDate']}')));
+  final overdue = purchasing == null
+      ? <Map<String, dynamic>>[]
+      : ([...purchasing.overdue]..sort((a, b) => (b['daysLate'] as num).compareTo(a['daysLate'] as num)));
+  String productLabel(Map<String, dynamic> x) => '${x['code']}  ${x['name']}';
+  void openProduct(Map<String, dynamic> p) => push(ProductDetailScreen(session: session, productId: p['id'] as int));
+  return [
+    if (commercial != null) ...[
+      DashAlert(
+        'Comercial',
+        Icons.event_busy_outlined,
+        'Pedidos de venda atrasados',
+        commercial.k('lateOrders').toInt(),
+        'sales-orders',
+        null,
+        to('sales-orders'),
+      ),
+      DashAlert('Comercial', Icons.gavel_outlined, 'Propostas a aprovar', commercial.k('pendingApprovals').toInt(), 'sales-quotes', null, to('sales-quotes')),
+      DashAlert(
+        'Comercial',
+        Icons.draw_outlined,
+        'Análises de viabilidade em assinatura',
+        commercial.feasibilityInReview,
+        'viability',
+        'InReview',
+        to('viability', 'InReview'),
+      ),
+    ],
+    if (production != null) ...[
+      DashAlert(
+        'PCP',
+        Icons.schedule,
+        'OFs atrasadas',
+        late.length,
+        'production-orders',
+        null,
+        showList(
           'OFs atrasadas',
-          late.length,
-          'production-orders',
-          null,
-          _showList(
-            'OFs atrasadas',
-            late,
-            (x) => '${x['reference']} · ${x['productCode']} · ${fmt(x['quantity'])} · ${fmtDay(x['dueDate'])}',
-            (x) => openProductionOrder(context, widget.session, x['id'] as int).then((_) => _refresh()),
-            all: 'production-orders',
-          ),
+          late,
+          (x) => '${x['reference']} · ${x['productCode']} · ${fmt(x['quantity'])} · ${fmtDay(x['dueDate'])}',
+          (x) => openProductionOrder(context, session, x['id'] as int).then((_) => refresh()),
+          all: 'production-orders',
         ),
-        _Alert(Icons.pause_circle_outline, 'OFs paradas', o.count('Stopped'), 'production-orders', 'Stopped', _go('production-orders', 'Stopped')),
-      ],
-      if (p != null) ...[
-        _Alert(
-          Icons.local_shipping_outlined,
+      ),
+      DashAlert(
+        'PCP',
+        Icons.pause_circle_outline,
+        'OFs paradas',
+        production.count('Stopped'),
+        'production-orders',
+        'Stopped',
+        to('production-orders', 'Stopped'),
+      ),
+    ],
+    if (purchasing != null) ...[
+      DashAlert(
+        'Suprimentos',
+        Icons.local_shipping_outlined,
+        'Entregas em atraso',
+        overdue.length,
+        'overdue',
+        null,
+        showList(
           'Entregas em atraso',
-          overdue.length,
-          'overdue',
-          null,
-          _showList(
-            'Entregas em atraso',
-            overdue,
-            (l) => '${l['daysLate']} d · ped. ${l['purchaseOrderNumber']} · ${l['supplierName']} · ${l['description']}',
-            (l) => _push(OrderScreen(session: widget.session, id: l['purchaseOrderId'] as int)),
-            all: 'overdue',
-          ),
+          overdue,
+          (l) => '${l['daysLate']} d · ped. ${l['purchaseOrderNumber']} · ${l['supplierName']} · ${l['description']}',
+          (l) => push(OrderScreen(session: session, id: l['purchaseOrderId'] as int)),
+          all: 'overdue',
         ),
-        _Alert(
-          Icons.assignment_late_outlined,
-          'Requisições a aprovar',
-          p.pendingApproval,
-          'requisitions',
-          'PendingApproval',
-          _go('requisitions', 'PendingApproval'),
-        ),
-      ],
-      if (s != null) _Alert(Icons.verified_outlined, 'Lotes em quarentena', s.quarantine, 'lots', 'Quarantine', _go('lots', 'Quarantine')),
-      if (e != null) ...[
-        _Alert(
-          Icons.block,
-          'Produtos bloqueados',
-          e.blocked.length,
-          products.path,
-          null,
-          _showList('Produtos bloqueados', e.blocked, productLabel, _openProduct),
-        ),
-        _Alert(
-          Icons.warning_amber,
-          'Produtos sem roteiro',
-          e.withoutRouting.length,
-          products.path,
-          null,
-          _showList('Produtos sem roteiro', e.withoutRouting, productLabel, _openProduct),
-        ),
-      ],
-    ].where((a) => a.count > 0).toList();
+      ),
+      DashAlert(
+        'Suprimentos',
+        Icons.assignment_late_outlined,
+        'Requisições a aprovar',
+        purchasing.pendingApproval,
+        'requisitions',
+        'PendingApproval',
+        to('requisitions', 'PendingApproval'),
+      ),
+    ],
+    if (stock != null) ...[
+      DashAlert('Estoque', Icons.verified_outlined, 'Lotes em quarentena', stock.quarantine, 'lots', 'Quarantine', to('lots', 'Quarantine')),
+      DashAlert('Estoque', Icons.content_cut, 'Aço aguardando retorno do slitter', stock.steelPending, 'steel', null, to('steel')),
+    ],
+    if (eng != null) ...[
+      DashAlert(
+        'Engenharia',
+        Icons.block,
+        'Produtos bloqueados',
+        eng.blocked.length,
+        products.path,
+        null,
+        showList('Produtos bloqueados', eng.blocked, productLabel, openProduct),
+      ),
+      DashAlert(
+        'Engenharia',
+        Icons.warning_amber,
+        'Produtos sem roteiro',
+        eng.withoutRouting.length,
+        products.path,
+        null,
+        showList('Produtos sem roteiro', eng.withoutRouting, productLabel, openProduct),
+      ),
+    ],
+  ].where((a) => a.count > 0).toList();
+}
+
+String hhmm(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({super.key, required this.session, this.onNavigate});
+
+  final Session session;
+  final Navigate? onNavigate;
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  static const _maxWidth = 1280.0;
+  late Future<DashboardData> _eng = fetchEngineering(widget.session.api, dashboardCounted);
+  late Future<StockDashboard> _stock = fetchStock(widget.session.api);
+  late Future<PurchasingDashboard> _purchasing = fetchPurchasing(widget.session.api);
+  late Future<ProductionDashboard> _production = fetchProduction(widget.session.api);
+  late Future<CommercialDashboard> _commercial = fetchCommercial(widget.session.api);
+  late Future<List<Object?>> _all = _combine();
+  DateTime? _updated;
+  final _focus = FocusNode();
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+    _settle();
+    _timer = Timer.periodic(const Duration(minutes: 2), (_) => _refresh());
   }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  Future<List<Object?>> _combine() =>
+      Future.wait<Object?>([_eng, _stock, _purchasing, _production, _commercial].map((f) => f.then<Object?>((v) => v, onError: (_) => null)));
+
+  List<DashAlert> _alerts(List<Object?> d) => buildAlerts(
+    context,
+    session: widget.session,
+    refresh: _refresh,
+    go: widget.onNavigate,
+    eng: d[0] as DashboardData?,
+    stock: d[1] as StockDashboard?,
+    purchasing: d[2] as PurchasingDashboard?,
+    production: d[3] as ProductionDashboard?,
+    commercial: d[4] as CommercialDashboard?,
+  );
+
+  Future<void> _settle() async {
+    final d = await _all;
+    if (!mounted) return;
+    widget.session.alerts.value = [for (final a in _alerts(d)) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter)];
+    setState(() => _updated = DateTime.now());
+  }
+
+  Future<void> _refresh() {
+    setState(() {
+      _eng = fetchEngineering(widget.session.api, dashboardCounted);
+      _stock = fetchStock(widget.session.api);
+      _purchasing = fetchPurchasing(widget.session.api);
+      _production = fetchProduction(widget.session.api);
+      _commercial = fetchCommercial(widget.session.api);
+      _all = _combine();
+    });
+    return _settle();
+  }
+
+  void Function()? _go(String id, [String? filter]) => widget.onNavigate == null ? null : () => widget.onNavigate!(id, filter);
 
   Widget _onboarding() => FutureBuilder<List<Object?>>(
     future: _all,
@@ -401,7 +327,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.only(bottom: 16),
         child: Card(
           margin: EdgeInsets.zero,
-          shape: _cardShape(context),
+          shape: dashCardShape(context),
           color: cs.surfaceContainerHigh,
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -439,500 +365,209 @@ class _DashboardScreenState extends State<DashboardScreen> {
     },
   );
 
-  Widget _attention() {
-    return FutureBuilder<List<Object?>>(
-      future: _all,
-      builder: (context, snap) {
-        final theme = Theme.of(context);
-        final updated = _updated;
-        final header = Row(
-          children: [
-            Expanded(
-              child: Text('Atenção', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
-            ),
-            if (updated != null) Text('Atualizado às ${_hhmm(updated)}', style: theme.textTheme.bodySmall),
-            IconButton(tooltip: 'Atualizar (F5)', onPressed: _refresh, icon: const Icon(Icons.refresh)),
-          ],
-        );
-        final Widget content;
-        if (!snap.hasData) {
-          content = const LinearProgressIndicator();
-        } else {
-          final d = snap.data!;
-          final alerts = _alerts(d[0] as DashboardData?, d[1] as StockDashboard?, d[2] as PurchasingDashboard?, d[3] as ProductionDashboard?);
-          content = alerts.isEmpty
-              ? _Notice(icon: Icons.check_circle_outline, title: 'Nada pendente', subtitle: 'Nenhuma OF atrasada, entrega em atraso, aprovação ou bloqueio.')
-              : _Grid(
-                  items: [for (final a in alerts) _GridItem(_Tile(icon: a.icon, label: a.label, value: '${a.count}', alert: true, onTap: a.onTap))],
-                );
-        }
-        return Column(key: _anchors[0], crossAxisAlignment: CrossAxisAlignment.stretch, children: [header, content, const SizedBox(height: 16)]);
-      },
-    );
-  }
-
-  static String _hhmm(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-
-  Widget _section<T>(int index, String title, IconData icon, Future<T> future, List<Widget> Function(T data) build) {
-    final theme = Theme.of(context);
-    if (_loaded && !_hasData.contains(index)) return SizedBox.shrink(key: _anchors[index]);
-    return Column(
-      key: _anchors[index],
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              Icon(icon, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ),
-        FutureBuilder<T>(
-          future: future,
-          builder: (context, snap) {
-            if (snap.hasError) return Text('${snap.error}', style: TextStyle(color: theme.colorScheme.error));
-            if (snap.connectionState != ConnectionState.done) return const LinearProgressIndicator();
-            final children = build(snap.data as T);
-            if (children.isEmpty) return const SizedBox.shrink();
-            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
-          },
-        ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  List<Widget> _engineering(DashboardData d) {
-    final masters = Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final e in d.counts.entries) ActionChip(avatar: Icon(e.key.icon, size: 18), label: Text('${e.value} ${e.key.title}'), onPressed: _go(e.key.path)),
-      ],
-    );
-    if (d.counts.values.every((v) => v == 0)) return [];
-    return [
-      masters,
-      const SizedBox(height: 12),
-      _Grid(
-        items: [
-          _GridItem.panel(_BarPanel(title: 'Produtos por tipo', data: d.countBy((p) => kinds[p['kind']] ?? '—'))),
-          _GridItem.panel(_BarPanel(title: 'Produtos por formato', data: d.countBy((p) => shapes[p['shape']] ?? 'Sem formato'))),
-          _GridItem.panel(_BarPanel(title: 'Operações por produto', data: d.countBy((p) => _bucket(p['operationCount'] as int? ?? 0)))),
-        ],
-      ),
-    ];
-  }
-
-  List<Widget> _stockPanels(StockDashboard d) {
-    if (d.locations == 0) return [];
-    return [
-      _Grid(
-        items: [
-          _GridItem(_Tile(icon: Icons.bookmark_border, label: 'Reservas abertas', value: '${d.openReservations}', onTap: _go('reservations'))),
-          _GridItem(
-            _Tile(
-              icon: Icons.lock_outline,
-              label: 'Último mês fechado',
-              value: d.lastClosing == null ? '—' : fmtPeriod(d.lastClosing!['period']),
-              onTap: _go('closing'),
-            ),
-          ),
-          _GridItem(_Tile(icon: Icons.place_outlined, label: 'Locais de estoque', value: '${d.locations}', onTap: _go('locations'))),
-        ],
-      ),
-    ];
-  }
-
-  List<Widget> _purchasingPanels(PurchasingDashboard d) {
-    if (d.pendingApproval + d.approved + d.openQuotations + d.openOrders + d.overdue.length == 0) return [];
-    final perf = {for (final p in d.performance.where((p) => (p['receivedLines'] as num) > 0)) '${p['supplierName']}': p['onTimePercent'] as num};
-    return [
-      _Grid(
-        items: [
-          _GridItem(
-            _Tile(icon: Icons.assignment_turned_in_outlined, label: 'Aprovadas sem cotação', value: '${d.approved}', onTap: _go('requisitions', 'Approved')),
-          ),
-          _GridItem(_Tile(icon: Icons.request_quote_outlined, label: 'Cotações abertas', value: '${d.openQuotations}', onTap: _go('quotations'))),
-          _GridItem(_Tile(icon: Icons.receipt_long_outlined, label: 'Pedidos abertos', value: '${d.openOrders}', onTap: _go('orders'))),
-          _GridItem.panel(_BarPanel(title: 'Atrasos por fornecedor', data: d.overdueBySupplier)),
-          _GridItem.panel(_BarPanel(title: 'Pontualidade 12 meses (%)', data: perf, max: 100)),
-        ],
-      ),
-    ];
-  }
-
-  List<Widget> _productionPanels(ProductionDashboard d) {
-    if (d.orders.isEmpty && d.shipments.isEmpty) return [];
-    return [
-      _Grid(
-        items: [
-          _GridItem(_Tile(icon: Icons.assignment_outlined, label: 'OFs a liberar', value: '${d.count('Created')}', onTap: _go('production-orders', 'Created'))),
-          _GridItem(_Tile(icon: Icons.play_circle_outline, label: 'Liberadas', value: '${d.count('Released')}', onTap: _go('production-orders', 'Released'))),
-          _GridItem(
-            _Tile(
-              icon: Icons.precision_manufacturing_outlined,
-              label: 'Em produção',
-              value: '${d.count('InProduction')}',
-              onTap: _go('production-orders', 'InProduction'),
-            ),
-          ),
-          _GridItem(
-            _Tile(icon: Icons.local_shipping_outlined, label: 'Remessas em terceiros', value: '${d.shipments.length}', onTap: _go('outside-processing')),
-          ),
-          _GridItem.panel(_BarPanel(title: 'Pico de carga 4 semanas (%)', data: d.peakLoad)),
-        ],
-      ),
-    ];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final sections = [
-      _section(1, 'Engenharia', Icons.architecture, _eng, _engineering),
-      _section(2, 'Estoque', Icons.inventory_outlined, _stock, _stockPanels),
-      _section(3, 'Suprimentos', Icons.shopping_cart_outlined, _purchasing, _purchasingPanels),
-      _section(4, 'PCP', Icons.precision_manufacturing_outlined, _production, _productionPanels),
-    ];
-    final order = switch (widget.session.role) {
-      'Stock' => [1, 3, 2, 0],
-      'Purchasing' => [2, 1, 3, 0],
-      'Production' => [3, 1, 2, 0],
-      _ => [0, 3, 1, 2],
-    };
-    final actions = quickActionsFor(widget.session);
-    final labels = ['Atenção', 'Engenharia', 'Estoque', 'Suprimentos', 'PCP'];
-    final tabs = [0, ...order.map((i) => i + 1).where((i) => !_loaded || _hasData.contains(i))];
-    final cs = Theme.of(context).colorScheme;
-    return CallbackShortcuts(
-      bindings: {const SingleActivator(LogicalKeyboardKey.f5): _refresh},
-      child: Focus(
-        focusNode: _focus,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Material(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: cs.outlineVariant)),
-                ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: _maxWidth),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: [
-                          for (final i in tabs)
-                            InkWell(
-                              key: _tabKeys[i],
-                              onTap: () => _jump(i),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                decoration: BoxDecoration(
-                                  border: Border(bottom: BorderSide(color: _anchor == i ? cs.primary : Colors.transparent, width: 2)),
-                                ),
-                                child: Text(
-                                  labels[i],
-                                  style: TextStyle(
-                                    fontWeight: _anchor == i ? FontWeight.w600 : FontWeight.w400,
-                                    color: _anchor == i ? cs.primary : cs.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _refresh,
-                child: SingleChildScrollView(
-                  key: _viewport,
-                  controller: _scroll,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: _maxWidth),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (actions.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  for (final a in actions)
-                                    FilledButton.tonalIcon(onPressed: () => a.run(context).then((_) => _refresh()), icon: Icon(a.icon), label: Text(a.label)),
-                                ],
-                              ),
-                            ),
-                          _onboarding(),
-                          _attention(),
-                          for (final i in order) sections[i],
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static String _bucket(int n) => n == 0
-      ? '0'
-      : n <= 3
-      ? '1–3'
-      : n <= 6
-      ? '4–6'
-      : '7+';
-}
-
-class _Alert {
-  const _Alert(this.icon, this.label, this.count, this.navId, this.filter, this.onTap);
-
-  final IconData icon;
-  final String label;
-  final int count;
-  final String navId;
-  final String? filter;
-  final void Function()? onTap;
-}
-
-class _GridItem {
-  const _GridItem(this.child) : span = 1, height = _Tile.height;
-  const _GridItem.panel(this.child) : span = 2, height = _BarPanel.height;
-
-  final Widget child;
-  final int span;
-  final double height;
-}
-
-class _Grid extends StatelessWidget {
-  const _Grid({required this.items});
-
-  static const gap = 12.0;
-  static const minColumn = 180.0;
-
-  final List<_GridItem> items;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, c) {
-      final cols = math.max(1, ((c.maxWidth + gap) / (minColumn + gap)).floor());
-      final colWidth = (c.maxWidth - gap * (cols - 1)) / cols;
-      return Wrap(
-        spacing: gap,
-        runSpacing: gap,
+  Widget _attention() => FutureBuilder<List<Object?>>(
+    future: _all,
+    builder: (context, snap) {
+      final theme = Theme.of(context);
+      final updated = _updated;
+      final header = Row(
         children: [
-          for (final i in items)
-            SizedBox(
-              width: (() {
-                final span = math.min(i.span, cols);
-                return colWidth * span + gap * (span - 1) - 0.01;
-              })(),
-              height: i.height,
-              child: i.child,
-            ),
+          Expanded(
+            child: Text('Atenção', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+          ),
+          if (updated != null) Text('Atualizado às ${hhmm(updated)}', style: theme.textTheme.bodySmall),
+          IconButton(tooltip: 'Atualizar (F5)', onPressed: _refresh, icon: const Icon(Icons.refresh)),
+        ],
+      );
+      final Widget content;
+      if (!snap.hasData) {
+        content = const LinearProgressIndicator();
+      } else {
+        final alerts = _alerts(snap.data!);
+        content = alerts.isEmpty
+            ? const DashNotice(
+                icon: Icons.check_circle_outline,
+                title: 'Nada pendente',
+                subtitle: 'Nenhuma OF atrasada, entrega em atraso, aprovação ou bloqueio.',
+              )
+            : DashGrid(
+                items: [for (final a in alerts) GridItem(DashTile(icon: a.icon, label: a.label, value: '${a.count}', alert: true, onTap: a.onTap))],
+              );
+      }
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [header, content, const SizedBox(height: 16)]);
+    },
+  );
+
+  List<String>? _summary(String module, List<Object?>? d) {
+    if (d == null) return null;
+    final e = d[0] as DashboardData?,
+        st = d[1] as StockDashboard?,
+        pu = d[2] as PurchasingDashboard?,
+        pr = d[3] as ProductionDashboard?,
+        co = d[4] as CommercialDashboard?;
+    switch (module) {
+      case 'Comercial':
+        return co == null
+            ? null
+            : ['${co.k('openQuotes').toInt()} propostas abertas', '${co.k('openOrders').toInt()} pedidos abertos · ${fmtMoney(co.k('openOrdersValue'))}'];
+      case 'Engenharia':
+        return e == null ? null : ['${e.products.length} produtos', '${e.counts[materials] ?? 0} materiais · ${e.counts[machines] ?? 0} máquinas'];
+      case 'Estoque':
+        return st == null ? null : ['${st.openReservations} reservas abertas', '${st.steelLots} bobinas · ${fmt(st.steelBalanceKg)} kg de aço'];
+      case 'Suprimentos':
+        return pu == null ? null : ['${pu.openOrders} pedidos de compra abertos', '${pu.openQuotations} cotações abertas'];
+      default:
+        return pr == null
+            ? null
+            : [
+                '${pr.count('InProduction')} em produção · ${pr.count('Released')} liberadas',
+                '${pr.count('Created')} a liberar · ${pr.shipments.length} em terceiros',
+              ];
+    }
+  }
+
+  Widget _modules() => FutureBuilder<List<Object?>>(
+    future: _all,
+    builder: (context, snap) {
+      final theme = Theme.of(context);
+      final alerts = snap.hasData ? _alerts(snap.data!) : const <DashAlert>[];
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text('Módulos', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+          ),
+          LayoutBuilder(
+            builder: (context, c) {
+              const gap = 12.0;
+              final cols = math.max(1, ((c.maxWidth + gap) / (300 + gap)).floor());
+              final width = (c.maxWidth - gap * (cols - 1)) / cols - 0.01;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final m in modulesFor(widget.session.role))
+                    SizedBox(
+                      width: width,
+                      child: ModuleCard(
+                        module: m,
+                        lines: _summary(m.section, snap.data),
+                        loading: !snap.hasData,
+                        attention: alerts.where((a) => a.module == m.section).fold<int>(0, (n, a) => n + a.count),
+                        onTap: _go(m.id),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
         ],
       );
     },
   );
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = quickActionsFor(widget.session);
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.f5): _refresh},
+      child: Focus(
+        focusNode: _focus,
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _maxWidth),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (actions.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final a in actions)
+                              FilledButton.tonalIcon(onPressed: () => a.run(context).then((_) => _refresh()), icon: Icon(a.icon), label: Text(a.label)),
+                          ],
+                        ),
+                      ),
+                    _onboarding(),
+                    _attention(),
+                    _modules(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-ShapeBorder _cardShape(BuildContext context) => RoundedRectangleBorder(
-  borderRadius: BorderRadius.circular(12),
-  side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-);
+class ModuleCard extends StatelessWidget {
+  const ModuleCard({super.key, required this.module, required this.lines, required this.loading, required this.attention, this.onTap});
 
-class _Tile extends StatelessWidget {
-  const _Tile({required this.icon, required this.label, required this.value, this.alert = false, this.onTap});
-
-  static const height = 104.0;
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final bool alert;
+  final ModuleInfo module;
+  final List<String>? lines;
+  final bool loading;
+  final int attention;
   final void Function()? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final fg = alert ? cs.onErrorContainer : null;
     return Semantics(
       button: onTap != null,
-      label: '$value $label',
-      excludeSemantics: true,
+      label: 'Módulo ${module.section}',
       child: Card(
+        key: ValueKey('module-${module.section}'),
         margin: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,
-        shape: _cardShape(context),
-        color: alert ? cs.errorContainer : cs.surfaceContainerHigh,
+        shape: dashCardShape(context),
+        color: cs.surfaceContainerHigh,
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
                   children: [
-                    Icon(alert ? Icons.error_outline : icon, size: 20, color: alert ? cs.onErrorContainer : cs.primary),
-                    const SizedBox(width: 8),
+                    CircleAvatar(backgroundColor: cs.primaryContainer, foregroundColor: cs.onPrimaryContainer, child: Icon(module.icon)),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Tooltip(
-                        message: label,
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(color: fg),
-                        ),
-                      ),
+                      child: Text(module.section, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
                     ),
-                    if (onTap != null) Icon(Icons.chevron_right, size: 18, color: fg ?? cs.onSurfaceVariant),
+                    if (attention > 0)
+                      Badge(label: Text('$attention'), backgroundColor: cs.error, textColor: cs.onError)
+                    else if (!loading && lines != null)
+                      Icon(Icons.check_circle_outline, size: 20, color: cs.primary),
+                    const SizedBox(width: 4),
+                    Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
                   ],
                 ),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.bottomLeft,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        value,
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: fg,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+                const SizedBox(height: 8),
+                Text(module.blurb, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                const SizedBox(height: 12),
+                if (loading)
+                  const LinearProgressIndicator()
+                else if (lines == null)
+                  Text('Indisponível no momento', style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
+                else
+                  for (final l in lines!) Text(l, style: theme.textTheme.bodyMedium),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Notice extends StatelessWidget {
-  const _Notice({required this.icon, required this.title, required this.subtitle});
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
-      shape: _cardShape(context),
-      color: theme.colorScheme.surfaceContainerHigh,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(icon, size: 32, color: theme.colorScheme.primary),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: theme.textTheme.titleMedium),
-                  Text(subtitle, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BarPanel extends StatelessWidget {
-  const _BarPanel({required this.title, required this.data, this.max});
-
-  static const height = 268.0;
-
-  final String title;
-  final Map<String, num> data;
-  final num? max;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final rows = data.entries.take(8).toList();
-    final top = max ?? rows.fold<num>(1, (m, e) => e.value > m ? e.value : m);
-    return Card(
-      margin: EdgeInsets.zero,
-      shape: _cardShape(context),
-      color: theme.colorScheme.surfaceContainerHigh,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(title, style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            if (rows.isEmpty)
-              Expanded(
-                child: Center(
-                  child: Text('Sem dados ainda', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-                ),
-              ),
-            for (final e in rows)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    SizedBox(width: 120, child: Text(e.key, overflow: TextOverflow.ellipsis)),
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: FractionallySizedBox(
-                          widthFactor: (e.value / top).clamp(0, 1).toDouble(),
-                          child: Container(
-                            height: 16,
-                            decoration: BoxDecoration(color: theme.colorScheme.primary, borderRadius: BorderRadius.circular(3)),
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 56,
-                      child: Text(
-                        fmtNum(e.value, e.value is int ? 0 : 1),
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
         ),
       ),
     );

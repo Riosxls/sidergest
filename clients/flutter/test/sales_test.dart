@@ -15,6 +15,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'nav.dart';
+
 http.Response json(Object? body, [int status = 200]) => http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json; charset=utf-8'});
 
 Map<String, dynamic> page(List<Map<String, dynamic>> items) => {'items': items, 'total': items.length, 'skip': 0, 'take': 50};
@@ -421,17 +423,20 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('delivery-ship')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('field-invoiceNumber')), '2581');
+    await tester.enterText(find.byKey(const ValueKey('field-lotNumber')), 'L-77');
+    await tester.enterText(find.byKey(const ValueKey('field-invoicedValue')), '420,5');
     await tester.tap(find.text('Salvar'));
     await tester.pumpAndSettle();
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['invoiceNumber'], '2581');
+    expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['lotNumber'], 'L-77');
+    expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['invoicedValue'], 420.5);
     expect(find.byKey(const ValueKey('delivery-confirm')), findsOneWidget);
   });
 
   testWidgets('reader sees the pipeline without actions', (tester) async {
     final fake = SalesFake()..role = 'Reader';
     await pumpScreen(tester, fake, (s) => Shell(session: s));
-    await tester.tap(find.text('Funil de vendas'));
-    await tester.pumpAndSettle();
+    await openScreen(tester, 'Comercial', 'sales-pipeline');
     expect(find.byKey(const ValueKey('pipeline-new')), findsNothing);
     await tester.tap(find.text('PROP 31'));
     await tester.pumpAndSettle();

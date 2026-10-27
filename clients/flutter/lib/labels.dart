@@ -117,3 +117,23 @@ const salesActions = {
   'delivered': 'Entrega confirmada',
 };
 const salesBadges = {'discount': 'Desconto acima do limite', 'expiring': 'Vence em breve', 'late': 'Atrasado', 'ready': 'Pronto', 'partial': 'Parcial'};
+
+const billToLabels = {'Ebt': 'EBT', 'Bts': 'BTS'};
+const orderOrigins = {'Email': 'E-mail', 'Fax': 'Fax', 'Verbal': 'Verbal', 'System': 'Sistema'};
+const deliveryConditions = {'Bk': 'BK', 'Nbk': 'NBK', 'Gbk': 'GBK'};
+const saleUnits = {'KG': 'KG', 'PC': 'PÇ'};
+
+const feasibilityStatuses = {'Draft': 'Rascunho', 'InReview': 'Em análise', 'Approved': 'Aprovada', 'Rejected': 'Reprovada'};
+const signoffAreas = {'Quality': 'Qualidade', 'Production': 'Produção', 'Commercial': 'Comercial'};
+const feasibilityActions = {
+  'created': 'Criada',
+  'edited': 'Editada',
+  'submitted': 'Enviada para análise',
+  'signed-quality': 'Qualidade assinou',
+  'signed-production': 'Produção assinou',
+  'signed-commercial': 'Comercial assinou',
+  'rejected-quality': 'Qualidade reprovou',
+  'rejected-production': 'Produção reprovou',
+  'rejected-commercial': 'Comercial reprovou',
+  'reopened': 'Reaberta',
+};
