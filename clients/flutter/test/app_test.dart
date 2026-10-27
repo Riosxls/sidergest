@@ -183,6 +183,8 @@ void main() {
     await pumpApp(tester, log);
     await login(tester, 'senha-correta');
 
+    await tester.tap(find.byKey(const ValueKey('module-card-engineering')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Produtos').first);
     await tester.pumpAndSettle();
     expect(find.text('T-100'), findsOneWidget);
@@ -228,9 +230,11 @@ void main() {
     await pumpApp(tester, log);
     tester.view.physicalSize = const Size(400, 800);
     await login(tester, 'senha-correta');
+    await tester.tap(find.byKey(const ValueKey('module-card-engineering')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Produtos'));
+    await tester.tap(find.text('Produtos').last);
     await tester.pumpAndSettle();
     expect(find.byType(DataTable), findsNothing);
     expect(find.widgetWithText(ListTile, 'T-100  Tubo 25x1,5'), findsOneWidget);

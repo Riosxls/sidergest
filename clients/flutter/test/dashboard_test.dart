@@ -182,39 +182,39 @@ void main() {
     await pumpShell(tester, 'Admin');
     await tester.tap(find.byTooltip('Recolher menu'));
     await tester.pumpAndSettle();
-    expect(find.text('Saldos'), findsNothing);
-    await tester.tap(find.byTooltip('Saldos'));
+    expect(find.text('Relatórios'), findsNothing);
+    await tester.tap(find.byTooltip('Parâmetros'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Expandir menu'));
     await tester.pumpAndSettle();
-    expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'Saldos')).selected, isTrue);
+    expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'Parâmetros')).selected, isTrue);
     expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'Painel')).selected, isFalse);
   });
 
   testWidgets('collapsed state is restored', (tester) async {
     await pumpShell(tester, 'Admin', prefs: {'navCollapsed': true});
-    expect(find.text('Saldos'), findsNothing);
+    expect(find.text('Relatórios'), findsNothing);
     expect(find.byTooltip('Expandir menu'), findsOneWidget);
   });
 
   testWidgets('sidebar groups collapse and the choice is remembered', (tester) async {
     await pumpShell(tester, 'Admin');
-    expect(find.text('Saldos'), findsOneWidget);
-    await tester.tap(find.descendant(of: find.byType(ExpansionTile), matching: find.text('Estoque')));
+    expect(find.text('Carteira de pedidos'), findsOneWidget);
+    expect(find.text('Nenhum favorito ainda'), findsOneWidget);
+    await tester.tap(find.descendant(of: find.byType(ExpansionTile), matching: find.text('Relatórios')));
     await tester.pumpAndSettle();
-    expect(find.text('Saldos'), findsNothing);
+    expect(find.text('Carteira de pedidos'), findsNothing);
     final p = await SharedPreferences.getInstance();
-    expect(p.getStringList('navClosedGroups'), ['Estoque']);
+    expect(p.getStringList('navClosedGroups'), ['Relatórios']);
     await pumpShell(
       tester,
       'Admin',
       prefs: {
-        'navClosedGroups': <String>['Estoque'],
+        'navClosedGroups': <String>['Relatórios'],
       },
     );
-    expect(find.text('Saldos'), findsNothing);
-    expect(find.text('Movimentações'), findsNothing);
-    expect(find.text('Funil de vendas'), findsOneWidget);
+    expect(find.text('Carteira de pedidos'), findsNothing);
+    expect(find.text('Parâmetros'), findsOneWidget);
   });
 
   testWidgets('command palette: keyboard navigation, actions, products and recents', (tester) async {

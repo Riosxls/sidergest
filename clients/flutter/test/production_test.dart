@@ -231,6 +231,8 @@ void main() {
   testWidgets('release with missing material shows the shortage and forces the release', (tester) async {
     final fake = Fake();
     await pumpScreen(tester, fake, (s) => Shell(session: s));
+    await tester.tap(find.byKey(const ValueKey('module-card-production')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Ordens de fabricação').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('OF 12'));
@@ -289,6 +291,8 @@ void main() {
   testWidgets('reader sees PCP read-only', (tester) async {
     final fake = Fake()..role = 'Reader';
     await pumpScreen(tester, fake, (s) => Shell(session: s));
+    await tester.tap(find.byKey(const ValueKey('module-card-production')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Ordens de fabricação').first);
     await tester.pumpAndSettle();
     expect(find.text('Nova OF'), findsNothing);

@@ -423,7 +423,10 @@ void main() {
         onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => Shell(session: s)),
       ),
     );
-    await tester.tap(find.text('Movimentações'));
+    await tester.tap(find.byKey(const ValueKey('module-card-stock')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Movimentações').first);
+    await tester.tap(find.text('Movimentações').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Novo lançamento'));
     await tester.pumpAndSettle();
@@ -465,7 +468,10 @@ void main() {
   testWidgets('quarantine lot is released by inspection', (tester) async {
     final fake = Fake();
     await pumpScreen(tester, fake, (s) => Shell(session: s));
-    await tester.tap(find.text('Lotes e inspeção'));
+    await tester.tap(find.byKey(const ValueKey('module-card-stock')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Lotes e inspeção').first);
+    await tester.tap(find.text('Lotes e inspeção').first);
     await tester.pumpAndSettle();
     expect(fake.last('GET', '/api/stock/lots').url.queryParameters['status'], 'Quarantine');
     await tester.tap(find.text('L-3'));
@@ -493,10 +499,18 @@ void main() {
   testWidgets('reader cannot post stock or approve requisitions', (tester) async {
     final fake = Fake()..role = 'Reader';
     await pumpScreen(tester, fake, (s) => Shell(session: s));
-    await tester.tap(find.text('Movimentações'));
+    await tester.tap(find.byKey(const ValueKey('module-card-stock')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Movimentações').first);
+    await tester.tap(find.text('Movimentações').first);
     await tester.pumpAndSettle();
     expect(find.text('Novo lançamento'), findsNothing);
-    await tester.tap(find.text('Requisições'));
+    await tester.tap(find.text('Painel').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('module-card-purchasing')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Requisições').first);
+    await tester.tap(find.text('Requisições').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('101'));
     await tester.pumpAndSettle();
@@ -507,7 +521,14 @@ void main() {
   testWidgets('buyer approves a requisition with a reduced quantity', (tester) async {
     final fake = Fake()..role = 'Purchasing';
     await pumpScreen(tester, fake, (s) => Shell(session: s));
-    await tester.tap(find.text('Requisições'));
+    await tester.tap(find.byKey(const ValueKey('module-card-purchasing')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Voltar ao Painel'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('module-card-purchasing')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Requisições').first);
+    await tester.tap(find.text('Requisições').first);
     await tester.pumpAndSettle();
     expect(fake.last('GET', '/api/requisitions').url.queryParameters['status'], 'PendingApproval');
     await tester.tap(find.text('101'));

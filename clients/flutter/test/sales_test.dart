@@ -430,7 +430,9 @@ void main() {
   testWidgets('reader sees the pipeline without actions', (tester) async {
     final fake = SalesFake()..role = 'Reader';
     await pumpScreen(tester, fake, (s) => Shell(session: s));
-    await tester.tap(find.text('Funil de vendas'));
+    await tester.tap(find.byKey(const ValueKey('module-card-sales')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Funil de vendas').first);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('pipeline-new')), findsNothing);
     await tester.tap(find.text('PROP 31'));
