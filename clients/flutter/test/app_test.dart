@@ -172,7 +172,10 @@ void main() {
     await login(tester, 'senha-correta');
     expect(session.loggedIn, isTrue);
     expect(session.canWrite, isTrue);
-    expect(find.text('eng · Engineering'), findsOneWidget);
+    await tester.tap(find.byTooltip('Conta'));
+    await tester.pumpAndSettle();
+    expect(find.text('eng'), findsOneWidget);
+    expect(find.text('Engineering'), findsOneWidget);
   });
 
   testWidgets('product list, server validation errors and product detail with explosion', (tester) async {

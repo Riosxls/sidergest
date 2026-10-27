@@ -1,12 +1,15 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../entities.dart';
 import '../session.dart';
+import '../widgets/global_search.dart';
 import 'dashboard.dart';
 import 'deliveries.dart';
 import 'entity_list.dart';
 import 'orders.dart';
+import 'product_detail.dart';
 import 'production_floor.dart';
 import 'production_orders.dart';
 import 'quotations.dart';
@@ -65,18 +68,6 @@ List<NavItem> navItems() => [
   NavItem('settings', Icons.tune, 'Parâmetros', 'Sistema', (s, f, go) => SettingsScreen(session: s)),
 ];
 
-String startPage(Session s, {bool? desktop}) {
-  final isDesktop = desktop ?? (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows);
-  if (!isDesktop) return 'dashboard';
-  return switch (s.role) {
-    'Stock' => 'balances',
-    'Purchasing' => 'orders',
-    'Production' => 'production-orders',
-    'Sales' || 'SalesManager' => 'sales-pipeline',
-    _ => products.path,
-  };
-}
-
 class Shell extends StatefulWidget {
   const Shell({super.key, required this.session});
 
@@ -88,8 +79,43 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   final _items = navItems();
-  late String _current = startPage(widget.session);
+  String _current = 'dashboard';
   String? _filter;
+  bool _collapsed = false;
+  final _search = SearchController();
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreCollapsed();
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _restoreCollapsed() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      if (mounted && (p.getBool('navCollapsed') ?? false)) setState(() => _collapsed = true);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleCollapsed() async {
+    setState(() => _collapsed = !_collapsed);
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool('navCollapsed', _collapsed);
+    } catch (_) {}
+  }
+
+  void _openProduct(int id) => Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => ProductDetailScreen(session: widget.session, productId: id),
+    ),
+  );
 
   void _go(String id, [String? filter]) => setState(() {
     _current = id;
@@ -98,7 +124,9 @@ class _ShellState extends State<Shell> {
 
   NavItem get _item => _items.firstWhere((i) => i.id == _current);
 
-  Widget _menu({bool closeDrawer = false}) {
+  Widget _menu({bool closeDrawer = false, bool rail = false}) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final children = <Widget>[];
     String? section;
     for (final d in _items) {
@@ -106,25 +134,52 @@ class _ShellState extends State<Shell> {
         section = d.section;
         if (section.isNotEmpty) {
           children.add(const Divider());
-          children.add(
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-              child: Text(section, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: Theme.of(context).colorScheme.primary)),
-            ),
-          );
+          if (!rail) {
+            children.add(
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                child: Text(section, style: theme.textTheme.labelMedium?.copyWith(color: cs.primary)),
+              ),
+            );
+          }
         }
       }
+      final active = d.id == _current;
+      void tap() {
+        _go(d.id);
+        if (closeDrawer) Navigator.pop(context);
+      }
+
       children.add(
-        ListTile(
-          dense: true,
-          leading: Icon(d.icon),
-          title: Text(d.title),
-          selected: d.id == _current,
-          onTap: () {
-            _go(d.id);
-            if (closeDrawer) Navigator.pop(context);
-          },
-        ),
+        rail
+            ? Tooltip(
+                message: d.title,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  child: Material(
+                    color: active ? cs.secondaryContainer : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: tap,
+                      child: SizedBox(height: 40, child: Icon(d.icon, color: active ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
+                    ),
+                  ),
+                ),
+              )
+            : Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: ListTile(
+                  dense: true,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  leading: Icon(d.icon),
+                  title: Text(d.title, style: active ? const TextStyle(fontWeight: FontWeight.w600) : null),
+                  selected: active,
+                  selectedTileColor: cs.secondaryContainer,
+                  selectedColor: cs.onSecondaryContainer,
+                  onTap: tap,
+                ),
+              ),
       );
     }
     return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
@@ -135,24 +190,40 @@ class _ShellState extends State<Shell> {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final s = widget.session;
     final page = KeyedSubtree(key: ValueKey('$_current/$_filter'), child: _item.build(s, _filter, _go));
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_item.title),
-        actions: [
-          Center(child: Text('${s.username} · ${s.role}')),
-          IconButton(tooltip: 'Sair', onPressed: s.logout, icon: const Icon(Icons.logout)),
-        ],
+    final targets = [for (final i in _items) SearchTarget(i.id, i.icon, i.title, i.section)];
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.keyK, control: true): _search.openView},
+      child: Scaffold(
+        appBar: AppBar(
+          leading: wide
+              ? IconButton(
+                  tooltip: _collapsed ? 'Expandir menu' : 'Recolher menu',
+                  onPressed: _toggleCollapsed,
+                  icon: Icon(_collapsed ? Icons.menu : Icons.menu_open),
+                )
+              : null,
+          title: Text(_item.title),
+          actions: [
+            GlobalSearch(session: s, controller: _search, targets: targets, onNavigate: _go, onOpenProduct: _openProduct, compact: !wide),
+            const SizedBox(width: 8),
+            UserMenu(session: s),
+            const SizedBox(width: 8),
+          ],
+        ),
+        drawer: wide ? null : Drawer(child: SafeArea(child: _menu(closeDrawer: true))),
+        body: wide
+            ? Row(
+                children: [
+                  SizedBox(
+                    width: _collapsed ? 72 : 248,
+                    child: _menu(rail: _collapsed),
+                  ),
+                  const VerticalDivider(width: 1),
+                  Expanded(child: page),
+                ],
+              )
+            : page,
       ),
-      drawer: wide ? null : Drawer(child: SafeArea(child: _menu(closeDrawer: true))),
-      body: wide
-          ? Row(
-              children: [
-                SizedBox(width: 248, child: _menu()),
-                const VerticalDivider(width: 1),
-                Expanded(child: page),
-              ],
-            )
-          : page,
     );
   }
 }

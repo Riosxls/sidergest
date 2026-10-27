@@ -25,6 +25,19 @@ const requisitionFields = [
   FieldSpec('notes', 'Observações'),
 ];
 
+Future<void> newRequisition(BuildContext context, Session session, {VoidCallback? onSaved}) async {
+  final r = await submitForm(
+    context,
+    api: session.api,
+    title: 'Nova requisição',
+    fields: requisitionFields,
+    submit: (b) => session.api.post('/api/requisitions', b),
+  );
+  if (r == null) return;
+  onSaved?.call();
+  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Requisição nº ${r['number']} criada')));
+}
+
 class RequisitionsScreen extends StatefulWidget {
   const RequisitionsScreen({super.key, required this.session, this.initialStatus});
 
@@ -45,19 +58,7 @@ class _RequisitionsScreenState extends State<RequisitionsScreen> {
     _status = widget.initialStatus ?? (widget.session.canBuy ? 'PendingApproval' : null);
   }
 
-  Future<void> _new() async {
-    final r = await submitForm(
-      context,
-      api: widget.session.api,
-      title: 'Nova requisição',
-      fields: requisitionFields,
-      submit: (b) => widget.session.api.post('/api/requisitions', b),
-    );
-    if (r != null) {
-      _list.currentState?.reload();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Requisição nº ${r['number']} criada')));
-    }
-  }
+  Future<void> _new() => newRequisition(context, widget.session, onSaved: () => _list.currentState?.reload());
 
   @override
   Widget build(BuildContext context) {

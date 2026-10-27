@@ -194,7 +194,7 @@ class Fake {
 
 Future<Session> pumpScreen(WidgetTester tester, Fake fake, Widget Function(Session s) screen) async {
   SharedPreferences.setMockInitialValues({});
-  tester.view.physicalSize = const Size(1600, 1800);
+  tester.view.physicalSize = const Size(1600, 2000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final session =
@@ -216,9 +216,8 @@ Future<Session> pumpScreen(WidgetTester tester, Fake fake, Widget Function(Sessi
 }
 
 void main() {
-  test('production role opens on production orders on Windows; times are parsed', () {
+  test('production role permissions; times are parsed', () {
     final s = Session(api: ApiClient(baseUrl: 'http://x'))..role = 'Production';
-    expect(startPage(s, desktop: true), 'production-orders');
     expect(s.canProduce, isTrue);
     expect(s.canMoveProduction, isTrue);
     expect(parseTime('7:30'), '07:30:00');

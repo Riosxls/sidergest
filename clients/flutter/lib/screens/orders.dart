@@ -17,6 +17,17 @@ bool isLate(Object? due) {
   return d.isBefore(DateTime(now.year, now.month, now.day));
 }
 
+Future<void> newPurchaseOrder(BuildContext context, Session session, {VoidCallback? onSaved}) async {
+  final o = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => OrderEditorScreen(session: session)));
+  onSaved?.call();
+  if (o == null || !context.mounted) return;
+  await Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => OrderScreen(session: session, id: o['id'] as int),
+    ),
+  );
+}
+
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key, required this.session, this.supplierId});
 
@@ -32,16 +43,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   String? _status;
   bool _open = true;
 
-  Future<void> _new() async {
-    final o = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => OrderEditorScreen(session: widget.session)));
-    _list.currentState?.reload();
-    if (o == null || !mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => OrderScreen(session: widget.session, id: o['id'] as int),
-      ),
-    );
-  }
+  Future<void> _new() => newPurchaseOrder(context, widget.session, onSaved: () => _list.currentState?.reload());
 
   @override
   Widget build(BuildContext context) {

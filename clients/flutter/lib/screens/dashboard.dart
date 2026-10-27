@@ -7,9 +7,11 @@ import 'package:flutter/services.dart';
 import '../entities.dart';
 import '../session.dart';
 import '../api.dart';
+import '../widgets/actions.dart';
 import 'orders.dart';
 import 'production_orders.dart';
 import 'product_detail.dart';
+import 'requisitions.dart';
 
 class DashboardData {
   DashboardData(this.counts, this.products);
@@ -104,6 +106,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late Future<ProductionDashboard> _production = _fetchProduction();
   late Future<List<Object?>> _all = _combine();
   DateTime? _updated;
+  final _anchors = [for (var i = 0; i < 5; i++) GlobalKey()];
+  int? _anchor;
   Timer? _timer;
 
   @override
@@ -329,16 +333,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   items: [for (final a in alerts) _GridItem(_Tile(icon: a.icon, label: a.label, value: '${a.count}', alert: true, onTap: a.onTap))],
                 );
         }
-        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [header, content, const SizedBox(height: 16)]);
+        return Column(key: _anchors[0], crossAxisAlignment: CrossAxisAlignment.stretch, children: [header, content, const SizedBox(height: 16)]);
       },
     );
   }
 
   static String _hhmm(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
-  Widget _section<T>(String title, IconData icon, Future<T> future, List<Widget> Function(T data) build) {
+  Widget _section<T>(int index, String title, IconData icon, Future<T> future, List<Widget> Function(T data) build) {
     final theme = Theme.of(context);
     return Column(
+      key: _anchors[index],
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
@@ -490,10 +495,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final sections = [
-      _section('Engenharia', Icons.architecture, _eng, _engineering),
-      _section('Estoque', Icons.inventory_outlined, _stock, _stockPanels),
-      _section('Suprimentos', Icons.shopping_cart_outlined, _purchasing, _purchasingPanels),
-      _section('PCP', Icons.precision_manufacturing_outlined, _production, _productionPanels),
+      _section(1, 'Engenharia', Icons.architecture, _eng, _engineering),
+      _section(2, 'Estoque', Icons.inventory_outlined, _stock, _stockPanels),
+      _section(3, 'Suprimentos', Icons.shopping_cart_outlined, _purchasing, _purchasingPanels),
+      _section(4, 'PCP', Icons.precision_manufacturing_outlined, _production, _productionPanels),
     ];
     final order = switch (widget.session.role) {
       'Stock' => [1, 3, 2, 0],
@@ -501,13 +506,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'Production' => [3, 1, 2, 0],
       _ => [0, 3, 1, 2],
     };
+    final api = widget.session.api;
+    final actions = <(IconData, String, Future<void> Function())>[
+      if (widget.session.canWrite)
+        (
+          Icons.add_box_outlined,
+          'Novo produto',
+          () async {
+            final r = await submitForm(
+              context,
+              api: api,
+              title: 'Novo: ${products.singular}',
+              fields: products.fields,
+              submit: (b) => api.post(products.path, b),
+            );
+            if (r != null && r['id'] is int && mounted) await _push(ProductDetailScreen(session: widget.session, productId: r['id'] as int));
+          },
+        ),
+      if (widget.session.canProduce) (Icons.add_task, 'Nova OF', () => newProductionOrder(context, widget.session)),
+      if (widget.session.canRequest) (Icons.post_add, 'Nova requisição', () => newRequisition(context, widget.session)),
+      if (widget.session.canBuy) (Icons.add_shopping_cart, 'Novo pedido', () => newPurchaseOrder(context, widget.session)),
+    ];
+    final labels = ['Atenção', 'Engenharia', 'Estoque', 'Suprimentos', 'PCP'];
+    final jumps = [0, ...order.map((i) => i + 1)];
     return CallbackShortcuts(
       bindings: {const SingleActivator(LogicalKeyboardKey.f5): _refresh},
       child: Focus(
         autofocus: true,
         child: RefreshIndicator(
           onRefresh: _refresh,
-          child: ListView(padding: const EdgeInsets.all(16), children: [_attention(), for (final i in order) sections[i]]),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (actions.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final a in actions) FilledButton.tonalIcon(onPressed: () => a.$3().then((_) => _refresh()), icon: Icon(a.$1), label: Text(a.$2)),
+                      ],
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SegmentedButton<int>(
+                      emptySelectionAllowed: true,
+                      showSelectedIcon: false,
+                      segments: [for (final j in jumps) ButtonSegment(value: j, label: Text(labels[j]))],
+                      selected: {?_anchor},
+                      onSelectionChanged: (v) {
+                        if (v.isEmpty) return;
+                        setState(() => _anchor = v.first);
+                        final ctx = _anchors[v.first].currentContext;
+                        if (ctx != null) Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+                      },
+                    ),
+                  ),
+                ),
+                _attention(),
+                for (final i in order) sections[i],
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -634,7 +701,11 @@ class _Tile extends StatelessWidget {
                       fit: BoxFit.scaleDown,
                       child: Text(
                         value,
-                        style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w600, color: fg, fontFeatures: const [FontFeature.tabularFigures()]),
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: fg,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
                     ),
                   ),
@@ -676,10 +747,14 @@ class _Notice extends StatelessWidget {
                 children: [
                   Text(title, style: theme.textTheme.titleMedium),
                   Text(subtitle, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  if (action != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: FilledButton.tonal(onPressed: onAction, child: Text(action!)),
+                    ),
                 ],
               ),
             ),
-            if (action != null) ...[const SizedBox(width: 16), FilledButton.tonal(onPressed: onAction, child: Text(action!))],
           ],
         ),
       ),

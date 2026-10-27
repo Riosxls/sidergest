@@ -53,6 +53,19 @@ Future<void> openProductionOrder(BuildContext context, Session session, int id) 
   ),
 );
 
+Future<void> newProductionOrder(BuildContext context, Session session, {VoidCallback? onSaved}) async {
+  final o = await submitForm(
+    context,
+    api: session.api,
+    title: 'Nova ordem de fabricação',
+    fields: productionOrderFields,
+    submit: (b) => session.api.post('/api/production/orders', b),
+  );
+  onSaved?.call();
+  if (o == null || o['id'] is! int || !context.mounted) return;
+  await openProductionOrder(context, session, o['id'] as int);
+}
+
 class ProductionOrdersScreen extends StatefulWidget {
   const ProductionOrdersScreen({super.key, required this.session, this.initialStatus});
 
@@ -69,18 +82,7 @@ class _ProductionOrdersScreenState extends State<ProductionOrdersScreen> {
   String? _kind;
   bool _open = true;
 
-  Future<void> _new() async {
-    final o = await submitForm(
-      context,
-      api: widget.session.api,
-      title: 'Nova ordem de fabricação',
-      fields: productionOrderFields,
-      submit: (b) => widget.session.api.post('/api/production/orders', b),
-    );
-    _list.currentState?.reload();
-    if (o == null || o['id'] is! int || !mounted) return;
-    await openProductionOrder(context, widget.session, o['id'] as int);
-  }
+  Future<void> _new() => newProductionOrder(context, widget.session, onSaved: () => _list.currentState?.reload());
 
   @override
   Widget build(BuildContext context) {

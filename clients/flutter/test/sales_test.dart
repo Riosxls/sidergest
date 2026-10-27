@@ -308,9 +308,8 @@ Future<Session> pumpScreen(WidgetTester tester, SalesFake fake, Widget Function(
 }
 
 void main() {
-  test('sales roles open on the pipeline and map statuses onto the flow path', () {
+  test('sales role permissions and statuses map onto the flow path', () {
     final s = Session(api: ApiClient(baseUrl: 'http://x'))..role = 'Sales';
-    expect(startPage(s, desktop: true), 'sales-pipeline');
     expect(s.canSell, isTrue);
     expect(s.canApproveSales, isFalse);
     expect(s.canShip, isTrue);

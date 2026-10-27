@@ -414,17 +414,6 @@ void main() {
     expect(nextPeriod(202612), 202701);
   });
 
-  test('Windows opens on the role page, mobile and web on the dashboard', () {
-    final s = Session(api: ApiClient(baseUrl: 'http://x'));
-    s.role = 'Stock';
-    expect(startPage(s, desktop: true), 'balances');
-    s.role = 'Purchasing';
-    expect(startPage(s, desktop: true), 'orders');
-    s.role = 'Engineering';
-    expect(startPage(s, desktop: true), '/api/products');
-    expect(startPage(s, desktop: false), 'dashboard');
-  });
-
   testWidgets('stock user posts an issue, opens the document and reverses it', (tester) async {
     final fake = Fake();
     await pumpScreen(
@@ -594,7 +583,7 @@ void main() {
           ..role = 'Purchasing';
     await tester.pumpWidget(EbtApp(session: session));
     await tester.pumpAndSettle();
-    expect(find.text('Suprimentos'), findsOneWidget);
+    expect(find.text('Suprimentos'), findsWidgets);
     expect(find.text('Entregas em atraso'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('75,0'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.text('75,0'), findsOneWidget);
