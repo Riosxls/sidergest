@@ -470,6 +470,56 @@ final holidays = EntitySpec(
 
 final productionMasters = [employees, shifts, occurrences, holidays];
 
+final paymentTerms = EntitySpec(
+  title: 'Condições de pagamento',
+  singular: 'Condição de pagamento',
+  path: '/api/sales/payment-terms',
+  icon: Icons.payments_outlined,
+  fields: const [
+    FieldSpec('code', 'Código', required: true),
+    FieldSpec('name', 'Descrição', required: true),
+    FieldSpec('days', 'Dias (DDL)', required: true, hint: 'ex.: 28/35/42 ou 0 para à vista'),
+    FieldSpec('creditLimit', 'Limite de crédito (R\$)', type: FieldType.decimal, hint: 'Vazio = sem limite'),
+    FieldSpec('active', 'Ativa', type: FieldType.boolean, defaultValue: true),
+  ],
+  columns: [
+    col('Código', 'code'),
+    col('Descrição', 'name'),
+    col('Dias', 'days'),
+    moneyCol('Limite de crédito', 'creditLimit'),
+    ColumnSpec('Ativa', (e) => e['active'] == true ? 'Sim' : 'Não'),
+  ],
+  writeRoles: const ['Admin', 'SalesManager'],
+);
+
+final priceList = EntitySpec(
+  title: 'Tabela de preços',
+  singular: 'Preço',
+  path: '/api/sales/price-list',
+  icon: Icons.sell_outlined,
+  fields: const [
+    FieldSpec('productId', 'Produto', type: FieldType.lookup, required: true, lookup: LookupSpec('/api/products')),
+    FieldSpec('customerId', 'Cliente', type: FieldType.lookup, lookup: LookupSpec('/api/customers'), hint: 'Vazio = preço geral'),
+    FieldSpec('unitPrice', 'Preço unitário (R\$)', type: FieldType.decimal, required: true),
+    FieldSpec('ipiPercent', 'IPI (%)', type: FieldType.decimal),
+    FieldSpec('icmsPercent', 'ICMS (%)', type: FieldType.decimal),
+    FieldSpec('validFrom', 'Válido de', type: FieldType.date, required: true),
+    FieldSpec('validTo', 'Válido até', type: FieldType.date),
+  ],
+  columns: [
+    col('Produto', 'productCode'),
+    col('Descrição', 'productName'),
+    ColumnSpec('Cliente', (e) => '${e['customerName'] ?? 'Geral'}'),
+    ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
+    col('IPI %', 'ipiPercent', numeric: true),
+    dateCol('De', 'validFrom'),
+    dateCol('Até', 'validTo'),
+  ],
+  writeRoles: const ['Admin', 'Sales', 'SalesManager'],
+);
+
+final salesMasters = [priceList, paymentTerms];
+
 String fmtTime(Object? v) {
   final s = v == null ? '' : '$v';
   return s.length >= 5 ? s.substring(0, 5) : s;

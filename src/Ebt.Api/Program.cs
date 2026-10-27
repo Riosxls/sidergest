@@ -24,6 +24,7 @@ builder.Services.AddScoped<BomService>();
 builder.Services.AddScoped<StockService>();
 builder.Services.AddPurchasing();
 builder.Services.AddProduction();
+builder.Services.AddSales();
 builder.Services.AddSingleton(jwt);
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddExceptionHandler<StockExceptionHandler>();
@@ -94,6 +95,7 @@ app.MapProducts();
 app.MapInventory();
 app.MapPurchasing();
 app.MapProduction();
+app.MapSales();
 
 app.Run();
 

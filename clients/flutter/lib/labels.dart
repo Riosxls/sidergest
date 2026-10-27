@@ -63,3 +63,57 @@ const productionStatuses = {
   'Closed': 'Encerrada',
 };
 const productionKinds = {'Standard': 'OF', 'Internal': 'OPI (interna)'};
+
+const quoteStatuses = {
+  'Draft': 'Rascunho',
+  'PendingApproval': 'Aguardando aprovação',
+  'Approved': 'Aprovada internamente',
+  'Sent': 'Enviada ao cliente',
+  'Accepted': 'Aceita pelo cliente',
+  'Rejected': 'Recusada',
+  'Expired': 'Expirada',
+  'Cancelled': 'Cancelada',
+  'Converted': 'Convertida em pedido',
+};
+const salesOrderStatuses = {
+  'Created': 'Criado',
+  'Released': 'Liberado p/ produção',
+  'PartiallyShipped': 'Expedido parcial',
+  'Shipped': 'Expedido',
+  'Delivered': 'Entregue',
+  'Cancelled': 'Cancelado',
+};
+const deliveryStatuses = {'Planned': 'Programada', 'Shipped': 'Expedida', 'Delivered': 'Entregue', 'Cancelled': 'Cancelada'};
+const freightTerms = {'Cif': 'CIF (frete nosso)', 'Fob': 'FOB (frete do cliente)', 'CustomerPickup': 'Retira na fábrica'};
+const pipelineStages = {
+  'quote': 'Proposta',
+  'sent': 'Enviada',
+  'accepted': 'Aceita',
+  'order': 'Pedido',
+  'production': 'Em produção',
+  'ready': 'Pronto p/ expedir',
+  'shipped': 'Expedido',
+  'delivered': 'Entregue',
+};
+const salesActions = {
+  'created': 'Criado',
+  'edited': 'Editado',
+  'submitted': 'Enviado para aprovação do gerente',
+  'approved': 'Desconto aprovado',
+  'approval-rejected': 'Desconto recusado',
+  'sent': 'Enviado ao cliente',
+  'accepted': 'Aceito pelo cliente',
+  'declined': 'Recusado pelo cliente',
+  'revised': 'Revisado',
+  'cancelled': 'Cancelado',
+  'expired': 'Validade expirada',
+  'converted': 'Convertido em pedido',
+  'released': 'Liberado para produção',
+  'credit-override': 'Limite de crédito liberado',
+  'delivery-planned': 'Entrega programada',
+  'status': 'Situação atualizada',
+  'delivery': 'Entrega atualizada',
+  'shipped': 'Expedido',
+  'delivered': 'Entrega confirmada',
+};
+const salesBadges = {'discount': 'Desconto acima do limite', 'expiring': 'Vence em breve', 'late': 'Atrasado', 'ready': 'Pronto', 'partial': 'Parcial'};
