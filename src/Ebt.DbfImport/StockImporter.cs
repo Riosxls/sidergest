@@ -93,7 +93,7 @@ public sealed class StockImporter(EbtDbContext db, StockImportOptions options)
             var period = r.Int("G28ANOMES");
             var raw = r.Dec("G28ESPESSU");
             if (period is null || period % 100 is < 1 or > 12 || raw is not > 0) { Skip(AverageTable, $"invalid row (anomes={r.Str("G28ANOMES")}, espessura={r.Str("G28ESPESSU")})"); continue; }
-            var thickness = raw.Value >= 10m ? raw.Value / 100m : raw.Value;
+            var thickness = Math.Round(raw.Value >= 10m ? raw.Value / 100m : raw.Value, 2);
             if (closed.Contains(period.Value)) { Skip(AverageTable, $"{period} is closed in the new system; legacy row for {thickness} mm ignored"); continue; }
             var inserted = !existing.TryGetValue((period.Value, thickness), out var a);
             if (!inserted && !a!.Imported) { Skip(AverageTable, $"{period}/{thickness} mm was computed by the new system; kept"); continue; }
