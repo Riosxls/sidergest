@@ -26,9 +26,10 @@ const requisitionFields = [
 ];
 
 class RequisitionsScreen extends StatefulWidget {
-  const RequisitionsScreen({super.key, required this.session});
+  const RequisitionsScreen({super.key, required this.session, this.initialStatus});
 
   final Session session;
+  final String? initialStatus;
 
   @override
   State<RequisitionsScreen> createState() => _RequisitionsScreenState();
@@ -41,7 +42,7 @@ class _RequisitionsScreenState extends State<RequisitionsScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.session.canBuy) _status = 'PendingApproval';
+    _status = widget.initialStatus ?? (widget.session.canBuy ? 'PendingApproval' : null);
   }
 
   Future<void> _new() async {

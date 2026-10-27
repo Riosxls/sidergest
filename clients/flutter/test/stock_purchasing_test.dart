@@ -598,6 +598,9 @@ void main() {
     expect(find.text('Entregas em atraso'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('75,0'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.text('75,0'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Entregas em atraso'), -200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Entregas em atraso'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('16 d · ped. 900'), findsOneWidget);
   });
 }
