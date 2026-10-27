@@ -211,6 +211,12 @@ class _ShellState extends State<Shell> {
 
   NavItem get _item => _items.firstWhere((i) => i.id == _current);
 
+  /// Parent for the AppBar back arrow; null on the Painel and module home screens (which have their own).
+  NavItem? get _backTarget {
+    if (_current == 'dashboard' || _current.startsWith('module-')) return null;
+    return _items.firstWhere((i) => i.id == (_currentModule?.navId ?? 'dashboard'));
+  }
+
   ModuleInfo? get _currentModule {
     for (final m in moduleInfos) {
       if (m.navId == _current || m.title == _item.section) return m;
@@ -345,16 +351,27 @@ class _ShellState extends State<Shell> {
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final s = widget.session;
+    final back = _backTarget;
     final page = KeyedSubtree(key: ValueKey('$_current/$_filter'), child: _item.build(s, _filter, _go));
     return Scaffold(
       appBar: AppBar(
-        leading: wide
-            ? IconButton(
-                tooltip: _collapsed ? 'Expandir menu' : 'Recolher menu',
-                onPressed: _toggleCollapsed,
-                icon: Icon(_collapsed ? Icons.menu : Icons.menu_open),
-              )
-            : null,
+        automaticallyImplyLeading: false,
+        leadingWidth: back == null ? 56 : 104,
+        leading: Row(
+          children: [
+            const SizedBox(width: 8),
+            wide
+                ? IconButton(
+                    tooltip: _collapsed ? 'Expandir menu' : 'Recolher menu',
+                    onPressed: _toggleCollapsed,
+                    icon: Icon(_collapsed ? Icons.menu : Icons.menu_open),
+                  )
+                : Builder(
+                    builder: (ctx) => IconButton(tooltip: 'Menu', onPressed: () => Scaffold.of(ctx).openDrawer(), icon: const Icon(Icons.menu)),
+                  ),
+            if (back != null) IconButton(tooltip: 'Voltar para ${back.title}', onPressed: () => _go(back.id), icon: const Icon(Icons.arrow_back)),
+          ],
+        ),
         title: Text(_item.title),
         actions: [
           SearchLauncher(onOpen: _openPalette, compact: !wide),

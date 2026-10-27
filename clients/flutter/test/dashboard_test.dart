@@ -88,6 +88,7 @@ Future<void> openPalette(WidgetTester tester) async {
 }
 
 void main() {
+  backArrowTests();
   testWidgets('Painel shows one card per module with metric and alert badge; no module content', (tester) async {
     final (_, log) = await pumpShell(tester, 'Production');
     expect(find.text('Primeiros passos'), findsOneWidget);
@@ -278,5 +279,27 @@ void main() {
       expect(t.cardTheme.color, t.colorScheme.surfaceContainerHigh);
       expect((t.cardTheme.shape as RoundedRectangleBorder).side.color, t.colorScheme.outlineVariant);
     }
+  });
+}
+
+void backArrowTests() {
+  testWidgets('screens inside a module go back to the module, others to the Painel', (tester) async {
+    await pumpShell(tester, 'Admin');
+    expect(find.byTooltip('Voltar para Painel'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('module-card-sales')));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Voltar para Comercial'), findsNothing);
+    await tester.tap(find.widgetWithText(ListTile, 'Pedidos de venda'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Voltar para Comercial'));
+    await tester.pumpAndSettle();
+    expect(find.text('Telas de Comercial'), findsOneWidget);
+    await tester.tap(find.byTooltip('Voltar ao Painel'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Parâmetros'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Voltar para Painel'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('module-card-sales')), findsOneWidget);
   });
 }
