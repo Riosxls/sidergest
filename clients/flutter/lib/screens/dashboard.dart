@@ -488,36 +488,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
         margin: EdgeInsets.zero,
         shape: _cardShape(context),
         color: cs.surfaceContainerHigh,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: ExpansionTile(
+          key: const ValueKey('onboarding'),
+          shape: const Border(),
+          collapsedShape: const Border(),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          leading: Icon(Icons.rocket_launch_outlined, color: cs.primary),
+          title: Text('Primeiros passos', style: theme.textTheme.titleMedium),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: LinearProgressIndicator(value: done / steps.length),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.rocket_launch_outlined, color: cs.primary),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text('Primeiros passos', style: theme.textTheme.titleMedium)),
-                  Text('$done de ${steps.length}', style: theme.textTheme.bodySmall),
-                ],
-              ),
-              const SizedBox(height: 8),
-              LinearProgressIndicator(value: done / steps.length),
-              const SizedBox(height: 8),
-              for (final s in steps)
-                ListTile(
-                  key: ValueKey('step-${s.$2}'),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(s.$3 ? Icons.check_circle : Icons.radio_button_unchecked, color: s.$3 ? cs.primary : cs.onSurfaceVariant),
-                  title: Text(
-                    s.$1,
-                    style: s.$3 ? TextStyle(decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant) : null,
-                  ),
-                  trailing: s.$3 || widget.onNavigate == null ? null : FilledButton.tonal(onPressed: _go(s.$4), child: const Text('Abrir')),
-                ),
+              Text('$done de ${steps.length}', style: theme.textTheme.bodySmall),
+              const SizedBox(width: 8),
+              const Icon(Icons.expand_more),
             ],
           ),
+          children: [
+            for (final s in steps)
+              ListTile(
+                key: ValueKey('step-${s.$2}'),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(s.$3 ? Icons.check_circle : Icons.radio_button_unchecked, color: s.$3 ? cs.primary : cs.onSurfaceVariant),
+                title: Text(
+                  s.$1,
+                  style: s.$3 ? TextStyle(decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant) : null,
+                ),
+                trailing: s.$3 || widget.onNavigate == null ? null : FilledButton.tonal(onPressed: _go(s.$4), child: const Text('Abrir')),
+              ),
+          ],
         ),
       ),
     );

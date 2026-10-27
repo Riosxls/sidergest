@@ -91,6 +91,10 @@ void main() {
   testWidgets('Painel shows one card per module with metric and alert badge; no module content', (tester) async {
     final (_, log) = await pumpShell(tester, 'Production');
     expect(find.text('Primeiros passos'), findsOneWidget);
+    expect(find.byKey(const ValueKey('step-products')), findsNothing);
+    await tester.tap(find.text('Primeiros passos'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('step-products')), findsOneWidget);
     expect(find.textContaining('Atualizado às'), findsOneWidget);
     for (final id in ['sales', 'engineering', 'stock', 'purchasing', 'production']) {
       expect(find.byKey(ValueKey('module-card-$id')), findsOneWidget);
