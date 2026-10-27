@@ -282,7 +282,7 @@ class _ShellState extends State<Shell> {
       children.add(one(NavItem(home.id, module.icon, module.title, '', home.build)));
       children.add(rail ? const Divider() : const Divider(height: 16));
       children.addAll(_items.where((i) => !i.hidden && i.section == module.title).map(one));
-      return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
+      return ListView(padding: const EdgeInsets.fromLTRB(0, 16, 0, 8), children: children);
     }
     for (final d in _items.where((i) => !i.hidden && globalSections.contains(i.section))) {
       sections.putIfAbsent(d.section, () => []).add(d);
@@ -338,7 +338,7 @@ class _ShellState extends State<Shell> {
         );
       }
     }
-    return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
+    return ListView(padding: const EdgeInsets.fromLTRB(0, 16, 0, 8), children: children);
   }
 
   @override
