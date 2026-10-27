@@ -54,9 +54,10 @@ Future<void> openProductionOrder(BuildContext context, Session session, int id) 
 );
 
 class ProductionOrdersScreen extends StatefulWidget {
-  const ProductionOrdersScreen({super.key, required this.session});
+  const ProductionOrdersScreen({super.key, required this.session, this.initialStatus});
 
   final Session session;
+  final String? initialStatus;
 
   @override
   State<ProductionOrdersScreen> createState() => _ProductionOrdersScreenState();
@@ -64,7 +65,7 @@ class ProductionOrdersScreen extends StatefulWidget {
 
 class _ProductionOrdersScreenState extends State<ProductionOrdersScreen> {
   final _list = GlobalKey<RecordListState>();
-  String? _status;
+  late String? _status = widget.initialStatus;
   String? _kind;
   bool _open = true;
 
