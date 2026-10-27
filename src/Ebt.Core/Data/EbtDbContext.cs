@@ -130,6 +130,8 @@ public partial class EbtDbContext(DbContextOptions<EbtDbContext> options) : DbCo
         ConfigurePurchasing(b);
         ConfigureProduction(b);
         ConfigureSales(b);
+        ConfigureViability(b);
+        ConfigureSteel(b);
     }
 
     partial void ConfigureInventory(ModelBuilder b);
@@ -139,4 +141,8 @@ public partial class EbtDbContext(DbContextOptions<EbtDbContext> options) : DbCo
     partial void ConfigureProduction(ModelBuilder b);
 
     partial void ConfigureSales(ModelBuilder b);
+
+    partial void ConfigureViability(ModelBuilder b);
+
+    partial void ConfigureSteel(ModelBuilder b);
 }

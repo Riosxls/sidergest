@@ -24,6 +24,8 @@ namespace Ebt.Core.Data.Migrations
 
             modelBuilder.HasSequence<int>("delivery_numbers");
 
+            modelBuilder.HasSequence<int>("feasibility_numbers");
+
             modelBuilder.HasSequence<int>("goods_receipt_numbers");
 
             modelBuilder.HasSequence<int>("internal_order_numbers");
@@ -396,6 +398,16 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("character varying(15)")
                         .HasColumnName("invoice_number");
 
+                    b.Property<decimal?>("InvoicedValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("invoiced_value");
+
+                    b.Property<string>("LotNumber")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("lot_number");
+
                     b.Property<string>("Notes")
                         .HasColumnType("text")
                         .HasColumnName("notes");
@@ -570,6 +582,149 @@ namespace Ebt.Core.Data.Migrations
                         .HasDatabaseName("ix_employees_work_center_id");
 
                     b.ToTable("employees", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.FeasibilityStudy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Characteristics")
+                        .HasColumnType("text")
+                        .HasColumnName("characteristics");
+
+                    b.Property<DateTimeOffset?>("CommercialAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("commercial_at");
+
+                    b.Property<string>("CommercialBy")
+                        .HasColumnType("text")
+                        .HasColumnName("commercial_by");
+
+                    b.Property<string>("CommercialNote")
+                        .HasColumnType("text")
+                        .HasColumnName("commercial_note");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("integer")
+                        .HasColumnName("customer_id");
+
+                    b.Property<string>("Finishing")
+                        .HasColumnType("text")
+                        .HasColumnName("finishing");
+
+                    b.Property<decimal?>("MonthlyConsumptionKg")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("monthly_consumption_kg");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer")
+                        .HasColumnName("number");
+
+                    b.Property<int>("OrdersAllowed")
+                        .HasColumnType("integer")
+                        .HasColumnName("orders_allowed");
+
+                    b.Property<string>("Packaging")
+                        .HasColumnType("text")
+                        .HasColumnName("packaging");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer")
+                        .HasColumnName("product_id");
+
+                    b.Property<DateTimeOffset?>("ProductionAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("production_at");
+
+                    b.Property<string>("ProductionBy")
+                        .HasColumnType("text")
+                        .HasColumnName("production_by");
+
+                    b.Property<string>("ProductionNote")
+                        .HasColumnType("text")
+                        .HasColumnName("production_note");
+
+                    b.Property<DateTimeOffset?>("QualityAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("quality_at");
+
+                    b.Property<string>("QualityBy")
+                        .HasColumnType("text")
+                        .HasColumnName("quality_by");
+
+                    b.Property<string>("QualityNote")
+                        .HasColumnType("text")
+                        .HasColumnName("quality_note");
+
+                    b.Property<int?>("QuoteId")
+                        .HasColumnType("integer")
+                        .HasColumnName("quote_id");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("reference");
+
+                    b.Property<string>("RejectionReason")
+                        .HasColumnType("text")
+                        .HasColumnName("rejection_reason");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("title");
+
+                    b.Property<string>("Transformations")
+                        .HasColumnType("text")
+                        .HasColumnName("transformations");
+
+                    b.HasKey("Id")
+                        .HasName("pk_feasibility_studies");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_feasibility_studies_number");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_feasibility_studies_product_id");
+
+                    b.HasIndex("QuoteId")
+                        .HasDatabaseName("ix_feasibility_studies_quote_id");
+
+                    b.HasIndex("Reference")
+                        .IsUnique()
+                        .HasDatabaseName("ix_feasibility_studies_reference");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_feasibility_studies_status");
+
+                    b.HasIndex("CustomerId", "ProductId")
+                        .HasDatabaseName("ix_feasibility_studies_customer_id_product_id");
+
+                    b.ToTable("feasibility_studies", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_feasibility_values", "orders_allowed > 0 AND (monthly_consumption_kg IS NULL OR monthly_consumption_kg >= 0)");
+                        });
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.GoodsReceipt", b =>
@@ -2857,6 +3012,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("address_id");
 
+                    b.Property<int>("BillTo")
+                        .HasColumnType("integer")
+                        .HasColumnName("bill_to");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -2886,6 +3045,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("number");
 
+                    b.Property<int>("Origin")
+                        .HasColumnType("integer")
+                        .HasColumnName("origin");
+
                     b.Property<int?>("PaymentTermId")
                         .HasColumnType("integer")
                         .HasColumnName("payment_term_id");
@@ -2907,6 +3070,11 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<string>("ReleasedBy")
                         .HasColumnType("text")
                         .HasColumnName("released_by");
+
+                    b.Property<string>("Salesperson")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("salesperson");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -2955,6 +3123,10 @@ namespace Ebt.Core.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("Condition")
+                        .HasColumnType("integer")
+                        .HasColumnName("condition");
+
                     b.Property<string>("CustomerPartNumber")
                         .HasColumnType("text")
                         .HasColumnName("customer_part_number");
@@ -2967,6 +3139,10 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<DateOnly>("DueDate")
                         .HasColumnType("date")
                         .HasColumnName("due_date");
+
+                    b.Property<int?>("FeasibilityStudyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("feasibility_study_id");
 
                     b.Property<decimal>("FromStock")
                         .HasPrecision(18, 4)
@@ -2983,9 +3159,29 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("numeric(7,4)")
                         .HasColumnName("ipi_percent");
 
+                    b.Property<decimal?>("Length")
+                        .HasPrecision(10, 1)
+                        .HasColumnType("numeric(10,1)")
+                        .HasColumnName("length");
+
+                    b.Property<decimal?>("MaterialNeedKg")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("material_need_kg");
+
                     b.Property<int>("OrderId")
                         .HasColumnType("integer")
                         .HasColumnName("order_id");
+
+                    b.Property<decimal?>("OutsideDiameter")
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasColumnName("outside_diameter");
+
+                    b.Property<decimal?>("PieceWeightKg")
+                        .HasPrecision(14, 4)
+                        .HasColumnType("numeric(14,4)")
+                        .HasColumnName("piece_weight_kg");
 
                     b.Property<int>("ProductId")
                         .HasColumnType("integer")
@@ -3004,9 +3200,39 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("reservation_id");
 
+                    b.Property<string>("SaleUnit")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("sale_unit");
+
                     b.Property<int>("Sequence")
                         .HasColumnType("integer")
                         .HasColumnName("sequence");
+
+                    b.Property<string>("Standard")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("standard");
+
+                    b.Property<decimal?>("Thickness")
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasColumnName("thickness");
+
+                    b.Property<decimal?>("ToleranceDiameter")
+                        .HasPrecision(8, 3)
+                        .HasColumnType("numeric(8,3)")
+                        .HasColumnName("tolerance_diameter");
+
+                    b.Property<decimal?>("ToleranceLengthPlus")
+                        .HasPrecision(8, 1)
+                        .HasColumnType("numeric(8,1)")
+                        .HasColumnName("tolerance_length_plus");
+
+                    b.Property<decimal?>("ToleranceThickness")
+                        .HasPrecision(8, 3)
+                        .HasColumnType("numeric(8,3)")
+                        .HasColumnName("tolerance_thickness");
 
                     b.Property<string>("Unit")
                         .IsRequired()
@@ -3021,6 +3247,9 @@ namespace Ebt.Core.Data.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_sales_order_lines");
+
+                    b.HasIndex("FeasibilityStudyId")
+                        .HasDatabaseName("ix_sales_order_lines_feasibility_study_id");
 
                     b.HasIndex("ProductId")
                         .HasDatabaseName("ix_sales_order_lines_product_id");
@@ -3136,6 +3365,80 @@ namespace Ebt.Core.Data.Migrations
                     b.ToTable("shifts", (string)null);
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.SlitterJob", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("FinishedKg")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("finished_kg");
+
+                    b.Property<int>("LotId")
+                        .HasColumnType("integer")
+                        .HasColumnName("lot_id");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("ProcessorId")
+                        .HasColumnType("integer")
+                        .HasColumnName("processor_id");
+
+                    b.Property<DateOnly?>("ReturnDate")
+                        .HasColumnType("date")
+                        .HasColumnName("return_date");
+
+                    b.Property<string>("ReturnInvoice")
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("return_invoice");
+
+                    b.Property<decimal?>("ScrapKg")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("scrap_kg");
+
+                    b.Property<decimal>("SentKg")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("sent_kg");
+
+                    b.Property<decimal?>("ServiceCost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("service_cost");
+
+                    b.Property<DateOnly>("ShipmentDate")
+                        .HasColumnType("date")
+                        .HasColumnName("shipment_date");
+
+                    b.Property<string>("ShipmentInvoice")
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("shipment_invoice");
+
+                    b.HasKey("Id")
+                        .HasName("pk_slitter_jobs");
+
+                    b.HasIndex("LotId")
+                        .HasDatabaseName("ix_slitter_jobs_lot_id");
+
+                    b.HasIndex("ProcessorId")
+                        .HasDatabaseName("ix_slitter_jobs_processor_id");
+
+                    b.ToTable("slitter_jobs", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_slitter_jobs_values", "sent_kg > 0 AND (finished_kg IS NULL OR finished_kg >= 0) AND (scrap_kg IS NULL OR scrap_kg >= 0) AND (service_cost IS NULL OR service_cost >= 0)");
+                        });
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.StandardOperation", b =>
                 {
                     b.Property<int>("Id")
@@ -3163,6 +3466,135 @@ namespace Ebt.Core.Data.Migrations
                         .HasDatabaseName("ix_standard_operations_code");
 
                     b.ToTable("standard_operations", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SteelLot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("LotCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("lot_code");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<decimal>("PricePerKg")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("price_per_kg");
+
+                    b.Property<string>("PurchaseInvoice")
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("purchase_invoice");
+
+                    b.Property<DateOnly>("ReceivedDate")
+                        .HasColumnType("date")
+                        .HasColumnName("received_date");
+
+                    b.Property<string>("Specification")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("specification");
+
+                    b.Property<int>("SupplierId")
+                        .HasColumnType("integer")
+                        .HasColumnName("supplier_id");
+
+                    b.Property<decimal?>("Thickness")
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasColumnName("thickness");
+
+                    b.Property<decimal>("WeightKg")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("weight_kg");
+
+                    b.Property<decimal?>("Width")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("width");
+
+                    b.HasKey("Id")
+                        .HasName("pk_steel_lots");
+
+                    b.HasIndex("ReceivedDate")
+                        .HasDatabaseName("ix_steel_lots_received_date");
+
+                    b.HasIndex("SupplierId", "LotCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_steel_lots_supplier_id_lot_code");
+
+                    b.ToTable("steel_lots", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_steel_lots_values", "weight_kg > 0 AND price_per_kg >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SteelUsage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<decimal>("Kg")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("kg");
+
+                    b.Property<decimal>("LaborCost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("labor_cost");
+
+                    b.Property<int>("LotId")
+                        .HasColumnType("integer")
+                        .HasColumnName("lot_id");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("reference");
+
+                    b.HasKey("Id")
+                        .HasName("pk_steel_usages");
+
+                    b.HasIndex("LotId")
+                        .HasDatabaseName("ix_steel_usages_lot_id");
+
+                    b.ToTable("steel_usages", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_steel_usages_values", "kg > 0 AND labor_cost >= 0");
+                        });
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.StockBalance", b =>
@@ -3996,6 +4428,34 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("WorkCenter");
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.FeasibilityStudy", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_feasibility_studies_customers_customer_id");
+
+                    b.HasOne("Ebt.Core.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_feasibility_studies_products_product_id");
+
+                    b.HasOne("Ebt.Core.Entities.Quote", "Quote")
+                        .WithMany()
+                        .HasForeignKey("QuoteId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_feasibility_studies_quotes_quote_id");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("Quote");
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.GoodsReceipt", b =>
                 {
                     b.HasOne("Ebt.Core.Entities.Supplier", "Supplier")
@@ -4620,6 +5080,12 @@ namespace Ebt.Core.Data.Migrations
 
             modelBuilder.Entity("Ebt.Core.Entities.SalesOrderLine", b =>
                 {
+                    b.HasOne("Ebt.Core.Entities.FeasibilityStudy", "FeasibilityStudy")
+                        .WithMany()
+                        .HasForeignKey("FeasibilityStudyId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_sales_order_lines_feasibility_studies_feasibility_study_id");
+
                     b.HasOne("Ebt.Core.Entities.SalesOrder", "Order")
                         .WithMany("Lines")
                         .HasForeignKey("OrderId")
@@ -4646,6 +5112,8 @@ namespace Ebt.Core.Data.Migrations
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_sales_order_lines_stock_reservations_reservation_id");
 
+                    b.Navigation("FeasibilityStudy");
+
                     b.Navigation("Order");
 
                     b.Navigation("Product");
@@ -4664,6 +5132,51 @@ namespace Ebt.Core.Data.Migrations
                         .HasConstraintName("fk_sales_settings_stock_locations_shipping_location_id");
 
                     b.Navigation("ShippingLocation");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SlitterJob", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.SteelLot", "Lot")
+                        .WithMany("SlitterJobs")
+                        .HasForeignKey("LotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_slitter_jobs_steel_lots_lot_id");
+
+                    b.HasOne("Ebt.Core.Entities.Supplier", "Processor")
+                        .WithMany()
+                        .HasForeignKey("ProcessorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_slitter_jobs_suppliers_processor_id");
+
+                    b.Navigation("Lot");
+
+                    b.Navigation("Processor");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SteelLot", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_steel_lots_suppliers_supplier_id");
+
+                    b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SteelUsage", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.SteelLot", "Lot")
+                        .WithMany("Usages")
+                        .HasForeignKey("LotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_steel_usages_steel_lots_lot_id");
+
+                    b.Navigation("Lot");
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.StockBalance", b =>
@@ -4933,6 +5446,13 @@ namespace Ebt.Core.Data.Migrations
             modelBuilder.Entity("Ebt.Core.Entities.SalesOrder", b =>
                 {
                     b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.SteelLot", b =>
+                {
+                    b.Navigation("SlitterJobs");
+
+                    b.Navigation("Usages");
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.StockDocument", b =>

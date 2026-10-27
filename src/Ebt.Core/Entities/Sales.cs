@@ -4,7 +4,10 @@ public enum QuoteStatus { Draft = 0, PendingApproval = 1, Approved = 2, Sent = 3
 public enum SalesOrderStatus { Created = 0, Released = 1, PartiallyShipped = 2, Shipped = 3, Delivered = 4, Cancelled = 5 }
 public enum DeliveryStatus { Planned = 0, Shipped = 1, Delivered = 2, Cancelled = 3 }
 public enum FreightTerms { Cif = 0, Fob = 1, CustomerPickup = 2 }
-public enum SalesRecordKind { Quote = 0, Order = 1, Delivery = 2 }
+public enum SalesRecordKind { Quote = 0, Order = 1, Delivery = 2, Feasibility = 3 }
+public enum BillTo { Ebt = 0, Bts = 1 }
+public enum OrderOrigin { Email = 0, Fax = 1, Verbal = 2, System = 3 }
+public enum DeliveryCondition { Bk = 0, Nbk = 1, Gbk = 2 }
 
 public class SalesSettings
 {
@@ -114,6 +117,9 @@ public class SalesOrder
     public FreightTerms Freight { get; set; }
     public SalesOrderStatus Status { get; set; }
     public string? Notes { get; set; }
+    public BillTo BillTo { get; set; }
+    public OrderOrigin Origin { get; set; } = OrderOrigin.System;
+    public string? Salesperson { get; set; }
     public string? StatusReason { get; set; }
     public string? CreatedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
@@ -143,6 +149,19 @@ public class SalesOrderLine
     public StockReservation? Reservation { get; set; }
     public int? ProductionOrderId { get; set; }
     public ProductionOrder? ProductionOrder { get; set; }
+    public decimal? OutsideDiameter { get; set; }
+    public decimal? Thickness { get; set; }
+    public decimal? Length { get; set; }
+    public string? Standard { get; set; }
+    public DeliveryCondition? Condition { get; set; }
+    public string? SaleUnit { get; set; }
+    public decimal? PieceWeightKg { get; set; }
+    public decimal? MaterialNeedKg { get; set; }
+    public decimal? ToleranceDiameter { get; set; }
+    public decimal? ToleranceThickness { get; set; }
+    public decimal? ToleranceLengthPlus { get; set; }
+    public int? FeasibilityStudyId { get; set; }
+    public FeasibilityStudy? FeasibilityStudy { get; set; }
 }
 
 public class Delivery
@@ -159,6 +178,8 @@ public class Delivery
     public string? Carrier { get; set; }
     public string? VehiclePlate { get; set; }
     public string? InvoiceNumber { get; set; }
+    public string? LotNumber { get; set; }
+    public decimal? InvoicedValue { get; set; }
     public int Packages { get; set; }
     public decimal? GrossWeightKg { get; set; }
     public int? StockDocumentId { get; set; }
