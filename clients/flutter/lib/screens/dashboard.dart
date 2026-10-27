@@ -7,11 +7,11 @@ import 'package:flutter/services.dart';
 import '../entities.dart';
 import '../session.dart';
 import '../api.dart';
-import '../widgets/actions.dart';
+import '../widgets/alerts.dart';
 import 'orders.dart';
 import 'production_orders.dart';
 import 'product_detail.dart';
-import 'requisitions.dart';
+import 'quick_actions.dart';
 
 class DashboardData {
   DashboardData(this.counts, this.products);
@@ -100,6 +100,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  static const _maxWidth = 1280.0;
   late Future<DashboardData> _eng = _fetchEngineering();
   late Future<StockDashboard> _stock = _fetchStock();
   late Future<PurchasingDashboard> _purchasing = _fetchPurchasing();
@@ -107,12 +108,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late Future<List<Object?>> _all = _combine();
   DateTime? _updated;
   final _anchors = [for (var i = 0; i < 5; i++) GlobalKey()];
-  int? _anchor;
+  final _scroll = ScrollController();
+  final _focus = FocusNode();
+  final _viewport = GlobalKey();
+  final _tabKeys = [for (var i = 0; i < 5; i++) GlobalKey()];
+  int _anchor = 0;
+  bool _loaded = false;
+  Set<int> _hasData = {};
   Timer? _timer;
 
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_spy);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
     _settle();
     _timer = Timer.periodic(const Duration(minutes: 2), (_) => _refresh());
   }
@@ -120,7 +131,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _scroll.dispose();
+    _focus.dispose();
     super.dispose();
+  }
+
+  List<int> get _visible => [
+    0,
+    ...[1, 2, 3, 4].where(_hasData.contains),
+  ];
+
+  void _spy() {
+    final box = _viewport.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.attached || !_scroll.hasClients) return;
+    final top = box.localToGlobal(Offset.zero).dy;
+    var active = 0;
+    for (final i in _visible) {
+      final r = _anchors[i].currentContext?.findRenderObject();
+      if (r is RenderBox && r.attached && r.localToGlobal(Offset.zero).dy - top <= 24) active = i;
+    }
+    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 4 && _scroll.position.maxScrollExtent > 0) active = _visible.last;
+    if (active != _anchor) setState(() => _anchor = active);
+  }
+
+  void _jump(int i) {
+    setState(() => _anchor = i);
+    final ctx = _anchors[i].currentContext;
+    if (ctx != null) Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
   static final _counted = [products, materials, machines, standardOperations, workCenters, tools];
@@ -194,8 +231,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
       Future.wait<Object?>([_eng, _stock, _purchasing, _production].map((f) => f.then<Object?>((v) => v, onError: (_) => null)));
 
   Future<void> _settle() async {
-    await _all;
-    if (mounted) setState(() => _updated = DateTime.now());
+    final d = await _all;
+    if (!mounted) return;
+    final e = d[0] as DashboardData?, st = d[1] as StockDashboard?, pu = d[2] as PurchasingDashboard?, pr = d[3] as ProductionDashboard?;
+    final alerts = _alerts(e, st, pu, pr);
+    widget.session.alerts.value = [for (final a in alerts) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter)];
+    setState(() {
+      _updated = DateTime.now();
+      _loaded = true;
+      _hasData = {
+        if (e == null || e.counts.values.any((v) => v > 0)) 1,
+        if (st == null || st.locations > 0) 2,
+        if (pu == null || pu.pendingApproval + pu.approved + pu.openQuotations + pu.openOrders + pu.overdue.length > 0) 3,
+        if (pr == null || pr.orders.isNotEmpty || pr.shipments.isNotEmpty) 4,
+      };
+    });
   }
 
   Future<void> _refresh() {
@@ -268,6 +318,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Icons.schedule,
           'OFs atrasadas',
           late.length,
+          'production-orders',
+          null,
           _showList(
             'OFs atrasadas',
             late,
@@ -276,13 +328,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             all: 'production-orders',
           ),
         ),
-        _Alert(Icons.pause_circle_outline, 'OFs paradas', o.count('Stopped'), _go('production-orders', 'Stopped')),
+        _Alert(Icons.pause_circle_outline, 'OFs paradas', o.count('Stopped'), 'production-orders', 'Stopped', _go('production-orders', 'Stopped')),
       ],
       if (p != null) ...[
         _Alert(
           Icons.local_shipping_outlined,
           'Entregas em atraso',
           overdue.length,
+          'overdue',
+          null,
           _showList(
             'Entregas em atraso',
             overdue,
@@ -291,20 +345,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
             all: 'overdue',
           ),
         ),
-        _Alert(Icons.assignment_late_outlined, 'Requisições a aprovar', p.pendingApproval, _go('requisitions', 'PendingApproval')),
+        _Alert(
+          Icons.assignment_late_outlined,
+          'Requisições a aprovar',
+          p.pendingApproval,
+          'requisitions',
+          'PendingApproval',
+          _go('requisitions', 'PendingApproval'),
+        ),
       ],
-      if (s != null) _Alert(Icons.verified_outlined, 'Lotes em quarentena', s.quarantine, _go('lots', 'Quarantine')),
+      if (s != null) _Alert(Icons.verified_outlined, 'Lotes em quarentena', s.quarantine, 'lots', 'Quarantine', _go('lots', 'Quarantine')),
       if (e != null) ...[
-        _Alert(Icons.block, 'Produtos bloqueados', e.blocked.length, _showList('Produtos bloqueados', e.blocked, productLabel, _openProduct)),
+        _Alert(
+          Icons.block,
+          'Produtos bloqueados',
+          e.blocked.length,
+          products.path,
+          null,
+          _showList('Produtos bloqueados', e.blocked, productLabel, _openProduct),
+        ),
         _Alert(
           Icons.warning_amber,
           'Produtos sem roteiro',
           e.withoutRouting.length,
+          products.path,
+          null,
           _showList('Produtos sem roteiro', e.withoutRouting, productLabel, _openProduct),
         ),
       ],
     ].where((a) => a.count > 0).toList();
   }
+
+  Widget _onboarding() => FutureBuilder<List<Object?>>(
+    future: _all,
+    builder: (context, snap) {
+      if (!snap.hasData) return const SizedBox.shrink();
+      final d = snap.data!;
+      final e = d[0] as DashboardData?, st = d[1] as StockDashboard?, pu = d[2] as PurchasingDashboard?, pr = d[3] as ProductionDashboard?;
+      final steps = [
+        ('Cadastrar produtos', 'products', e == null || (e.counts[products] ?? 0) > 0, products.path),
+        ('Cadastrar locais de estoque', 'locations', st == null || st.locations > 0, 'locations'),
+        (
+          'Registrar a primeira requisição ou pedido de compra',
+          'purchasing',
+          pu == null || pu.pendingApproval + pu.approved + pu.openQuotations + pu.openOrders + pu.overdue.length > 0,
+          'requisitions',
+        ),
+        ('Criar a primeira ordem de fabricação', 'production', pr == null || pr.orders.isNotEmpty || pr.shipments.isNotEmpty, 'production-orders'),
+      ];
+      final done = steps.where((s) => s.$3).length;
+      if (done == steps.length) return const SizedBox.shrink();
+      final theme = Theme.of(context);
+      final cs = theme.colorScheme;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Card(
+          margin: EdgeInsets.zero,
+          shape: _cardShape(context),
+          color: cs.surfaceContainerHigh,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.rocket_launch_outlined, color: cs.primary),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text('Primeiros passos', style: theme.textTheme.titleMedium)),
+                    Text('$done de ${steps.length}', style: theme.textTheme.bodySmall),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                LinearProgressIndicator(value: done / steps.length),
+                const SizedBox(height: 8),
+                for (final s in steps)
+                  ListTile(
+                    key: ValueKey('step-${s.$2}'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(s.$3 ? Icons.check_circle : Icons.radio_button_unchecked, color: s.$3 ? cs.primary : cs.onSurfaceVariant),
+                    title: Text(
+                      s.$1,
+                      style: s.$3 ? TextStyle(decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant) : null,
+                    ),
+                    trailing: s.$3 || widget.onNavigate == null ? null : FilledButton.tonal(onPressed: _go(s.$4), child: const Text('Abrir')),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
 
   Widget _attention() {
     return FutureBuilder<List<Object?>>(
@@ -342,6 +475,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _section<T>(int index, String title, IconData icon, Future<T> future, List<Widget> Function(T data) build) {
     final theme = Theme.of(context);
+    if (_loaded && !_hasData.contains(index)) return SizedBox.shrink(key: _anchors[index]);
     return Column(
       key: _anchors[index],
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -361,16 +495,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           builder: (context, snap) {
             if (snap.hasError) return Text('${snap.error}', style: TextStyle(color: theme.colorScheme.error));
             if (snap.connectionState != ConnectionState.done) return const LinearProgressIndicator();
-            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: build(snap.data as T));
+            final children = build(snap.data as T);
+            if (children.isEmpty) return const SizedBox.shrink();
+            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
           },
         ),
         const SizedBox(height: 16),
       ],
     );
   }
-
-  Widget _empty(IconData icon, String title, String subtitle, String action, String nav) =>
-      _Notice(icon: icon, title: title, subtitle: subtitle, action: widget.onNavigate == null ? null : action, onAction: _go(nav));
 
   List<Widget> _engineering(DashboardData d) {
     final masters = Wrap(
@@ -380,19 +513,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         for (final e in d.counts.entries) ActionChip(avatar: Icon(e.key.icon, size: 18), label: Text('${e.value} ${e.key.title}'), onPressed: _go(e.key.path)),
       ],
     );
-    if ((d.counts[products] ?? 0) == 0) {
-      return [
-        _empty(
-          Icons.inventory_2_outlined,
-          'Nenhum produto cadastrado',
-          'Cadastre produtos e roteiros para ver os indicadores de engenharia.',
-          'Cadastrar produtos',
-          products.path,
-        ),
-        const SizedBox(height: 12),
-        masters,
-      ];
-    }
+    if (d.counts.values.every((v) => v == 0)) return [];
     return [
       masters,
       const SizedBox(height: 12),
@@ -407,11 +528,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   List<Widget> _stockPanels(StockDashboard d) {
-    if (d.locations == 0) {
-      return [
-        _empty(Icons.place_outlined, 'Nenhum local de estoque', 'Cadastre os locais para começar a movimentar o estoque.', 'Cadastrar locais', 'locations'),
-      ];
-    }
+    if (d.locations == 0) return [];
     return [
       _Grid(
         items: [
@@ -431,17 +548,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   List<Widget> _purchasingPanels(PurchasingDashboard d) {
-    if (d.pendingApproval + d.approved + d.openQuotations + d.openOrders + d.overdue.length == 0) {
-      return [
-        _empty(
-          Icons.shopping_cart_outlined,
-          'Nada em aberto em Suprimentos',
-          'Nenhuma requisição, cotação ou pedido de compra em andamento.',
-          'Abrir requisições',
-          'requisitions',
-        ),
-      ];
-    }
+    if (d.pendingApproval + d.approved + d.openQuotations + d.openOrders + d.overdue.length == 0) return [];
     final perf = {for (final p in d.performance.where((p) => (p['receivedLines'] as num) > 0)) '${p['supplierName']}': p['onTimePercent'] as num};
     return [
       _Grid(
@@ -459,17 +566,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   List<Widget> _productionPanels(ProductionDashboard d) {
-    if (d.orders.isEmpty && d.shipments.isEmpty) {
-      return [
-        _empty(
-          Icons.precision_manufacturing_outlined,
-          'Nenhuma OF aberta',
-          'Crie ordens de fabricação para acompanhar a produção aqui.',
-          'Ordens de fabricação',
-          'production-orders',
-        ),
-      ];
-    }
+    if (d.orders.isEmpty && d.shipments.isEmpty) return [];
     return [
       _Grid(
         items: [
@@ -506,75 +603,93 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'Production' => [3, 1, 2, 0],
       _ => [0, 3, 1, 2],
     };
-    final api = widget.session.api;
-    final actions = <(IconData, String, Future<void> Function())>[
-      if (widget.session.canWrite)
-        (
-          Icons.add_box_outlined,
-          'Novo produto',
-          () async {
-            final r = await submitForm(
-              context,
-              api: api,
-              title: 'Novo: ${products.singular}',
-              fields: products.fields,
-              submit: (b) => api.post(products.path, b),
-            );
-            if (r != null && r['id'] is int && mounted) await _push(ProductDetailScreen(session: widget.session, productId: r['id'] as int));
-          },
-        ),
-      if (widget.session.canProduce) (Icons.add_task, 'Nova OF', () => newProductionOrder(context, widget.session)),
-      if (widget.session.canRequest) (Icons.post_add, 'Nova requisição', () => newRequisition(context, widget.session)),
-      if (widget.session.canBuy) (Icons.add_shopping_cart, 'Novo pedido', () => newPurchaseOrder(context, widget.session)),
-    ];
+    final actions = quickActionsFor(widget.session);
     final labels = ['Atenção', 'Engenharia', 'Estoque', 'Suprimentos', 'PCP'];
-    final jumps = [0, ...order.map((i) => i + 1)];
+    final tabs = [0, ...order.map((i) => i + 1).where((i) => !_loaded || _hasData.contains(i))];
+    final cs = Theme.of(context).colorScheme;
     return CallbackShortcuts(
       bindings: {const SingleActivator(LogicalKeyboardKey.f5): _refresh},
       child: Focus(
-        autofocus: true,
-        child: RefreshIndicator(
-          onRefresh: _refresh,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (actions.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final a in actions) FilledButton.tonalIcon(onPressed: () => a.$3().then((_) => _refresh()), icon: Icon(a.$1), label: Text(a.$2)),
-                      ],
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SegmentedButton<int>(
-                      emptySelectionAllowed: true,
-                      showSelectedIcon: false,
-                      segments: [for (final j in jumps) ButtonSegment(value: j, label: Text(labels[j]))],
-                      selected: {?_anchor},
-                      onSelectionChanged: (v) {
-                        if (v.isEmpty) return;
-                        setState(() => _anchor = v.first);
-                        final ctx = _anchors[v.first].currentContext;
-                        if (ctx != null) Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
-                      },
+        focusNode: _focus,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Material(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: cs.outlineVariant)),
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: _maxWidth),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          for (final i in tabs)
+                            InkWell(
+                              key: _tabKeys[i],
+                              onTap: () => _jump(i),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: BoxDecoration(
+                                  border: Border(bottom: BorderSide(color: _anchor == i ? cs.primary : Colors.transparent, width: 2)),
+                                ),
+                                child: Text(
+                                  labels[i],
+                                  style: TextStyle(
+                                    fontWeight: _anchor == i ? FontWeight.w600 : FontWeight.w400,
+                                    color: _anchor == i ? cs.primary : cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-                _attention(),
-                for (final i in order) sections[i],
-              ],
+              ),
             ),
-          ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _refresh,
+                child: SingleChildScrollView(
+                  key: _viewport,
+                  controller: _scroll,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: _maxWidth),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (actions.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (final a in actions)
+                                    FilledButton.tonalIcon(onPressed: () => a.run(context).then((_) => _refresh()), icon: Icon(a.icon), label: Text(a.label)),
+                                ],
+                              ),
+                            ),
+                          _onboarding(),
+                          _attention(),
+                          for (final i in order) sections[i],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -590,11 +705,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 class _Alert {
-  const _Alert(this.icon, this.label, this.count, this.onTap);
+  const _Alert(this.icon, this.label, this.count, this.navId, this.filter, this.onTap);
 
   final IconData icon;
   final String label;
   final int count;
+  final String navId;
+  final String? filter;
   final void Function()? onTap;
 }
 
@@ -720,13 +837,11 @@ class _Tile extends StatelessWidget {
 }
 
 class _Notice extends StatelessWidget {
-  const _Notice({required this.icon, required this.title, required this.subtitle, this.action, this.onAction});
+  const _Notice({required this.icon, required this.title, required this.subtitle});
 
   final IconData icon;
   final String title;
   final String subtitle;
-  final String? action;
-  final void Function()? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -747,11 +862,6 @@ class _Notice extends StatelessWidget {
                 children: [
                   Text(title, style: theme.textTheme.titleMedium),
                   Text(subtitle, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                  if (action != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: FilledButton.tonal(onPressed: onAction, child: Text(action!)),
-                    ),
                 ],
               ),
             ),

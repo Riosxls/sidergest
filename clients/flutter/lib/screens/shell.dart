@@ -4,7 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../entities.dart';
 import '../session.dart';
-import '../widgets/global_search.dart';
+import '../widgets/alerts.dart';
+import '../widgets/command_palette.dart';
+import '../widgets/user_menu.dart';
 import 'dashboard.dart';
 import 'deliveries.dart';
 import 'entity_list.dart';
@@ -12,6 +14,7 @@ import 'orders.dart';
 import 'product_detail.dart';
 import 'production_floor.dart';
 import 'production_orders.dart';
+import 'quick_actions.dart';
 import 'quotations.dart';
 import 'receipts.dart';
 import 'requisitions.dart';
@@ -82,24 +85,40 @@ class _ShellState extends State<Shell> {
   String _current = 'dashboard';
   String? _filter;
   bool _collapsed = false;
-  final _search = SearchController();
+  bool _prefsLoaded = false;
+  final _closedGroups = <String>{};
 
   @override
   void initState() {
     super.initState();
-    _restoreCollapsed();
+    _restorePrefs();
+    HardwareKeyboard.instance.addHandler(_onKey);
   }
 
   @override
   void dispose() {
-    _search.dispose();
+    HardwareKeyboard.instance.removeHandler(_onKey);
     super.dispose();
   }
 
-  Future<void> _restoreCollapsed() async {
+  bool _paletteOpen = false;
+
+  bool _onKey(KeyEvent e) {
+    if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.keyK || !HardwareKeyboard.instance.isControlPressed) return false;
+    if (_paletteOpen || !(ModalRoute.of(context)?.isCurrent ?? false)) return false;
+    _openPalette();
+    return true;
+  }
+
+  Future<void> _restorePrefs() async {
     try {
       final p = await SharedPreferences.getInstance();
-      if (mounted && (p.getBool('navCollapsed') ?? false)) setState(() => _collapsed = true);
+      if (!mounted) return;
+      setState(() {
+        _collapsed = p.getBool('navCollapsed') ?? false;
+        _closedGroups.addAll(p.getStringList('navClosedGroups') ?? const []);
+        _prefsLoaded = true;
+      });
     } catch (_) {}
   }
 
@@ -111,76 +130,135 @@ class _ShellState extends State<Shell> {
     } catch (_) {}
   }
 
+  Future<void> _groupToggled(String section, bool open) async {
+    open ? _closedGroups.remove(section) : _closedGroups.add(section);
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setStringList('navClosedGroups', _closedGroups.toList());
+    } catch (_) {}
+  }
+
+  void _go(String id, [String? filter]) {
+    setState(() {
+      _current = id;
+      _filter = filter;
+    });
+    if (id != 'dashboard') RecentStore.add(RecentItem('screen', id, _items.firstWhere((i) => i.id == id).title));
+  }
+
   void _openProduct(int id) => Navigator.of(context).push(
     MaterialPageRoute(
       builder: (_) => ProductDetailScreen(session: widget.session, productId: id),
     ),
   );
 
-  void _go(String id, [String? filter]) => setState(() {
-    _current = id;
-    _filter = filter;
-  });
+  Future<void> _openPalette() async {
+    _paletteOpen = true;
+    try {
+      await _showPalette();
+    } finally {
+      _paletteOpen = false;
+    }
+  }
+
+  Future<void> _showPalette() => showCommandPalette(
+    context,
+    session: widget.session,
+    targets: [for (final i in _items) SearchTarget(i.id, i.icon, i.title, i.section)],
+    actions: [for (final a in quickActionsFor(widget.session)) PaletteAction(a.icon, a.label, () => a.run(context))],
+    onNavigate: _go,
+    onOpenProduct: _openProduct,
+  );
 
   NavItem get _item => _items.firstWhere((i) => i.id == _current);
+
+  Widget _railItem(NavItem d, ColorScheme cs, VoidCallback tap) {
+    final active = d.id == _current;
+    return Tooltip(
+      message: d.title,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        child: Material(
+          color: active ? cs.secondaryContainer : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: tap,
+            child: SizedBox(height: 40, child: Icon(d.icon, color: active ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tile(NavItem d, ColorScheme cs, VoidCallback tap) {
+    final active = d.id == _current;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: ListTile(
+        dense: true,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        leading: Icon(d.icon),
+        title: Text(
+          d.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          softWrap: false,
+          style: active ? const TextStyle(fontWeight: FontWeight.w600) : null,
+        ),
+        selected: active,
+        selectedTileColor: cs.secondaryContainer,
+        selectedColor: cs.onSecondaryContainer,
+        onTap: tap,
+      ),
+    );
+  }
 
   Widget _menu({bool closeDrawer = false, bool rail = false}) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final children = <Widget>[];
-    String? section;
+    final sections = <String, List<NavItem>>{};
     for (final d in _items) {
-      if (d.section != section) {
-        section = d.section;
-        if (section.isNotEmpty) {
-          children.add(const Divider());
-          if (!rail) {
-            children.add(
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                child: Text(section, style: theme.textTheme.labelMedium?.copyWith(color: cs.primary)),
-              ),
-            );
-          }
+      sections.putIfAbsent(d.section, () => []).add(d);
+    }
+    for (final entry in sections.entries) {
+      final section = entry.key;
+      Widget one(NavItem d) {
+        void tap() {
+          _go(d.id);
+          if (closeDrawer) Navigator.pop(context);
         }
-      }
-      final active = d.id == _current;
-      void tap() {
-        _go(d.id);
-        if (closeDrawer) Navigator.pop(context);
+
+        return rail ? _railItem(d, cs, tap) : _tile(d, cs, tap);
       }
 
-      children.add(
-        rail
-            ? Tooltip(
-                message: d.title,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  child: Material(
-                    color: active ? cs.secondaryContainer : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: tap,
-                      child: SizedBox(height: 40, child: Icon(d.icon, color: active ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
-                    ),
-                  ),
-                ),
-              )
-            : Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: ListTile(
-                  dense: true,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  leading: Icon(d.icon),
-                  title: Text(d.title, style: active ? const TextStyle(fontWeight: FontWeight.w600) : null),
-                  selected: active,
-                  selectedTileColor: cs.secondaryContainer,
-                  selectedColor: cs.onSecondaryContainer,
-                  onTap: tap,
-                ),
-              ),
-      );
+      if (section.isEmpty) {
+        children.addAll(entry.value.map(one));
+      } else if (rail) {
+        children.add(const Divider());
+        children.addAll(entry.value.map(one));
+      } else {
+        children.add(
+          ExpansionTile(
+            key: ValueKey('$section/$_prefsLoaded'),
+            initiallyExpanded: !_closedGroups.contains(section),
+            onExpansionChanged: (open) => _groupToggled(section, open),
+            dense: true,
+            shape: const Border(),
+            collapsedShape: const Border(),
+            tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+            childrenPadding: EdgeInsets.zero,
+            title: Text(
+              section,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelMedium?.copyWith(color: cs.primary),
+            ),
+            children: entry.value.map(one).toList(),
+          ),
+        );
+      }
     }
     return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
   }
@@ -190,40 +268,37 @@ class _ShellState extends State<Shell> {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final s = widget.session;
     final page = KeyedSubtree(key: ValueKey('$_current/$_filter'), child: _item.build(s, _filter, _go));
-    final targets = [for (final i in _items) SearchTarget(i.id, i.icon, i.title, i.section)];
-    return CallbackShortcuts(
-      bindings: {const SingleActivator(LogicalKeyboardKey.keyK, control: true): _search.openView},
-      child: Scaffold(
-        appBar: AppBar(
-          leading: wide
-              ? IconButton(
-                  tooltip: _collapsed ? 'Expandir menu' : 'Recolher menu',
-                  onPressed: _toggleCollapsed,
-                  icon: Icon(_collapsed ? Icons.menu : Icons.menu_open),
-                )
-              : null,
-          title: Text(_item.title),
-          actions: [
-            GlobalSearch(session: s, controller: _search, targets: targets, onNavigate: _go, onOpenProduct: _openProduct, compact: !wide),
-            const SizedBox(width: 8),
-            UserMenu(session: s),
-            const SizedBox(width: 8),
-          ],
-        ),
-        drawer: wide ? null : Drawer(child: SafeArea(child: _menu(closeDrawer: true))),
-        body: wide
-            ? Row(
-                children: [
-                  SizedBox(
-                    width: _collapsed ? 72 : 248,
-                    child: _menu(rail: _collapsed),
-                  ),
-                  const VerticalDivider(width: 1),
-                  Expanded(child: page),
-                ],
+    return Scaffold(
+      appBar: AppBar(
+        leading: wide
+            ? IconButton(
+                tooltip: _collapsed ? 'Expandir menu' : 'Recolher menu',
+                onPressed: _toggleCollapsed,
+                icon: Icon(_collapsed ? Icons.menu : Icons.menu_open),
               )
-            : page,
+            : null,
+        title: Text(_item.title),
+        actions: [
+          SearchLauncher(onOpen: _openPalette, compact: !wide),
+          const SizedBox(width: 4),
+          AlertBell(center: s.alerts, onNavigate: _go),
+          UserMenu(session: s),
+          const SizedBox(width: 8),
+        ],
       ),
+      drawer: wide ? null : Drawer(child: SafeArea(child: _menu(closeDrawer: true))),
+      body: wide
+          ? Row(
+              children: [
+                SizedBox(
+                  width: _collapsed ? 72 : 248,
+                  child: _menu(rail: _collapsed),
+                ),
+                const VerticalDivider(width: 1),
+                Expanded(child: page),
+              ],
+            )
+          : page,
     );
   }
 }

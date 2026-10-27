@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
+import 'widgets/alerts.dart';
 
 const defaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://localhost:8080');
 
@@ -14,6 +16,8 @@ class Session extends ChangeNotifier {
   String? username;
   String? role;
   DateTime? expiresAt;
+  ThemeMode themeMode = ThemeMode.system;
+  final alerts = AlertCenter();
 
   bool get loggedIn => api.token != null && (expiresAt == null || expiresAt!.isAfter(DateTime.now()));
   bool hasRole(Iterable<String> roles) => roles.contains(role);
@@ -34,6 +38,7 @@ class Session extends ChangeNotifier {
   Future<void> restore() async {
     final p = await SharedPreferences.getInstance();
     api.baseUrl = p.getString('apiUrl') ?? defaultApiUrl;
+    themeMode = ThemeMode.values.asNameMap()[p.getString('themeMode')] ?? ThemeMode.system;
     final exp = DateTime.tryParse(p.getString('expiresAt') ?? '');
     if (exp != null && exp.isAfter(DateTime.now())) {
       api.token = p.getString('token');
@@ -61,11 +66,21 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setThemeMode(ThemeMode mode) async {
+    themeMode = mode;
+    notifyListeners();
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString('themeMode', mode.name);
+    } catch (_) {}
+  }
+
   Future<void> logout() async {
     api.token = null;
     username = null;
     role = null;
     expiresAt = null;
+    alerts.value = const [];
     final p = await SharedPreferences.getInstance();
     for (final k in ['token', 'username', 'role', 'expiresAt']) {
       await p.remove(k);

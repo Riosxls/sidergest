@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:ebt_engenharia/api.dart';
+import 'package:ebt_engenharia/main.dart' show appTheme;
 import 'package:ebt_engenharia/screens/shell.dart';
 import 'package:ebt_engenharia/session.dart';
+import 'package:ebt_engenharia/widgets/alerts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -29,40 +31,66 @@ final stopped = {
   'kind': 'Normal',
 };
 
-void main() {
-  testWidgets('empty engineering shows a call to action, alert tile opens filtered orders, F5 refreshes', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    tester.view.physicalSize = const Size(1600, 1400);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final log = <http.Request>[];
-    final client = MockClient((r) async {
-      log.add(r);
-      final p = r.url.path;
-      if (lists.contains(p)) return json([]);
-      if (p == '/api/production/orders') return json(page(r.url.queryParameters['status'] == 'Created' ? [] : [stopped]));
-      return json(page([]));
-    });
-    final session =
-        Session(
-            api: ApiClient(baseUrl: 'http://api.test', client: client, token: 'tok'),
-          )
-          ..username = 'pcp'
-          ..role = 'Production';
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('pt', 'BR'),
-        supportedLocales: const [Locale('pt', 'BR')],
-        localizationsDelegates: GlobalMaterialLocalizations.delegates,
-        home: Shell(session: session),
-      ),
-    );
-    await tester.pumpAndSettle();
+Future<(Session, List<http.Request>)> pumpShell(
+  WidgetTester tester,
+  String role, {
+  Size size = const Size(1600, 1400),
+  Map<String, Object> prefs = const {},
+}) async {
+  SharedPreferences.setMockInitialValues(prefs);
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  final log = <http.Request>[];
+  final client = MockClient((r) async {
+    log.add(r);
+    final p = r.url.path;
+    if (lists.contains(p)) return json([]);
+    if (p == '/api/products' && r.url.queryParameters['q'] == 'T-1') {
+      return json(
+        page([
+          {'id': 1, 'code': 'T-100', 'name': 'Tubo 25x1,5'},
+        ]),
+      );
+    }
+    if (p == '/api/production/orders') return json(page(r.url.queryParameters['status'] == 'Created' ? [] : [stopped]));
+    return json(page([]));
+  });
+  final session =
+      Session(
+          api: ApiClient(baseUrl: 'http://api.test', client: client, token: 'tok'),
+        )
+        ..username = 'ana'
+        ..role = role;
+  await tester.pumpWidget(
+    MaterialApp(
+      locale: const Locale('pt', 'BR'),
+      supportedLocales: const [Locale('pt', 'BR')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      home: Shell(session: session),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return (session, log);
+}
 
-    expect(find.text('Nenhum produto cadastrado'), findsOneWidget);
+Future<void> openPalette(WidgetTester tester) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+  await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  testWidgets('onboarding card replaces empty sections, alert tile opens filtered orders, F5 refreshes', (tester) async {
+    final (_, log) = await pumpShell(tester, 'Production');
+    expect(find.text('Primeiros passos'), findsOneWidget);
     expect(find.text('Cadastrar produtos'), findsOneWidget);
-    expect(find.text('Nenhum local de estoque'), findsOneWidget);
+    expect(find.text('Nenhum local de estoque'), findsNothing);
+    expect(find.text('Estoque'), findsWidgets);
     expect(find.textContaining('Atualizado às'), findsOneWidget);
+    final card = find.ancestor(of: find.text('Primeiros passos'), matching: find.byType(Card)).first;
+    expect(tester.getSize(card).width, lessThanOrEqualTo(1280));
 
     final before = log.length;
     await tester.sendKeyEvent(LogicalKeyboardKey.f5);
@@ -76,42 +104,23 @@ void main() {
     expect(find.text('OF-7'), findsOneWidget);
   });
 
-  Future<List<http.Request>> pumpShell(WidgetTester tester, String role, {Size size = const Size(1600, 1400), Map<String, dynamic>? prefs}) async {
-    SharedPreferences.setMockInitialValues({...?prefs});
-    tester.view.physicalSize = size;
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final log = <http.Request>[];
-    final client = MockClient((r) async {
-      log.add(r);
-      final p = r.url.path;
-      if (lists.contains(p)) return json([]);
-      if (p == '/api/products' && r.url.queryParameters['q'] == 'T-1') {
-        return json(
-          page([
-            {'id': 1, 'code': 'T-100', 'name': 'Tubo 25x1,5'},
-          ]),
-        );
-      }
-      return json(page([]));
-    });
-    final session =
-        Session(
-            api: ApiClient(baseUrl: 'http://api.test', client: client, token: 'tok'),
-          )
-          ..username = 'ana'
-          ..role = role;
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('pt', 'BR'),
-        supportedLocales: const [Locale('pt', 'BR')],
-        localizationsDelegates: GlobalMaterialLocalizations.delegates,
-        home: Shell(session: session),
-      ),
-    );
+  testWidgets('empty sections are hidden and their tabs removed', (tester) async {
+    await pumpShell(tester, 'Production');
+    final tabs = find.byWidgetPredicate((w) => w is InkWell && w.key is GlobalKey);
+    expect(tabs, findsNWidgets(2));
+    expect(find.descendant(of: tabs, matching: find.text('PCP')), findsOneWidget);
+    expect(find.descendant(of: tabs, matching: find.text('Estoque')), findsNothing);
+  });
+
+  testWidgets('bell shows the Atenção total and jumps to the filtered list', (tester) async {
+    final (_, log) = await pumpShell(tester, 'Production');
+    expect(find.byTooltip('Notificações (1)'), findsOneWidget);
+    await tester.tap(find.byTooltip('Notificações (1)'));
     await tester.pumpAndSettle();
-    return log;
-  }
+    await tester.tap(find.descendant(of: find.byType(PopupMenuItem<AlertInfo>), matching: find.text('OFs paradas')));
+    await tester.pumpAndSettle();
+    expect(log.last.url.queryParameters['status'], 'Stopped');
+  });
 
   testWidgets('quick actions follow the role', (tester) async {
     await pumpShell(tester, 'Production');
@@ -132,18 +141,14 @@ void main() {
 
   testWidgets('sidebar collapses to icons, remembers it, and marks the active page', (tester) async {
     await pumpShell(tester, 'Admin');
-    expect(find.text('Saldos'), findsOneWidget);
     await tester.tap(find.byTooltip('Recolher menu'));
     await tester.pumpAndSettle();
     expect(find.text('Saldos'), findsNothing);
-    expect(find.byTooltip('Saldos'), findsOneWidget);
     await tester.tap(find.byTooltip('Saldos'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Expandir menu'), findsOneWidget);
     await tester.tap(find.byTooltip('Expandir menu'));
     await tester.pumpAndSettle();
-    final tile = tester.widget<ListTile>(find.widgetWithText(ListTile, 'Saldos'));
-    expect(tile.selected, isTrue);
+    expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'Saldos')).selected, isTrue);
     expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'Painel')).selected, isFalse);
   });
 
@@ -153,34 +158,96 @@ void main() {
     expect(find.byTooltip('Expandir menu'), findsOneWidget);
   });
 
-  testWidgets('global search finds screens and products and opens them', (tester) async {
-    final log = await pumpShell(tester, 'Admin');
-    await tester.tap(find.byType(SearchBar));
+  testWidgets('sidebar groups collapse and the choice is remembered', (tester) async {
+    await pumpShell(tester, 'Admin');
+    expect(find.text('Saldos'), findsOneWidget);
+    await tester.tap(find.descendant(of: find.byType(ExpansionTile), matching: find.text('Estoque')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'saldo');
+    expect(find.text('Saldos'), findsNothing);
+    final p = await SharedPreferences.getInstance();
+    expect(p.getStringList('navClosedGroups'), ['Estoque']);
+    await pumpShell(
+      tester,
+      'Admin',
+      prefs: {
+        'navClosedGroups': <String>['Estoque'],
+      },
+    );
+    expect(find.text('Saldos'), findsNothing);
+    expect(find.text('Movimentações'), findsNothing);
+    expect(find.text('Funil de vendas'), findsOneWidget);
+  });
+
+  testWidgets('command palette: keyboard navigation, actions, products and recents', (tester) async {
+    final (_, log) = await pumpShell(tester, 'Admin');
+    await openPalette(tester);
+    expect(find.text('Nova OF'), findsWidgets);
+    await tester.enterText(find.descendant(of: find.byType(Dialog), matching: find.byType(TextField)), 'saldo');
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, 'Saldos').last);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'Saldos')).selected, isTrue);
 
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await openPalette(tester);
+    expect(find.text('Recentes'), findsOneWidget);
+    await tester.enterText(find.descendant(of: find.byType(Dialog), matching: find.byType(TextField)), 'nova req');
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'T-1');
+    expect(find.text('Ações'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Nova requisição'), findsWidgets);
+    expect(find.byType(Dialog), findsOneWidget);
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    await openPalette(tester);
+    await tester.enterText(find.descendant(of: find.byType(Dialog), matching: find.byType(TextField)), 'T-1');
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
     expect(find.text('T-100  Tubo 25x1,5'), findsOneWidget);
     expect(log.any((r) => r.url.path == '/api/products' && r.url.queryParameters['q'] == 'T-1'), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsNothing);
   });
 
-  testWidgets('section shortcuts scroll the dashboard', (tester) async {
-    await pumpShell(tester, 'Admin', size: const Size(1600, 500));
-    final seg = find.descendant(of: find.byType(SegmentedButton<int>), matching: find.text('PCP'));
-    expect(seg, findsOneWidget);
-    final before = tester.getTopLeft(find.text('Nenhuma OF aberta')).dy;
-    await tester.tap(seg);
+  testWidgets('avatar menu: profile, theme and sign out', (tester) async {
+    final (session, _) = await pumpShell(tester, 'Admin');
+    await tester.tap(find.byTooltip('Conta'));
     await tester.pumpAndSettle();
-    expect(tester.getTopLeft(find.text('Nenhuma OF aberta')).dy, lessThan(before));
+    await tester.tap(find.text('Perfil'));
+    await tester.pumpAndSettle();
+    expect(find.text('Usuário: ana'), findsOneWidget);
+    await tester.tap(find.text('Fechar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Conta'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tema escuro'));
+    await tester.pumpAndSettle();
+    expect(session.themeMode, ThemeMode.dark);
+    final p = await SharedPreferences.getInstance();
+    expect(p.getString('themeMode'), 'dark');
+  });
+
+  testWidgets('section tabs scroll and follow the scroll position', (tester) async {
+    await pumpShell(tester, 'Production', size: const Size(1600, 500));
+    final tab = find.descendant(of: find.byWidgetPredicate((w) => w is InkWell && w.key is GlobalKey), matching: find.text('PCP'));
+    TextStyle? style() => tester.widget<Text>(tab).style;
+    expect(style()?.fontWeight, FontWeight.w400);
+    await tester.tap(tab);
+    await tester.pumpAndSettle();
+    expect(style()?.fontWeight, FontWeight.w600);
+    final scrollable = find.ancestor(of: find.text('OFs a liberar'), matching: find.byType(Scrollable)).first;
+    await tester.drag(scrollable, const Offset(0, 3000));
+    await tester.pumpAndSettle();
+    expect(style()?.fontWeight, FontWeight.w400);
+  });
+
+  test('cards use a higher-contrast surface and an outline', () {
+    for (final b in Brightness.values) {
+      final t = appTheme(b);
+      expect(t.cardTheme.color, t.colorScheme.surfaceContainerHigh);
+      expect((t.cardTheme.shape as RoundedRectangleBorder).side.color, t.colorScheme.outlineVariant);
+    }
   });
 }
