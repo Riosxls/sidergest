@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,6 +7,7 @@ import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
 import '../session.dart';
+import '../widgets/discard_guard.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
@@ -133,12 +136,19 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
   List<Map<String, dynamic>> _addresses = [];
   String? _message;
   bool _busy = false;
+  late final String _initial;
+
+  String _signature() => jsonEncode([
+    _customerId, _addressId, _termId, _customTerm, _freight, _lines,
+    for (final c in [_validity, _contact, _email, _ref, _conditions, _notes, _po]) c.text,
+  ]);
 
   ApiClient get api => widget.session.api;
 
   @override
   void initState() {
     super.initState();
+    _initial = _signature();
     if (_customerId != null) _loadAddresses(_customerId!, keep: true);
   }
 
@@ -211,7 +221,9 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     final wide = MediaQuery.sizeOf(context).width >= 700;
     final w = wide ? 300.0 : double.infinity;
     final estimate = _lines.fold<num>(0, (a, l) => a + lineEstimate(l));
-    return Scaffold(
+    return DiscardGuard(
+      isDirty: () => _signature() != _initial,
+      child: Scaffold(
       appBar: AppBar(
         title: Text(widget.quote != null ? 'Editar ${widget.quote!['reference']}' : (widget.asOrder ? 'Novo pedido de venda' : 'Novo orçamento comercial')),
         actions: [
@@ -387,7 +399,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
           if (_message != null) Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
         ],
       ),
-    );
+    ));
   }
 }
 

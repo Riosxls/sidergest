@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
 import '../session.dart';
+import '../widgets/discard_guard.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/record_list.dart';
@@ -222,8 +225,17 @@ class _StockPostScreenState extends State<StockPostScreen> {
   List<Map<String, dynamic>> _lines = [];
   String? _message;
   bool _busy = false;
+  late final String _initial;
+
+  String _signature() => jsonEncode([_type, _date.text, _reference.text, _notes.text, _supplierId, _lines]);
 
   ApiClient get api => widget.session.api;
+
+  @override
+  void initState() {
+    super.initState();
+    _initial = _signature();
+  }
 
   @override
   void dispose() {
@@ -276,7 +288,9 @@ class _StockPostScreenState extends State<StockPostScreen> {
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 700;
     final w = wide ? 260.0 : double.infinity;
-    return Scaffold(
+    return DiscardGuard(
+      isDirty: () => _signature() != _initial,
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Novo lançamento de estoque'),
         actions: [
@@ -372,6 +386,6 @@ class _StockPostScreenState extends State<StockPostScreen> {
             ),
         ],
       ),
-    );
+    ));
   }
 }

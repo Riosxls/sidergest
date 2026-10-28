@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'discard_guard.dart';
 
 import '../api.dart';
 import '../entities.dart';
@@ -68,6 +71,11 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
   final _clientErrors = <String, String>{};
   String? _message;
   bool _busy = false;
+  late final String _initial;
+
+  String _signature() => jsonEncode([
+    for (final f in widget.fields) _text[f.key]?.text ?? _values[f.key],
+  ]);
 
   bool _isText(FieldSpec f) =>
       f.type == FieldType.text || f.type == FieldType.integer || f.type == FieldType.decimal || f.type == FieldType.date || f.type == FieldType.time;
@@ -87,6 +95,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
     }
     final labels = widget.initial?['_labels'];
     if (labels is Map) _labels.addAll(labels.cast<String, String>());
+    _initial = _signature();
   }
 
   @override
@@ -349,19 +358,19 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
         Row(children: actions),
       ],
     );
-    if (narrow) {
-      return Dialog.fullscreen(
-        child: SafeArea(
-          child: Padding(padding: const EdgeInsets.all(16), child: content),
-        ),
-      );
-    }
-    return Dialog(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 760),
-        child: Padding(padding: const EdgeInsets.all(20), child: content),
-      ),
-    );
+    final dialog = narrow
+        ? Dialog.fullscreen(
+            child: SafeArea(
+              child: Padding(padding: const EdgeInsets.all(16), child: content),
+            ),
+          )
+        : Dialog(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720, maxHeight: 760),
+              child: Padding(padding: const EdgeInsets.all(20), child: content),
+            ),
+          );
+    return widget.readOnly ? dialog : DiscardGuard(isDirty: () => _signature() != _initial, child: dialog);
   }
 }
 

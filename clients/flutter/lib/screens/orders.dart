@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
 import '../session.dart';
+import '../widgets/discard_guard.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/record_list.dart';
@@ -273,6 +276,15 @@ class _OrderEditorScreenState extends State<OrderEditorScreen> {
   List<Map<String, dynamic>> _lines = [];
   String? _message;
   bool _busy = false;
+  late final String _initial;
+
+  String _signature() => jsonEncode([_supplierId, _terms.text, _notes.text, _lines]);
+
+  @override
+  void initState() {
+    super.initState();
+    _initial = _signature();
+  }
 
   @override
   void dispose() {
@@ -307,7 +319,9 @@ class _OrderEditorScreenState extends State<OrderEditorScreen> {
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 700;
     final w = wide ? 300.0 : double.infinity;
-    return Scaffold(
+    return DiscardGuard(
+      isDirty: () => _signature() != _initial,
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Novo pedido de compra'),
         actions: [
@@ -377,7 +391,7 @@ class _OrderEditorScreenState extends State<OrderEditorScreen> {
           if (_message != null) Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
         ],
       ),
-    );
+    ));
   }
 }
 

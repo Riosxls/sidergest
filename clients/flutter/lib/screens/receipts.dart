@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
 import '../session.dart';
+import '../widgets/discard_guard.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/record_list.dart';
@@ -161,12 +164,19 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   bool _loading = false;
   bool _busy = false;
   String? _message;
+  late final String _initial;
+
+  String _signature() => jsonEncode([
+    _supplierId, _invoice.text, _series.text, _date.text, _invoiceTotal.text, _justification.text, _notes.text,
+    [for (final l in _lines) if (l.qty.text.isNotEmpty || l.lot.text.isNotEmpty) [_lines.indexOf(l), l.qty.text, l.price.text, l.lot.text]],
+  ]);
 
   ApiClient get api => widget.session.api;
 
   @override
   void initState() {
     super.initState();
+    _initial = _signature();
     if (_supplierId != null) _loadOrders();
   }
 
@@ -275,7 +285,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     final diff = typed == null ? 0 : typed - _calculated;
     final divergent = typed != null && diff.abs() > 0.01;
     final wide = MediaQuery.sizeOf(context).width >= 900;
-    return Scaffold(
+    return DiscardGuard(
+      isDirty: () => _signature() != _initial,
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Receber nota fiscal'),
         actions: [
@@ -355,7 +367,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           if (_message != null) Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
         ],
       ),
-    );
+    ));
   }
 
   Widget _lineRow(_OpenLine l, bool wide) {
