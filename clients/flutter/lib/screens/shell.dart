@@ -7,6 +7,7 @@ import '../session.dart';
 import '../widgets/alerts.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/user_menu.dart';
+import 'customers.dart';
 import 'dashboard.dart';
 import 'deliveries.dart';
 import 'entity_list.dart';
@@ -58,6 +59,7 @@ List<NavItem> navItems() => [
       ),
       hidden: true,
     ),
+  NavItem('customers', Icons.people_outline, 'Clientes', 'Comercial', (s, f, go) => CustomersScreen(session: s)),
   NavItem('sales-pipeline', Icons.view_kanban_outlined, 'Funil de vendas', 'Comercial', (s, f, go) => SalesPipelineScreen(session: s)),
   NavItem('sales-quotes', Icons.request_quote_outlined, 'Orçamentos', 'Comercial', (s, f, go) => QuotesScreen(session: s)),
   NavItem('sales-orders', Icons.receipt_long_outlined, 'Pedidos de venda', 'Comercial', (s, f, go) => SalesOrdersScreen(session: s)),

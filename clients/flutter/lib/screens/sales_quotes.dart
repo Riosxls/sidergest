@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
+import '../reports/print_docs.dart';
 import '../session.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/actions.dart';
@@ -746,6 +747,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         ),
     ];
     return [
+      PrintButton(name: 'Orçamento ${q['reference']}', builder: () => buildQuotePdf(api, q)),
       if (s.canSell && status == 'Draft') IconButton(tooltip: 'Editar', onPressed: _edit, icon: const Icon(Icons.edit_outlined)),
       PopupMenuButton<VoidCallback>(key: const ValueKey('quote-menu'), onSelected: (f) => f(), itemBuilder: (_) => menu),
     ];
