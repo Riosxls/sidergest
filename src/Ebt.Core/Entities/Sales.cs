@@ -56,6 +56,8 @@ public class Quote
     public string? CustomerReference { get; set; }
     public int? PaymentTermId { get; set; }
     public PaymentTerm? PaymentTerm { get; set; }
+    /// <summary>Free-text prazo used only on this quote (when no standard prazo fits).</summary>
+    public string? CustomPaymentTerm { get; set; }
     public FreightTerms Freight { get; set; }
     public int ValidityDays { get; set; }
     public DateOnly? ValidUntil { get; set; }
@@ -109,8 +111,10 @@ public class SalesOrder
     public int AddressId { get; set; }
     public CustomerAddress? Address { get; set; }
     public string? CustomerPo { get; set; }
+    public string Company { get; set; } = "EBT";
     public int? PaymentTermId { get; set; }
     public PaymentTerm? PaymentTerm { get; set; }
+    public string? CustomPaymentTerm { get; set; }
     public FreightTerms Freight { get; set; }
     public SalesOrderStatus Status { get; set; }
     public string? Notes { get; set; }

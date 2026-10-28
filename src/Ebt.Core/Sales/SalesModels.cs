@@ -15,9 +15,9 @@ public sealed class SalesException(int status, string message, string? field = n
 public sealed record SalesLineInput(int ProductId, decimal Quantity, decimal? UnitPrice = null, decimal? IpiPercent = null, decimal? IcmsPercent = null, int? LeadTimeDays = null, DateOnly? DeliveryDate = null, string? Description = null);
 
 public sealed record QuoteInput(int CustomerId, IReadOnlyList<SalesLineInput> Lines, int? AddressId = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, int? ValidityDays = null,
-    string? ContactName = null, string? ContactEmail = null, string? CustomerReference = null, string? Conditions = null, string? Notes = null);
+    string? ContactName = null, string? ContactEmail = null, string? CustomerReference = null, string? Conditions = null, string? Notes = null, string? CustomPaymentTerm = null);
 
-public sealed record SalesOrderInput(int CustomerId, int AddressId, IReadOnlyList<SalesLineInput> Lines, string? CustomerPo = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, string? Notes = null);
+public sealed record SalesOrderInput(int CustomerId, int AddressId, IReadOnlyList<SalesLineInput> Lines, string? CustomerPo = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, string? Notes = null, string? Company = null, string? CustomPaymentTerm = null);
 
 public sealed record ConvertInput(int? AddressId = null, string? CustomerPo = null, bool OverrideCredit = false);
 

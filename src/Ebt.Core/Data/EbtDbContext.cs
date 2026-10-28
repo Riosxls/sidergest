@@ -31,6 +31,10 @@ public partial class EbtDbContext(DbContextOptions<EbtDbContext> options) : DbCo
             e.HasIndex(x => x.LegacyCode).IsUnique();
             e.Property(x => x.Name).HasMaxLength(120);
             e.Property(x => x.LegacyCode).HasMaxLength(10);
+            e.Property(x => x.Document).HasMaxLength(14);
+            e.Property(x => x.Uf).HasMaxLength(2);
+            e.Property(x => x.ZipCode).HasMaxLength(8);
+            e.HasOne(x => x.DefaultPaymentTerm).WithMany().HasForeignKey(x => x.DefaultPaymentTermId).OnDelete(DeleteBehavior.SetNull);
         });
         b.Entity<CustomerAddress>(e =>
         {

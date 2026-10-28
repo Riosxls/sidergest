@@ -96,6 +96,7 @@ app.MapInventory();
 app.MapPurchasing();
 app.MapProduction();
 app.MapSales();
+app.MapReports();
 
 app.Run();
 

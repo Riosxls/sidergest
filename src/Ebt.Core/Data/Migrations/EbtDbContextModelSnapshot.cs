@@ -235,9 +235,42 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("active");
 
+                    b.Property<string>("City")
+                        .HasColumnType("text")
+                        .HasColumnName("city");
+
+                    b.Property<string>("Complement")
+                        .HasColumnType("text")
+                        .HasColumnName("complement");
+
                     b.Property<int>("ConsumerType")
                         .HasColumnType("integer")
                         .HasColumnName("consumer_type");
+
+                    b.Property<string>("Contact")
+                        .HasColumnType("text")
+                        .HasColumnName("contact");
+
+                    b.Property<int?>("DefaultPaymentTermId")
+                        .HasColumnType("integer")
+                        .HasColumnName("default_payment_term_id");
+
+                    b.Property<string>("District")
+                        .HasColumnType("text")
+                        .HasColumnName("district");
+
+                    b.Property<string>("Document")
+                        .HasMaxLength(14)
+                        .HasColumnType("character varying(14)")
+                        .HasColumnName("document");
+
+                    b.Property<string>("Email")
+                        .HasColumnType("text")
+                        .HasColumnName("email");
+
+                    b.Property<bool>("IcmsContributor")
+                        .HasColumnType("boolean")
+                        .HasColumnName("icms_contributor");
 
                     b.Property<string>("LegacyCode")
                         .HasMaxLength(10)
@@ -250,12 +283,41 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("name");
 
+                    b.Property<string>("Number")
+                        .HasColumnType("text")
+                        .HasColumnName("number");
+
+                    b.Property<string>("Phone")
+                        .HasColumnType("text")
+                        .HasColumnName("phone");
+
+                    b.Property<string>("StateRegistration")
+                        .HasColumnType("text")
+                        .HasColumnName("state_registration");
+
+                    b.Property<string>("Street")
+                        .HasColumnType("text")
+                        .HasColumnName("street");
+
                     b.Property<string>("TradeName")
                         .HasColumnType("text")
                         .HasColumnName("trade_name");
 
+                    b.Property<string>("Uf")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("uf");
+
+                    b.Property<string>("ZipCode")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("zip_code");
+
                     b.HasKey("Id")
                         .HasName("pk_customers");
+
+                    b.HasIndex("DefaultPaymentTermId")
+                        .HasDatabaseName("ix_customers_default_payment_term_id");
 
                     b.HasIndex("LegacyCode")
                         .IsUnique()
@@ -2475,6 +2537,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("created_by");
 
+                    b.Property<string>("CustomPaymentTerm")
+                        .HasColumnType("text")
+                        .HasColumnName("custom_payment_term");
+
                     b.Property<int>("CustomerId")
                         .HasColumnType("integer")
                         .HasColumnName("customer_id");
@@ -2857,6 +2923,14 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("address_id");
 
+                    b.Property<string>("Company")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("EBT")
+                        .HasColumnName("company");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -2864,6 +2938,10 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("text")
                         .HasColumnName("created_by");
+
+                    b.Property<string>("CustomPaymentTerm")
+                        .HasColumnType("text")
+                        .HasColumnName("custom_payment_term");
 
                     b.Property<int>("CustomerId")
                         .HasColumnType("integer")
@@ -3913,6 +3991,17 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Material");
 
                     b.Navigation("RoutingOperation");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.Customer", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.PaymentTerm", "DefaultPaymentTerm")
+                        .WithMany()
+                        .HasForeignKey("DefaultPaymentTermId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_customers_payment_terms_default_payment_term_id");
+
+                    b.Navigation("DefaultPaymentTerm");
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.CustomerAddress", b =>

@@ -19,7 +19,7 @@ public record PriceOut(int ProductId, int? CustomerId, decimal? UnitPrice, decim
 public record SalesEventOut(long Id, string Action, string? FromStatus, string? ToStatus, string? Note, string? User, DateTimeOffset At);
 public record QuoteActionIn(string? Note = null, string? SentTo = null, string? CustomerPo = null);
 public record SalesReasonIn(string? Reason);
-public record SalesOrderIn(int CustomerId, int AddressId, List<SalesLineInput> Lines, string? CustomerPo = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, string? Notes = null, bool OverrideCredit = false);
+public record SalesOrderIn(int CustomerId, int AddressId, List<SalesLineInput> Lines, string? CustomerPo = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, string? Notes = null, bool OverrideCredit = false, string? Company = null, string? CustomPaymentTerm = null);
 public record SalesReleaseIn(bool UseStock = true);
 public record ConfirmDeliveryIn(DateOnly? Date = null, string? ReceivedBy = null);
 
@@ -28,7 +28,7 @@ public record QuoteLineOut(int Id, int Sequence, int ProductId, string ProductCo
 public record QuoteSummaryOut(int Id, int Number, int Revision, string Reference, int CustomerId, string CustomerName, QuoteStatus Status, bool NeedsApproval, decimal Total, DateOnly? ValidUntil,
     DateTimeOffset? SentAt, DateTimeOffset CreatedAt, string? CreatedBy, int? SalesOrderId);
 public record QuoteOut(int Id, int Number, int Revision, string Reference, int CustomerId, string CustomerName, int? AddressId, string? AddressText, string? ContactName, string? ContactEmail, string? CustomerReference,
-    int? PaymentTermId, string? PaymentTermName, FreightTerms Freight, int ValidityDays, DateOnly? ValidUntil, string? Conditions, string? Notes, QuoteStatus Status, bool NeedsApproval, string? ApprovedBy, DateTimeOffset? ApprovedAt,
+    int? PaymentTermId, string? PaymentTermName, string? CustomPaymentTerm, FreightTerms Freight, int ValidityDays, DateOnly? ValidUntil, string? Conditions, string? Notes, QuoteStatus Status, bool NeedsApproval, string? ApprovedBy, DateTimeOffset? ApprovedAt,
     DateTimeOffset? SentAt, string? SentTo, DateTimeOffset? DecidedAt, string? DecisionBy, string? DecisionNote, string? CustomerPo, int? SalesOrderId, string? SalesOrderReference, string? CreatedBy, DateTimeOffset CreatedAt,
     QuoteTotals Totals, IReadOnlyList<QuoteLineOut> Lines, IReadOnlyList<SalesEventOut> History);
 
@@ -38,7 +38,7 @@ public record SalesOrderSummaryOut(int Id, int Number, string Reference, int Cus
     DateTimeOffset CreatedAt, int? QuoteId);
 public record DeliverySummaryOut(int Id, int Number, string Reference, int OrderId, string OrderReference, int CustomerId, string CustomerName, DateOnly PlannedDate, DeliveryStatus Status, int Packages, decimal? GrossWeightKg,
     string? InvoiceNumber, string? Carrier, DateTimeOffset? ShippedAt, DateTimeOffset? DeliveredAt);
-public record SalesOrderOut(int Id, int Number, string Reference, int CustomerId, string CustomerName, int AddressId, string AddressText, string? CustomerPo, int? PaymentTermId, string? PaymentTermName, FreightTerms Freight,
+public record SalesOrderOut(int Id, int Number, string Reference, int CustomerId, string CustomerName, int AddressId, string AddressText, string? CustomerPo, int? PaymentTermId, string? PaymentTermName, string? CustomPaymentTerm, FreightTerms Freight,
     SalesOrderStatus Status, string? StatusReason, string? Notes, int? QuoteId, string? QuoteReference, string? CreatedBy, DateTimeOffset CreatedAt, string? ReleasedBy, DateTimeOffset? ReleasedAt,
     decimal Products, decimal Ipi, decimal Total, decimal Progress, bool Ready, bool Late, CreditCheck Credit, IReadOnlyList<SalesOrderLineOut> Lines, IReadOnlyList<DeliverySummaryOut> Deliveries, IReadOnlyList<SalesEventOut> History);
 public record DeliveryLineOut(int Id, int OrderLineId, int Sequence, int ProductId, string ProductCode, string Description, decimal Quantity, string Unit, int Packages);
@@ -53,6 +53,7 @@ public record PipelineOut(PipelineKpis Kpis, IReadOnlyList<PipelineStage> Stages
 
 public static class SalesPolicies
 {
+    public const string Customers = "customers";
     public const string Sell = "sales";
     public const string Approve = "sales-approve";
     public const string Release = "sales-release";
@@ -82,6 +83,7 @@ public static class SalesEndpoints
         services.AddExceptionHandler<SalesExceptionHandler>();
         services.AddAuthorization(o =>
         {
+            o.AddPolicy(SalesPolicies.Customers, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Engineering), nameof(UserRole.Sales), nameof(UserRole.SalesManager)));
             o.AddPolicy(SalesPolicies.Sell, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Sales), nameof(UserRole.SalesManager)));
             o.AddPolicy(SalesPolicies.Approve, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.SalesManager)));
             o.AddPolicy(SalesPolicies.Release, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Sales), nameof(UserRole.SalesManager), nameof(UserRole.Production)));
@@ -248,13 +250,13 @@ public static class SalesEndpoints
 
         g.MapPost("/", async (SalesOrderIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
-            var o = await svc.CreateOrderAsync(new SalesOrderInput(i.CustomerId, i.AddressId, i.Lines, i.CustomerPo, i.PaymentTermId, i.Freight, i.Notes), i.OverrideCredit && IsManager(user), Who(user), ct);
+            var o = await svc.CreateOrderAsync(new SalesOrderInput(i.CustomerId, i.AddressId, i.Lines, i.CustomerPo, i.PaymentTermId, i.Freight, i.Notes, i.Company, i.CustomPaymentTerm), i.OverrideCredit && IsManager(user), Who(user), ct);
             return Results.Created($"/api/sales/orders/{o.Id}", await LoadOrder(db, svc, o.Id, ct));
         }).RequireAuthorization(SalesPolicies.Sell);
 
         g.MapPut("/{id:int}", async (int id, SalesOrderIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
-            await svc.UpdateOrderAsync(id, new SalesOrderInput(i.CustomerId, i.AddressId, i.Lines, i.CustomerPo, i.PaymentTermId, i.Freight, i.Notes), Who(user), ct);
+            await svc.UpdateOrderAsync(id, new SalesOrderInput(i.CustomerId, i.AddressId, i.Lines, i.CustomerPo, i.PaymentTermId, i.Freight, i.Notes, i.Company, i.CustomPaymentTerm), Who(user), ct);
             return Results.Ok(await LoadOrder(db, svc, id, ct));
         }).RequireAuthorization(SalesPolicies.Sell);
 
@@ -424,7 +426,7 @@ public static class SalesEndpoints
         var lines = q.Lines.OrderBy(l => l.Sequence).Select(l => new QuoteLineOut(l.Id, l.Sequence, l.ProductId, l.Product!.Code, l.CustomerPartNumber, l.Description, l.Quantity, l.Unit, l.UnitPrice, l.ListPrice,
             l.ListPrice is > 0 ? Math.Round((1 - l.UnitPrice / l.ListPrice.Value) * 100m, 2) : null, l.IpiPercent, l.IcmsPercent, l.LeadTimeDays, l.DeliveryDate, Math.Round(l.Quantity * l.UnitPrice, 2))).ToList();
         return new QuoteOut(q.Id, q.Number, q.Revision, q.Reference, q.CustomerId, q.Customer!.Name, q.AddressId, q.Address is null ? null : AddressText(q.Address), q.ContactName, q.ContactEmail, q.CustomerReference,
-            q.PaymentTermId, q.PaymentTerm?.Name, q.Freight, q.ValidityDays, q.ValidUntil, q.Conditions, q.Notes, q.Status, q.NeedsApproval, q.ApprovedBy, q.ApprovedAt, q.SentAt, q.SentTo, q.DecidedAt, q.DecisionBy, q.DecisionNote,
+            q.PaymentTermId, q.PaymentTerm?.Name, q.CustomPaymentTerm, q.Freight, q.ValidityDays, q.ValidUntil, q.Conditions, q.Notes, q.Status, q.NeedsApproval, q.ApprovedBy, q.ApprovedAt, q.SentAt, q.SentTo, q.DecidedAt, q.DecisionBy, q.DecisionNote,
             q.CustomerPo, q.SalesOrderId, order, q.CreatedBy, q.CreatedAt, SalesService.Totals(q), lines, await History(db, SalesRecordKind.Quote, id, ct));
     }
 
@@ -441,7 +443,7 @@ public static class SalesEndpoints
         var totals = SalesService.Totals(o.Lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, (decimal?)null)));
         var credit = await svc.CreditAsync(o.CustomerId, o.PaymentTermId, 0m, null, ct);
         var deliveries = await db.Deliveries.AsNoTracking().Where(d => d.OrderId == id).OrderBy(d => d.Number).Select(DeliverySummary).ToListAsync(ct);
-        return new SalesOrderOut(o.Id, o.Number, o.Reference, o.CustomerId, o.Customer!.Name, o.AddressId, AddressText(o.Address), o.CustomerPo, o.PaymentTermId, o.PaymentTerm?.Name, o.Freight, o.Status, o.StatusReason, o.Notes,
+        return new SalesOrderOut(o.Id, o.Number, o.Reference, o.CustomerId, o.Customer!.Name, o.AddressId, AddressText(o.Address), o.CustomerPo, o.PaymentTermId, o.PaymentTerm?.Name, o.CustomPaymentTerm, o.Freight, o.Status, o.StatusReason, o.Notes,
             o.QuoteId, o.Quote?.Reference, o.CreatedBy, o.CreatedAt, o.ReleasedBy, o.ReleasedAt, totals.Products, totals.Ipi, totals.Total, progress?.Progress ?? 0, progress?.Ready ?? false, progress?.Late ?? false,
             credit, lines, deliveries, await History(db, SalesRecordKind.Order, id, ct));
     }

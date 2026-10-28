@@ -87,6 +87,7 @@ public partial class EbtDbContext
             e.HasIndex(x => x.QuoteId).IsUnique();
             e.Property(x => x.Reference).HasMaxLength(40);
             e.Property(x => x.CustomerPo).HasMaxLength(40);
+            e.Property(x => x.Company).HasMaxLength(10).HasDefaultValue("EBT");
             e.HasOne(x => x.Quote).WithMany().OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Customer).WithMany().OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Address).WithMany().OnDelete(DeleteBehavior.Restrict);

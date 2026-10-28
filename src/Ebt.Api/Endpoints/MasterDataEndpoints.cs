@@ -6,8 +6,9 @@ using static Ebt.Api.Infrastructure.Crud;
 
 namespace Ebt.Api.Endpoints;
 
-public record CustomerIn(string Name, string? TradeName, string? LegacyCode, ConsumerType ConsumerType, bool Active = true);
-public record CustomerOut(int Id, string Name, string? TradeName, string? LegacyCode, ConsumerType ConsumerType, bool Active, int AddressCount);
+public record CustomerCompany(string? Document, string? StateRegistration, bool IcmsContributor, string? Street, string? Number, string? Complement, string? District, string? City, string? Uf, string? ZipCode, string? Contact, string? Email, string? Phone, int? PaymentTermId = null, string? PaymentTermName = null);
+public record CustomerIn(string Name, string? TradeName, string? LegacyCode, ConsumerType ConsumerType, bool Active = true, CustomerAddressIn? Address = null, CustomerCompany? Company = null);
+public record CustomerOut(int Id, string Name, string? TradeName, string? LegacyCode, ConsumerType ConsumerType, bool Active, int AddressCount, CustomerAddressOut? DefaultAddress = null, CustomerCompany? Company = null);
 public record CustomerAddressIn(string Document, string Uf, string? LegacyCode, string? StateRegistration, bool IcmsContributor, string? Street, string? Number, string? Complement, string? District, string? City, string? CityIbgeCode, string? ZipCode, string? DefaultCfop, string? Buyer, string? Email, string? Phone);
 public record CustomerAddressOut(int Id, int CustomerId, string Document, string Uf, string? LegacyCode, string? StateRegistration, bool IcmsContributor, string? Street, string? Number, string? Complement, string? District, string? City, string? CityIbgeCode, string? ZipCode, string? DefaultCfop, string? Buyer, string? Email, string? Phone);
 
@@ -37,12 +38,44 @@ public static class MasterDataEndpoints
     {
         app.MapGroup("/api/customers").WithTags("Customers").MapCrud(new CrudSpec<Customer, CustomerIn, CustomerOut>
         {
-            Project = c => new CustomerOut(c.Id, c.Name, c.TradeName, c.LegacyCode, c.ConsumerType, c.Active, c.Addresses.Count),
-            Create = i => new Customer { Name = i.Name.Trim(), TradeName = Clean(i.TradeName), LegacyCode = Clean(i.LegacyCode), ConsumerType = i.ConsumerType, Active = i.Active },
-            Apply = (i, c) => { c.Name = i.Name.Trim(); c.TradeName = Clean(i.TradeName); c.LegacyCode = Clean(i.LegacyCode); c.ConsumerType = i.ConsumerType; c.Active = i.Active; },
-            Validate = (i, _, _) => Task.FromResult(Errors().Require(Has(i.Name), "name", "Required")),
-            Search = (q, s) => q.Where(c => EF.Functions.ILike(c.Name, $"%{s}%") || EF.Functions.ILike(c.TradeName ?? "", $"%{s}%") || c.LegacyCode == s),
+            // The default delivery address is the first one (legacy code, then id).
+            Project = c => new CustomerOut(c.Id, c.Name, c.TradeName, c.LegacyCode, c.ConsumerType, c.Active, c.Addresses.Count,
+                c.Addresses.OrderBy(a => a.LegacyCode).ThenBy(a => a.Id)
+                    .Select(a => new CustomerAddressOut(a.Id, a.CustomerId, a.Document, a.Uf, a.LegacyCode, a.StateRegistration, a.IcmsContributor, a.Street, a.Number, a.Complement, a.District, a.City, a.CityIbgeCode, a.ZipCode, a.DefaultCfop, a.Buyer, a.Email, a.Phone))
+                    .FirstOrDefault(),
+                new CustomerCompany(c.Document, c.StateRegistration, c.IcmsContributor, c.Street, c.Number, c.Complement, c.District, c.City, c.Uf, c.ZipCode, c.Contact, c.Email, c.Phone, c.DefaultPaymentTermId, c.DefaultPaymentTerm != null ? c.DefaultPaymentTerm.Name : null)),
+            Create = i =>
+            {
+                var c = new Customer { Name = i.Name.Trim(), TradeName = Clean(i.TradeName), LegacyCode = Clean(i.LegacyCode), ConsumerType = i.ConsumerType, Active = i.Active };
+                ApplyCompany(i.Company, c);
+                if (i.Address is { } ai)
+                {
+                    var a = new CustomerAddress { Document = "", Uf = "" };
+                    ApplyAddress(ai, a);
+                    c.Addresses.Add(a);
+                }
+                return c;
+            },
+            Apply = (i, c) => { c.Name = i.Name.Trim(); c.TradeName = Clean(i.TradeName); c.LegacyCode = Clean(i.LegacyCode); c.ConsumerType = i.ConsumerType; c.Active = i.Active; ApplyCompany(i.Company, c); },
+            Validate = async (i, db, ct) =>
+            {
+                var errors = Errors().Require(Has(i.Name), "name", "Required");
+                if (i.Company?.PaymentTermId is { } pt)
+                    errors.Require(await db.PaymentTerms.AnyAsync(p => p.Id == pt, ct), "company.paymentTermId", "Not found");
+                if (i.Company is { } co)
+                    errors.Require(!Has(co.Document) || Digits(co.Document, 11, 14), "company.document", "CPF (11) or CNPJ (14) digits")
+                        .Require(!Has(co.Uf) || co.Uf.Trim().Length == 2, "company.uf", "Two-letter state")
+                        .Require(!Has(co.ZipCode) || Digits(co.ZipCode, 8), "company.zipCode", "8 digits")
+                        .Require(!co.IcmsContributor || Has(co.StateRegistration), "company.stateRegistration", "Required for ICMS contributors");
+                if (i.Address is { } a)
+                    foreach (var (k, v) in ValidateAddress(a)) errors[$"address.{char.ToLowerInvariant(k[0])}{k[1..]}"] = v;
+                return errors;
+            },
+            Search = (q, s) => q.Where(c => EF.Functions.ILike(c.Name, $"%{s}%") || EF.Functions.ILike(c.TradeName ?? "", $"%{s}%") || c.LegacyCode == s
+                || (c.Document != null && c.Document.StartsWith(s.Replace(".", "").Replace("-", "").Replace("/", "")))),
+            Filter = (q, query) => query["active"] is { Count: > 0 } v && bool.TryParse(v[0], out var active) ? q.Where(c => c.Active == active) : q,
             Order = q => q.OrderBy(c => c.Name),
+            WritePolicy = SalesPolicies.Customers,
             BeforeDelete = async (id, db, ct) => await db.ProductCustomers.AnyAsync(pc => pc.CustomerId == id, ct) ? "Customer is linked to products" : null
         });
         MapCustomerAddresses(app);
@@ -165,6 +198,25 @@ public static class MasterDataEndpoints
         BeforeDelete = beforeDelete
     };
 
+    private static void ApplyCompany(CustomerCompany? i, Customer c)
+    {
+        if (i is null) return;
+        c.Document = Numeric(i.Document);
+        c.StateRegistration = Clean(i.StateRegistration);
+        c.IcmsContributor = i.IcmsContributor;
+        c.Street = Clean(i.Street);
+        c.Number = Clean(i.Number);
+        c.Complement = Clean(i.Complement);
+        c.District = Clean(i.District);
+        c.City = Clean(i.City);
+        c.Uf = Clean(i.Uf)?.ToUpper();
+        c.ZipCode = Numeric(i.ZipCode);
+        c.Contact = Clean(i.Contact);
+        c.Email = Clean(i.Email);
+        c.Phone = Clean(i.Phone);
+        c.DefaultPaymentTermId = i.PaymentTermId;
+    }
+
     private static void MapCustomerAddresses(WebApplication app)
     {
         var g = app.MapGroup("/api/customers/{customerId:int}/addresses").WithTags("Customers");
@@ -183,7 +235,7 @@ public static class MasterDataEndpoints
             db.CustomerAddresses.Add(a);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/customers/{customerId}/addresses/{a.Id}", ToOut(a));
-        }).RequireAuthorization(Policies.Write);
+        }).RequireAuthorization(SalesPolicies.Customers);
 
         g.MapPut("/{id:int}", async (int customerId, int id, CustomerAddressIn i, EbtDbContext db, CancellationToken ct) =>
         {
@@ -194,13 +246,13 @@ public static class MasterDataEndpoints
             ApplyAddress(i, a);
             await db.SaveChangesAsync(ct);
             return Results.Ok(ToOut(a));
-        }).RequireAuthorization(Policies.Write);
+        }).RequireAuthorization(SalesPolicies.Customers);
 
         g.MapDelete("/{id:int}", async (int customerId, int id, EbtDbContext db, CancellationToken ct) =>
         {
             var deleted = await db.CustomerAddresses.Where(x => x.Id == id && x.CustomerId == customerId).ExecuteDeleteAsync(ct);
             return deleted == 0 ? Results.NotFound() : Results.NoContent();
-        }).RequireAuthorization(Policies.Write);
+        }).RequireAuthorization(SalesPolicies.Customers);
     }
 
     private static Dictionary<string, string[]> ValidateAddress(CustomerAddressIn i) => Errors()

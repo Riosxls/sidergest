@@ -26,6 +26,13 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
             .OrderBy(p => p.CustomerId == null).ThenByDescending(p => p.ValidFrom)
             .FirstOrDefaultAsync(ct);
 
+    public static string CompanyOf(string? company) => Clean(company)?.ToUpperInvariant() switch
+    {
+        null or "EBT" => "EBT",
+        "BST" => "BST",
+        _ => throw SalesException.Invalid("company", "EBT or BST")
+    };
+
     public static QuoteTotals Totals(IEnumerable<(decimal Qty, decimal Price, decimal Ipi, decimal? List)> lines)
     {
         var list = lines.ToList();
@@ -211,7 +218,7 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
             var today = Today();
             var lines = q.Lines.OrderBy(l => l.Sequence).Select(l => new SalesLineInput(l.ProductId, l.Quantity, l.UnitPrice, l.IpiPercent, l.IcmsPercent, l.LeadTimeDays,
                 l.DeliveryDate ?? (l.LeadTimeDays is { } d ? today.AddDays(d) : null), l.Description)).ToList();
-            var order = await CreateOrderCoreAsync(new SalesOrderInput(q.CustomerId, addressId, lines, Clean(i.CustomerPo) ?? q.CustomerPo, q.PaymentTermId, q.Freight, q.Notes), q, i.OverrideCredit && mayOverrideCredit, user, ct);
+            var order = await CreateOrderCoreAsync(new SalesOrderInput(q.CustomerId, addressId, lines, Clean(i.CustomerPo) ?? q.CustomerPo, q.PaymentTermId, q.Freight, q.Notes, null, q.CustomPaymentTerm), q, i.OverrideCredit && mayOverrideCredit, user, ct);
             var from = q.Status;
             q.Status = QuoteStatus.Converted;
             q.SalesOrderId = order.Id;
@@ -236,7 +243,7 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
         var order = new SalesOrder
         {
             Number = number, Reference = OrderReference(number), QuoteId = quote?.Id, CustomerId = i.CustomerId, AddressId = i.AddressId, CustomerPo = Clean(i.CustomerPo),
-            PaymentTermId = i.PaymentTermId, Freight = i.Freight, Notes = Clean(i.Notes), Status = SalesOrderStatus.Created, CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow,
+            PaymentTermId = i.PaymentTermId, CustomPaymentTerm = Clean(i.CustomPaymentTerm), Freight = i.Freight, Notes = Clean(i.Notes), Company = CompanyOf(i.Company), Status = SalesOrderStatus.Created, CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow,
             Lines = lines.Select((l, n) => new SalesOrderLine
             {
                 Sequence = (n + 1) * 10, ProductId = l.ProductId, CustomerPartNumber = l.CustomerPartNumber, Description = l.Description, Quantity = l.Quantity, Unit = l.Unit,
@@ -263,7 +270,9 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
             var today = Today();
             o.AddressId = i.AddressId;
             o.CustomerPo = Clean(i.CustomerPo);
+            if (i.Company is not null) o.Company = CompanyOf(i.Company);
             o.PaymentTermId = i.PaymentTermId;
+            o.CustomPaymentTerm = Clean(i.CustomPaymentTerm);
             o.Freight = i.Freight;
             o.Notes = Clean(i.Notes);
             db.SalesOrderLines.RemoveRange(o.Lines);
@@ -594,6 +603,7 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
     {
         q.AddressId = i.AddressId;
         q.PaymentTermId = i.PaymentTermId;
+        q.CustomPaymentTerm = Clean(i.CustomPaymentTerm);
         q.Freight = i.Freight;
         q.ContactName = Clean(i.ContactName);
         q.ContactEmail = Clean(i.ContactEmail);
