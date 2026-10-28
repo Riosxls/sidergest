@@ -160,6 +160,23 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     super.dispose();
   }
 
+  String? _termName;
+
+  /// Pre-fills the prazo with the customer's default when the user has not picked one yet.
+  Future<void> _applyDefaultTerm(int customerId) async {
+    if (_termId != null || _customTerm != null) return;
+    try {
+      final c = await api.get('/api/customers/$customerId') as Map<String, dynamic>;
+      final company = c['company'] as Map<String, dynamic>?;
+      final termId = company?['paymentTermId'] as int?;
+      if (!mounted || termId == null || _termId != null || _customTerm != null || _customerId != customerId) return;
+      setState(() {
+        _termId = termId;
+        _termName = company?['paymentTermName'] as String?;
+      });
+    } catch (_) {}
+  }
+
   Future<void> _loadAddresses(int customerId, {bool keep = false}) async {
     try {
       final r = await api.get('/api/customers/$customerId/addresses');
@@ -256,14 +273,17 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
                     label: 'Cliente *',
                     value: _customerId,
                     initialDisplay: widget.quote?['customerName'] as String?,
-                    enabled: widget.quote == null,
+                    enabled: widget.quote == null || !widget.asOrder, // an order keeps its customer; a draft quote can change it
                     onChanged: (id, _) {
                       setState(() {
                         _customerId = id;
                         _addresses = [];
                         _addressId = null;
                       });
-                      if (id != null) _loadAddresses(id);
+                      if (id != null) {
+                        _loadAddresses(id);
+                        _applyDefaultTerm(id);
+                      }
                     },
                   ),
                 ),
@@ -305,13 +325,15 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
                           child: Text(_customTerm!, overflow: TextOverflow.ellipsis),
                         )
                       : LookupField(
+                          key: ValueKey('quote-term-$_termId'),
                           api: api,
                           spec: const LookupSpec('/api/sales/payment-terms'),
                           label: 'Prazo *',
                           value: _termId,
-                          initialDisplay: widget.quote?['paymentTermName'] as String?,
+                          initialDisplay: _termName ?? widget.quote?['paymentTermName'] as String?,
                           onChanged: (id, _) => setState(() {
                             _termId = id;
+                            _termName = null;
                             if (id != null) _customTerm = null;
                           }),
                           onCustom: (text) => setState(() {
