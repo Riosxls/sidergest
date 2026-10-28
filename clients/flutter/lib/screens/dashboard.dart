@@ -595,7 +595,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          _Grid(minColumn: 200, balanced: true, items: [for (final c in cards) _GridItem.sized(c, _ModuleCard.height)]),
+          _Grid(minColumn: 220, balanced: true, items: [for (final c in cards) _GridItem.sized(c, _ModuleCard.height)]),
         ],
       );
     },
@@ -863,7 +863,11 @@ class _ModuleCard extends StatelessWidget {
                     Icon(info.icon, size: 28, color: cs.primary),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(info.title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(info.title, maxLines: 1, softWrap: false, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+                      ),
                     ),
                     if (badge > 0)
                       Tooltip(
