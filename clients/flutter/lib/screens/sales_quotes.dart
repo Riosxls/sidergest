@@ -170,7 +170,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
 
   Future<void> _save() async {
     if (_customerId == null) return setState(() => _message = 'Informe o cliente');
-    if (_termId == null) return setState(() => _message = 'Informe a condição de pagamento');
+    if (_termId == null) return setState(() => _message = 'Informe o prazo');
     if (_lines.isEmpty) return setState(() => _message = 'Inclua ao menos um item');
     if (widget.asOrder && _addressId == null) return setState(() => _message = 'O cliente precisa de um endereço de entrega cadastrado');
     setState(() {
@@ -278,7 +278,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
                   child: LookupField(
                     api: api,
                     spec: const LookupSpec('/api/sales/payment-terms'),
-                    label: 'Condição de pagamento *',
+                    label: 'Prazo *',
                     value: _termId,
                     initialDisplay: widget.quote?['paymentTermName'] as String?,
                     onChanged: (id, _) => setState(() => _termId = id),
@@ -531,7 +531,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ..writeln('Cliente: ${q['customerName']}')
       ..writeln(q['contactName'] == null ? '' : 'A/C: ${q['contactName']}')
       ..writeln(q['customerReference'] == null ? '' : 'Sua referência: ${q['customerReference']}')
-      ..writeln('Condição de pagamento: ${q['paymentTermName'] ?? 'a combinar'} · Frete: ${freightTerms[q['freight']] ?? q['freight']}')
+      ..writeln('Prazo: ${q['paymentTermName'] ?? 'a combinar'} · Frete: ${freightTerms[q['freight']] ?? q['freight']}')
       ..writeln()
       ..writeln('Item  Produto  Descrição  Qtd  Un  Vl. unit.  IPI%  Vl. total  Entrega');
     for (final l in (q['lines'] as List).cast<Map<String, dynamic>>()) {
@@ -721,7 +721,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
             ('Cliente', '${q['customerName']}'),
             ('Contato', [q['contactName'], q['contactEmail']].whereType<String>().join(' · ')),
             ('Validade', q['validUntil'] != null ? fmtDay(q['validUntil']) : '${q['validityDays']} dias após envio'),
-            ('Pagamento', fmt(q['paymentTermName'])),
+            ('Prazo', fmt(q['paymentTermName'])),
             ('Frete', freightTerms[q['freight']] ?? fmt(q['freight'])),
             ('Ref. do cliente', fmt(q['customerReference'])),
             ('Pedido do cliente', fmt(q['customerPo'])),

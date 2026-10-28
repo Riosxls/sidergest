@@ -479,8 +479,8 @@ final holidays = EntitySpec(
 final productionMasters = [employees, shifts, occurrences, holidays];
 
 final paymentTerms = EntitySpec(
-  title: 'Condições de pagamento',
-  singular: 'Condição de pagamento',
+  title: 'Prazos',
+  singular: 'Prazo',
   path: '/api/sales/payment-terms',
   icon: Icons.payments_outlined,
   fields: const [

@@ -275,7 +275,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
           fields: [
             ('Cliente', '${o['customerName']}'),
             ('Pedido do cliente', fmt(o['customerPo'])),
-            ('Pagamento', fmt(o['paymentTermName'])),
+            ('Prazo', fmt(o['paymentTermName'])),
             ('Frete', freightTerms[o['freight']] ?? fmt(o['freight'])),
             ('Orçamento', fmt(o['quoteReference'])),
             ('Crédito', credit['limit'] == null ? 'Sem limite' : '${fmtMoney(credit['open'])} em aberto de ${fmtMoney(credit['limit'])}'),
