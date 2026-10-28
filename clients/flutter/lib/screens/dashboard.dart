@@ -781,7 +781,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
-            child: Center(
+            child: Align(
+              alignment: Alignment.topCenter,
+              heightFactor: 1,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: _maxWidth),
                 child: module == null ? _painel() : _module(module),
