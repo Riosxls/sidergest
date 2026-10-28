@@ -98,8 +98,6 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       fields: [
         FieldSpec('date', 'Data de saída', type: FieldType.date, required: true, defaultValue: isoDate(DateTime.now())),
         const FieldSpec('invoiceNumber', 'Nº da NF', hint: 'Até o Faturamento entrar, informe a NF emitida'),
-        FieldSpec('carrier', 'Transportadora', defaultValue: d['carrier']),
-        const FieldSpec('vehiclePlate', 'Placa do veículo'),
         FieldSpec('grossWeightKg', 'Peso bruto (kg)', type: FieldType.decimal, defaultValue: d['grossWeightKg']),
       ],
       submit: (b) => api.post('$base/ship', b),

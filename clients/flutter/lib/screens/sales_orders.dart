@@ -436,7 +436,6 @@ class _DeliveryDialog extends StatefulWidget {
 
 class _DeliveryDialogState extends State<_DeliveryDialog> {
   late final _date = TextEditingController(text: fmtDay(isoDate(DateTime.now())));
-  final _carrier = TextEditingController();
   final _notes = TextEditingController();
   late final _qty = {
     for (final l in widget.lines)
@@ -450,7 +449,7 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
 
   @override
   void dispose() {
-    for (final c in [_date, _carrier, _notes, ..._qty.values]) {
+    for (final c in [_date, _notes, ..._qty.values]) {
       c.dispose();
     }
     super.dispose();
@@ -466,7 +465,6 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
     if (lines.isEmpty) return setState(() => _error = 'Informe a quantidade de ao menos um item');
     Navigator.pop(context, {
       'plannedDate': date,
-      'carrier': _carrier.text.trim().isEmpty ? null : _carrier.text.trim(),
       'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       'lines': lines,
     });
@@ -488,13 +486,6 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
                   child: TextField(
                     controller: _date,
                     decoration: const InputDecoration(labelText: 'Data *', border: OutlineInputBorder(), isDense: true),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _carrier,
-                    decoration: const InputDecoration(labelText: 'Transportadora', border: OutlineInputBorder(), isDense: true),
                   ),
                 ),
               ],
