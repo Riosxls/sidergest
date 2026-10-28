@@ -190,6 +190,15 @@ class _ShellState extends State<Shell> {
 
   NavItem get _item => _items.firstWhere((i) => i.id == _current);
 
+  /// Back target: sub-screens go to their module page, module pages to the Painel.
+  String get _parent {
+    final item = _item;
+    for (final m in moduleInfos) {
+      if (item.section == m.title) return m.navId;
+    }
+    return 'dashboard';
+  }
+
   Widget _railItem(NavItem d, ColorScheme cs, VoidCallback tap) {
     final active = d.id == _current || (d.id == 'dashboard' && _current.startsWith('module-'));
     return Tooltip(
@@ -288,13 +297,23 @@ class _ShellState extends State<Shell> {
     final page = KeyedSubtree(key: ValueKey('$_current/$_filter'), child: _item.build(s, _filter, _go));
     return Scaffold(
       appBar: AppBar(
-        leading: wide
-            ? IconButton(
+        automaticallyImplyLeading: false,
+        leadingWidth: _current == 'dashboard' ? 56 : 104,
+        leading: Row(
+          children: [
+            if (_current != 'dashboard') IconButton(tooltip: 'Voltar', onPressed: () => _go(_parent), icon: const Icon(Icons.arrow_back)),
+            if (wide)
+              IconButton(
                 tooltip: _collapsed ? 'Expandir menu' : 'Recolher menu',
                 onPressed: _toggleCollapsed,
                 icon: Icon(_collapsed ? Icons.menu : Icons.menu_open),
               )
-            : null,
+            else
+              Builder(
+                builder: (ctx) => IconButton(tooltip: 'Menu', onPressed: () => Scaffold.of(ctx).openDrawer(), icon: const Icon(Icons.menu)),
+              ),
+          ],
+        ),
         title: Text(_item.title),
         actions: [
           SearchLauncher(onOpen: _openPalette, compact: !wide),

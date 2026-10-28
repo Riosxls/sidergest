@@ -569,6 +569,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _onboarding(d),
+          if (quickActionsFor(widget.session).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final a in quickActionsFor(widget.session))
+                    FilledButton.tonalIcon(onPressed: () => a.run(context).then((_) => _refresh()), icon: Icon(a.icon), label: Text(a.label)),
+                ],
+              ),
+            ),
           _heading(
             'Módulos',
             trailing: Row(
@@ -684,7 +696,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context, snap) {
         final header = Row(
           children: [
-            IconButton(tooltip: 'Voltar ao Painel', onPressed: _go('dashboard'), icon: const Icon(Icons.arrow_back)),
             Icon(m.icon, color: theme.colorScheme.primary),
             const SizedBox(width: 8),
             Expanded(

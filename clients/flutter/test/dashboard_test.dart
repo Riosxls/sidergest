@@ -134,7 +134,7 @@ void main() {
     expect(find.text('Propostas pendentes'), findsOneWidget);
     expect(find.text('Entregas atrasadas'), findsOneWidget);
     expect(log.every((r) => r.url.path.startsWith('/api/sales')), isTrue);
-    await tester.tap(find.byTooltip('Voltar ao Painel'));
+    await tester.tap(find.byTooltip('Voltar'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('module-card-stock')), findsOneWidget);
   });
@@ -154,7 +154,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('module-card-production')));
     await tester.pumpAndSettle();
     expect(find.text('Nova OF'), findsOneWidget);
-    await tester.tap(find.byTooltip('Voltar ao Painel'));
+    await tester.tap(find.byTooltip('Voltar'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('module-card-purchasing')));
     await tester.pumpAndSettle();
@@ -169,7 +169,7 @@ void main() {
     for (final l in ['Nova requisição', 'Novo pedido']) {
       expect(find.text(l), findsOneWidget);
     }
-    await tester.tap(find.byTooltip('Voltar ao Painel'));
+    await tester.tap(find.byTooltip('Voltar'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('module-card-production')));
     await tester.pumpAndSettle();
