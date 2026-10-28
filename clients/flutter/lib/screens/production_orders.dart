@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
+import '../reports/print_docs.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
@@ -328,6 +329,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
       if (s.canProduce && status == 'Created') PopupMenuItem(value: _delete, child: const Text('Excluir')),
     ];
     return [
+      if (_o != null) PrintButton(name: 'Ordem de fabricação ${_o!['reference']}', builder: () => buildProductionOrderPdf(s.api, _o!)),
       if (s.canProduce && status == 'Created')
         TextButton.icon(key: const ValueKey('of-release'), onPressed: _release, icon: const Icon(Icons.play_arrow), label: const Text('Liberar')),
       if (s.canProduce && status == 'Stopped')
