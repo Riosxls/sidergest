@@ -537,16 +537,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   List<_ModuleCard> _cards(List<Object?> d) {
     final alerts = _alerts(d);
-    int badge(String m) => alerts.where((a) => a.module == m).fold(0, (n, a) => n + a.count);
+    List<_Alert> alertsOf(String m) => alerts.where((a) => a.module == m).toList();
     final e = _e(d), s = _s(d), p = _p(d), o = _o(d), c = _c(d);
     return [
       for (final m in moduleInfos)
         switch (m.id) {
-          'sales' => _ModuleCard(m, c?.openOrders, 'pedidos abertos', badge(m.id), _go(m.navId)),
-          'engineering' => _ModuleCard(m, e == null ? null : e.products.length - e.blocked.length, 'produtos ativos', badge(m.id), _go(m.navId)),
-          'stock' => _ModuleCard(m, s?.belowMinimum.length, 'itens abaixo do mínimo', badge(m.id), _go(m.navId)),
-          'purchasing' => _ModuleCard(m, p?.openOrders, 'OCs pendentes', badge(m.id), _go(m.navId)),
-          _ => _ModuleCard(m, o?.count('InProduction'), 'OFs em produção', badge(m.id), _go(m.navId)),
+          'sales' => _ModuleCard(m, c?.openOrders, 'pedidos abertos', alertsOf(m.id), _go(m.navId)),
+          'engineering' => _ModuleCard(m, e == null ? null : e.products.length - e.blocked.length, 'produtos ativos', alertsOf(m.id), _go(m.navId)),
+          'stock' => _ModuleCard(m, s?.belowMinimum.length, 'itens abaixo do mínimo', alertsOf(m.id), _go(m.navId)),
+          'purchasing' => _ModuleCard(m, p?.openOrders, 'OCs pendentes', alertsOf(m.id), _go(m.navId)),
+          _ => _ModuleCard(m, o?.count('InProduction'), 'OFs em produção', alertsOf(m.id), _go(m.navId)),
         },
     ];
   }
@@ -571,13 +571,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _onboarding(d),
           if (quickActionsFor(widget.session).isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.only(bottom: 12),
               child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 12,
+                runSpacing: 12,
                 children: [
                   for (final a in quickActionsFor(widget.session))
-                    FilledButton.tonalIcon(onPressed: () => a.run(context).then((_) => _refresh()), icon: Icon(a.icon), label: Text(a.label)),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(minimumSize: const Size(0, 52), padding: const EdgeInsets.symmetric(horizontal: 22)),
+                      onPressed: () => a.run(context).then((_) => _refresh()),
+                      icon: Icon(a.icon),
+                      label: Text(a.label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    ),
                 ],
               ),
             ),
@@ -590,7 +595,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          _Grid(minColumn: 260, items: [for (final c in cards) _GridItem.sized(c, _ModuleCard.height)]),
+          _Grid(minColumn: 200, balanced: true, items: [for (final c in cards) _GridItem.sized(c, _ModuleCard.height)]),
         ],
       );
     },
@@ -723,13 +728,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           } else {
             final alerts = _alerts(d).where((a) => a.module == m.id).toList();
             body.addAll([
-              _heading('Atenção'),
-              alerts.isEmpty
-                  ? const _Notice(icon: Icons.check_circle_outline, title: 'Nada pendente', subtitle: 'Nenhum alerta neste módulo.')
-                  : _Grid(
-                      items: [for (final a in alerts) _GridItem(_Tile(icon: a.icon, label: a.label, value: '${a.count}', alert: true, onTap: a.onTap))],
-                    ),
-              const SizedBox(height: 16),
+              if (alerts.isNotEmpty) ...[
+                _heading('Atenção'),
+                _Grid(
+                  items: [for (final a in alerts) _GridItem(_Tile(icon: a.icon, label: a.label, value: '${a.count}', alert: true, onTap: a.onTap))],
+                ),
+                const SizedBox(height: 16),
+              ],
               _heading('Indicadores'),
               _Grid(items: _kpis(m.id, d)),
             ]);
@@ -780,7 +785,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           onRefresh: _refresh,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 32, 16),
             child: Align(
               alignment: Alignment.topCenter,
               heightFactor: 1,
@@ -817,20 +822,25 @@ class _Alert {
 }
 
 class _ModuleCard extends StatelessWidget {
-  const _ModuleCard(this.info, this.metric, this.metricLabel, this.badge, this.onTap);
+  const _ModuleCard(this.info, this.metric, this.metricLabel, this.alerts, this.onTap);
 
   static const height = 160.0;
 
   final ModuleInfo info;
   final int? metric;
   final String metricLabel;
-  final int badge;
+  final List<_Alert> alerts;
   final void Function()? onTap;
+
+  int get badge => alerts.fold(0, (n, a) => n + a.count);
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final alertText = alerts.isEmpty
+        ? null
+        : alerts.take(2).map((a) => '${a.count} ${a.label.toLowerCase()}').join(' · ') + (alerts.length > 2 ? ' · +${alerts.length - 2}' : '');
     return Semantics(
       button: true,
       label: '${info.title}: ${metric ?? 'indisponível'} $metricLabel',
@@ -856,13 +866,16 @@ class _ModuleCard extends StatelessWidget {
                       child: Text(info.title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
                     ),
                     if (badge > 0)
-                      Container(
-                        key: ValueKey('module-badge-${info.id}'),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(12)),
-                        child: Text(
-                          '$badge',
-                          style: TextStyle(color: cs.onErrorContainer, fontWeight: FontWeight.w600),
+                      Tooltip(
+                        message: alerts.map((a) => '${a.count} ${a.label.toLowerCase()}').join('\n'),
+                        child: Container(
+                          key: ValueKey('module-badge-${info.id}'),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(12)),
+                          child: Text(
+                            '$badge',
+                            style: TextStyle(color: cs.onErrorContainer, fontWeight: FontWeight.w600),
+                          ),
                         ),
                       ),
                     const SizedBox(width: 4),
@@ -889,6 +902,11 @@ class _ModuleCard extends StatelessWidget {
                                   ),
                                 ),
                                 Text(metricLabel, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                                if (alertText != null)
+                                  Text(
+                                    alertText,
+                                    style: theme.textTheme.bodySmall?.copyWith(color: cs.error, fontWeight: FontWeight.w600),
+                                  ),
                               ],
                             ),
                           ),
@@ -914,17 +932,35 @@ class _GridItem {
 }
 
 class _Grid extends StatelessWidget {
-  const _Grid({required this.items, this.minColumn = 180});
+  const _Grid({required this.items, this.minColumn = 180, this.balanced = false});
 
   static const gap = 12.0;
 
   final double minColumn;
+  final bool balanced;
   final List<_GridItem> items;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, c) {
-      final cols = math.max(1, ((c.maxWidth + gap) / (minColumn + gap)).floor());
+      var cols = math.max(1, ((c.maxWidth + gap) / (minColumn + gap)).floor());
+      if (balanced && items.isNotEmpty) {
+        // Avoid an orphan card on the last row: pick the column count that fills it best.
+        if (cols >= items.length) {
+          cols = items.length;
+        } else {
+          var best = cols, bestFill = -1.0;
+          for (var k = cols; k >= 2; k--) {
+            final rem = items.length % k;
+            final fill = rem == 0 ? 1.0 : rem / k;
+            if (fill > bestFill) {
+              best = k;
+              bestFill = fill;
+            }
+          }
+          cols = best;
+        }
+      }
       final colWidth = (c.maxWidth - gap * (cols - 1)) / cols;
       return Wrap(
         spacing: gap,
