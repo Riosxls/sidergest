@@ -186,9 +186,10 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
         _addresses = list;
         if (!keep || !list.any((a) => a['id'] == _addressId)) _addressId = list.isEmpty ? null : list.first['id'] as int;
         final first = list.isEmpty ? null : list.firstWhere((a) => a['id'] == _addressId, orElse: () => list.first);
-        if (!keep && first != null) {
-          if (_contact.text.isEmpty) _contact.text = '${first['buyer'] ?? ''}';
-          if (_email.text.isEmpty) _email.text = '${first['email'] ?? ''}';
+        if (!keep) {
+          // A new customer replaces the previous customer's contact details.
+          _contact.text = '${first?['buyer'] ?? ''}';
+          _email.text = '${first?['email'] ?? ''}';
         }
       });
     } catch (_) {}
@@ -562,7 +563,10 @@ class _QuoteScreenState extends State<QuoteScreen> {
         builder: (_) => QuoteEditorScreen(session: s, quote: _q),
       ),
     );
-    if (r != null) setState(() => _q = r);
+    if (r != null) {
+      setState(() => _q = r);
+      await _load();
+    }
   }
 
   Future<void> _delete() async {
