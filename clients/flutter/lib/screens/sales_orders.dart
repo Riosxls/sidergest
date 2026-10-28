@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
+import '../reports/print_docs.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
@@ -248,7 +249,10 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(o == null ? 'Pedido de venda' : '${o['reference']} · ${o['customerName']}', overflow: TextOverflow.ellipsis),
-        actions: [if (menu.isNotEmpty) PopupMenuButton<VoidCallback>(key: const ValueKey('order-menu'), onSelected: (f) => f(), itemBuilder: (_) => menu)],
+        actions: [
+          if (o != null) PrintButton(name: 'Pedido de venda ${o['reference']}', builder: () => buildSalesOrderPdf(api, o)),
+          if (menu.isNotEmpty) PopupMenuButton<VoidCallback>(key: const ValueKey('order-menu'), onSelected: (f) => f(), itemBuilder: (_) => menu),
+        ],
       ),
       body: _error != null && o == null
           ? Center(child: Text(_error!))
