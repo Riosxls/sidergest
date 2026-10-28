@@ -170,6 +170,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
 
   Future<void> _save() async {
     if (_customerId == null) return setState(() => _message = 'Informe o cliente');
+    if (_termId == null) return setState(() => _message = 'Informe a condição de pagamento');
     if (_lines.isEmpty) return setState(() => _message = 'Inclua ao menos um item');
     if (widget.asOrder && _addressId == null) return setState(() => _message = 'O cliente precisa de um endereço de entrega cadastrado');
     setState(() {
@@ -277,7 +278,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
                   child: LookupField(
                     api: api,
                     spec: const LookupSpec('/api/sales/payment-terms'),
-                    label: 'Condição de pagamento',
+                    label: 'Condição de pagamento *',
                     value: _termId,
                     initialDisplay: widget.quote?['paymentTermName'] as String?,
                     onChanged: (id, _) => setState(() => _termId = id),
@@ -345,6 +346,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
             fields: salesLineFields,
             newTitle: 'Criar orçamento',
             addLabel: 'Criar orçamento',
+            addEnabled: _customerId != null && _termId != null,
             editTitle: 'Editar orçamento',
             lines: _lines,
             onChanged: (l) => setState(() => _lines = l),
