@@ -41,7 +41,6 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
       col('Volumes', 'packages', numeric: true),
       col('Peso (kg)', 'grossWeightKg', numeric: true),
       col('NF', 'invoiceNumber'),
-      col('Transportadora', 'carrier'),
     ],
     rowColor: (ctx, e) => e['status'] == 'Planned' && isLate(e['plannedDate']) ? toneColors(ctx, Tone.danger).$1 : null,
     onTap: (e) async {
@@ -211,8 +210,6 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
             ('Volumes', fmt(d['packages'])),
             ('Peso bruto (kg)', fmt(d['grossWeightKg'])),
             ('NF', fmt(d['invoiceNumber'])),
-            ('Transportadora', fmt(d['carrier'])),
-            ('Placa', fmt(d['vehiclePlate'])),
           ],
         ),
         gap,

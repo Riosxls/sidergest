@@ -331,7 +331,6 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
               labelCol('Situação', 'status', deliveryStatuses),
               col('NF', 'invoiceNumber'),
               col('Volumes', 'packages', numeric: true),
-              col('Transportadora', 'carrier'),
             ],
             rows: deliveries,
             actions: (d) => [
