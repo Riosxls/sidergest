@@ -25,12 +25,16 @@ const salesLineFields = [
 final salesLineColumns = [
   ColumnSpec('Produto', (e) => lbl(e, 'productId')),
   ColumnSpec('Quantidade', (e) => fmt(e['quantity']), numeric: true),
-  ColumnSpec('Preço', (e) => e['unitPrice'] == null ? 'tabela' : fmtNum(e['unitPrice'], 4), numeric: true),
+  ColumnSpec('Preço Unitário', (e) => e['unitPrice'] == null ? 'tabela' : fmtMoney(e['unitPrice']), numeric: true),
   ColumnSpec('IPI %', (e) => fmt(e['ipiPercent']), numeric: true),
+  ColumnSpec('Valor estimado', (e) => e['unitPrice'] == null ? '' : fmtMoney(lineEstimate(e)), numeric: true),
   ColumnSpec('Entrega', (e) => e['deliveryDate'] != null ? fmtDay(e['deliveryDate']) : (e['leadTimeDays'] != null ? '${e['leadTimeDays']} dias' : '')),
 ];
 
 num _n(Object? v) => v is num ? v : 0;
+
+/// Quantity × unit price, plus IPI when set (ICMS is already part of the price).
+num lineEstimate(Map<String, dynamic> l) => _n(l['quantity']) * _n(l['unitPrice']) * (1 + _n(l['ipiPercent']) / 100);
 
 class QuotesScreen extends StatefulWidget {
   const QuotesScreen({super.key, required this.session});
@@ -200,7 +204,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 700;
     final w = wide ? 300.0 : double.infinity;
-    final estimate = _lines.fold<num>(0, (a, l) => a + _n(l['quantity']) * _n(l['unitPrice']) * (1 + _n(l['ipiPercent']) / 100));
+    final estimate = _lines.fold<num>(0, (a, l) => a + lineEstimate(l));
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.quote != null ? 'Editar ${widget.quote!['reference']}' : (widget.asOrder ? 'Novo pedido de venda' : 'Novo orçamento comercial')),
@@ -734,7 +738,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
                   ColumnSpec('Produto', (e) => '${e['productCode']}${e['customerPartNumber'] == null ? '' : ' (${e['customerPartNumber']})'}'),
                   col('Descrição', 'description'),
                   ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
-                  ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
+                  ColumnSpec('Preço Unitário', (e) => fmtMoney(e['unitPrice']), numeric: true),
                   ColumnSpec('Tabela', (e) => e['listPrice'] == null ? '' : fmtNum(e['listPrice'], 4), numeric: true),
                   ColumnSpec('Desc. %', (e) => e['discountPercent'] == null || e['discountPercent'] == 0 ? '' : fmt(e['discountPercent']), numeric: true),
                   col('IPI %', 'ipiPercent', numeric: true),
