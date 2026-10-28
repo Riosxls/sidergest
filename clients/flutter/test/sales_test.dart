@@ -323,7 +323,7 @@ void main() {
   testWidgets('pipeline shows the stages and advances a sent proposal to accepted', (tester) async {
     final fake = SalesFake()..quoteStatus = 'Sent';
     await pumpScreen(tester, fake, (s) => SalesPipelineScreen(session: s));
-    expect(find.text('Propostas em aberto'), findsOneWidget);
+    expect(find.text('Orçamentos em aberto'), findsOneWidget);
     expect(find.text('50%'), findsOneWidget);
     expect(find.byKey(const ValueKey('stage-production')), findsOneWidget);
     expect(find.text('PROP 31'), findsOneWidget);

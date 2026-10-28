@@ -86,7 +86,7 @@ const salesOrderStatuses = {
 const deliveryStatuses = {'Planned': 'Programada', 'Shipped': 'Expedida', 'Delivered': 'Entregue', 'Cancelled': 'Cancelada'};
 const freightTerms = {'Cif': 'CIF (frete nosso)', 'Fob': 'FOB (frete do cliente)', 'CustomerPickup': 'Retira na fábrica'};
 const pipelineStages = {
-  'quote': 'Proposta',
+  'quote': 'Orçamento',
   'sent': 'Enviada',
   'accepted': 'Aceita',
   'order': 'Pedido',

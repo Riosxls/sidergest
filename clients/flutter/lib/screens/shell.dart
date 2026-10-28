@@ -59,7 +59,7 @@ List<NavItem> navItems() => [
       hidden: true,
     ),
   NavItem('sales-pipeline', Icons.view_kanban_outlined, 'Funil de vendas', 'Comercial', (s, f, go) => SalesPipelineScreen(session: s)),
-  NavItem('sales-quotes', Icons.request_quote_outlined, 'Propostas', 'Comercial', (s, f, go) => QuotesScreen(session: s)),
+  NavItem('sales-quotes', Icons.request_quote_outlined, 'Orçamentos', 'Comercial', (s, f, go) => QuotesScreen(session: s)),
   NavItem('sales-orders', Icons.receipt_long_outlined, 'Pedidos de venda', 'Comercial', (s, f, go) => SalesOrdersScreen(session: s)),
   NavItem('deliveries', Icons.local_shipping_outlined, 'Entregas', 'Comercial', (s, f, go) => DeliveriesScreen(session: s)),
   NavItem('report-material-consumption', Icons.scale_outlined, 'Consumo de material vendido', 'Comercial', (s, f, go) => MaterialConsumptionScreen(session: s)),
@@ -304,7 +304,7 @@ class _ShellState extends State<Shell> {
         leadingWidth: wide ? (_collapsed ? 72.0 : 248.0) : 56,
         leading: wide
             ? Align(
-                alignment: Alignment.centerLeft,
+                alignment: _collapsed ? Alignment.center : Alignment.centerLeft,
                 child: IconButton(
                   tooltip: _collapsed ? 'Expandir menu' : 'Recolher menu',
                   onPressed: _toggleCollapsed,

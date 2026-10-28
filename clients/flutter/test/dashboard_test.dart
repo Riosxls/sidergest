@@ -132,7 +132,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('module-card-sales')));
     await tester.pumpAndSettle();
     expect(find.text('Pedidos abertos'), findsOneWidget);
-    expect(find.text('Propostas pendentes'), findsOneWidget);
+    expect(find.text('Orçamentos pendentes'), findsOneWidget);
     expect(find.text('Entregas atrasadas'), findsOneWidget);
     expect(log.every((r) => r.url.path.startsWith('/api/sales')), isTrue);
     await tester.tap(find.byTooltip('Voltar'));

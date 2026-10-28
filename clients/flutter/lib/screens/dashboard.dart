@@ -365,7 +365,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return [
       if (c != null) ...[
         _Alert('sales', Icons.event_busy_outlined, 'Pedidos atrasados', c.lateOrders, 'sales-orders', null, _go('sales-orders')),
-        _Alert('sales', Icons.gavel_outlined, 'Propostas a aprovar', c.pendingApprovals, 'sales-quotes', null, _go('sales-quotes')),
+        _Alert('sales', Icons.gavel_outlined, 'Orçamentos a aprovar', c.pendingApprovals, 'sales-quotes', null, _go('sales-quotes')),
       ],
       if (o != null) ...[
         _Alert(
@@ -623,7 +623,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final c = _c(d)!;
         return [
           _GridItem(_Tile(icon: Icons.receipt_long_outlined, label: 'Pedidos abertos', value: '${c.openOrders}', onTap: _go('sales-orders'))),
-          _GridItem(_Tile(icon: Icons.request_quote_outlined, label: 'Propostas pendentes', value: '${c.openQuotes}', onTap: _go('sales-quotes'))),
+          _GridItem(_Tile(icon: Icons.request_quote_outlined, label: 'Orçamentos pendentes', value: '${c.openQuotes}', onTap: _go('sales-quotes'))),
           _GridItem(_Tile(icon: Icons.event_busy_outlined, label: 'Entregas atrasadas', value: '${c.lateOrders}', onTap: _go('sales-orders'))),
           _GridItem(_Tile(icon: Icons.local_shipping_outlined, label: 'Prontos para entregar', value: '${c.readyToShip}', onTap: _go('deliveries'))),
         ];
@@ -994,7 +994,7 @@ ShapeBorder _cardShape(BuildContext context) => RoundedRectangleBorder(
 class _Tile extends StatelessWidget {
   const _Tile({required this.icon, required this.label, required this.value, this.alert = false, this.onTap});
 
-  static const height = 104.0;
+  static const height = 124.0;
 
   final IconData icon;
   final String label;
@@ -1032,7 +1032,7 @@ class _Tile extends StatelessWidget {
                         message: label,
                         child: Text(
                           label,
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodyMedium?.copyWith(color: fg),
                         ),
@@ -1138,7 +1138,7 @@ class _BarPanel extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
                   children: [
-                    SizedBox(width: 120, child: Text(e.key, overflow: TextOverflow.ellipsis)),
+                    SizedBox(width: 160, child: Tooltip(message: e.key, child: Text(e.key, maxLines: 2, overflow: TextOverflow.ellipsis))),
                     Expanded(
                       child: Align(
                         alignment: Alignment.centerLeft,

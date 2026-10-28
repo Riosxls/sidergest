@@ -86,7 +86,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
           if (!await confirmStep(
             context,
             title: 'Aprovar desconto de $ref?',
-            message: 'A proposta fica liberada para envio ao cliente.',
+            message: 'O orçamento fica liberado para envio ao cliente.',
             confirmLabel: 'Aprovar',
           )) {
             return;
@@ -110,7 +110,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
           return;
         }
         call = api.post('/api/sales/quotes/$id/send', {'sentTo': q['contactEmail'] ?? q['contactName']});
-        success = approval ? 'Enviada para aprovação' : 'Proposta enviada ao cliente';
+        success = approval ? 'Enviada para aprovação' : 'Orçamento enviado ao cliente';
       case 'sent':
         if (!s.canSell) return;
         final po = await promptText(context, title: 'Cliente aprovou $ref', label: 'Nº do pedido de compra do cliente', confirmLabel: 'Registrar aprovação');
@@ -170,9 +170,9 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 KpiTile(
-                  label: 'Propostas em aberto',
+                  label: 'Orçamentos em aberto',
                   value: fmtMoney(k['openQuotesValue']),
-                  caption: '${k['openQuotes']} propostas',
+                  caption: '${k['openQuotes']} orçamentos',
                   icon: Icons.request_quote_outlined,
                 ),
                 KpiTile(
@@ -218,7 +218,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
                 ),
                 IconButton(tooltip: 'Atualizar', onPressed: _reload, icon: const Icon(Icons.refresh)),
                 if (s.canSell)
-                  FilledButton.icon(key: const ValueKey('pipeline-new'), onPressed: _new, icon: const Icon(Icons.add), label: const Text('Nova proposta')),
+                  FilledButton.icon(key: const ValueKey('pipeline-new'), onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo orçamento')),
                 Text('Arraste um cartão para a próxima etapa ou use a seta do cartão.', style: Theme.of(context).textTheme.bodySmall),
               ],
             ),

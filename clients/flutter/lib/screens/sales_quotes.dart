@@ -60,16 +60,16 @@ class _QuotesScreenState extends State<QuotesScreen> {
     api: widget.session.api,
     path: '/api/sales/quotes',
     query: {'status': _status, 'open': _open && _status == null ? true : null},
-    searchHint: 'Proposta, cliente ou referência do cliente',
+    searchHint: 'Orçamento, cliente ou referência do cliente',
     filters: [
       ChoiceFilter(label: 'Situação', value: _status, choices: quoteStatuses, onChanged: (v) => setState(() => _status = v)),
       FilterChip(label: const Text('Somente abertas'), selected: _open, onSelected: (v) => setState(() => _open = v)),
     ],
     fab: widget.session.canSell
-        ? FloatingActionButton.extended(heroTag: 'new-quote', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Nova proposta'))
+        ? FloatingActionButton.extended(heroTag: 'new-quote', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo orçamento'))
         : null,
     columns: [
-      col('Proposta', 'reference'),
+      col('Orçamento', 'reference'),
       col('Cliente', 'customerName'),
       labelCol('Situação', 'status', quoteStatuses),
       moneyCol('Total', 'total'),
@@ -203,7 +203,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     final estimate = _lines.fold<num>(0, (a, l) => a + _n(l['quantity']) * _n(l['unitPrice']) * (1 + _n(l['ipiPercent']) / 100));
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.quote != null ? 'Editar ${widget.quote!['reference']}' : (widget.asOrder ? 'Novo pedido de venda' : 'Nova proposta comercial')),
+        title: Text(widget.quote != null ? 'Editar ${widget.quote!['reference']}' : (widget.asOrder ? 'Novo pedido de venda' : 'Novo orçamento comercial')),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -410,7 +410,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         context,
         title: 'Enviar para aprovação?',
         message:
-            'O desconto desta proposta (${fmt(q['totals']['maxDiscountPercent'])}%) passa do limite de ${fmt(_maxDiscount)}%. Ela vai para o gerente comercial aprovar antes de seguir ao cliente.',
+            'O desconto deste orçamento (${fmt(q['totals']['maxDiscountPercent'])}%) passa do limite de ${fmt(_maxDiscount)}%. Ele vai para o gerente comercial aprovar antes de seguir ao cliente.',
         confirmLabel: 'Enviar para aprovação',
         icon: Icons.verified_user_outlined,
       );
@@ -429,7 +429,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     );
     if (r != null && r['reference'] != null) {
       setState(() => _q = r);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Proposta enviada · válida até ${fmtDay(r['validUntil'])}')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Orçamento enviado · válida até ${fmtDay(r['validUntil'])}')));
     }
   }
 
@@ -509,13 +509,13 @@ class _QuoteScreenState extends State<QuoteScreen> {
     final ok = await runAction(context, () async {
       await api.delete(base);
       return true;
-    }, success: 'Proposta excluída');
+    }, success: 'Orçamento excluído');
     if (ok == true && mounted) Navigator.pop(context);
   }
 
   String proposalText(Map<String, dynamic> q) {
     final b = StringBuffer()
-      ..writeln('PROPOSTA COMERCIAL ${q['reference']}')
+      ..writeln('ORÇAMENTO COMERCIAL ${q['reference']}')
       ..writeln('Cliente: ${q['customerName']}')
       ..writeln(q['contactName'] == null ? '' : 'A/C: ${q['contactName']}')
       ..writeln(q['customerReference'] == null ? '' : 'Sua referência: ${q['customerReference']}')
@@ -532,7 +532,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ..writeln()
       ..writeln('Total dos produtos: ${fmtMoney(t['products'])}')
       ..writeln('IPI: ${fmtMoney(t['ipi'])}')
-      ..writeln('Total da proposta: ${fmtMoney(t['total'])}')
+      ..writeln('Total do orçamento: ${fmtMoney(t['total'])}')
       ..writeln()
       ..writeln('Validade: ${q['validityDays']} dias${q['validUntil'] == null ? '' : ' (até ${fmtDay(q['validUntil'])})'}');
     if (q['conditions'] != null) b.writeln('Condições gerais: ${q['conditions']}');
@@ -544,7 +544,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     await showDialog<void>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text('Proposta ${_q!['reference']}'),
+        title: Text('Orçamento ${_q!['reference']}'),
         content: SizedBox(
           width: 720,
           child: SingleChildScrollView(
@@ -594,7 +594,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
               'quote-reject-approval',
               'Recusar',
               Icons.thumb_down_alt_outlined,
-              () => _reason('reject-approval', 'Recusar desconto', success: 'Proposta voltou para rascunho'),
+              () => _reason('reject-approval', 'Recusar desconto', success: 'Orçamento voltou para rascunho'),
             ),
         ],
       ),
@@ -625,7 +625,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ),
       'Converted' => NextStepCard(
         title: 'Convertida em pedido',
-        message: 'Esta proposta virou o pedido ${q['salesOrderReference'] ?? ''}.',
+        message: 'Este orçamento virou o pedido ${q['salesOrderReference'] ?? ''}.',
         tone: Tone.success,
         actions: [
           if (q['salesOrderId'] != null)
@@ -636,7 +636,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         title: st == 'Rejected' ? 'Recusada pelo cliente' : 'Validade expirada',
         message: q['decisionNote'] == null ? 'Revise preços e prazos e envie de novo.' : 'Motivo: ${q['decisionNote']}. Revise e envie de novo.',
         tone: Tone.danger,
-        actions: [if (sell) primary('quote-revise', 'Revisar proposta', Icons.edit, () => _act('revise', success: 'Nova revisão em rascunho'))],
+        actions: [if (sell) primary('quote-revise', 'Revisar orçamento', Icons.edit, () => _act('revise', success: 'Nova revisão em rascunho'))],
       ),
       _ => NextStepCard(title: 'Cancelada', message: '${q['decisionNote'] ?? ''}', tone: Tone.danger),
     };
@@ -648,7 +648,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     final menu = <PopupMenuEntry<VoidCallback>>[
       PopupMenuItem(
         value: _preview,
-        child: const ListTile(leading: Icon(Icons.description_outlined), title: Text('Ver texto da proposta')),
+        child: const ListTile(leading: Icon(Icons.description_outlined), title: Text('Ver texto do orçamento')),
       ),
       if (s.canSell && status == 'Draft')
         PopupMenuItem(
@@ -662,7 +662,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         ),
       if (s.canSell && ['Draft', 'PendingApproval', 'Approved', 'Sent', 'Accepted', 'Rejected', 'Expired'].contains(status))
         PopupMenuItem(
-          value: () => _reason('cancel', 'Cancelar ${q['reference']}', success: 'Proposta cancelada'),
+          value: () => _reason('cancel', 'Cancelar ${q['reference']}', success: 'Orçamento cancelado'),
           child: const ListTile(leading: Icon(Icons.block), title: Text('Cancelar')),
         ),
       if (s.canSell && status == 'Draft' && q['revision'] == 0)
@@ -682,7 +682,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     final q = _q;
     return Scaffold(
       appBar: AppBar(
-        title: Text(q == null ? 'Proposta' : '${q['reference']} · ${q['customerName']}', overflow: TextOverflow.ellipsis),
+        title: Text(q == null ? 'Orçamento' : '${q['reference']} · ${q['customerName']}', overflow: TextOverflow.ellipsis),
         actions: _menuActions(),
       ),
       body: _error != null && q == null
@@ -701,7 +701,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       main: [
         RecordHeader(
           icon: Icons.request_quote_outlined,
-          kind: 'Proposta comercial${q['revision'] == 0 ? '' : ' · revisão ${q['revision']}'}',
+          kind: 'Orçamento comercial${q['revision'] == 0 ? '' : ' · revisão ${q['revision']}'}',
           title: '${q['reference']}',
           badge: StatusBadge(quoteStatuses[q['status']] ?? '${q['status']}', tone: quoteTone(q['status'])),
           amount: fmtMoney(t['total']),

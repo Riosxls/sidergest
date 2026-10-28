@@ -277,7 +277,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
             ('Pedido do cliente', fmt(o['customerPo'])),
             ('Pagamento', fmt(o['paymentTermName'])),
             ('Frete', freightTerms[o['freight']] ?? fmt(o['freight'])),
-            ('Proposta', fmt(o['quoteReference'])),
+            ('Orçamento', fmt(o['quoteReference'])),
             ('Crédito', credit['limit'] == null ? 'Sem limite' : '${fmtMoney(credit['open'])} em aberto de ${fmtMoney(credit['limit'])}'),
           ],
         ),
@@ -294,7 +294,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
               TextButton.icon(
                 onPressed: () => openQuote(context, s, o['quoteId'] as int).then((_) => _load()),
                 icon: const Icon(Icons.request_quote_outlined),
-                label: const Text('Ver proposta'),
+                label: const Text('Ver orçamento'),
               ),
           ],
           child: SimpleTable(
