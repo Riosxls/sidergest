@@ -869,6 +869,7 @@ class _ModuleCard extends StatelessWidget {
                         child: Text(info.title, maxLines: 1, softWrap: false, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
                       ),
                     ),
+                    const SizedBox(width: 12),
                     if (badge > 0)
                       Tooltip(
                         message: alerts.map((a) => '${a.count} ${a.label.toLowerCase()}').join('\n'),
