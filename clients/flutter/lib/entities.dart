@@ -14,7 +14,9 @@ class LookupSpec {
     final code = e['code'] ?? e['number'];
     final name = e['name'] ?? e['description'] ?? e['itemCode'] ?? e['reference'];
     final extra = e['remaining'] != null ? '${fmt(e['remaining'])} disp.' : (e['quantity'] != null && e['itemCode'] != null ? fmt(e['quantity']) : null);
-    return [code, name, extra].whereType<Object>().join(' · ');
+    // Payment terms use the code only for ordering, so it is not shown.
+    final shownCode = e['days'] != null ? null : code;
+    return [shownCode, name, extra].whereType<Object>().join(' · ');
   }
 }
 

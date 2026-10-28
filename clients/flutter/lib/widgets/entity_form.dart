@@ -423,7 +423,7 @@ class _LookupFieldState extends State<LookupField> {
   Future<void> _pick() async {
     final picked = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => LookupPicker(api: widget.api, path: widget.spec.path, title: widget.label, query: widget.spec.query),
+      builder: (_) => LookupPicker(api: widget.api, path: widget.spec.path, title: widget.label, query: widget.spec.query, selectedId: widget.value),
     );
     if (picked == null) return;
     setState(() => _display = LookupSpec.display(picked));
@@ -460,12 +460,13 @@ class _LookupFieldState extends State<LookupField> {
 }
 
 class LookupPicker extends StatefulWidget {
-  const LookupPicker({super.key, required this.api, required this.path, required this.title, this.query = const {}});
+  const LookupPicker({super.key, required this.api, required this.path, required this.title, this.query = const {}, this.selectedId});
 
   final ApiClient api;
   final Map<String, dynamic> query;
   final String path;
   final String title;
+  final int? selectedId;
 
   @override
   State<LookupPicker> createState() => _LookupPickerState();
@@ -502,8 +503,13 @@ class _LookupPickerState extends State<LookupPicker> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final title = widget.title.replaceAll(' *', '');
     return AlertDialog(
-      title: Text(widget.title.replaceAll(' *', '')),
+      titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+      contentPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      title: Text(title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
       content: SizedBox(
         width: 520,
         height: 440,
@@ -511,16 +517,41 @@ class _LookupPickerState extends State<LookupPicker> {
           children: [
             TextField(
               autofocus: true,
-              decoration: InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar ${widget.title.replaceAll(' *', '').toLowerCase()}', isDense: true),
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search),
+                hintText: 'Buscar ${title.toLowerCase()}',
+                filled: true,
+                fillColor: cs.surfaceContainerHigh,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
+              ),
               onChanged: _search,
             ),
-            if (_loading) const LinearProgressIndicator(),
+            const SizedBox(height: 8),
+            SizedBox(height: 3, child: _loading ? const LinearProgressIndicator() : null),
             if (_error != null) Padding(padding: const EdgeInsets.all(8), child: Text(_error!)),
             Expanded(
-              child: ListView.builder(
-                itemCount: _items.length,
-                itemBuilder: (_, i) => ListTile(dense: true, title: Text(LookupSpec.display(_items[i])), onTap: () => Navigator.pop(context, _items[i])),
-              ),
+              child: !_loading && _error == null && _items.isEmpty
+                  ? Center(child: Text('Nenhum resultado', style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)))
+                  : ListView.separated(
+                      itemCount: _items.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 2),
+                      itemBuilder: (_, i) {
+                        final item = _items[i];
+                        final selected = widget.selectedId != null && item['id'] == widget.selectedId;
+                        return ListTile(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                          selected: selected,
+                          selectedTileColor: cs.secondaryContainer,
+                          selectedColor: cs.onSecondaryContainer,
+                          hoverColor: cs.onSurface.withValues(alpha: 0.06),
+                          title: Text(LookupSpec.display(item), style: theme.textTheme.bodyLarge, maxLines: 2, overflow: TextOverflow.ellipsis),
+                          trailing: selected ? const Icon(Icons.check) : null,
+                          onTap: () => Navigator.pop(context, item),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
