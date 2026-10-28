@@ -4,6 +4,7 @@ import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
 import '../session.dart';
+import '../reports/nf_doc.dart';
 import '../widgets/actions.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
@@ -103,9 +104,19 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
     );
     if (r != null && r['reference'] != null) {
       setState(() => _d = r);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Entrega expedida e estoque baixado')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Entrega expedida e estoque baixado')));
+        await _printNf();
+      }
     }
   }
+
+  Future<void> _printNf() => printNf(
+    context,
+    name: 'NF ${_d!['reference']}',
+    number: _d!['invoiceNumber'] == null ? '' : '${_d!['invoiceNumber']}',
+    build: (f) => buildSaleNfPdf(api, _d!, f),
+  );
 
   Future<void> _confirm() async {
     final r = await submitForm(
@@ -174,6 +185,8 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       appBar: AppBar(
         title: Text(d == null ? 'Entrega' : '${d['reference']} · ${d['customerName']}', overflow: TextOverflow.ellipsis),
         actions: [
+          if (d != null && ['Shipped', 'Delivered'].contains(d['status']))
+            IconButton(key: const ValueKey('delivery-print-nf'), tooltip: 'Imprimir NF', icon: const Icon(Icons.print_outlined), onPressed: _printNf),
           if (canCancel)
             PopupMenuButton<VoidCallback>(
               onSelected: (f) => f(),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
+import '../reports/nf_doc.dart';
 import '../reports/print_docs.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
@@ -512,7 +513,17 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
       ],
       submit: (b) => api.post('$base/operations/${op['sequence']}/outside-shipments', b),
     );
-    if (r != null) _load();
+    if (r != null) {
+      _load();
+      if (mounted) {
+        await printNf(
+          context,
+          name: 'NF remessa ${r['reference']}',
+          number: r['invoiceNumber'] == null ? '' : '${r['invoiceNumber']}',
+          build: (f) => buildOutsideNfPdf(api, r, f),
+        );
+      }
+    }
   }
 
   Widget _operations(Map<String, dynamic> o) {
