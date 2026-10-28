@@ -298,23 +298,23 @@ class _ShellState extends State<Shell> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        leadingWidth: _current == 'dashboard' ? 56 : 104,
-        leading: Row(
-          children: [
-            if (_current != 'dashboard') IconButton(tooltip: 'Voltar', onPressed: () => _go(_parent), icon: const Icon(Icons.arrow_back)),
-            if (wide)
-              IconButton(
+        leadingWidth: 56,
+        leading: wide
+            ? IconButton(
                 tooltip: _collapsed ? 'Expandir menu' : 'Recolher menu',
                 onPressed: _toggleCollapsed,
                 icon: Icon(_collapsed ? Icons.menu : Icons.menu_open),
               )
-            else
-              Builder(
+            : Builder(
                 builder: (ctx) => IconButton(tooltip: 'Menu', onPressed: () => Scaffold.of(ctx).openDrawer(), icon: const Icon(Icons.menu)),
               ),
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            if (_current != 'dashboard') IconButton(tooltip: 'Voltar', onPressed: () => _go(_parent), icon: const Icon(Icons.arrow_back)),
+            Flexible(child: Text(_item.title, overflow: TextOverflow.ellipsis)),
           ],
         ),
-        title: Text(_item.title),
         actions: [
           SearchLauncher(onOpen: _openPalette, compact: !wide),
           const SizedBox(width: 4),
