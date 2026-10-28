@@ -423,7 +423,7 @@ class _LookupFieldState extends State<LookupField> {
   Future<void> _pick() async {
     final picked = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => LookupPicker(api: widget.api, path: widget.spec.path, title: widget.label, query: widget.spec.query, selectedId: widget.value),
+      builder: (_) => LookupPicker(api: widget.api, path: widget.spec.path, title: widget.label, query: widget.spec.query, selectedId: widget.value, create: widget.spec.path == '/api/sales/payment-terms' ? (ctx) => _createPrazo(ctx, widget.api) : null, createLabel: 'Prazo personalizado'),
     );
     if (picked == null) return;
     setState(() => _display = LookupSpec.display(picked));
@@ -460,13 +460,17 @@ class _LookupFieldState extends State<LookupField> {
 }
 
 class LookupPicker extends StatefulWidget {
-  const LookupPicker({super.key, required this.api, required this.path, required this.title, this.query = const {}, this.selectedId});
+  const LookupPicker({super.key, required this.api, required this.path, required this.title, this.query = const {}, this.selectedId, this.create, this.createLabel = 'Novo'});
 
   final ApiClient api;
   final Map<String, dynamic> query;
   final String path;
   final String title;
   final int? selectedId;
+
+  /// Optional "create new" flow; the created record is returned as the picked item.
+  final Future<Map<String, dynamic>?> Function(BuildContext context)? create;
+  final String createLabel;
 
   @override
   State<LookupPicker> createState() => _LookupPickerState();
@@ -556,7 +560,99 @@ class _LookupPickerState extends State<LookupPicker> {
           ],
         ),
       ),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar'))],
+      actionsAlignment: MainAxisAlignment.spaceBetween,
+      actions: [
+        if (widget.create != null)
+          TextButton.icon(
+            key: const ValueKey('picker-create'),
+            icon: const Icon(Icons.add),
+            label: Text(widget.createLabel),
+            onPressed: () async {
+              final r = await widget.create!(context);
+              if (r != null && context.mounted) Navigator.pop(context, r);
+            },
+          )
+        else
+          const SizedBox.shrink(),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+      ],
     );
   }
+}
+
+/// Asks for a custom prazo, saves it as a new payment term and returns it.
+Future<Map<String, dynamic>?> _createPrazo(BuildContext context, ApiClient api) {
+  final days = TextEditingController();
+  final name = TextEditingController();
+  String? error;
+  var busy = false;
+  return showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) {
+        Future<void> save() async {
+          final parts = days.text.split(RegExp(r'[/\s,]+')).where((p) => p.isNotEmpty).toList();
+          if (parts.isEmpty || parts.any((p) => int.tryParse(p) == null)) {
+            return setState(() => error = 'Informe os dias, ex.: 45 ou 30/45/60');
+          }
+          final label = name.text.trim().isEmpty ? '${parts.join(' / ')} dias' : name.text.trim();
+          setState(() {
+            busy = true;
+            error = null;
+          });
+          try {
+            final r = await api.post('/api/sales/payment-terms', {
+              'code': 'P${DateTime.now().millisecondsSinceEpoch % 100000000}',
+              'name': label,
+              'days': parts.join('/'),
+              'active': true,
+            });
+            if (ctx.mounted) Navigator.pop(ctx, r as Map<String, dynamic>);
+          } on ApiException catch (e) {
+            if (ctx.mounted) {
+              setState(() {
+                busy = false;
+                error = e.message;
+              });
+            }
+          }
+        }
+
+        return AlertDialog(
+          title: const Text('Prazo personalizado'),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  key: const ValueKey('prazo-days'),
+                  controller: days,
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: 'Dias *', hintText: 'ex.: 45 ou 30/45/60', border: OutlineInputBorder(), isDense: true),
+                  onSubmitted: (_) => save(),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const ValueKey('prazo-name'),
+                  controller: name,
+                  decoration: const InputDecoration(labelText: 'Nome', hintText: 'Vazio = automático, ex.: 45 dias', border: OutlineInputBorder(), isDense: true),
+                  onSubmitted: (_) => save(),
+                ),
+                if (error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(error!, style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: busy ? null : () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            FilledButton(onPressed: busy ? null : save, child: const Text('Criar e usar')),
+          ],
+        );
+      },
+    ),
+  );
 }
