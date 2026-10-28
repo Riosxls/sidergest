@@ -377,6 +377,7 @@ class LookupField extends StatefulWidget {
     this.error,
     this.enabled = true,
     this.initialDisplay,
+    this.onCustom,
   });
 
   final ApiClient api;
@@ -387,6 +388,9 @@ class LookupField extends StatefulWidget {
   final String? error;
   final int? value;
   final bool enabled;
+
+  /// When set, the picker offers a free-text prazo that is kept only by the caller (not saved as a record).
+  final ValueChanged<String>? onCustom;
   final void Function(int? id, Map<String, dynamic>? entity) onChanged;
 
   @override
@@ -423,9 +427,11 @@ class _LookupFieldState extends State<LookupField> {
   Future<void> _pick() async {
     final picked = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => LookupPicker(api: widget.api, path: widget.spec.path, title: widget.label, query: widget.spec.query, selectedId: widget.value, create: widget.spec.path == '/api/sales/payment-terms' ? (ctx) => _createPrazo(ctx, widget.api) : null, createLabel: 'Prazo personalizado'),
+      builder: (_) => LookupPicker(api: widget.api, path: widget.spec.path, title: widget.label, query: widget.spec.query, selectedId: widget.value, create: widget.onCustom == null ? null : askCustomPrazo, createLabel: 'Prazo personalizado'),
     );
     if (picked == null) return;
+    final custom = picked['_custom'];
+    if (custom is String) return widget.onCustom?.call(custom);
     setState(() => _display = LookupSpec.display(picked));
     widget.onChanged(picked['id'] as int, picked);
   }
@@ -580,79 +586,58 @@ class _LookupPickerState extends State<LookupPicker> {
   }
 }
 
-/// Asks for a custom prazo, saves it as a new payment term and returns it.
-Future<Map<String, dynamic>?> _createPrazo(BuildContext context, ApiClient api) {
-  final days = TextEditingController();
-  final name = TextEditingController();
-  String? error;
-  var busy = false;
-  return showDialog<Map<String, dynamic>>(
-    context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setState) {
-        Future<void> save() async {
-          final parts = days.text.split(RegExp(r'[/\s,]+')).where((p) => p.isNotEmpty).toList();
-          if (parts.isEmpty || parts.any((p) => int.tryParse(p) == null)) {
-            return setState(() => error = 'Informe os dias, ex.: 45 ou 30/45/60');
-          }
-          final label = name.text.trim().isEmpty ? '${parts.join(' / ')} dias' : name.text.trim();
-          setState(() {
-            busy = true;
-            error = null;
-          });
-          try {
-            final r = await api.post('/api/sales/payment-terms', {
-              'code': 'P${DateTime.now().millisecondsSinceEpoch % 100000000}',
-              'name': label,
-              'days': parts.join('/'),
-              'active': true,
-            });
-            if (ctx.mounted) Navigator.pop(ctx, r as Map<String, dynamic>);
-          } on ApiException catch (e) {
-            if (ctx.mounted) {
-              setState(() {
-                busy = false;
-                error = e.message;
-              });
-            }
-          }
-        }
+/// Asks for a free-text prazo that belongs to a single quote; returned as `{'_custom': text}`.
+Future<Map<String, dynamic>?> askCustomPrazo(BuildContext context) async {
+  final text = await showDialog<String>(context: context, builder: (_) => const _CustomPrazoDialog());
+  return text == null ? null : {'_custom': text};
+}
 
-        return AlertDialog(
-          title: const Text('Prazo personalizado'),
-          content: SizedBox(
-            width: 380,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  key: const ValueKey('prazo-days'),
-                  controller: days,
-                  autofocus: true,
-                  decoration: const InputDecoration(labelText: 'Dias *', hintText: 'ex.: 45 ou 30/45/60', border: OutlineInputBorder(), isDense: true),
-                  onSubmitted: (_) => save(),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  key: const ValueKey('prazo-name'),
-                  controller: name,
-                  decoration: const InputDecoration(labelText: 'Nome', hintText: 'Vazio = automático, ex.: 45 dias', border: OutlineInputBorder(), isDense: true),
-                  onSubmitted: (_) => save(),
-                ),
-                if (error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Text(error!, style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: busy ? null : () => Navigator.pop(ctx), child: const Text('Cancelar')),
-            FilledButton(onPressed: busy ? null : save, child: const Text('Criar e usar')),
-          ],
-        );
-      },
+class _CustomPrazoDialog extends StatefulWidget {
+  const _CustomPrazoDialog();
+
+  @override
+  State<_CustomPrazoDialog> createState() => _CustomPrazoDialogState();
+}
+
+class _CustomPrazoDialogState extends State<_CustomPrazoDialog> {
+  final _text = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _ok() {
+    final t = _text.text.trim();
+    if (t.isEmpty) return setState(() => _error = 'Informe o prazo');
+    Navigator.pop(context, t);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Prazo personalizado'),
+    content: SizedBox(
+      width: 380,
+      child: TextField(
+        key: const ValueKey('prazo-custom'),
+        controller: _text,
+        autofocus: true,
+        decoration: InputDecoration(
+          labelText: 'Prazo *',
+          hintText: 'ex.: 45 dias, 20% entrada + 30/60',
+          helperText: 'Vale só para este orçamento; não entra na lista de prazos.',
+          errorText: _error,
+          border: const OutlineInputBorder(),
+          isDense: true,
+        ),
+        onSubmitted: (_) => _ok(),
+      ),
     ),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+      FilledButton(onPressed: _ok, child: const Text('Usar neste orçamento')),
+    ],
   );
 }

@@ -107,6 +107,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
   late int? _customerId = widget.quote?['customerId'] as int?;
   late int? _addressId = widget.quote?['addressId'] as int?;
   late int? _termId = widget.quote?['paymentTermId'] as int?;
+  late String? _customTerm = widget.quote?['customPaymentTerm'] as String?;
   late String _freight = '${widget.quote?['freight'] ?? 'Cif'}';
   late final _validity = TextEditingController(text: '${widget.quote?['validityDays'] ?? ''}');
   late final _contact = TextEditingController(text: widget.quote?['contactName'] as String? ?? '');
@@ -170,7 +171,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
 
   Future<void> _save() async {
     if (_customerId == null) return setState(() => _message = 'Informe o cliente');
-    if (_termId == null) return setState(() => _message = 'Informe o prazo');
+    if (_termId == null && _customTerm == null) return setState(() => _message = 'Informe o prazo');
     if (_lines.isEmpty) return setState(() => _message = 'Inclua ao menos um item');
     if (widget.asOrder && _addressId == null) return setState(() => _message = 'O cliente precisa de um endereço de entrega cadastrado');
     setState(() {
@@ -181,6 +182,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
       'customerId': _customerId,
       'addressId': _addressId,
       'paymentTermId': _termId,
+      'customPaymentTerm': _termId == null ? _customTerm : null,
       'freight': _freight,
       'validityDays': int.tryParse(_validity.text.trim()),
       'contactName': _t(_contact),
@@ -275,14 +277,36 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
                 ),
                 SizedBox(
                   width: w,
-                  child: LookupField(
-                    api: api,
-                    spec: const LookupSpec('/api/sales/payment-terms'),
-                    label: 'Prazo *',
-                    value: _termId,
-                    initialDisplay: widget.quote?['paymentTermName'] as String?,
-                    onChanged: (id, _) => setState(() => _termId = id),
-                  ),
+                  child: _customTerm != null && _termId == null
+                      ? InputDecorator(
+                          key: const ValueKey('quote-custom-term'),
+                          decoration: InputDecoration(
+                            labelText: 'Prazo * (personalizado)',
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            suffixIcon: IconButton(
+                              tooltip: 'Escolher outro prazo',
+                              icon: const Icon(Icons.clear),
+                              onPressed: () => setState(() => _customTerm = null),
+                            ),
+                          ),
+                          child: Text(_customTerm!, overflow: TextOverflow.ellipsis),
+                        )
+                      : LookupField(
+                          api: api,
+                          spec: const LookupSpec('/api/sales/payment-terms'),
+                          label: 'Prazo *',
+                          value: _termId,
+                          initialDisplay: widget.quote?['paymentTermName'] as String?,
+                          onChanged: (id, _) => setState(() {
+                            _termId = id;
+                            if (id != null) _customTerm = null;
+                          }),
+                          onCustom: (text) => setState(() {
+                            _termId = null;
+                            _customTerm = text;
+                          }),
+                        ),
                 ),
                 SizedBox(
                   width: w,
@@ -346,7 +370,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
             fields: salesLineFields,
             newTitle: 'Criar orçamento',
             addLabel: 'Criar orçamento',
-            addEnabled: _customerId != null && _termId != null,
+            addEnabled: _customerId != null && (_termId != null || _customTerm != null),
             editTitle: 'Editar orçamento',
             lines: _lines,
             onChanged: (l) => setState(() => _lines = l),
@@ -531,7 +555,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ..writeln('Cliente: ${q['customerName']}')
       ..writeln(q['contactName'] == null ? '' : 'A/C: ${q['contactName']}')
       ..writeln(q['customerReference'] == null ? '' : 'Sua referência: ${q['customerReference']}')
-      ..writeln('Prazo: ${q['paymentTermName'] ?? 'a combinar'} · Frete: ${freightTerms[q['freight']] ?? q['freight']}')
+      ..writeln('Prazo: ${q['paymentTermName'] ?? q['customPaymentTerm'] ?? 'a combinar'} · Frete: ${freightTerms[q['freight']] ?? q['freight']}')
       ..writeln()
       ..writeln('Item  Produto  Descrição  Qtd  Un  Vl. unit.  IPI%  Vl. total  Entrega');
     for (final l in (q['lines'] as List).cast<Map<String, dynamic>>()) {
@@ -721,7 +745,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
             ('Cliente', '${q['customerName']}'),
             ('Contato', [q['contactName'], q['contactEmail']].whereType<String>().join(' · ')),
             ('Validade', q['validUntil'] != null ? fmtDay(q['validUntil']) : '${q['validityDays']} dias após envio'),
-            ('Prazo', fmt(q['paymentTermName'])),
+            ('Prazo', fmt(q['paymentTermName'] ?? q['customPaymentTerm'])),
             ('Frete', freightTerms[q['freight']] ?? fmt(q['freight'])),
             ('Ref. do cliente', fmt(q['customerReference'])),
             ('Pedido do cliente', fmt(q['customerPo'])),
