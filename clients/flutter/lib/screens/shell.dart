@@ -17,6 +17,7 @@ import 'production_orders.dart';
 import 'quick_actions.dart';
 import 'quotations.dart';
 import 'receipts.dart';
+import 'reports.dart';
 import 'requisitions.dart';
 import 'sales_orders.dart';
 import 'sales_pipeline.dart';
@@ -61,6 +62,8 @@ List<NavItem> navItems() => [
   NavItem('sales-quotes', Icons.request_quote_outlined, 'Propostas', 'Comercial', (s, f, go) => QuotesScreen(session: s)),
   NavItem('sales-orders', Icons.receipt_long_outlined, 'Pedidos de venda', 'Comercial', (s, f, go) => SalesOrdersScreen(session: s)),
   NavItem('deliveries', Icons.local_shipping_outlined, 'Entregas', 'Comercial', (s, f, go) => DeliveriesScreen(session: s)),
+  NavItem('report-material-consumption', Icons.scale_outlined, 'Consumo de material vendido', 'Comercial', (s, f, go) => MaterialConsumptionScreen(session: s)),
+  NavItem('report-billing', Icons.bar_chart_outlined, 'Faturamento consolidado', 'Comercial', (s, f, go) => BillingSummaryScreen(session: s)),
   for (final spec in salesMasters) NavItem(spec.path, spec.icon, spec.title, 'Comercial', (s, f, go) => EntityListScreen(session: s, spec: spec)),
   for (final spec in masterData) NavItem(spec.path, spec.icon, spec.title, 'Engenharia', (s, f, go) => EntityListScreen(session: s, spec: spec)),
   NavItem('balances', Icons.inventory_outlined, 'Saldos', 'Estoque', (s, f, go) => BalancesScreen(session: s)),
@@ -298,17 +301,20 @@ class _ShellState extends State<Shell> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        leadingWidth: 56,
+        leadingWidth: wide ? (_collapsed ? 72.0 : 248.0) : 56,
         leading: wide
-            ? IconButton(
-                tooltip: _collapsed ? 'Expandir menu' : 'Recolher menu',
-                onPressed: _toggleCollapsed,
-                icon: Icon(_collapsed ? Icons.menu : Icons.menu_open),
+            ? Align(
+                alignment: Alignment.centerLeft,
+                child: IconButton(
+                  tooltip: _collapsed ? 'Expandir menu' : 'Recolher menu',
+                  onPressed: _toggleCollapsed,
+                  icon: Icon(_collapsed ? Icons.menu : Icons.menu_open),
+                ),
               )
             : Builder(
                 builder: (ctx) => IconButton(tooltip: 'Menu', onPressed: () => Scaffold.of(ctx).openDrawer(), icon: const Icon(Icons.menu)),
               ),
-        titleSpacing: 0,
+        titleSpacing: _current == 'dashboard' ? 16 : 4,
         title: Row(
           children: [
             if (_current != 'dashboard') IconButton(tooltip: 'Voltar', onPressed: () => _go(_parent), icon: const Icon(Icons.arrow_back)),
