@@ -17,8 +17,8 @@ const salesLineFields = [
   FieldSpec('unitPrice', 'Preço unitário (R\$)', type: FieldType.decimal, hint: 'Vazio = tabela de preços do cliente'),
   FieldSpec('ipiPercent', 'IPI (%)', type: FieldType.decimal, hint: 'Vazio = tabela de preços'),
   FieldSpec('icmsPercent', 'ICMS (%)', type: FieldType.decimal, hint: 'Vazio = tabela de preços'),
-  FieldSpec('leadTimeDays', 'Prazo de entrega (dias)', type: FieldType.integer),
-  FieldSpec('deliveryDate', 'Data de entrega', type: FieldType.date),
+  FieldSpec('leadTimeDays', 'Prazo de entrega (dias)', type: FieldType.integer, daysFor: 'deliveryDate'),
+  FieldSpec('deliveryDate', 'Data de entrega', type: FieldType.date, dateFor: 'leadTimeDays'),
   FieldSpec('description', 'Descrição', hint: 'Vazio = descrição do cliente ou do produto'),
 ];
 
@@ -336,6 +336,8 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
             api: api,
             title: 'Itens',
             fields: salesLineFields,
+            newTitle: 'Nova proposta',
+            editTitle: 'Editar proposta',
             lines: _lines,
             onChanged: (l) => setState(() => _lines = l),
             columns: salesLineColumns,

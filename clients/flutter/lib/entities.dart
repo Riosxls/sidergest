@@ -28,6 +28,8 @@ class FieldSpec {
     this.lookup,
     this.hint,
     this.defaultValue,
+    this.daysFor,
+    this.dateFor,
   });
 
   final String key;
@@ -38,6 +40,12 @@ class FieldSpec {
   final LookupSpec? lookup;
   final String? hint;
   final Object? defaultValue;
+
+  /// Integer field holding days from today; keeps the date field with this key in sync.
+  final String? daysFor;
+
+  /// Date field kept in sync with the days field with this key.
+  final String? dateFor;
 }
 
 class ColumnSpec {

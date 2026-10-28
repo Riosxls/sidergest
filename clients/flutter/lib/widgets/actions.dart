@@ -117,6 +117,8 @@ class LinesEditor extends StatelessWidget {
     required this.lines,
     required this.onChanged,
     this.enabled = true,
+    this.newTitle = 'Nova linha',
+    this.editTitle,
   });
 
   final ApiClient api;
@@ -126,12 +128,14 @@ class LinesEditor extends StatelessWidget {
   final List<Map<String, dynamic>> lines;
   final ValueChanged<List<Map<String, dynamic>>> onChanged;
   final bool enabled;
+  final String newTitle;
+  final String? editTitle;
 
   Future<void> _edit(BuildContext context, [int? index]) async {
     final r = await showEntityForm(
       context,
       api: api,
-      title: index == null ? 'Nova linha' : 'Linha ${index + 1}',
+      title: index == null ? newTitle : (editTitle ?? 'Linha ${index + 1}'),
       fields: fields,
       initial: index == null ? null : lines[index],
       onSubmit: (_) async => null,

@@ -167,7 +167,28 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
   Future<void> _pickDate(FieldSpec f) async {
     final current = DateTime.tryParse(parseDate(_text[f.key]!.text) ?? '') ?? DateTime.now();
     final d = await showDatePicker(context: context, initialDate: current, firstDate: DateTime(2000), lastDate: DateTime(2100));
-    if (d != null) setState(() => _text[f.key]!.text = fmtDay(isoDate(d)));
+    if (d != null) {
+      setState(() {
+        _text[f.key]!.text = fmtDay(isoDate(d));
+        _syncLinked(f);
+      });
+    }
+  }
+
+  DateTime get _today {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  void _syncLinked(FieldSpec f) {
+    final days = f.daysFor, date = f.dateFor;
+    if (days != null) {
+      final n = int.tryParse(_text[f.key]!.text.trim());
+      if (n != null && _text.containsKey(days)) _text[days]!.text = fmtDay(isoDate(_today.add(Duration(days: n))));
+    } else if (date != null) {
+      final d = DateTime.tryParse(parseDate(_text[f.key]!.text) ?? '');
+      if (d != null && _text.containsKey(date)) _text[date]!.text = '${DateTime(d.year, d.month, d.day).difference(_today).inDays}';
+    }
   }
 
   String? _errorFor(String key) => _clientErrors[key] ?? _serverErrors[key]?.join('; ');
@@ -214,12 +235,20 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
                 : null,
           ),
           onSubmitted: (_) => widget.readOnly ? null : _save(),
-          onChanged: (_) => _serverErrors.containsKey(f.key) || _clientErrors.containsKey(f.key)
-              ? setState(() {
-                  _serverErrors.remove(f.key);
-                  _clientErrors.remove(f.key);
-                })
-              : null,
+          onChanged: (_) {
+            if (f.daysFor != null || f.dateFor != null) {
+              _syncLinked(f);
+              _serverErrors.remove(f.daysFor ?? f.dateFor);
+              _clientErrors.remove(f.daysFor ?? f.dateFor);
+              setState(() {});
+            }
+            if (_serverErrors.containsKey(f.key) || _clientErrors.containsKey(f.key)) {
+              setState(() {
+                _serverErrors.remove(f.key);
+                _clientErrors.remove(f.key);
+              });
+            }
+          },
         );
       case FieldType.boolean:
         return InputDecorator(
