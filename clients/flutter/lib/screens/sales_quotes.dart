@@ -33,8 +33,11 @@ final salesLineColumns = [
 
 num _n(Object? v) => v is num ? v : 0;
 
-/// Quantity × unit price, plus IPI when set (ICMS is already part of the price).
-num lineEstimate(Map<String, dynamic> l) => _n(l['quantity']) * _n(l['unitPrice']) * (1 + _n(l['ipiPercent']) / 100);
+/// Quantity × unit price, plus IPI and ICMS amounts (both on the base value) when set.
+num lineEstimate(Map<String, dynamic> l) {
+  final base = _n(l['quantity']) * _n(l['unitPrice']);
+  return base + base * _n(l['ipiPercent']) / 100 + base * _n(l['icmsPercent']) / 100;
+}
 
 class QuotesScreen extends StatefulWidget {
   const QuotesScreen({super.key, required this.session});
@@ -350,7 +353,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
           Padding(
             padding: const EdgeInsets.all(8),
             child: Text(
-              'Estimativa (itens com preço informado, com IPI): ${fmtMoney(estimate)}',
+              'Estimativa (itens com preço informado, com IPI e ICMS): ${fmtMoney(estimate)}',
               textAlign: TextAlign.right,
               style: Theme.of(context).textTheme.titleSmall,
             ),
