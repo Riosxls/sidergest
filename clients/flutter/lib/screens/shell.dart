@@ -326,6 +326,7 @@ class _ShellState extends State<Shell> {
       drawer: wide ? null : Drawer(child: SafeArea(child: _menu(closeDrawer: true))),
       body: wide
           ? Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SizedBox(
                   width: _collapsed ? 72 : 248,
