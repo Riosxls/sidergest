@@ -88,6 +88,7 @@ Future<void> openPalette(WidgetTester tester) async {
 }
 
 void main() {
+  painelQuickActionsTest();
   testWidgets('Painel shows one card per module with metric and alert badge; no module content', (tester) async {
     final (_, log) = await pumpShell(tester, 'Production');
     expect(find.text('Primeiros passos'), findsOneWidget);
@@ -274,5 +275,20 @@ void main() {
       expect(t.cardTheme.color, t.colorScheme.surfaceContainerHigh);
       expect((t.cardTheme.shape as RoundedRectangleBorder).side.color, t.colorScheme.outlineVariant);
     }
+  });
+}
+
+void painelQuickActionsTest() {
+  testWidgets('Painel shows quick actions for Admin and sub-screens have a back button', (tester) async {
+    await pumpShell(tester, 'Admin');
+    for (final l in ['Novo produto', 'Nova OF', 'Nova requisição', 'Novo pedido']) {
+      expect(find.text(l), findsOneWidget);
+    }
+    expect(find.byTooltip('Voltar'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('module-card-sales')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pedidos de venda').last);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Voltar'), findsOneWidget);
   });
 }
