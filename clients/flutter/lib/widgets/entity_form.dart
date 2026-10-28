@@ -511,7 +511,7 @@ class _LookupPickerState extends State<LookupPicker> {
           children: [
             TextField(
               autofocus: true,
-              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar por código ou nome', isDense: true),
+              decoration: InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar ${widget.title.replaceAll(' *', '').toLowerCase()}', isDense: true),
               onChanged: _search,
             ),
             if (_loading) const LinearProgressIndicator(),

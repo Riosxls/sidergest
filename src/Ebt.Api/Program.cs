@@ -85,8 +85,6 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<EbtDbContext>();
     if (app.Configuration.GetValue("Database:MigrateOnStartup", false)) await db.Database.MigrateAsync();
     await AuthEndpoints.EnsureBootstrapAdminAsync(db, app.Configuration, app.Logger);
-    try { await Ebt.Core.Sales.PaymentTermSeed.EnsureAsync(db); }
-    catch (Exception ex) { app.Logger.LogWarning(ex, "Could not seed payment terms"); }
 }
 
 app.MapGet("/", (IConfiguration c, IWebHostEnvironment e) => Results.Redirect(c.GetValue("Swagger:Enabled", e.IsDevelopment()) ? "/swagger" : "/health")).AllowAnonymous().ExcludeFromDescription();
