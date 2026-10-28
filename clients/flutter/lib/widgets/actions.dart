@@ -119,6 +119,7 @@ class LinesEditor extends StatelessWidget {
     this.enabled = true,
     this.newTitle = 'Nova linha',
     this.editTitle,
+    this.addLabel = 'Adicionar linha',
   });
 
   final ApiClient api;
@@ -130,6 +131,7 @@ class LinesEditor extends StatelessWidget {
   final bool enabled;
   final String newTitle;
   final String? editTitle;
+  final String addLabel;
 
   Future<void> _edit(BuildContext context, [int? index]) async {
     final r = await showEntityForm(
@@ -169,7 +171,7 @@ class LinesEditor extends StatelessWidget {
                     key: const ValueKey('add-line'),
                     onPressed: () => _edit(context),
                     icon: const Icon(Icons.add),
-                    label: const Text('Adicionar linha'),
+                    label: Text(addLabel),
                   ),
               ],
             ),
