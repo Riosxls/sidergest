@@ -17,6 +17,7 @@ jobs:
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
     env:
       EBT_TEST_PG: Host=localhost;Username=postgres;Password=postgres
+      EBT_TEST_LOG: Error
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
