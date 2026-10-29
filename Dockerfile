@@ -18,7 +18,7 @@ USER app
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 CMD ["dotnet", "Ebt.Api.dll", "--healthcheck"]
 ENTRYPOINT ["dotnet", "Ebt.Api.dll"]
 
-FROM mcr.microsoft.com/dotnet/runtime:8.0@sha256:67e16b7d568208713e05db7f7bcc81827679a636222160bf57bb148acd23622e AS dbf-import
+FROM mcr.microsoft.com/dotnet/runtime:10.0@sha256:a3f9f81954b9c810af2ed18849716c8dc74a4707bd0907fdbd69be81554c0f30 AS dbf-import
 WORKDIR /app
 COPY --from=build /out/import .
 USER app
