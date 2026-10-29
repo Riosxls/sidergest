@@ -23,7 +23,7 @@ public static class ProductEndpoints
 {
     public static void MapProducts(this WebApplication app)
     {
-        var products = app.MapGroup("/api/products").WithTags("Products");
+        var products = app.MapGroup("/api/products").WithTags("Products").AddEndpointFilter(new RowVersionFilter<Product>());
         products.MapCrud(new CrudSpec<Product, ProductIn, ProductOut>
         {
             Project = p => new ProductOut(p.Id, p.Code, p.Name, p.Kind, p.Shape, p.DiameterMm, p.WidthMm, p.HeightMm, p.ThicknessMm, p.LengthMm, p.NetWeightKg, p.LossPercent, p.Ncm, p.StockUnit, p.PiecesPerPackage, p.Blocked, p.DrawingRevision, p.ProcessRevision, p.Routing.Count),

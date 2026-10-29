@@ -212,7 +212,7 @@ public static class FiscalEndpoints
 
     private static void MapDocuments(WebApplication app)
     {
-        var g = app.MapGroup("/api/fiscal/documents").WithTags("Fiscal").RequireAuthorization(Policies.Read);
+        var g = app.MapGroup("/api/fiscal/documents").WithTags("Fiscal").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<FiscalDocument>());
 
         g.MapGet("/", async (EbtDbContext db, FiscalKind? kind, FiscalStatus? status, int? deliveryId, int? outsideShipmentId, string? q, int? skip, int? take, CancellationToken ct) =>
         {
