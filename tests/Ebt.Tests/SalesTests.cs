@@ -189,6 +189,29 @@ public class SalesTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Customer_default_term_and_custom_term_flow_to_quote_and_order()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var company = new CustomerCompany("26133636000103", "148061942112", true, "Av. Brasil", "100", null, "Centro", "Embu", "SP", "06800000", null, null, null, s.Term.Id);
+        var updated = await (await admin.Put($"/api/customers/{s.Customer.Id}", new CustomerIn(s.Customer.Name, null, null, ConsumerType.Normal, Company: company))).Read<CustomerOut>();
+        Assert.Equal(s.Term.Id, updated.Company!.PaymentTermId);
+        Assert.Equal(s.Term.Name, updated.Company.PaymentTermName);
+
+        var custom = Quote(s) with { PaymentTermId = null, CustomPaymentTerm = "30/60/90" };
+        var quote = await (await admin.Post("/api/sales/quotes", custom)).Read<QuoteOut>();
+        Assert.Null(quote.PaymentTermId);
+        Assert.Equal("30/60/90", quote.CustomPaymentTerm);
+        var fromTerm = await (await admin.Post("/api/sales/quotes", Quote(s))).Read<QuoteOut>();
+        Assert.Equal(s.Term.Id, fromTerm.PaymentTermId);
+        Assert.Equal(s.Term.Name, fromTerm.PaymentTermName);
+
+        var order = await (await admin.Post("/api/sales/orders", new SalesOrderIn(s.Customer.Id, s.Address.Id, [new SalesLineInput(s.Tube.Id, 10m)], null, null, FreightTerms.Cif, null, false, null, "45 dias"))).Read<SalesOrderOut>();
+        Assert.Equal("45 dias", order.CustomPaymentTerm);
+        Assert.Null(order.PaymentTermName);
+    }
+
+    [Fact]
     public async Task Credit_limit_needs_manager_override()
     {
         var admin = await api.AdminAsync();

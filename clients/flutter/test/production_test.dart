@@ -194,7 +194,7 @@ class Fake {
 
 Future<Session> pumpScreen(WidgetTester tester, Fake fake, Widget Function(Session s) screen) async {
   SharedPreferences.setMockInitialValues({});
-  tester.view.physicalSize = const Size(1600, 2000);
+  tester.view.physicalSize = const Size(1600, 3000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final session =
