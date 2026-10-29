@@ -279,7 +279,17 @@ class _ShellState extends State<Shell> {
                 icon: Icon(_collapsed ? Icons.menu : Icons.menu_open),
               )
             : null,
-        title: Text(_moduleSection == null || _item.section == hiddenSection ? _item.title : '${_item.section} › ${_item.title}'),
+        title: Row(
+          children: [
+            if (_current != 'dashboard')
+              IconButton(
+                tooltip: 'Voltar ao Painel',
+                onPressed: () => _go('dashboard'),
+                icon: const Icon(Icons.arrow_back),
+              ),
+            Flexible(child: Text(_moduleSection == null || _item.section == hiddenSection ? _item.title : '${_item.section} › ${_item.title}', overflow: TextOverflow.ellipsis)),
+          ],
+        ),
         actions: [
           SearchLauncher(onOpen: _openPalette, compact: !wide),
           const SizedBox(width: 4),
