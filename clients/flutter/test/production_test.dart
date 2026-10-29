@@ -13,6 +13,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'nav.dart';
+
 http.Response json(Object? body, [int status = 200]) => http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json; charset=utf-8'});
 
 Map<String, dynamic> page(List<Map<String, dynamic>> items) => {'items': items, 'total': items.length, 'skip': 0, 'take': 50};
@@ -231,8 +233,7 @@ void main() {
   testWidgets('release with missing material shows the shortage and forces the release', (tester) async {
     final fake = Fake();
     await pumpScreen(tester, fake, (s) => Shell(session: s));
-    await tester.tap(find.text('Ordens de fabricação').first);
-    await tester.pumpAndSettle();
+    await openScreen(tester, 'PCP', 'production-orders');
     await tester.tap(find.text('OF 12'));
     await tester.pumpAndSettle();
     expect(find.text('OF 12 · TB-50'), findsOneWidget);
@@ -289,8 +290,7 @@ void main() {
   testWidgets('reader sees PCP read-only', (tester) async {
     final fake = Fake()..role = 'Reader';
     await pumpScreen(tester, fake, (s) => Shell(session: s));
-    await tester.tap(find.text('Ordens de fabricação').first);
-    await tester.pumpAndSettle();
+    await openScreen(tester, 'PCP', 'production-orders');
     expect(find.text('Nova OF'), findsNothing);
     await tester.tap(find.text('OF 12'));
     await tester.pumpAndSettle();

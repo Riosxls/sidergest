@@ -10,6 +10,7 @@ import '../widgets/user_menu.dart';
 import 'dashboard.dart';
 import 'deliveries.dart';
 import 'entity_list.dart';
+import 'modules.dart';
 import 'orders.dart';
 import 'product_detail.dart';
 import 'production_floor.dart';
@@ -25,40 +26,39 @@ import 'stock_balances.dart';
 import 'stock_closing.dart';
 import 'stock_documents.dart';
 import 'stock_lots.dart';
+import 'steel.dart';
 import 'suppliers.dart';
+import 'viability.dart';
 
 class NavItem {
-  const NavItem(this.id, this.icon, this.title, this.section, this.build, {this.hidden = false});
+  const NavItem(this.id, this.icon, this.title, this.section, this.build);
 
   final String id;
   final IconData icon;
   final String title;
   final String section;
   final Widget Function(Session s, String? filter, Navigate go) build;
-  final bool hidden;
 }
 
-List<NavItem> navItems() => [
+const hiddenSection = '_module';
+
+List<NavItem> navItems() {
+  final base = _screens();
+  final links = {
+    for (final m in modules) m.section: [for (final i in base.where((i) => i.section == m.section)) ModuleLink(i.id, i.icon, i.title)],
+  };
+  return [
+    ...base,
+    for (final m in modules)
+      NavItem(m.id, m.icon, m.section, hiddenSection, (s, f, go) => ModuleScreen(session: s, module: m, links: links[m.section]!, onNavigate: go)),
+  ];
+}
+
+List<NavItem> _screens() => [
   NavItem('dashboard', Icons.dashboard_outlined, 'Painel', '', (s, f, go) => DashboardScreen(session: s, onNavigate: go)),
-  for (final m in moduleInfos)
-    NavItem(
-      m.navId,
-      m.icon,
-      m.title,
-      '',
-      (s, f, go) => DashboardScreen(
-        session: s,
-        onNavigate: go,
-        module: m.id,
-        links: [
-          for (final i in navItems())
-            if (i.section == m.title) ModuleLink(i.id, i.icon, i.title),
-        ],
-      ),
-      hidden: true,
-    ),
   NavItem('sales-pipeline', Icons.view_kanban_outlined, 'Funil de vendas', 'Comercial', (s, f, go) => SalesPipelineScreen(session: s)),
   NavItem('sales-quotes', Icons.request_quote_outlined, 'Propostas', 'Comercial', (s, f, go) => QuotesScreen(session: s)),
+  NavItem('viability', Icons.fact_check_outlined, 'Análises de viabilidade', 'Comercial', (s, f, go) => ViabilityScreen(session: s, initialStatus: f)),
   NavItem('sales-orders', Icons.receipt_long_outlined, 'Pedidos de venda', 'Comercial', (s, f, go) => SalesOrdersScreen(session: s)),
   NavItem('deliveries', Icons.local_shipping_outlined, 'Entregas', 'Comercial', (s, f, go) => DeliveriesScreen(session: s)),
   for (final spec in salesMasters) NavItem(spec.path, spec.icon, spec.title, 'Comercial', (s, f, go) => EntityListScreen(session: s, spec: spec)),
@@ -73,6 +73,7 @@ List<NavItem> navItems() => [
     (s, f, go) => LotsView(session: s, initialStatus: f ?? (s.canStock ? 'Quarantine' : null)),
   ),
   NavItem('reservations', Icons.bookmark_border, 'Reservas', 'Estoque', (s, f, go) => ReservationsView(session: s)),
+  NavItem('steel', Icons.layers_outlined, 'Controle de aço', 'Estoque', (s, f, go) => SteelScreen(session: s)),
   NavItem('closing', Icons.calculate_outlined, 'Fechamento e custo médio', 'Estoque', (s, f, go) => ClosingScreen(session: s)),
   NavItem('locations', stockLocations.icon, stockLocations.title, 'Estoque', (s, f, go) => EntityListScreen(session: s, spec: stockLocations)),
   NavItem('requisitions', Icons.assignment_outlined, 'Requisições', 'Suprimentos', (s, f, go) => RequisitionsScreen(session: s, initialStatus: f)),
@@ -103,8 +104,6 @@ class _ShellState extends State<Shell> {
   String _current = 'dashboard';
   String? _filter;
   bool _collapsed = false;
-  bool _prefsLoaded = false;
-  final _closedGroups = <String>{};
 
   @override
   void initState() {
@@ -134,8 +133,6 @@ class _ShellState extends State<Shell> {
       if (!mounted) return;
       setState(() {
         _collapsed = p.getBool('navCollapsed') ?? false;
-        _closedGroups.addAll(p.getStringList('navClosedGroups') ?? const []);
-        _prefsLoaded = true;
       });
     } catch (_) {}
   }
@@ -145,14 +142,6 @@ class _ShellState extends State<Shell> {
     try {
       final p = await SharedPreferences.getInstance();
       await p.setBool('navCollapsed', _collapsed);
-    } catch (_) {}
-  }
-
-  Future<void> _groupToggled(String section, bool open) async {
-    open ? _closedGroups.remove(section) : _closedGroups.add(section);
-    try {
-      final p = await SharedPreferences.getInstance();
-      await p.setStringList('navClosedGroups', _closedGroups.toList());
     } catch (_) {}
   }
 
@@ -182,7 +171,7 @@ class _ShellState extends State<Shell> {
   Future<void> _showPalette() => showCommandPalette(
     context,
     session: widget.session,
-    targets: [for (final i in _items.where((i) => !i.hidden)) SearchTarget(i.id, i.icon, i.title, i.section)],
+    targets: [for (final i in _items) SearchTarget(i.id, i.icon, i.title, i.section == hiddenSection ? 'Módulos' : i.section)],
     actions: [for (final a in quickActionsFor(widget.session)) PaletteAction(a.icon, a.label, () => a.run(context))],
     onNavigate: _go,
     onOpenProduct: _openProduct,
@@ -191,7 +180,7 @@ class _ShellState extends State<Shell> {
   NavItem get _item => _items.firstWhere((i) => i.id == _current);
 
   Widget _railItem(NavItem d, ColorScheme cs, VoidCallback tap) {
-    final active = d.id == _current || (d.id == 'dashboard' && _current.startsWith('module-'));
+    final active = d.id == _current;
     return Tooltip(
       message: d.title,
       child: Padding(
@@ -209,8 +198,8 @@ class _ShellState extends State<Shell> {
     );
   }
 
-  Widget _tile(NavItem d, ColorScheme cs, VoidCallback tap) {
-    final active = d.id == _current || (d.id == 'dashboard' && _current.startsWith('module-'));
+  Widget _tile(NavItem d, ColorScheme cs, VoidCallback tap, {String? title}) {
+    final active = d.id == _current;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: ListTile(
@@ -218,7 +207,7 @@ class _ShellState extends State<Shell> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         leading: Icon(d.icon),
         title: Text(
-          d.title,
+          title ?? d.title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           softWrap: false,
@@ -232,51 +221,46 @@ class _ShellState extends State<Shell> {
     );
   }
 
+  String? get _moduleSection =>
+      _item.section == hiddenSection ? _item.id.substring('module:'.length) : (modules.any((m) => m.section == _item.section) ? _item.section : null);
+
   Widget _menu({bool closeDrawer = false, bool rail = false}) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final children = <Widget>[];
-    final sections = <String, List<NavItem>>{};
-    for (final d in _items.where((i) => !i.hidden)) {
-      sections.putIfAbsent(d.section, () => []).add(d);
-    }
-    for (final entry in sections.entries) {
-      final section = entry.key;
-      Widget one(NavItem d) {
-        void tap() {
-          _go(d.id);
-          if (closeDrawer) Navigator.pop(context);
-        }
 
-        return rail ? _railItem(d, cs, tap) : _tile(d, cs, tap);
+    Widget one(NavItem d, {String? title}) {
+      void tap() {
+        _go(d.id);
+        if (closeDrawer) Navigator.pop(context);
       }
 
-      if (section.isEmpty) {
-        children.addAll(entry.value.map(one));
-      } else if (rail) {
+      return rail ? _railItem(d, cs, tap) : _tile(d, cs, tap, title: title);
+    }
+
+    final dashboard = _items.firstWhere((i) => i.id == 'dashboard');
+    children.add(one(dashboard));
+    final section = _moduleSection;
+    if (section != null) {
+      final module = moduleBySection(section);
+      final home = _items.firstWhere((i) => i.id == module.id);
+      if (rail) {
         children.add(const Divider());
-        children.addAll(entry.value.map(one));
       } else {
         children.add(
-          ExpansionTile(
-            key: ValueKey('$section/$_prefsLoaded'),
-            initiallyExpanded: !_closedGroups.contains(section),
-            onExpansionChanged: (open) => _groupToggled(section, open),
-            dense: true,
-            shape: const Border(),
-            collapsedShape: const Border(),
-            tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-            childrenPadding: EdgeInsets.zero,
-            title: Text(
-              section,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelMedium?.copyWith(color: cs.primary),
-            ),
-            children: entry.value.map(one).toList(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Text(module.section, style: theme.textTheme.labelMedium?.copyWith(color: cs.primary)),
           ),
         );
       }
+      children.add(one(home, title: 'Visão geral'));
+      children.addAll(_items.where((i) => i.section == section).map((i) => one(i)));
+    }
+    final system = _items.where((i) => i.section == 'Sistema');
+    if (system.isNotEmpty) {
+      children.add(const Divider());
+      children.addAll(system.map((i) => one(i)));
     }
     return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
   }
@@ -303,7 +287,7 @@ class _ShellState extends State<Shell> {
                 onPressed: () => _go('dashboard'),
                 icon: const Icon(Icons.arrow_back),
               ),
-            Flexible(child: Text(_item.title, overflow: TextOverflow.ellipsis)),
+            Flexible(child: Text(_moduleSection == null || _item.section == hiddenSection ? _item.title : '${_item.section} › ${_item.title}', overflow: TextOverflow.ellipsis)),
           ],
         ),
         actions: [
