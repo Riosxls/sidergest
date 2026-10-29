@@ -15,6 +15,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'nav.dart';
+
 http.Response json(Object? body, [int status = 200]) => http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json; charset=utf-8'});
 
 Map<String, dynamic> page(List<Map<String, dynamic>> items) => {'items': items, 'total': items.length, 'skip': 0, 'take': 50};
@@ -423,8 +425,7 @@ void main() {
         onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => Shell(session: s)),
       ),
     );
-    await tester.tap(find.text('Movimentações'));
-    await tester.pumpAndSettle();
+    await openScreen(tester, 'Estoque', 'documents');
     await tester.tap(find.text('Novo lançamento'));
     await tester.pumpAndSettle();
 
@@ -465,8 +466,7 @@ void main() {
   testWidgets('quarantine lot is released by inspection', (tester) async {
     final fake = Fake();
     await pumpScreen(tester, fake, (s) => Shell(session: s));
-    await tester.tap(find.text('Lotes e inspeção'));
-    await tester.pumpAndSettle();
+    await openScreen(tester, 'Estoque', 'lots');
     expect(fake.last('GET', '/api/stock/lots').url.queryParameters['status'], 'Quarantine');
     await tester.tap(find.text('L-3'));
     await tester.pumpAndSettle();
@@ -493,11 +493,9 @@ void main() {
   testWidgets('reader cannot post stock or approve requisitions', (tester) async {
     final fake = Fake()..role = 'Reader';
     await pumpScreen(tester, fake, (s) => Shell(session: s));
-    await tester.tap(find.text('Movimentações'));
-    await tester.pumpAndSettle();
+    await openScreen(tester, 'Estoque', 'documents');
     expect(find.text('Novo lançamento'), findsNothing);
-    await tester.tap(find.text('Requisições'));
-    await tester.pumpAndSettle();
+    await openScreen(tester, 'Suprimentos', 'requisitions');
     await tester.tap(find.text('101'));
     await tester.pumpAndSettle();
     expect(find.text('Aprovar'), findsNothing);
@@ -507,8 +505,7 @@ void main() {
   testWidgets('buyer approves a requisition with a reduced quantity', (tester) async {
     final fake = Fake()..role = 'Purchasing';
     await pumpScreen(tester, fake, (s) => Shell(session: s));
-    await tester.tap(find.text('Requisições'));
-    await tester.pumpAndSettle();
+    await openScreen(tester, 'Suprimentos', 'requisitions');
     expect(fake.last('GET', '/api/requisitions').url.queryParameters['status'], 'PendingApproval');
     await tester.tap(find.text('101'));
     await tester.pumpAndSettle();
@@ -584,14 +581,14 @@ void main() {
     await tester.pumpWidget(EbtApp(session: session));
     await tester.pumpAndSettle();
     expect(find.text('Suprimentos'), findsWidgets);
-    await tester.tap(find.byKey(const ValueKey('module-card-purchasing')));
-    await tester.pumpAndSettle();
-    expect(find.text('Entregas em atraso'), findsNWidgets(2));
-    await tester.scrollUntilVisible(find.text('75,0'), 200, scrollable: find.byType(Scrollable).first);
-    expect(find.text('75,0'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Entregas em atraso').first, -200, scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('Entregas em atraso').first);
+    expect(find.text('Entregas em atraso'), findsOneWidget);
+    await tester.tap(find.text('Entregas em atraso'));
     await tester.pumpAndSettle();
     expect(find.textContaining('16 d · ped. 900'), findsOneWidget);
+    await tester.tap(find.text('Fechar'));
+    await tester.pumpAndSettle();
+    await openModule(tester, 'Suprimentos');
+    await tester.scrollUntilVisible(find.text('75,0'), 200, scrollable: find.byType(Scrollable).first);
+    expect(find.text('75,0'), findsOneWidget);
   });
 }

@@ -31,6 +31,21 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
   final _list = GlobalKey<RecordListState>();
   String? _status;
   bool _open = true;
+  bool _late = false;
+  String? _month;
+  String? _billTo;
+
+  static Map<String, String> _months() {
+    final now = DateTime.now();
+    const names = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+    return {
+      for (var i = -2; i <= 9; i++)
+        () {
+          final d = DateTime(now.year, now.month + i);
+          return '${d.year}-${d.month.toString().padLeft(2, '0')}';
+        }(): '${names[DateTime(now.year, now.month + i).month - 1]}/${DateTime(now.year, now.month + i).year}',
+    };
+  }
 
   Future<void> _new() async {
     final o = await Navigator.of(context)
@@ -46,11 +61,14 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
     key: _list,
     api: widget.session.api,
     path: '/api/sales/orders',
-    query: {'status': _status, 'open': _open && _status == null ? true : null},
+    query: {'status': _status, 'open': _open && _status == null ? true : null, 'month': _month, 'late': _late ? true : null, 'billTo': _billTo},
     searchHint: 'Pedido, cliente ou pedido do cliente',
     filters: [
       ChoiceFilter(label: 'Situação', value: _status, choices: salesOrderStatuses, onChanged: (v) => setState(() => _status = v)),
       FilterChip(label: const Text('Somente abertos'), selected: _open, onSelected: (v) => setState(() => _open = v)),
+      ChoiceFilter(label: 'Entrega no mês', value: _month, choices: _months(), onChanged: (v) => setState(() => _month = v)),
+      FilterChip(key: const ValueKey('orders-late'), label: const Text('Atrasados'), selected: _late, onSelected: (v) => setState(() => _late = v)),
+      ChoiceFilter(label: 'Faturar para', value: _billTo, choices: billToLabels, onChanged: (v) => setState(() => _billTo = v)),
     ],
     fab: widget.session.canSell
         ? FloatingActionButton.extended(heroTag: 'new-sales-order', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo pedido'))
@@ -60,7 +78,10 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
       col('Cliente', 'customerName'),
       col('Pedido do cliente', 'customerPo'),
       labelCol('Situação', 'status', salesOrderStatuses),
+      labelCol('Faturar p/', 'billTo', billToLabels),
       moneyCol('Total', 'total'),
+      moneyCol('Saldo R\$', 'balanceValue'),
+      ColumnSpec('Saldo kg', (e) => e['balanceKg'] == null ? '' : fmt(e['balanceKg']), numeric: true),
       dateCol('Entrega', 'nextDue'),
       ColumnSpec('Pronto', (e) => '${(_n(e['progress']) * 100).round()}%', numeric: true),
       ColumnSpec(
@@ -77,6 +98,20 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
       _list.currentState?.reload();
     },
   );
+}
+
+String _measures(Object? spec) {
+  if (spec is! Map) return '';
+  return [
+    if (spec['outsideDiameter'] != null) 'Ø${fmt(spec['outsideDiameter'])}',
+    if (spec['thickness'] != null) 'e${fmt(spec['thickness'])}',
+    if (spec['length'] != null) 'c${fmt(spec['length'])}',
+  ].join(' × ');
+}
+
+String _standard(Object? spec) {
+  if (spec is! Map) return '';
+  return [spec['standard'], if (spec['condition'] != null) deliveryConditions[spec['condition']]].whereType<Object>().join(' · ');
 }
 
 class SalesOrderScreen extends StatefulWidget {
@@ -330,6 +365,9 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
           fields: [
             ('Cliente', '${o['customerName']}'),
             ('Pedido do cliente', fmt(o['customerPo'])),
+            ('Faturar para', billToLabels[o['billTo']] ?? fmt(o['billTo'])),
+            ('Origem', orderOrigins[o['origin']] ?? fmt(o['origin'])),
+            ('Responsável de vendas', fmt(o['salesperson'])),
             ('Prazo', fmt(o['paymentTermName'] ?? o['customPaymentTerm'])),
             ('Frete', freightTerms[o['freight']] ?? fmt(o['freight'])),
             ('Orçamento', fmt(o['quoteReference'])),
@@ -358,12 +396,17 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
               ColumnSpec('Produto', (e) => '${e['productCode']}${e['customerPartNumber'] == null ? '' : ' (${e['customerPartNumber']})'}'),
               col('Descrição', 'description'),
               ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
+              ColumnSpec('Medidas', (e) => _measures(e['spec'])),
+              ColumnSpec('Norma', (e) => _standard(e['spec'])),
+              ColumnSpec('MP (kg)', (e) => fmt((e['spec'] as Map?)?['materialNeedKg']), numeric: true),
+              col('Viabilidade', 'feasibilityReference'),
               ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
               col('IPI %', 'ipiPercent', numeric: true),
               dateCol('Entrega', 'dueDate'),
               moneyCol('Total', 'total'),
               col('Expedido', 'shipped', numeric: true),
               col('Saldo', 'remaining', numeric: true),
+              moneyCol('Saldo R\$', 'balanceValue'),
             ],
             rows: lines,
           ),

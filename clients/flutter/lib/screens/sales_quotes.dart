@@ -15,6 +15,7 @@ import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
 import 'sales_common.dart';
+import 'viability.dart';
 
 const _requestExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt'];
 
@@ -41,6 +42,65 @@ const salesLineFields = [
   FieldSpec('deliveryDate', 'Data de entrega', type: FieldType.date, dateFor: 'leadTimeDays'),
   FieldSpec('description', 'Descrição', hint: 'Vazio = descrição do cliente ou do produto'),
 ];
+
+const specKeys = [
+  'outsideDiameter',
+  'thickness',
+  'length',
+  'standard',
+  'condition',
+  'saleUnit',
+  'pieceWeightKg',
+  'materialNeedKg',
+  'toleranceDiameter',
+  'toleranceThickness',
+  'toleranceLengthPlus',
+];
+
+final orderLineFields = [
+  ...salesLineFields,
+  const FieldSpec('outsideDiameter', 'Ø externo (mm)', type: FieldType.decimal),
+  const FieldSpec('thickness', 'Espessura (mm)', type: FieldType.decimal),
+  const FieldSpec('length', 'Comprimento (mm)', type: FieldType.decimal),
+  const FieldSpec('standard', 'Norma', hint: 'NBR 5599, DIN 2393…'),
+  FieldSpec('condition', 'Estado de entrega', type: FieldType.choice, choices: deliveryConditions),
+  FieldSpec('saleUnit', 'Unidade de venda', type: FieldType.choice, choices: saleUnits),
+  const FieldSpec('pieceWeightKg', 'Peso da peça (kg)', type: FieldType.decimal),
+  const FieldSpec('materialNeedKg', 'Necessidade de MP (kg)', type: FieldType.decimal, hint: 'Vazio = calculada pela quantidade'),
+  const FieldSpec('toleranceDiameter', 'Tolerância Ø (± mm)', type: FieldType.decimal),
+  const FieldSpec('toleranceThickness', 'Tolerância espessura (± mm)', type: FieldType.decimal),
+  const FieldSpec('toleranceLengthPlus', 'Tolerância comprimento (+ mm)', type: FieldType.decimal),
+  const FieldSpec(
+    'feasibilityId',
+    'Análise de viabilidade',
+    type: FieldType.lookup,
+    lookup: LookupSpec('/api/viability', query: {'usable': true}),
+    hint: 'Cobre até 3 pedidos do mesmo item',
+  ),
+];
+
+final orderLineColumns = <ColumnSpec>[
+  ...salesLineColumns,
+  ColumnSpec(
+    'Medidas',
+    (e) => [
+      if (e['outsideDiameter'] != null) 'Ø${fmt(e['outsideDiameter'])}',
+      if (e['thickness'] != null) 'e${fmt(e['thickness'])}',
+      if (e['length'] != null) 'c${fmt(e['length'])}',
+    ].join(' × '),
+  ),
+  ColumnSpec('Norma', (e) => [e['standard'], if (e['condition'] != null) deliveryConditions[e['condition']]].whereType<Object>().join(' · ')),
+];
+
+Map<String, dynamic> packSpec(Map<String, dynamic> line) {
+  final spec = {
+    for (final k in specKeys)
+      if (line[k] != null) k: line[k],
+  };
+  final out = Map.of(line)..removeWhere((k, _) => specKeys.contains(k));
+  if (spec.isNotEmpty) out['spec'] = spec;
+  return out;
+}
 
 final salesLineColumns = [
   ColumnSpec('Produto', (e) => lbl(e, 'productId')),
@@ -146,6 +206,9 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
   late final _conditions = TextEditingController(text: widget.quote?['conditions'] as String? ?? '');
   late final _notes = TextEditingController(text: widget.quote?['notes'] as String? ?? '');
   late final _po = TextEditingController(text: widget.quote?['customerPo'] as String? ?? '');
+  late final _salesperson = TextEditingController(text: widget.quote?['salesperson'] as String? ?? widget.session.username ?? '');
+  late String _billTo = '${widget.quote?['billTo'] ?? 'Ebt'}';
+  late String _origin = '${widget.quote?['origin'] ?? 'Email'}';
   late List<Map<String, dynamic>> _lines = [
     for (final l in (widget.quote?['lines'] as List? ?? []).cast<Map<String, dynamic>>())
       {
@@ -157,7 +220,9 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
         'leadTimeDays': l['leadTimeDays'],
         'deliveryDate': l['deliveryDate'] ?? l['dueDate'],
         'description': l['description'],
-        '_labels': {'productId': '${l['productCode']} · ${l['description']}'},
+        ...?(l['spec'] as Map<String, dynamic>?),
+        'feasibilityId': l['feasibilityId'],
+        '_labels': {'productId': '${l['productCode']} · ${l['description']}', if (l['feasibilityId'] != null) 'feasibilityId': '${l['feasibilityReference']}'},
       },
   ];
   List<Map<String, dynamic>> _addresses = [];
@@ -181,7 +246,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
 
   @override
   void dispose() {
-    for (final c in [_validity, _contact, _email, _ref, _conditions, _notes, _po]) {
+    for (final c in [_validity, _contact, _email, _ref, _conditions, _notes, _po, _salesperson]) {
       c.dispose();
     }
     super.dispose();
@@ -245,9 +310,14 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
       'customerReference': _t(_ref),
       'conditions': _t(_conditions),
       'notes': _t(_notes),
-      'lines': [for (final l in _lines) stripLocal(l)],
+      'lines': [for (final l in _lines) widget.asOrder ? packSpec(stripLocal(l)) : stripLocal(l)],
     };
-    if (widget.asOrder) body['customerPo'] = _t(_po);
+    if (widget.asOrder) {
+      body['customerPo'] = _t(_po);
+      body['billTo'] = _billTo;
+      body['origin'] = _origin;
+      body['salesperson'] = _t(_salesperson);
+    }
     final path = widget.asOrder ? '/api/sales/orders' : '/api/sales/quotes';
     try {
       final q = (widget.quote == null ? await api.post(path, body) : await api.put('$path/${widget.quote!['id']}', body)) as Map<String, dynamic>;
@@ -380,11 +450,36 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
                     onChanged: (v) => setState(() => _freight = v ?? 'Cif'),
                   ),
                 ),
-                if (widget.asOrder)
+                if (widget.asOrder) ...[
                   SizedBox(
                     width: w,
                     child: TextField(controller: _po, decoration: _dec('Pedido de compra do cliente')),
                   ),
+                  SizedBox(
+                    width: w,
+                    child: DropdownButtonFormField<String>(
+                      key: const ValueKey('order-bill-to'),
+                      initialValue: _billTo,
+                      decoration: _dec('Faturar para'),
+                      items: [for (final e in billToLabels.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+                      onChanged: (v) => setState(() => _billTo = v ?? 'Ebt'),
+                    ),
+                  ),
+                  SizedBox(
+                    width: w,
+                    child: DropdownButtonFormField<String>(
+                      key: const ValueKey('order-origin'),
+                      initialValue: _origin,
+                      decoration: _dec('Origem do pedido'),
+                      items: [for (final e in orderOrigins.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+                      onChanged: (v) => setState(() => _origin = v ?? 'Email'),
+                    ),
+                  ),
+                  SizedBox(
+                    width: w,
+                    child: TextField(key: const ValueKey('order-salesperson'), controller: _salesperson, decoration: _dec('Responsável de vendas')),
+                  ),
+                ],
                 if (!widget.asOrder) ...[
                   SizedBox(
                     width: wide ? 140 : w,
@@ -430,14 +525,14 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
           LinesEditor(
             api: api,
             title: 'Itens',
-            fields: salesLineFields,
-            newTitle: 'Criar orçamento',
-            addLabel: 'Criar orçamento',
-            addEnabled: _customerId != null && (_termId != null || _customTerm != null),
-            editTitle: 'Editar orçamento',
+            fields: widget.asOrder ? orderLineFields : salesLineFields,
+            newTitle: widget.asOrder ? 'Nova linha' : 'Criar orçamento',
+            addLabel: widget.asOrder ? 'Adicionar linha' : 'Criar orçamento',
+            addEnabled: widget.asOrder || (_customerId != null && (_termId != null || _customTerm != null)),
+            editTitle: widget.asOrder ? null : 'Editar orçamento',
             lines: _lines,
             onChanged: (l) => setState(() => _lines = l),
-            columns: salesLineColumns,
+            columns: widget.asOrder ? orderLineColumns : salesLineColumns,
           ),
           Padding(
             padding: const EdgeInsets.all(8),
@@ -847,6 +942,19 @@ class _QuoteScreenState extends State<QuoteScreen> {
   }
 
   static const _revisable = ['PendingApproval', 'Approved', 'Sent', 'Accepted', 'PurchaseOrder', 'Rejected', 'Expired'];
+  Future<void> _newFeasibility() async {
+    final q = _q!;
+    final r = await newFeasibility(
+      context,
+      s,
+      initial: {
+        'customerId': q['customerId'],
+        'quoteId': q['id'],
+        '_labels': {'customerId': '${q['customerName']}', 'quoteId': '${q['reference']}'},
+      },
+    );
+    if (r != null && r['id'] is int && mounted) await openFeasibility(context, s, r['id'] as int);
+  }
 
   List<Widget> _menuActions() {
     final q = _q;
@@ -856,6 +964,11 @@ class _QuoteScreenState extends State<QuoteScreen> {
         value: _preview,
         child: const ListTile(leading: Icon(Icons.description_outlined), title: Text('Ver texto do orçamento')),
       ),
+      if (s.canSell && !['Cancelled', 'Converted'].contains(status))
+        PopupMenuItem(
+          value: _newFeasibility,
+          child: const ListTile(leading: Icon(Icons.fact_check_outlined), title: Text('Nova análise de viabilidade')),
+        ),
       if (s.canSell && status == 'Draft')
         PopupMenuItem(
           value: _edit,

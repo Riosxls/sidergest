@@ -1,6 +1,7 @@
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
 using Ebt.Core.Fiscal;
+using Ebt.Core.Viability;
 using Ebt.Core.Inventory;
 using Ebt.Core.Production;
 using Microsoft.EntityFrameworkCore;
@@ -252,8 +253,9 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
             var addressId = i.AddressId ?? q.AddressId ?? await db.CustomerAddresses.Where(a => a.CustomerId == q.CustomerId).OrderBy(a => a.Id).Select(a => (int?)a.Id).FirstOrDefaultAsync(ct)
                 ?? throw SalesException.Invalid("addressId", "Customer has no address; register the plant/delivery address first");
             var today = Today();
+            var studies = await ViabilityRules.UsableForQuoteAsync(db, q.Id, ct);
             var lines = q.Lines.OrderBy(l => l.Sequence).Select(l => new SalesLineInput(l.ProductId, l.Quantity, l.UnitPrice, l.IpiPercent, l.IcmsPercent, l.LeadTimeDays,
-                l.DeliveryDate ?? (l.LeadTimeDays is { } d ? today.AddDays(d) : null), l.Description)).ToList();
+                l.DeliveryDate ?? (l.LeadTimeDays is { } d ? today.AddDays(d) : null), l.Description, null, studies.TryGetValue(l.ProductId, out var fid) ? fid : null)).ToList();
             var order = await CreateOrderCoreAsync(new SalesOrderInput(q.CustomerId, addressId, lines, Clean(i.CustomerPo) ?? q.CustomerPo, q.PaymentTermId, q.Freight, q.Notes, null, q.CustomPaymentTerm), q, i.OverrideCredit && mayOverrideCredit, user, ct);
             var from = q.Status;
             q.Status = QuoteStatus.Converted;
@@ -271,6 +273,7 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
     {
         await ValidateHeaderAsync(i.CustomerId, i.AddressId, i.PaymentTermId, ct);
         var lines = await BuildLinesAsync(i.CustomerId, i.Lines, ct);
+        await ViabilityRules.ValidateAsync(db, i.CustomerId, lines.Select(l => (l.ProductId, l.FeasibilityId)), null, ct);
         var credit = await CreditAsync(i.CustomerId, i.PaymentTermId, Totals(lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, (decimal?)null))).Total, null, ct);
         if (credit.Exceeded && !overrideCredit)
             throw SalesException.Conflict($"Credit limit exceeded: limit {credit.Limit:0.00}, open {credit.Open:0.00}, this order {credit.ThisOrder:0.00}");
@@ -279,12 +282,13 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
         var order = new SalesOrder
         {
             Number = number, Reference = OrderReference(number), QuoteId = quote?.Id, CustomerId = i.CustomerId, AddressId = i.AddressId, CustomerPo = Clean(i.CustomerPo),
-            PaymentTermId = i.PaymentTermId, CustomPaymentTerm = Clean(i.CustomPaymentTerm), Freight = i.Freight, Notes = Clean(i.Notes), Company = CompanyOf(i.Company), Status = SalesOrderStatus.Created, CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow,
+            PaymentTermId = i.PaymentTermId, CustomPaymentTerm = Clean(i.CustomPaymentTerm), Freight = i.Freight, Notes = Clean(i.Notes), Company = CompanyOf(i.Company), BillTo = i.BillTo, Origin = i.Origin, Salesperson = Clean(i.Salesperson), Status = SalesOrderStatus.Created, CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow,
             Lines = lines.Select((l, n) => new SalesOrderLine
             {
                 Sequence = (n + 1) * 10, ProductId = l.ProductId, CustomerPartNumber = l.CustomerPartNumber, Description = l.Description, Quantity = l.Quantity, Unit = l.Unit,
-                UnitPrice = l.UnitPrice, IpiPercent = l.IpiPercent, IcmsPercent = l.IcmsPercent, DueDate = l.DeliveryDate ?? today.AddDays(l.LeadTimeDays ?? 30)
-            }).ToList()
+                UnitPrice = l.UnitPrice, IpiPercent = l.IpiPercent, IcmsPercent = l.IcmsPercent, DueDate = l.DeliveryDate ?? today.AddDays(l.LeadTimeDays ?? 30),
+                FeasibilityStudyId = l.FeasibilityId
+            }.WithSpec(l.Spec)).ToList()
         };
         db.SalesOrders.Add(order);
         await db.SaveChangesAsync(ct);
@@ -298,6 +302,7 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
     {
         await ValidateHeaderAsync(i.CustomerId, i.AddressId, i.PaymentTermId, ct);
         var lines = await BuildLinesAsync(i.CustomerId, i.Lines, ct);
+        await ViabilityRules.ValidateAsync(db, i.CustomerId, lines.Select(l => (l.ProductId, l.FeasibilityId)), id, ct);
         return await InTransaction(async () =>
         {
             var o = await LockOrderAsync(id, ct);
@@ -311,13 +316,17 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
             o.CustomPaymentTerm = Clean(i.CustomPaymentTerm);
             o.Freight = i.Freight;
             o.Notes = Clean(i.Notes);
+            o.BillTo = i.BillTo;
+            o.Origin = i.Origin;
+            o.Salesperson = Clean(i.Salesperson);
             db.SalesOrderLines.RemoveRange(o.Lines);
             await db.SaveChangesAsync(ct);
             o.Lines = lines.Select((l, n) => new SalesOrderLine
             {
                 Sequence = (n + 1) * 10, ProductId = l.ProductId, CustomerPartNumber = l.CustomerPartNumber, Description = l.Description, Quantity = l.Quantity, Unit = l.Unit,
-                UnitPrice = l.UnitPrice, IpiPercent = l.IpiPercent, IcmsPercent = l.IcmsPercent, DueDate = l.DeliveryDate ?? today.AddDays(l.LeadTimeDays ?? 30)
-            }).ToList();
+                UnitPrice = l.UnitPrice, IpiPercent = l.IpiPercent, IcmsPercent = l.IcmsPercent, DueDate = l.DeliveryDate ?? today.AddDays(l.LeadTimeDays ?? 30),
+                FeasibilityStudyId = l.FeasibilityId
+            }.WithSpec(l.Spec)).ToList();
             Log(SalesRecordKind.Order, o.Id, "edited", o.Status, o.Status, null, user);
             await db.SaveChangesAsync(ct);
             return o;
@@ -347,8 +356,9 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
                     notes.Add($"Item {line.Sequence}: {fromStock:0.####} do estoque");
                     continue;
                 }
+                var routing = line.FeasibilityStudyId is { } fid ? await db.FeasibilityStudies.AsNoTracking().FirstOrDefaultAsync(f => f.Id == fid, ct) : null;
                 var of = await production.CreateOrderAsync(new OrderInput(line.ProductId, toProduce, line.DueDate, ProductionOrderKind.Standard, o.CustomerId,
-                    Notes: $"{o.Reference} item {line.Sequence}{(o.CustomerPo is null ? "" : $" · pedido cliente {o.CustomerPo}")}"), user, ct);
+                    Notes: $"{o.Reference} item {line.Sequence}{(o.CustomerPo is null ? "" : $" · pedido cliente {o.CustomerPo}")}{(routing is null ? "" : $" · {ViabilityRules.RoutingNote(routing)}")}"), user, ct);
                 line.ProductionOrderId = of.Id;
                 notes.Add($"Item {line.Sequence}: {of.Reference} ({toProduce:0.####}){(fromStock > 0 ? $" + {fromStock:0.####} do estoque" : "")}");
             }
@@ -539,6 +549,8 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
             d.Carrier = Clean(i.Carrier) ?? d.Carrier;
             d.VehiclePlate = Clean(i.VehiclePlate)?.ToUpper();
             d.GrossWeightKg = i.GrossWeightKg ?? d.GrossWeightKg;
+            d.LotNumber = Clean(i.LotNumber) ?? d.LotNumber;
+            d.InvoicedValue = i.InvoicedValue ?? d.InvoicedValue;
             Log(SalesRecordKind.Delivery, d.Id, "shipped", DeliveryStatus.Planned, d.Status, d.InvoiceNumber is null ? null : $"NF {d.InvoiceNumber}", user);
             await db.SaveChangesAsync(ct);
             await RefreshOrderStatusAsync(o, $"{d.Reference} expedida", user, ct);
@@ -624,7 +636,7 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
                ?? throw SalesException.Conflict($"Set the shipping location in /api/sales/settings or create stock location {ProductionService.DefaultReceiptLocationCode}");
     }
 
-    private sealed record ResolvedLine(int ProductId, string? CustomerPartNumber, string Description, decimal Quantity, string Unit, decimal UnitPrice, decimal? ListPrice, decimal IpiPercent, decimal IcmsPercent, int? LeadTimeDays, DateOnly? DeliveryDate);
+    private sealed record ResolvedLine(int ProductId, string? CustomerPartNumber, string Description, decimal Quantity, string Unit, decimal UnitPrice, decimal? ListPrice, decimal IpiPercent, decimal IcmsPercent, int? LeadTimeDays, DateOnly? DeliveryDate, LineSpec? Spec = null, int? FeasibilityId = null);
 
     private async Task<List<ResolvedLine>> BuildLinesAsync(int customerId, IReadOnlyList<SalesLineInput>? input, CancellationToken ct)
     {
@@ -648,7 +660,7 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
             var unitPrice = l.UnitPrice ?? price?.UnitPrice ?? throw SalesException.Invalid($"{f}.unitPrice", $"No price for {p.Code}; give one or register it in the price list");
             customerParts.TryGetValue(p.Id, out var cp);
             result.Add(new ResolvedLine(p.Id, cp?.CustomerPartNumber, Clean(l.Description) ?? cp?.CustomerDescription ?? p.Name, l.Quantity, p.StockUnit, unitPrice, price?.UnitPrice,
-                l.IpiPercent ?? price?.IpiPercent ?? 0m, l.IcmsPercent ?? price?.IcmsPercent ?? 0m, l.LeadTimeDays, l.DeliveryDate));
+                l.IpiPercent ?? price?.IpiPercent ?? 0m, l.IcmsPercent ?? price?.IcmsPercent ?? 0m, l.LeadTimeDays, l.DeliveryDate, l.Spec, l.FeasibilityId));
         }
         return result;
     }
