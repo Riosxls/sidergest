@@ -19,7 +19,7 @@ jobs:
       EBT_TEST_PG: Host=localhost;Username=postgres;Password=postgres
       EBT_TEST_LOG: Error
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
@@ -39,7 +39,7 @@ jobs:
       run:
         working-directory: clients/flutter
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -68,7 +68,7 @@ jobs:
       ASPNETCORE_URLS: http://localhost:5099
       ASPNETCORE_ENVIRONMENT: Testing
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
