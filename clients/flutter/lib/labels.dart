@@ -33,7 +33,49 @@ const postableTypes = [
   'OpeningBalance',
 ];
 
-const lotStatuses = {'Released': 'Liberado', 'Quarantine': 'Quarentena', 'Rejected': 'Rejeitado'};
+const userRoles = {
+  'Admin': 'Administrador',
+  'Engineering': 'Engenharia',
+  'Reader': 'Leitura',
+  'Stock': 'Estoque',
+  'Purchasing': 'Compras',
+  'Production': 'Produção',
+  'Sales': 'Vendas',
+  'SalesManager': 'Gerente de vendas',
+};
+
+const auditActions = {'Insert': 'Criado', 'Update': 'Alterado', 'Delete': 'Excluído'};
+
+const auditEntities = [
+  'Customer', 'CustomerAddress', 'Supplier', 'SupplierAddress', 'Material', 'Product', 'AppUser', 'StockLocation', 'StockSettings', 'StockClosing',
+  'FiscalSettings', 'Cfop', 'TaxRule', 'MonthlyPrice', 'PaymentTerm', 'PriceListEntry', 'SalesSettings', 'ProductionSettings', 'SteelLot', 'SlitterJob',
+];
+
+const policyDescriptions = {
+  'read': 'Consultar todos os cadastros e telas',
+  'write': 'Alterar cadastros de engenharia',
+  'admin': 'Administrar usuários, parâmetros e auditoria',
+  'stock': 'Lançar movimentações, lotes e reservas de estoque',
+  'purchasing-request': 'Criar requisições de compra',
+  'purchasing': 'Aprovar requisições, cotar e emitir pedidos de compra',
+  'receiving': 'Receber notas fiscais de compra',
+  'production': 'Operar ordens de fabricação e apontamentos',
+  'production-materials': 'Movimentar materiais da produção',
+  'sales': 'Criar orçamentos e pedidos de venda',
+  'sales-approve': 'Aprovar orçamentos e pedidos de venda',
+  'sales-release': 'Liberar pedidos para produção',
+  'sales-ship': 'Expedir entregas',
+  'customers': 'Manter clientes',
+  'certificates': 'Emitir certificados de qualidade',
+  'fiscal-prices': 'Manter preços fiscais mensais',
+  'fiscal-cancel': 'Cancelar notas fiscais',
+  'steel': 'Controle de aço (bobinas e slitter)',
+  'viability-quality': 'Assinar viabilidade (qualidade)',
+  'viability-production': 'Assinar viabilidade (produção)',
+  'viability-commercial': 'Assinar viabilidade (comercial)',
+};
+
+const lotStatuses ={'Released': 'Liberado', 'Quarantine': 'Quarentena', 'Rejected': 'Rejeitado'};
 const reservationStatuses = {'Open': 'Aberta', 'Consumed': 'Consumida', 'Released': 'Liberada'};
 
 const requisitionStatuses = {
