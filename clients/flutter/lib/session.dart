@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -15,19 +16,21 @@ class Session extends ChangeNotifier {
     : api = api ?? ApiClient(baseUrl: defaultApiUrl),
       _storage = storage ?? const FlutterSecureStorage() {
     this.api.onUnauthorized = logout;
+    this.api.onRefreshed = (r) => unawaited(_apply(r));
   }
 
   final ApiClient api;
   final FlutterSecureStorage _storage;
-  static const _secureKeys = ['token', 'username', 'role', 'expiresAt', 'permissions'];
+  static const _secureKeys = ['token', 'username', 'role', 'expiresAt', 'permissions', 'refreshToken', 'refreshExpiresAt'];
   String? username;
   String? role;
   Set<String> permissions = const {};
   DateTime? expiresAt;
+  DateTime? refreshExpiresAt;
   ThemeMode themeMode = ThemeMode.system;
   final alerts = AlertCenter();
 
-  bool get loggedIn => api.token != null && (expiresAt == null || expiresAt!.isAfter(DateTime.now()));
+  bool get loggedIn => api.token != null && ((expiresAt?.isAfter(DateTime.now()) ?? true) || _refreshValid);
   bool get canWrite => permissions.contains('write');
   bool get isAdmin => permissions.contains('admin');
   bool get canStock => permissions.contains('stock');
@@ -50,6 +53,8 @@ class Session extends ChangeNotifier {
   bool get canFiscalCancel => permissions.contains('fiscal-cancel');
   String get baseUrl => api.baseUrl;
 
+  bool get _refreshValid => api.refreshToken != null && refreshExpiresAt != null && refreshExpiresAt!.isAfter(DateTime.now());
+
   Future<void> restore() async {
     try {
       final p = await SharedPreferences.getInstance();
@@ -59,12 +64,42 @@ class Session extends ChangeNotifier {
     try {
       final v = await _storage.readAll();
       final exp = DateTime.tryParse(v['expiresAt'] ?? '');
-      if (exp != null && exp.isAfter(DateTime.now()) && v['token'] != null) {
+      final rExp = DateTime.tryParse(v['refreshExpiresAt'] ?? '');
+      final rt = v['refreshToken'];
+      final accessValid = exp != null && exp.isAfter(DateTime.now());
+      final refreshValid = rt != null && rExp != null && rExp.isAfter(DateTime.now());
+      if (v['token'] != null && (accessValid || refreshValid)) {
         api.token = v['token'];
+        api.refreshToken = rt;
         username = v['username'];
         role = v['role'];
         permissions = (jsonDecode(v['permissions'] ?? '[]') as List).cast<String>().toSet();
         expiresAt = exp;
+        refreshExpiresAt = rExp;
+        if (!accessValid && !await api.refresh()) await logout();
+      }
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  /// Applies a login/refresh response and persists it.
+  Future<void> _apply(Map<String, dynamic> r) async {
+    api.token = r['token'] as String;
+    api.refreshToken = r['refreshToken'] as String?;
+    username = r['username'] as String? ?? username;
+    role = r['role'] as String? ?? role;
+    if (r['permissions'] is List) permissions = (r['permissions'] as List).cast<String>().toSet();
+    expiresAt = DateTime.parse(r['expiresAt'] as String);
+    refreshExpiresAt = DateTime.tryParse('${r['refreshExpiresAt'] ?? ''}');
+    try {
+      await _storage.write(key: 'token', value: api.token);
+      await _storage.write(key: 'username', value: username);
+      await _storage.write(key: 'role', value: role);
+      await _storage.write(key: 'expiresAt', value: expiresAt!.toIso8601String());
+      await _storage.write(key: 'permissions', value: jsonEncode(permissions.toList()));
+      if (api.refreshToken != null) {
+        await _storage.write(key: 'refreshToken', value: api.refreshToken);
+        await _storage.write(key: 'refreshExpiresAt', value: refreshExpiresAt?.toIso8601String());
       }
     } catch (_) {}
     notifyListeners();
@@ -73,24 +108,13 @@ class Session extends ChangeNotifier {
   Future<void> login(String url, String user, String password) async {
     api.baseUrl = url.trim();
     api.token = null;
+    api.refreshToken = null;
     final r = await api.post('/api/auth/login', {'username': user, 'password': password}) as Map<String, dynamic>;
-    api.token = r['token'] as String;
-    username = r['username'] as String;
-    role = r['role'] as String;
-    permissions = ((r['permissions'] as List?) ?? const []).cast<String>().toSet();
-    expiresAt = DateTime.parse(r['expiresAt'] as String);
     try {
       final p = await SharedPreferences.getInstance();
       await p.setString('apiUrl', api.baseUrl);
     } catch (_) {}
-    try {
-      await _storage.write(key: 'token', value: api.token);
-      await _storage.write(key: 'username', value: username);
-      await _storage.write(key: 'role', value: role);
-      await _storage.write(key: 'expiresAt', value: expiresAt!.toIso8601String());
-      await _storage.write(key: 'permissions', value: jsonEncode(permissions.toList()));
-    } catch (_) {}
-    notifyListeners();
+    await _apply(r);
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
@@ -103,12 +127,19 @@ class Session extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    final rt = api.refreshToken;
+    if (rt != null) {
+      // Best effort: revoke the refresh token server-side without blocking the UI.
+      unawaited(api.post('/api/auth/logout', {'refreshToken': rt}).then<void>((_) {}, onError: (_) {}));
+    }
     api.token = null;
+    api.refreshToken = null;
     api.clearVersions();
     username = null;
     role = null;
     permissions = const {};
     expiresAt = null;
+    refreshExpiresAt = null;
     alerts.value = const [];
     for (final k in _secureKeys) {
       try {

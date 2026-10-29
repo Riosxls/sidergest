@@ -39,6 +39,11 @@ class ApiClient {
 
   String? token;
   void Function()? onUnauthorized;
+  String? refreshToken;
+
+  /// Called with the refresh response (same shape as login) after a successful silent refresh.
+  void Function(Map<String, dynamic> session)? onRefreshed;
+  Future<bool>? _refreshing;
   final http.Client _http;
   final _versions = <String, String>{};
   static final _idKey = RegExp(r'^(.*?/\d+)(?:[/?]|$)');
@@ -107,13 +112,41 @@ class ApiClient {
     throw _error(r);
   }
 
-  Future<dynamic> _send(String path, Future<http.Response> Function() call) async {
-    http.Response r;
+  /// Exchanges the refresh token for a new session. Concurrent callers share one request.
+  Future<bool> refresh() => _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
+
+  Future<bool> _doRefresh() async {
+    final rt = refreshToken;
+    if (rt == null) return false;
     try {
-      r = await call();
+      final r = await _http.post(_uri('/api/auth/refresh'), headers: {'Content-Type': 'application/json', 'Accept': 'application/json'}, body: jsonEncode({'refreshToken': rt}));
+      if (r.statusCode < 200 || r.statusCode >= 300) return false;
+      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      token = j['token'] as String;
+      refreshToken = j['refreshToken'] as String?;
+      onRefreshed?.call(j);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<http.Response> _call(String path, Future<http.Response> Function() call) async {
+    try {
+      var r = await call();
+      if (r.statusCode == 401 && token != null && !path.startsWith('/api/auth/')) {
+        if (await refresh()) {
+          r = await call();
+        }
+      }
+      return r;
     } catch (e) {
       throw ApiException(0, 'Servidor indisponível ($baseUrl)');
     }
+  }
+
+  Future<dynamic> _send(String path, Future<http.Response> Function() call) async {
+    final r = await _call(path, call);
     if (r.statusCode == 401 && token != null) onUnauthorized?.call();
     if (r.statusCode >= 200 && r.statusCode < 300) {
       final tag = r.headers['etag'];

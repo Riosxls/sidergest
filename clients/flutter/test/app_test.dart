@@ -48,6 +48,8 @@ MockClient fakeBackend(List<http.Request> log) => MockClient((r) async {
     return json({
       'token': 'tok',
       'expiresAt': DateTime.now().add(const Duration(hours: 8)).toUtc().toIso8601String(),
+      'refreshToken': 'rt-1',
+      'refreshExpiresAt': DateTime.now().add(const Duration(days: 7)).toUtc().toIso8601String(),
       'username': 'eng',
       'role': 'Engineering',
       'permissions': ['read', 'write', 'purchasing-request'],
