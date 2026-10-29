@@ -1,5 +1,6 @@
 using System.Net;
 using Ebt.Api.Endpoints;
+using Ebt.Api.Infrastructure;
 using Ebt.Core.Entities;
 using Ebt.Core.Services;
 
@@ -127,6 +128,27 @@ public class EngineeringTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.BadRequest, (await c.Post($"/api/customers/{customer.Id}/addresses", bad)).StatusCode);
         var noIe = ok with { StateRegistration = null, LegacyCode = "3" };
         Assert.Equal(HttpStatusCode.BadRequest, (await c.Post($"/api/customers/{customer.Id}/addresses", noIe)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Customer_is_created_with_default_address_and_inactivated()
+    {
+        var c = await api.AdminAsync();
+        var address = new CustomerAddressIn("12.345.678/0001-90", "SP", null, null, false, "Rua A", "10", null, "Centro", "São Paulo", null, null, null, "Maria", "m@x.com", "1199999");
+        var name = "Cliente " + Code("C");
+        var created = await (await c.Post("/api/customers", new CustomerIn(name, null, null, ConsumerType.Normal, true, address))).Read<CustomerOut>();
+        Assert.Equal(1, created.AddressCount);
+        Assert.Equal("12345678000190", created.DefaultAddress!.Document);
+
+        var bad = await c.Post("/api/customers", new CustomerIn("Y " + Code("C"), null, null, ConsumerType.Normal, true, address with { Document = "1" }));
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+
+        var off = await (await c.Put($"/api/customers/{created.Id}", new CustomerIn(name, null, null, ConsumerType.Normal, false))).Read<CustomerOut>();
+        Assert.False(off.Active);
+        var active = await (await c.GetAsync($"/api/customers?q={Uri.EscapeDataString(name)}&active=true")).Read<Page<CustomerOut>>();
+        Assert.DoesNotContain(active.Items, x => x.Id == created.Id);
+        var inactive = await (await c.GetAsync($"/api/customers?q={Uri.EscapeDataString(name)}&active=false")).Read<Page<CustomerOut>>();
+        Assert.Contains(inactive.Items, x => x.Id == created.Id);
     }
 
     [Fact]

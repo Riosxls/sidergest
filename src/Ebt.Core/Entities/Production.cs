@@ -79,6 +79,7 @@ public class ProductionOrder
     public ProductionOrder? PreviousOrder { get; set; }
     public int? Bales { get; set; }
     public string? Notes { get; set; }
+    public string? PrimaryTube { get; set; }
     public string? StatusReason { get; set; }
     public string? CreatedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
@@ -101,6 +102,9 @@ public class ProductionOrderOperation
     public ProductionOrder? Order { get; set; }
     public int Sequence { get; set; }
     public string? Description { get; set; }
+    public string? Tolerance { get; set; }
+    public string? MeasureStart { get; set; }
+    public string? MeasureEnd { get; set; }
     public int? MachineId { get; set; }
     public Machine? Machine { get; set; }
     public int? WorkCenterId { get; set; }

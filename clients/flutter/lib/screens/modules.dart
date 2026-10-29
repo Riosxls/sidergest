@@ -100,7 +100,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
   }
 
   List<GridItem> _commercial(CommercialDashboard d) => [
-    _tile(Icons.request_quote_outlined, 'Propostas abertas', '${d.k('openQuotes').toInt()}', _go('sales-quotes')),
+    _tile(Icons.request_quote_outlined, 'Orçamentos abertos', '${d.k('openQuotes').toInt()}', _go('sales-quotes')),
     _tile(Icons.payments_outlined, 'Valor em propostas', fmtMoney(d.k('openQuotesValue')), _go('sales-quotes')),
     _tile(Icons.receipt_long_outlined, 'Pedidos abertos', '${d.k('openOrders').toInt()}', _go('sales-orders')),
     _tile(Icons.attach_money, 'Valor em pedidos', fmtMoney(d.k('openOrdersValue')), _go('sales-orders')),

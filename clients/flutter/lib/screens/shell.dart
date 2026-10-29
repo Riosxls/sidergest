@@ -7,9 +7,12 @@ import '../session.dart';
 import '../widgets/alerts.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/user_menu.dart';
+import 'certificates.dart';
+import 'customers.dart';
 import 'dashboard.dart';
 import 'deliveries.dart';
 import 'entity_list.dart';
+import 'fiscal.dart';
 import 'modules.dart';
 import 'orders.dart';
 import 'product_detail.dart';
@@ -18,6 +21,7 @@ import 'production_orders.dart';
 import 'quick_actions.dart';
 import 'quotations.dart';
 import 'receipts.dart';
+import 'reports.dart' show BillingSummaryScreen, MaterialConsumptionScreen;
 import 'requisitions.dart';
 import 'sales_orders.dart';
 import 'sales_pipeline.dart';
@@ -56,11 +60,16 @@ List<NavItem> navItems() {
 
 List<NavItem> _screens() => [
   NavItem('dashboard', Icons.dashboard_outlined, 'Painel', '', (s, f, go) => DashboardScreen(session: s, onNavigate: go)),
+  NavItem('customers', Icons.people_outline, 'Clientes', 'Comercial', (s, f, go) => CustomersScreen(session: s)),
   NavItem('sales-pipeline', Icons.view_kanban_outlined, 'Funil de vendas', 'Comercial', (s, f, go) => SalesPipelineScreen(session: s)),
-  NavItem('sales-quotes', Icons.request_quote_outlined, 'Propostas', 'Comercial', (s, f, go) => QuotesScreen(session: s)),
+  NavItem('sales-quotes', Icons.request_quote_outlined, 'Orçamentos', 'Comercial', (s, f, go) => QuotesScreen(session: s)),
   NavItem('viability', Icons.fact_check_outlined, 'Análises de viabilidade', 'Comercial', (s, f, go) => ViabilityScreen(session: s, initialStatus: f)),
   NavItem('sales-orders', Icons.receipt_long_outlined, 'Pedidos de venda', 'Comercial', (s, f, go) => SalesOrdersScreen(session: s)),
   NavItem('deliveries', Icons.local_shipping_outlined, 'Entregas', 'Comercial', (s, f, go) => DeliveriesScreen(session: s)),
+  NavItem('certificates', Icons.verified_outlined, 'Certificados de qualidade', 'Comercial', (s, f, go) => CertificatesScreen(session: s)),
+  NavItem('fiscal-documents', Icons.description_outlined, 'Notas fiscais', 'Comercial', (s, f, go) => FiscalDocumentsScreen(session: s)),
+  NavItem('report-material-consumption', Icons.scale_outlined, 'Consumo de material vendido', 'Comercial', (s, f, go) => MaterialConsumptionScreen(session: s)),
+  NavItem('report-billing', Icons.bar_chart_outlined, 'Faturamento consolidado', 'Comercial', (s, f, go) => BillingSummaryScreen(session: s)),
   for (final spec in salesMasters) NavItem(spec.path, spec.icon, spec.title, 'Comercial', (s, f, go) => EntityListScreen(session: s, spec: spec)),
   for (final spec in masterData) NavItem(spec.path, spec.icon, spec.title, 'Engenharia', (s, f, go) => EntityListScreen(session: s, spec: spec)),
   NavItem('balances', Icons.inventory_outlined, 'Saldos', 'Estoque', (s, f, go) => BalancesScreen(session: s)),
@@ -88,6 +97,7 @@ List<NavItem> _screens() => [
   NavItem('planning', Icons.view_timeline_outlined, 'Programação e carga', 'PCP', (s, f, go) => PlanningScreen(session: s)),
   for (final spec in productionMasters) NavItem(spec.path, spec.icon, spec.title, 'PCP', (s, f, go) => EntityListScreen(session: s, spec: spec)),
   NavItem('settings', Icons.tune, 'Parâmetros', 'Sistema', (s, f, go) => SettingsScreen(session: s)),
+  NavItem('fiscal-settings', Icons.receipt_outlined, 'Parâmetros fiscais', 'Sistema', (s, f, go) => FiscalSettingsScreen(session: s)),
 ];
 
 class Shell extends StatefulWidget {

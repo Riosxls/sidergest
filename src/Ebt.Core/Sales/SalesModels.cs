@@ -19,9 +19,9 @@ public sealed record SalesLineInput(int ProductId, decimal Quantity, decimal? Un
     LineSpec? Spec = null, int? FeasibilityId = null);
 
 public sealed record QuoteInput(int CustomerId, IReadOnlyList<SalesLineInput> Lines, int? AddressId = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, int? ValidityDays = null,
-    string? ContactName = null, string? ContactEmail = null, string? CustomerReference = null, string? Conditions = null, string? Notes = null);
+    string? ContactName = null, string? ContactEmail = null, string? CustomerReference = null, string? Conditions = null, string? Notes = null, string? CustomPaymentTerm = null);
 
-public sealed record SalesOrderInput(int CustomerId, int AddressId, IReadOnlyList<SalesLineInput> Lines, string? CustomerPo = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, string? Notes = null,
+public sealed record SalesOrderInput(int CustomerId, int AddressId, IReadOnlyList<SalesLineInput> Lines, string? CustomerPo = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, string? Notes = null, string? Company = null, string? CustomPaymentTerm = null,
     BillTo BillTo = BillTo.Ebt, OrderOrigin Origin = OrderOrigin.System, string? Salesperson = null);
 
 public sealed record ConvertInput(int? AddressId = null, string? CustomerPo = null, bool OverrideCredit = false);
@@ -30,7 +30,7 @@ public sealed record DeliveryLineInput(int OrderLineId, decimal Quantity);
 
 public sealed record DeliveryInput(DateOnly PlannedDate, int? AddressId = null, string? Carrier = null, IReadOnlyList<DeliveryLineInput>? Lines = null, string? Notes = null);
 
-public sealed record ShipInput(DateOnly Date, string? InvoiceNumber = null, string? Carrier = null, string? VehiclePlate = null, decimal? GrossWeightKg = null, string? LotNumber = null, decimal? InvoicedValue = null);
+public sealed record ShipInput(DateOnly Date, string? InvoiceNumber = null, string? Carrier = null, string? VehiclePlate = null, decimal? GrossWeightKg = null, string? Cfop = null, decimal? Freight = null, string? LotNumber = null, decimal? InvoicedValue = null);
 
 public sealed record QuoteTotals(decimal Products, decimal Ipi, decimal Total, decimal MaxDiscountPercent);
 

@@ -1,12 +1,13 @@
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
+using Ebt.Core.Fiscal;
 using Ebt.Core.Inventory;
 using Ebt.Core.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ebt.Core.Production;
 
-public sealed partial class ProductionService(EbtDbContext db, StockService stock, BomService bom)
+public sealed partial class ProductionService(EbtDbContext db, StockService stock, BomService bom, FiscalService? fiscal = null)
 {
     public const string DefaultIssueLocationCode = "ALM";
     public const string DefaultReceiptLocationCode = "PA";
@@ -42,7 +43,7 @@ public sealed partial class ProductionService(EbtDbContext db, StockService stoc
             {
                 Kind = i.Kind, Number = number, Reference = ReferenceFor(i.Kind, number), ProductId = product.Id, CustomerId = i.CustomerId, Quantity = i.Quantity,
                 DueDate = i.DueDate, Status = ProductionOrderStatus.Created, ParentOrderId = i.ParentOrderId, PreviousOrderId = i.PreviousOrderId, Bales = i.Bales,
-                Notes = Clean(i.Notes), CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow
+                Notes = Clean(i.Notes), PrimaryTube = Clean(i.PrimaryTube), CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow
             };
             await SnapshotStructureAsync(order, ct);
             db.ProductionOrders.Add(order);
@@ -69,6 +70,7 @@ public sealed partial class ProductionService(EbtDbContext db, StockService stoc
             order.CustomerId = i.CustomerId;
             order.Bales = i.Bales;
             order.Notes = Clean(i.Notes);
+            order.PrimaryTube = Clean(i.PrimaryTube);
             await db.SaveChangesAsync(ct);
             return order;
         }, ct);
@@ -487,7 +489,7 @@ public sealed partial class ProductionService(EbtDbContext db, StockService stoc
             order.Operations.Add(new ProductionOrderOperation
             {
                 Sequence = op.Sequence, Description = op.Description, MachineId = op.MachineId, WorkCenterId = op.WorkCenterId,
-                SetupHours = op.SetupHours, PiecesPerHour = op.PiecesPerHour, Operators = op.Operators
+                SetupHours = op.SetupHours, PiecesPerHour = op.PiecesPerHour, Operators = op.Operators, Tolerance = op.Standard
             });
             foreach (var g in op.Items.GroupBy(i => (i.MaterialId, i.ComponentProductId)))
             {

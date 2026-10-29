@@ -56,6 +56,8 @@ public static class AuthEndpoints
 
     public static string Hash(AppUser user, string password) => Hasher.HashPassword(user, password);
 
+    public static bool VerifyPassword(AppUser user, string password) => Hasher.VerifyHashedPassword(user, user.PasswordHash, password) != PasswordVerificationResult.Failed;
+
     public static void MapAuth(this WebApplication app)
     {
         var auth = app.MapGroup("/api/auth").WithTags("Auth");

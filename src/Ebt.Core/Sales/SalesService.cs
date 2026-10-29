@@ -1,5 +1,6 @@
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
+using Ebt.Core.Fiscal;
 using Ebt.Core.Viability;
 using Ebt.Core.Inventory;
 using Ebt.Core.Production;
@@ -7,14 +8,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ebt.Core.Sales;
 
-public sealed class SalesService(EbtDbContext db, StockService stock, ProductionService production)
+public sealed class SalesService(EbtDbContext db, StockService stock, ProductionService production, FiscalService fiscal)
 {
-    public static readonly QuoteStatus[] OpenQuote = [QuoteStatus.Draft, QuoteStatus.PendingApproval, QuoteStatus.Approved, QuoteStatus.Sent, QuoteStatus.Accepted];
+    public static readonly QuoteStatus[] OpenQuote = [QuoteStatus.Draft, QuoteStatus.PendingApproval, QuoteStatus.Approved, QuoteStatus.Sent, QuoteStatus.PurchaseOrder, QuoteStatus.Accepted];
     public static readonly SalesOrderStatus[] OpenOrder = [SalesOrderStatus.Created, SalesOrderStatus.Released, SalesOrderStatus.PartiallyShipped];
-    private static readonly QuoteStatus[] Revisable = [QuoteStatus.PendingApproval, QuoteStatus.Approved, QuoteStatus.Sent, QuoteStatus.Rejected, QuoteStatus.Expired];
+    private static readonly QuoteStatus[] Revisable = [QuoteStatus.PendingApproval, QuoteStatus.Approved, QuoteStatus.Sent, QuoteStatus.Accepted, QuoteStatus.PurchaseOrder, QuoteStatus.Rejected, QuoteStatus.Expired];
     private static readonly ProductionOrderStatus[] ProductionDone = [ProductionOrderStatus.Finished, ProductionOrderStatus.Closed];
 
-    public static string QuoteReference(int number, int revision) => revision == 0 ? $"PROP {number}" : $"PROP {number}/R{revision}";
+    /// <summary>"PROP 4685" until revised; once revised every version carries a letter: -A (original), -B, -C...</summary>
+    public static string QuoteReference(int number, int revision, bool revised = false) => revision == 0 && !revised ? $"PROP {number}" : $"PROP {number}-{(char)('A' + revision)}";
     public static string OrderReference(int number) => $"PV {number}";
     public static string DeliveryReference(int number) => $"ENT {number}";
 
@@ -26,6 +28,13 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
             .Where(p => p.ProductId == productId && (p.CustomerId == customerId || p.CustomerId == null) && p.ValidFrom <= date && (p.ValidTo == null || p.ValidTo >= date))
             .OrderBy(p => p.CustomerId == null).ThenByDescending(p => p.ValidFrom)
             .FirstOrDefaultAsync(ct);
+
+    public static string CompanyOf(string? company) => Clean(company)?.ToUpperInvariant() switch
+    {
+        null or "EBT" => "EBT",
+        "BST" => "BST",
+        _ => throw SalesException.Invalid("company", "EBT or BST")
+    };
 
     public static QuoteTotals Totals(IEnumerable<(decimal Qty, decimal Price, decimal Ipi, decimal? List)> lines)
     {
@@ -139,6 +148,16 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
         return Task.FromResult<string?>(null);
     });
 
+    /// <summary>After the customer approves: registers the purchase order, which needs its text or file attached to the quote.</summary>
+    public Task<Quote> ReceivePurchaseOrderAsync(int id, string? customerPo, string? note, string? user, CancellationToken ct = default) => QuoteStep(id, "po-received", note, user, ct, q =>
+    {
+        if (q.Status != QuoteStatus.Accepted) throw SalesException.Conflict($"Quote is {q.Status}; the customer must approve it first");
+        if (Clean(q.RequestText) is null && q.RequestFileName is null) throw SalesException.Conflict("Attach the customer's purchase order (file or text) first");
+        q.Status = QuoteStatus.PurchaseOrder;
+        q.CustomerPo = Clean(customerPo) ?? q.CustomerPo;
+        return Task.FromResult<string?>(null);
+    });
+
     public Task<Quote> AcceptAsync(int id, string? customerPo, string? note, string? user, CancellationToken ct = default) => QuoteStep(id, "accepted", note, user, ct, q =>
     {
         if (q.Status != QuoteStatus.Sent) throw SalesException.Conflict($"Quote is {q.Status}");
@@ -162,22 +181,46 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
         return Task.FromResult<string?>(null);
     });
 
-    public Task<Quote> ReviseAsync(int id, string? note, string? user, CancellationToken ct = default) => QuoteStep(id, "revised", note, user, ct, q =>
+    /// <summary>
+    /// The customer changed their mind: cancels this quote (kept for history) and opens a new draft with the next letter (PROP 4685-A → -B),
+    /// copying customer, items and prazo. <paramref name="customerPo"/>: null carries the old PO forward, blank clears it, text replaces it.
+    /// </summary>
+    public async Task<Quote> ReviseAsync(int id, string? reason, string? customerPo, string? user, CancellationToken ct = default)
     {
-        if (!Revisable.Contains(q.Status)) throw SalesException.Conflict($"Quote is {q.Status}");
-        q.Revision++;
-        q.Reference = QuoteReference(q.Number, q.Revision);
-        q.Status = QuoteStatus.Draft;
-        q.ApprovedAt = null;
-        q.ApprovedBy = null;
-        q.SentAt = null;
-        q.SentTo = null;
-        q.ValidUntil = null;
-        q.DecidedAt = null;
-        q.DecisionBy = null;
-        q.DecisionNote = null;
-        return Task.FromResult<string?>(null);
-    });
+        if (Clean(reason) is null) throw SalesException.Invalid("note", "Required");
+        return await InTransaction(async () =>
+        {
+            var old = await LockQuoteAsync(id, ct);
+            if (!Revisable.Contains(old.Status)) throw SalesException.Conflict($"Quote is {old.Status}");
+            var next = await db.Quotes.Where(x => x.Number == old.Number).MaxAsync(x => x.Revision, ct) + 1;
+            if (next > 25) throw SalesException.Conflict("Too many revisions of this quote");
+            foreach (var original in await db.Quotes.Where(x => x.Number == old.Number && x.Revision == 0).ToListAsync(ct))
+                original.Reference = QuoteReference(original.Number, 0, revised: true);
+            var settings = await SettingsAsync(ct);
+            var q = new Quote
+            {
+                Number = old.Number, Revision = next, Reference = QuoteReference(old.Number, next), CustomerId = old.CustomerId, Status = QuoteStatus.Draft, CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow,
+                AddressId = old.AddressId, ContactName = old.ContactName, ContactEmail = old.ContactEmail, CustomerReference = old.CustomerReference, PaymentTermId = old.PaymentTermId,
+                CustomPaymentTerm = old.CustomPaymentTerm, Freight = old.Freight, ValidityDays = old.ValidityDays, Conditions = old.Conditions, Notes = old.Notes,
+                CustomerPo = customerPo is null ? old.CustomerPo : Clean(customerPo),
+                Lines = old.Lines.OrderBy(l => l.Sequence).Select(l => new QuoteLine
+                {
+                    Sequence = l.Sequence, ProductId = l.ProductId, CustomerPartNumber = l.CustomerPartNumber, Description = l.Description, Quantity = l.Quantity, Unit = l.Unit, UnitPrice = l.UnitPrice,
+                    ListPrice = l.ListPrice, IpiPercent = l.IpiPercent, IcmsPercent = l.IcmsPercent, LeadTimeDays = l.LeadTimeDays, DeliveryDate = l.DeliveryDate
+                }).ToList()
+            };
+            q.NeedsApproval = Totals(q).MaxDiscountPercent > settings.MaxDiscountPercent;
+            var from = old.Status;
+            old.Status = QuoteStatus.Cancelled;
+            old.DecisionNote = Clean(reason);
+            db.Quotes.Add(q);
+            await db.SaveChangesAsync(ct);
+            Log(SalesRecordKind.Quote, old.Id, "cancelled", from, old.Status, $"Revisão {q.Reference}: {Clean(reason)}", user);
+            Log(SalesRecordKind.Quote, q.Id, "revised", null, q.Status, $"Revisão de {QuoteReference(old.Number, old.Revision, revised: true)}: {Clean(reason)}", user);
+            await db.SaveChangesAsync(ct);
+            return q;
+        }, ct);
+    }
 
     public Task<Quote> CancelQuoteAsync(int id, string? reason, string? user, CancellationToken ct = default) => QuoteStep(id, "cancelled", reason, user, ct, q =>
     {
@@ -206,14 +249,14 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
         return await InTransaction(async () =>
         {
             var q = await LockQuoteAsync(quoteId, ct);
-            if (q.Status != QuoteStatus.Accepted) throw SalesException.Conflict($"Quote is {q.Status}; the customer must accept it first");
+            if (q.Status != QuoteStatus.PurchaseOrder) throw SalesException.Conflict($"Quote is {q.Status}; register the customer's purchase order first");
             var addressId = i.AddressId ?? q.AddressId ?? await db.CustomerAddresses.Where(a => a.CustomerId == q.CustomerId).OrderBy(a => a.Id).Select(a => (int?)a.Id).FirstOrDefaultAsync(ct)
                 ?? throw SalesException.Invalid("addressId", "Customer has no address; register the plant/delivery address first");
             var today = Today();
             var studies = await ViabilityRules.UsableForQuoteAsync(db, q.Id, ct);
             var lines = q.Lines.OrderBy(l => l.Sequence).Select(l => new SalesLineInput(l.ProductId, l.Quantity, l.UnitPrice, l.IpiPercent, l.IcmsPercent, l.LeadTimeDays,
                 l.DeliveryDate ?? (l.LeadTimeDays is { } d ? today.AddDays(d) : null), l.Description, null, studies.TryGetValue(l.ProductId, out var fid) ? fid : null)).ToList();
-            var order = await CreateOrderCoreAsync(new SalesOrderInput(q.CustomerId, addressId, lines, Clean(i.CustomerPo) ?? q.CustomerPo, q.PaymentTermId, q.Freight, q.Notes), q, i.OverrideCredit && mayOverrideCredit, user, ct);
+            var order = await CreateOrderCoreAsync(new SalesOrderInput(q.CustomerId, addressId, lines, Clean(i.CustomerPo) ?? q.CustomerPo, q.PaymentTermId, q.Freight, q.Notes, null, q.CustomPaymentTerm), q, i.OverrideCredit && mayOverrideCredit, user, ct);
             var from = q.Status;
             q.Status = QuoteStatus.Converted;
             q.SalesOrderId = order.Id;
@@ -239,7 +282,7 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
         var order = new SalesOrder
         {
             Number = number, Reference = OrderReference(number), QuoteId = quote?.Id, CustomerId = i.CustomerId, AddressId = i.AddressId, CustomerPo = Clean(i.CustomerPo),
-            PaymentTermId = i.PaymentTermId, Freight = i.Freight, Notes = Clean(i.Notes), BillTo = i.BillTo, Origin = i.Origin, Salesperson = Clean(i.Salesperson), Status = SalesOrderStatus.Created, CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow,
+            PaymentTermId = i.PaymentTermId, CustomPaymentTerm = Clean(i.CustomPaymentTerm), Freight = i.Freight, Notes = Clean(i.Notes), Company = CompanyOf(i.Company), BillTo = i.BillTo, Origin = i.Origin, Salesperson = Clean(i.Salesperson), Status = SalesOrderStatus.Created, CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow,
             Lines = lines.Select((l, n) => new SalesOrderLine
             {
                 Sequence = (n + 1) * 10, ProductId = l.ProductId, CustomerPartNumber = l.CustomerPartNumber, Description = l.Description, Quantity = l.Quantity, Unit = l.Unit,
@@ -268,7 +311,9 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
             var today = Today();
             o.AddressId = i.AddressId;
             o.CustomerPo = Clean(i.CustomerPo);
+            if (i.Company is not null) o.Company = CompanyOf(i.Company);
             o.PaymentTermId = i.PaymentTermId;
+            o.CustomPaymentTerm = Clean(i.CustomPaymentTerm);
             o.Freight = i.Freight;
             o.Notes = Clean(i.Notes);
             o.BillTo = i.BillTo;
@@ -494,6 +539,13 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
             d.ShippedAt = DateTimeOffset.UtcNow;
             d.ShippedBy = user;
             d.InvoiceNumber = Clean(i.InvoiceNumber) ?? d.InvoiceNumber;
+            // Venda (5101): stock is lowered first, then the NF is authorized; if SEFAZ rejects, the transaction rolls back and stock is untouched.
+            if (d.InvoiceNumber is null && await fiscal.EnabledAsync(ct))
+            {
+                var invoice = await fiscal.IssueSaleAsync(d, o, new SaleInvoiceOptions(i.Cfop, i.Freight ?? 0m, Clean(i.Carrier), Clean(i.VehiclePlate)?.ToUpper(), i.GrossWeightKg), user, ct);
+                d.InvoiceNumber = invoice.Number.ToString();
+                doc.Notes = $"{doc.Notes} · NF {invoice.Number}";
+            }
             d.Carrier = Clean(i.Carrier) ?? d.Carrier;
             d.VehiclePlate = Clean(i.VehiclePlate)?.ToUpper();
             d.GrossWeightKg = i.GrossWeightKg ?? d.GrossWeightKg;
@@ -530,6 +582,8 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
         {
             var d = await LockDeliveryAsync(id, ct);
             if (d.Status is DeliveryStatus.Cancelled or DeliveryStatus.Delivered) throw SalesException.Conflict($"Delivery is {d.Status}");
+            if (await db.FiscalDocuments.Where(f => f.DeliveryId == id && f.Status == FiscalStatus.Authorized).Select(f => (int?)f.Number).FirstOrDefaultAsync(ct) is { } nfNumber)
+                throw SalesException.Conflict($"NF {nfNumber} is authorized for this delivery; cancel the NF first");
             var from = d.Status;
             if (d.Status == DeliveryStatus.Shipped && d.StockDocumentId is { } doc) await stock.ReverseAsync(doc, user ?? "system", $"{d.Reference} cancelada: {Clean(reason)}", ct);
             d.Status = DeliveryStatus.Cancelled;
@@ -538,6 +592,21 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
             var o = await LockOrderAsync(d.OrderId, ct);
             await RefreshOrderStatusAsync(o, $"{d.Reference} cancelada", user, ct);
             return d;
+        }, ct);
+    }
+
+    /// <summary>Cancels the NF of a shipped delivery at SEFAZ, then cancels the delivery (stock comes back, the order reopens). Blocked once the delivery is confirmed.</summary>
+    public async Task<FiscalDocument> CancelInvoiceAsync(int documentId, string? reason, string? user, CancellationToken ct = default)
+    {
+        return await InTransaction(async () =>
+        {
+            var f = await db.FiscalDocuments.AsNoTracking().FirstOrDefaultAsync(x => x.Id == documentId, ct) ?? throw SalesException.NotFound("NF");
+            if (f.Kind != FiscalKind.Sale || f.DeliveryId is not { } deliveryId) throw SalesException.Conflict($"NF {f.Number} is not a sale NF");
+            var d = await LockDeliveryAsync(deliveryId, ct);
+            if (d.Status == DeliveryStatus.Delivered) throw SalesException.Conflict($"{d.Reference} was already delivered; issue a return NF instead of cancelling");
+            var cancelled = await fiscal.CancelAsync(documentId, reason, user, ct);
+            await CancelDeliveryAsync(deliveryId, $"NF {f.Number} cancelada: {Clean(reason)}", user, ct);
+            return cancelled;
         }, ct);
     }
 
@@ -606,6 +675,7 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
     {
         q.AddressId = i.AddressId;
         q.PaymentTermId = i.PaymentTermId;
+        q.CustomPaymentTerm = Clean(i.CustomPaymentTerm);
         q.Freight = i.Freight;
         q.ContactName = Clean(i.ContactName);
         q.ContactEmail = Clean(i.ContactEmail);

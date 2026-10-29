@@ -226,7 +226,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   static const salesFields = [
     FieldSpec('maxDiscountPercent', 'Desconto máximo sem aprovação (%)', type: FieldType.decimal, required: true),
-    FieldSpec('defaultValidityDays', 'Validade padrão da proposta (dias)', type: FieldType.integer, required: true),
+    FieldSpec('defaultValidityDays', 'Validade padrão do orçamento (dias)', type: FieldType.integer, required: true),
     FieldSpec('minimumOrderValue', 'Faturamento mínimo (R\$)', type: FieldType.decimal, required: true),
     FieldSpec(
       'shippingLocationId',
@@ -322,7 +322,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 12),
           _card('Comercial', '/api/sales/settings', salesFields, sa, [
             ('Desconto sem aprovação', 'até ${fmt(sa['maxDiscountPercent'])} %'),
-            ('Validade da proposta', '${fmt(sa['defaultValidityDays'])} dias'),
+            ('Validade do orçamento', '${fmt(sa['defaultValidityDays'])} dias'),
             ('Faturamento mínimo', fmtMoney(sa['minimumOrderValue'])),
             ('Local de expedição', fmt(sa['shippingLocation'] ?? 'Acabado do PCP (padrão)')),
             ('Condições gerais', fmt(sa['defaultConditions'])),

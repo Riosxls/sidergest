@@ -13,6 +13,7 @@ public sealed class CrudSpec<TEntity, TIn, TOut> where TEntity : class
     public required Action<TIn, TEntity> Apply { get; init; }
     public Func<TIn, EbtDbContext, CancellationToken, Task<Dictionary<string, string[]>>>? Validate { get; init; }
     public Func<IQueryable<TEntity>, string, IQueryable<TEntity>>? Search { get; init; }
+    public Func<IQueryable<TEntity>, IQueryCollection, IQueryable<TEntity>>? Filter { get; init; }
     public Func<IQueryable<TEntity>, IQueryable<TEntity>>? Order { get; init; }
     public Func<int, EbtDbContext, CancellationToken, Task<string?>>? BeforeDelete { get; init; }
     public string WritePolicy { get; init; } = Policies.Write;
@@ -23,9 +24,10 @@ public static class Crud
     public static RouteGroupBuilder MapCrud<TEntity, TIn, TOut>(this RouteGroupBuilder group, CrudSpec<TEntity, TIn, TOut> spec)
         where TEntity : class
     {
-        group.MapGet("/", async (EbtDbContext db, string? q, int? skip, int? take, CancellationToken ct) =>
+        group.MapGet("/", async (EbtDbContext db, HttpContext http, string? q, int? skip, int? take, CancellationToken ct) =>
         {
             IQueryable<TEntity> query = db.Set<TEntity>().AsNoTracking();
+            if (spec.Filter is not null) query = spec.Filter(query, http.Request.Query);
             if (!string.IsNullOrWhiteSpace(q) && spec.Search is not null) query = spec.Search(query, q.Trim());
             var total = await query.CountAsync(ct);
             query = spec.Order is not null ? spec.Order(query) : query.OrderBy(e => EF.Property<int>(e, "Id"));
