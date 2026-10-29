@@ -55,7 +55,7 @@ public static class ReportsEndpoints
                     if (!materials.TryGetValue(mid, out var m)) continue;
                     var docType = s.ProductionOrderId != null ? "OP" : "Entrega";
                     rows.Add(new MaterialConsumptionRow(m.Code, m.Description, m.StockUnit, m.GroupId, m.Group, s.Date, docType, s.ProductionOrderId != null ? s.ProductionReference! : s.DeliveryReference,
-                        Math.Round(per * s.Quantity, 3), s.InvoiceNumber, s.Customer));
+                        Math.Round(per * s.Quantity, 3), s.InvoiceNumber, $"{s.ProductCode}-{s.Customer}"));
                 }
             }
 
@@ -126,7 +126,7 @@ public static class ReportsEndpoints
     }
 
     private sealed record Shipped(int CustomerId, string Customer, string Company, DateOnly Date, decimal Quantity, decimal UnitPrice, decimal IpiPercent, decimal IcmsPercent,
-        int ProductId, decimal? NetWeightKg, int? ProductionOrderId, string? ProductionReference, decimal PoQuantity, decimal? PoMaterialCost, string DeliveryReference, string? InvoiceNumber);
+        int ProductId, decimal? NetWeightKg, int? ProductionOrderId, string? ProductionReference, decimal PoQuantity, decimal? PoMaterialCost, string DeliveryReference, string? InvoiceNumber, string ProductCode);
 
     private static async Task<List<Shipped>> ShippedLines(EbtDbContext db, DateOnly from, DateOnly to, CancellationToken ct)
     {
@@ -138,13 +138,13 @@ public static class ReportsEndpoints
             {
                 l.Quantity, ShippedAt = l.Delivery!.ShippedAt!.Value, DeliveryReference = l.Delivery.Reference, l.Delivery.InvoiceNumber,
                 CustomerId = l.Delivery.Order!.CustomerId, Customer = l.Delivery.Order.Customer!.Name, l.Delivery.Order.Company,
-                Line = l.OrderLine!, ProductId = l.OrderLine!.ProductId, NetWeightKg = l.OrderLine.Product!.NetWeightKg,
+                Line = l.OrderLine!, ProductId = l.OrderLine!.ProductId, ProductCode = l.OrderLine.Product!.Code, NetWeightKg = l.OrderLine.Product!.NetWeightKg,
                 PoRef = l.OrderLine.ProductionOrder != null ? l.OrderLine.ProductionOrder.Reference : null,
                 PoQty = l.OrderLine.ProductionOrder != null ? l.OrderLine.ProductionOrder.Quantity : 0m,
                 PoCost = l.OrderLine.ProductionOrder != null ? l.OrderLine.ProductionOrder.MaterialCost : null
             }).ToListAsync(ct);
         return rows.Select(r => new Shipped(r.CustomerId, r.Customer, r.Company, DateOnly.FromDateTime(r.ShippedAt.ToLocalTime().DateTime), r.Quantity, r.Line.UnitPrice, r.Line.IpiPercent, r.Line.IcmsPercent,
-                r.ProductId, r.NetWeightKg, r.Line.ProductionOrderId, r.PoRef, r.PoQty, r.PoCost, r.DeliveryReference, r.InvoiceNumber))
+                r.ProductId, r.NetWeightKg, r.Line.ProductionOrderId, r.PoRef, r.PoQty, r.PoCost, r.DeliveryReference, r.InvoiceNumber, r.ProductCode))
             .Where(r => r.Date >= from && r.Date <= to).ToList();
     }
 

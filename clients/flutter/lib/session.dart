@@ -34,6 +34,7 @@ class Session extends ChangeNotifier {
   bool get canApproveSales => hasRole(const ['Admin', 'SalesManager']);
   bool get canReleaseSales => hasRole(const ['Admin', 'Sales', 'SalesManager', 'Production']);
   bool get canShip => hasRole(const ['Admin', 'Sales', 'SalesManager', 'Stock']);
+  bool get canCertificate => hasRole(const ['Admin', 'Engineering', 'Production', 'Sales', 'SalesManager']);
   String get baseUrl => api.baseUrl;
 
   Future<void> restore() async {

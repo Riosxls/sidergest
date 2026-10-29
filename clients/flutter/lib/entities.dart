@@ -32,6 +32,7 @@ class FieldSpec {
     this.defaultValue,
     this.daysFor,
     this.dateFor,
+    this.obscure = false,
   });
 
   final String key;
@@ -48,6 +49,9 @@ class FieldSpec {
 
   /// Date field kept in sync with the days field with this key.
   final String? dateFor;
+
+  /// Hides the typed text (passwords).
+  final bool obscure;
 }
 
 class ColumnSpec {
@@ -528,7 +532,7 @@ final priceList = EntitySpec(
   writeRoles: const ['Admin', 'Sales', 'SalesManager'],
 );
 
-final salesMasters = [priceList, paymentTerms];
+final salesMasters = [priceList, paymentTerms, monthlyPrices, taxRules];
 
 String fmtTime(Object? v) {
   final s = v == null ? '' : '$v';
@@ -543,3 +547,56 @@ String? parseTime(Object? v) {
   if (h > 23 || min > 59) return null;
   return '${_two(h)}:${_two(min)}:00';
 }
+
+final monthlyPrices = EntitySpec(
+  title: 'Preços mensais da NF',
+  singular: 'Preço mensal',
+  path: '/api/fiscal/monthly-prices',
+  icon: Icons.event_note_outlined,
+  fields: const [
+    FieldSpec('productId', 'Produto', type: FieldType.lookup, required: true, lookup: LookupSpec('/api/products')),
+    FieldSpec('customerId', 'Cliente', type: FieldType.lookup, required: true, lookup: LookupSpec('/api/customers')),
+    FieldSpec('cfopCode', 'CFOP', required: true, defaultValue: '5101'),
+    FieldSpec('year', 'Ano', type: FieldType.integer, required: true),
+    FieldSpec('month', 'Mês', type: FieldType.integer, required: true),
+    FieldSpec('unitPrice', 'Preço unitário (R\$)', type: FieldType.decimal, required: true, hint: 'Sem preço no mês, a NF de venda é bloqueada'),
+  ],
+  columns: [
+    col('Produto', 'productCode'),
+    col('Descrição', 'productName'),
+    col('Cliente', 'customerName'),
+    col('CFOP', 'cfopCode'),
+    ColumnSpec('Mês', (e) => '${e['month'].toString().padLeft(2, '0')}/${e['year']}'),
+    ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
+  ],
+  writeRoles: const ['Admin', 'SalesManager'],
+);
+
+final taxRules = EntitySpec(
+  title: 'Regras de imposto',
+  singular: 'Regra',
+  path: '/api/fiscal/tax-rules',
+  icon: Icons.percent,
+  fields: const [
+    FieldSpec('productId', 'Produto', type: FieldType.lookup, required: true, lookup: LookupSpec('/api/products')),
+    FieldSpec('customerId', 'Cliente', type: FieldType.lookup, lookup: LookupSpec('/api/customers'), hint: 'Vazio = todos os clientes'),
+    FieldSpec('cfopCode', 'CFOP', required: true, defaultValue: '5101'),
+    FieldSpec('icmsCst', 'CST do ICMS', hint: 'Vazio = padrão do CFOP'),
+    FieldSpec('icmsPercent', 'ICMS (%)', type: FieldType.decimal, required: true, defaultValue: 0),
+    FieldSpec('icmsBaseReductionPercent', 'Redução da base do ICMS (%)', type: FieldType.decimal, required: true, defaultValue: 0),
+    FieldSpec('ipiCst', 'CST do IPI', hint: 'Vazio = padrão do CFOP'),
+    FieldSpec('ipiPercent', 'IPI (%)', type: FieldType.decimal, required: true, defaultValue: 0),
+    FieldSpec('pisPercent', 'PIS (%)', type: FieldType.decimal, hint: 'Vazio = padrão do CFOP'),
+    FieldSpec('cofinsPercent', 'COFINS (%)', type: FieldType.decimal, hint: 'Vazio = padrão do CFOP'),
+  ],
+  columns: [
+    col('Produto', 'productCode'),
+    ColumnSpec('Cliente', (e) => '${e['customerName'] ?? 'Todos'}'),
+    col('CFOP', 'cfopCode'),
+    col('ICMS %', 'icmsPercent', numeric: true),
+    col('IPI %', 'ipiPercent', numeric: true),
+    col('PIS %', 'pisPercent', numeric: true),
+    col('COFINS %', 'cofinsPercent', numeric: true),
+  ],
+  writeRoles: const ['Admin', 'SalesManager'],
+);

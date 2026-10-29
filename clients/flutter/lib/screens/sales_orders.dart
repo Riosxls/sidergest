@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -9,6 +11,7 @@ import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
+import 'certificates.dart';
 import 'production_orders.dart';
 import 'sales_common.dart';
 import 'sales_quotes.dart';
@@ -88,12 +91,23 @@ class SalesOrderScreen extends StatefulWidget {
 
 class _SalesOrderScreenState extends State<SalesOrderScreen> {
   Map<String, dynamic>? _o;
+  List<Map<String, dynamic>> _certs = const [];
   String? _error;
 
   ApiClient get api => widget.session.api;
   Session get s => widget.session;
   String get base => '/api/sales/orders/${widget.id}';
   String get status => '${_o?['status']}';
+  bool get _certified => _o?['certificateWaived'] == true || _certs.any((c) => c['status'] == 'Issued');
+
+  Future<void> _newCertificate() async {
+    if (await newCertificate(context, s, _o!) && mounted) _load();
+  }
+
+  Future<void> _waiveCertificate(bool waived) async {
+    final r = await runAction(context, () => api.post('$base/certificate-waiver', {'waived': waived}), success: waived ? 'Certificado dispensado' : 'Certificado exigido novamente');
+    if (r != null) _load();
+  }
 
   @override
   void initState() {
@@ -104,9 +118,15 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
   Future<void> _load() async {
     try {
       final o = await api.get(base) as Map<String, dynamic>;
+      // Certificates are optional context: a failure here must not hide the order.
+      var certs = const <Map<String, dynamic>>[];
+      try {
+        certs = (await api.list('/api/sales/certificates', query: {'orderId': widget.id}, take: 200)).items;
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _o = o;
+          _certs = certs;
           _error = null;
         });
       }
@@ -198,6 +218,18 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         message: 'O estoque livre é reservado para o pedido e as OFs do restante vão para o PCP.',
         actions: [if (s.canReleaseSales) primary('order-release', 'Liberar para produção', Icons.play_arrow, _release)],
       ),
+      'Released' || 'PartiallyShipped' when o['ready'] == true && !_certified => NextStepCard(
+        title: 'Produção pronta · falta o certificado',
+        message: 'Emita o certificado de qualidade antes de programar a entrega. Se o cliente não exige certificado, dispense.',
+        tone: Tone.warning,
+        actions: [
+          if (s.canCertificate) primary('order-certificate', 'Emitir certificado', Icons.verified_outlined, _newCertificate),
+          if (s.canShip)
+            OutlinedButton.icon(key: const ValueKey('order-deliver'), onPressed: _planDelivery, icon: const Icon(Icons.local_shipping_outlined), label: const Text('Programar entrega')),
+          if (s.canCertificate)
+            TextButton(key: const ValueKey('order-certificate-waive'), onPressed: () => _waiveCertificate(true), child: const Text('Dispensar certificado')),
+        ],
+      ),
       'Released' || 'PartiallyShipped' when o['ready'] == true => NextStepCard(
         title: 'Pronto para expedir',
         message: 'Há produto acabado para os itens em aberto. Programe a entrega.',
@@ -226,6 +258,25 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     };
   }
 
+  /// Na etapa Produção o botão da barra imprime a Ordem de Produção; nas demais, o pedido de venda.
+  List<Widget> _printActions(Map<String, dynamic> o) {
+    Future<Uint8List> ofPdf(Object? id) async => buildProductionOrderPdf(api, await api.get('/api/production/orders/$id') as Map<String, dynamic>);
+    final ofs = (o['lines'] as List)
+        .cast<Map<String, dynamic>>()
+        .where((l) => l['productionOrderId'] != null)
+        .fold(<int, String>{}, (m, l) => m..[l['productionOrderId'] as int] = '${l['productionReference']}');
+    final inProduction = ['Released', 'PartiallyShipped'].contains(o['status']);
+    if (!inProduction || ofs.isEmpty) return [PrintButton(name: 'Pedido de venda ${o['reference']}', builder: () => buildSalesOrderPdf(api, o))];
+    if (ofs.length == 1) {
+      final e = ofs.entries.first;
+      return [PrintButton(key: const ValueKey('print-of'), name: 'Ordem de produção ${e.value}', builder: () => ofPdf(e.key))];
+    }
+    return [
+      for (final e in ofs.entries)
+        PrintButton(key: ValueKey('print-of-${e.key}'), name: 'Ordem de produção ${e.value}', builder: () => ofPdf(e.key)),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final o = _o;
@@ -250,7 +301,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       appBar: AppBar(
         title: Text(o == null ? 'Pedido de venda' : '${o['reference']} · ${o['customerName']}', overflow: TextOverflow.ellipsis),
         actions: [
-          if (o != null) PrintButton(name: 'Pedido de venda ${o['reference']}', builder: () => buildSalesOrderPdf(api, o)),
+          if (o != null) ..._printActions(o),
           if (menu.isNotEmpty) PopupMenuButton<VoidCallback>(key: const ValueKey('order-menu'), onSelected: (f) => f(), itemBuilder: (_) => menu),
         ],
       ),
@@ -263,7 +314,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
   }
 
   Widget _body(Map<String, dynamic> o) {
-    final (step, failed) = orderPath(o['status']);
+    final (step, failed) = orderPath(o['status'], ready: o['ready'] == true, certified: _certified);
     final lines = (o['lines'] as List).cast<Map<String, dynamic>>();
     final deliveries = (o['deliveries'] as List).cast<Map<String, dynamic>>();
     final credit = o['credit'] as Map<String, dynamic>;
@@ -342,6 +393,37 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
             ],
           ),
         ),
+        if (released) ...[
+          gap,
+          Section(
+            title: 'Certificados de qualidade (${_certs.length})',
+            actions: [
+              if (o['certificateWaived'] == true)
+                TextButton(onPressed: s.canCertificate ? () => _waiveCertificate(false) : null, child: const Text('Dispensado · exigir novamente'))
+              else if (s.canCertificate && status != 'Cancelled')
+                FilledButton.tonalIcon(key: const ValueKey('order-new-certificate'), onPressed: _newCertificate, icon: const Icon(Icons.add), label: const Text('Emitir certificado')),
+            ],
+            child: SimpleTable(
+              columns: [
+                col('Certificado', 'reference'),
+                dateCol('Data', 'issueDate'),
+                labelCol('Situação', 'status', certificateStatuses),
+                col('Produto', 'description'),
+                ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
+                col('Entrega', 'deliveryReference'),
+                col('NF', 'invoiceNumber'),
+              ],
+              rows: _certs,
+              actions: (c) => [
+                IconButton(
+                  tooltip: 'Abrir',
+                  icon: const Icon(Icons.open_in_new, size: 20),
+                  onPressed: () => openCertificate(context, s, c['id'] as int).then((_) => _load()),
+                ),
+              ],
+            ),
+          ),
+        ],
         gap,
         Section(
           title: 'Detalhes',
@@ -400,6 +482,12 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
                         icon: Icons.open_in_new,
                       ),
                     ),
+                  ),
+                if (l['productionOrderId'] != null)
+                  PrintButton(
+                    key: ValueKey('print-of-${l['productionOrderId']}'),
+                    name: 'Ordem de produção ${l['productionReference']}',
+                    builder: () async => buildProductionOrderPdf(api, await api.get('/api/production/orders/${l['productionOrderId']}') as Map<String, dynamic>),
                   ),
                 if (l['ready'] == true && _n(l['remaining']) > 0)
                   const Padding(

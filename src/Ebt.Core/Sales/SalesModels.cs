@@ -25,7 +25,7 @@ public sealed record DeliveryLineInput(int OrderLineId, decimal Quantity);
 
 public sealed record DeliveryInput(DateOnly PlannedDate, int? AddressId = null, string? Carrier = null, IReadOnlyList<DeliveryLineInput>? Lines = null, string? Notes = null);
 
-public sealed record ShipInput(DateOnly Date, string? InvoiceNumber = null, string? Carrier = null, string? VehiclePlate = null, decimal? GrossWeightKg = null);
+public sealed record ShipInput(DateOnly Date, string? InvoiceNumber = null, string? Carrier = null, string? VehiclePlate = null, decimal? GrossWeightKg = null, string? Cfop = null, decimal? Freight = null);
 
 public sealed record QuoteTotals(decimal Products, decimal Ipi, decimal Total, decimal MaxDiscountPercent);
 

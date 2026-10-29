@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -14,6 +15,21 @@ import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
 import 'sales_common.dart';
+
+const _requestExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt'];
+
+String _fmtSize(Object? v) {
+  final n = v is num ? v : 0;
+  return n >= 1048576 ? '${(n / 1048576).toStringAsFixed(1).replaceAll('.', ',')} MB' : '${(n / 1024).ceil()} KB';
+}
+
+/// Lets the user choose the customer's request file (PDF, image or text).
+Future<({String name, Uint8List bytes})?> pickRequestFile() async {
+  final files = await FilePicker.pickFiles(dialogTitle: 'Anexar arquivo', type: FileType.custom, allowedExtensions: _requestExtensions);
+  if (files.isEmpty) return null;
+  final f = files.first;
+  return (name: f.name, bytes: await f.readAsBytes());
+}
 
 const salesLineFields = [
   FieldSpec('productId', 'Produto', type: FieldType.lookup, required: true, lookup: LookupSpec('/api/products')),
@@ -55,7 +71,16 @@ class QuotesScreen extends StatefulWidget {
 class _QuotesScreenState extends State<QuotesScreen> {
   final _list = GlobalKey<RecordListState>();
   String? _status;
-  bool _open = true;
+  bool _open = false; // cancelled originals stay listed next to their revisions
+
+  static const _cancellable = ['Draft', 'PendingApproval', 'Approved', 'Sent', 'Accepted', 'PurchaseOrder', 'Rejected', 'Expired'];
+
+  /// Quick cancel from the list: asks for the reason, no need to open the quote.
+  Future<void> _cancel(Map<String, dynamic> e) async {
+    final reason = await promptText(context, title: 'Cancelar ${e['reference']}', label: 'Motivo', required: true);
+    if (reason == null || !mounted) return;
+    await runAction(context, () => widget.session.api.post('/api/sales/quotes/${e['id']}/cancel', {'note': reason}), success: '${e['reference']} cancelado');
+  }
 
   Future<void> _new() async {
     final q = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => QuoteEditorScreen(session: widget.session)));
@@ -88,6 +113,7 @@ class _QuotesScreenState extends State<QuotesScreen> {
       dateCol('Criada', 'createdAt'),
       ColumnSpec('Desconto', (e) => e['needsApproval'] == true ? 'Acima do limite' : ''),
     ],
+    rowActions: (e) => widget.session.canSell && _cancellable.contains(e['status']) ? [RowAction('Cancelar', Icons.block, () => _cancel(e))] : const [],
     rowColor: (ctx, e) => e['status'] == 'PendingApproval' ? toneColors(ctx, Tone.warning).$1 : null,
     onTap: (e) async {
       await openQuote(context, widget.session, e['id'] as int);
@@ -224,8 +250,8 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     if (widget.asOrder) body['customerPo'] = _t(_po);
     final path = widget.asOrder ? '/api/sales/orders' : '/api/sales/quotes';
     try {
-      final q = widget.quote == null ? await api.post(path, body) : await api.put('$path/${widget.quote!['id']}', body);
-      if (mounted) Navigator.pop(context, q as Map<String, dynamic>);
+      final q = (widget.quote == null ? await api.post(path, body) : await api.put('$path/${widget.quote!['id']}', body)) as Map<String, dynamic>;
+      if (mounted) Navigator.pop(context, q);
     } on ApiException catch (e) {
       setState(() => _message = describeError(e));
     } finally {
@@ -348,6 +374,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
                   width: w,
                   child: DropdownButtonFormField<String>(
                     initialValue: _freight,
+                    isExpanded: true,
                     decoration: _dec('Frete'),
                     items: [for (final e in freightTerms.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
                     onChanged: (v) => setState(() => _freight = v ?? 'Cif'),
@@ -505,6 +532,23 @@ class _QuoteScreenState extends State<QuoteScreen> {
     }
   }
 
+  /// "Pedido de compra" step: the customer's PO (file and/or text) must be attached before the quote moves on.
+  Future<void> _receivePo() async {
+    final q = _q!;
+    if ('${q['requestText'] ?? ''}'.trim().isEmpty && q['requestFileName'] == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Anexe o arquivo ou o texto do pedido de compra antes de registrá-lo')));
+      return;
+    }
+    final r = await submitForm(
+      context,
+      api: api,
+      title: 'Pedido de compra de ${q['reference']}',
+      fields: [FieldSpec('customerPo', 'Nº do pedido de compra do cliente', defaultValue: q['customerPo']), const FieldSpec('note', 'Observação')],
+      submit: (b) => api.post('$base/purchase-order', b),
+    );
+    if (r != null && r['reference'] != null) setState(() => _q = r);
+  }
+
   Future<void> _accept() async {
     final r = await submitForm(
       context,
@@ -516,10 +560,59 @@ class _QuoteScreenState extends State<QuoteScreen> {
     if (r != null && r['reference'] != null) setState(() => _q = r);
   }
 
+  Future<void> _setRequestText() async {
+    final text = await promptText(context, title: 'Texto do pedido de compra', label: 'Texto do pedido de compra', initial: '${_q?['requestText'] ?? ''}', confirmLabel: 'Salvar');
+    if (text == null || !mounted) return;
+    final r = await runAction(context, () => api.put('$base/request', {'text': text}));
+    if (r is Map<String, dynamic>) setState(() => _q = r);
+  }
+
+  Future<void> _attachRequest() async {
+    final f = await pickRequestFile();
+    if (f == null || !mounted) return;
+    final r = await runAction(context, () => api.upload('$base/request-file', 'file', f.name, f.bytes), success: 'Arquivo anexado');
+    if (r is Map<String, dynamic>) setState(() => _q = r);
+  }
+
+  Future<void> _removeRequest() async {
+    final r = await runAction(context, () => api.delete('$base/request-file'), success: 'Anexo removido');
+    if (r is Map<String, dynamic>) setState(() => _q = r);
+  }
+
+  Future<void> _saveRequest() async {
+    try {
+      final bytes = await api.download('$base/request-file');
+      final saved = await FilePicker.saveFile(fileName: '${_q!['requestFileName']}', bytes: bytes, dialogTitle: 'Salvar pedido de compra');
+      if (saved != null && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Arquivo salvo')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha: $e')));
+    }
+  }
+
   Future<void> _reason(String action, String title, {String label = 'Motivo', String? success}) async {
     final reason = await promptText(context, title: title, label: label, required: true);
     if (reason == null || !mounted) return;
     await _act(action, body: {'note': reason}, success: success);
+  }
+
+  /// Cancels this quote (reason required) and opens the new revision as a draft with the same client, items and prazo.
+  Future<void> _revise() async {
+    final q = _q!;
+    final r = await submitForm(
+      context,
+      api: api,
+      title: 'Revisar ${q['reference']}',
+      fields: [
+        const FieldSpec('note', 'Motivo do cancelamento', required: true, hint: 'O orçamento atual fica cancelado, só para consulta'),
+        FieldSpec('customerPo', 'Pedido de compra do cliente', defaultValue: q['customerPo'], hint: 'Mantenha o mesmo ou informe outro'),
+      ],
+      submit: (b) => api.post('$base/revise', b),
+    );
+    if (r == null || r['id'] == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${q['reference']} cancelado · nova revisão ${r['reference']} em rascunho')));
+    await _load();
+    if (mounted) await openQuote(context, s, r['id'] as int);
+    if (mounted) _load();
   }
 
   Future<void> _convert() async {
@@ -614,6 +707,36 @@ class _QuoteScreenState extends State<QuoteScreen> {
     return b.toString().replaceAll(RegExp(r'\n{3,}'), '\n\n');
   }
 
+  Widget _requestSection(Map<String, dynamic> q) {
+    final text = '${q['requestText'] ?? ''}';
+    final fileName = q['requestFileName'] as String?;
+    final canEdit = s.canSell && (status == 'Accepted' || status == 'PurchaseOrder');
+    return Section(
+      title: 'Pedido de compra',
+      actions: [
+        if (canEdit) TextButton.icon(key: const ValueKey('quote-po-text'), onPressed: _setRequestText, icon: const Icon(Icons.edit_note), label: const Text('Texto do pedido')),
+        if (canEdit) TextButton.icon(key: const ValueKey('quote-po-attach'), onPressed: _attachRequest, icon: const Icon(Icons.attach_file), label: Text(fileName == null ? 'Anexar arquivo' : 'Substituir arquivo')),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (fileName == null && text.isEmpty) const Text('Nenhum pedido de compra anexado (PDF, imagem ou texto)'),
+          if (fileName != null)
+            Row(
+              children: [
+                const Icon(Icons.description_outlined, size: 18),
+                const SizedBox(width: 6),
+                Expanded(child: Text('$fileName · ${_fmtSize(q['requestFileSize'])}', overflow: TextOverflow.ellipsis)),
+                TextButton.icon(onPressed: _saveRequest, icon: const Icon(Icons.download_outlined), label: const Text('Baixar')),
+                if (canEdit) IconButton(tooltip: 'Remover anexo', icon: const Icon(Icons.delete_outline), onPressed: _removeRequest),
+              ],
+            ),
+          if (text.isNotEmpty) SelectableText(text),
+        ],
+      ),
+    );
+  }
+
   Future<void> _preview() async {
     final text = proposalText(_q!);
     await showDialog<void>(
@@ -694,6 +817,12 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ),
       'Accepted' => NextStepCard(
         title: 'Aprovada pelo cliente',
+        message: 'Anexe o pedido de compra do cliente (arquivo ou texto) e registre-o para gerar o pedido de venda.',
+        tone: Tone.success,
+        actions: [if (sell) primary('quote-po', 'Registrar pedido de compra', Icons.assignment_turned_in_outlined, _receivePo)],
+      ),
+      'PurchaseOrder' => NextStepCard(
+        title: 'Pedido de compra recebido',
         message: 'Gere o pedido de venda${q['customerPo'] == null ? '' : ' (pedido do cliente ${q['customerPo']})'} para liberar a produção.',
         tone: Tone.success,
         actions: [if (sell) primary('quote-convert', 'Gerar pedido de venda', Icons.receipt_long, _convert)],
@@ -711,11 +840,13 @@ class _QuoteScreenState extends State<QuoteScreen> {
         title: st == 'Rejected' ? 'Recusada pelo cliente' : 'Validade expirada',
         message: q['decisionNote'] == null ? 'Revise preços e prazos e envie de novo.' : 'Motivo: ${q['decisionNote']}. Revise e envie de novo.',
         tone: Tone.danger,
-        actions: [if (sell) primary('quote-revise', 'Revisar orçamento', Icons.edit, () => _act('revise', success: 'Nova revisão em rascunho'))],
+        actions: [if (sell) primary('quote-revise', 'Revisar orçamento', Icons.edit, _revise)],
       ),
       _ => NextStepCard(title: 'Cancelada', message: '${q['decisionNote'] ?? ''}', tone: Tone.danger),
     };
   }
+
+  static const _revisable = ['PendingApproval', 'Approved', 'Sent', 'Accepted', 'PurchaseOrder', 'Rejected', 'Expired'];
 
   List<Widget> _menuActions() {
     final q = _q;
@@ -730,12 +861,12 @@ class _QuoteScreenState extends State<QuoteScreen> {
           value: _edit,
           child: const ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar')),
         ),
-      if (s.canSell && ['PendingApproval', 'Approved', 'Sent'].contains(status))
+      if (s.canSell && _revisable.contains(status))
         PopupMenuItem(
-          value: () => _act('revise', success: 'Nova revisão em rascunho'),
-          child: const ListTile(leading: Icon(Icons.history_edu), title: Text('Revisar')),
+          value: _revise,
+          child: const ListTile(leading: Icon(Icons.history_edu), title: Text('Revisar orçamento')),
         ),
-      if (s.canSell && ['Draft', 'PendingApproval', 'Approved', 'Sent', 'Accepted', 'Rejected', 'Expired'].contains(status))
+      if (s.canSell && ['Draft', 'PendingApproval', 'Approved', 'Sent', 'PurchaseOrder', 'Accepted', 'Rejected', 'Expired'].contains(status))
         PopupMenuItem(
           value: () => _reason('cancel', 'Cancelar ${q['reference']}', success: 'Orçamento cancelado'),
           child: const ListTile(leading: Icon(Icons.block), title: Text('Cancelar')),
@@ -747,6 +878,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
         ),
     ];
     return [
+      if (s.canSell && _revisable.contains(status))
+        TextButton.icon(key: const ValueKey('quote-revise-top'), onPressed: _revise, icon: const Icon(Icons.history_edu), label: const Text('Revisar')),
       PrintButton(name: 'Orçamento ${q['reference']}', builder: () => buildQuotePdf(api, q)),
       if (s.canSell && status == 'Draft') IconButton(tooltip: 'Editar', onPressed: _edit, icon: const Icon(Icons.edit_outlined)),
       PopupMenuButton<VoidCallback>(key: const ValueKey('quote-menu'), onSelected: (f) => f(), itemBuilder: (_) => menu),
@@ -777,7 +910,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       main: [
         RecordHeader(
           icon: Icons.request_quote_outlined,
-          kind: 'Orçamento comercial${q['revision'] == 0 ? '' : ' · revisão ${q['revision']}'}',
+          kind: 'Orçamento comercial${q['revision'] == 0 ? '' : ' · revisão ${String.fromCharCode(65 + (q['revision'] as int))}'}',
           title: '${q['reference']}',
           badge: StatusBadge(quoteStatuses[q['status']] ?? '${q['status']}', tone: quoteTone(q['status'])),
           amount: fmtMoney(t['total']),
@@ -808,10 +941,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
                   col('Descrição', 'description'),
                   ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
                   ColumnSpec('Preço Unitário', (e) => fmtMoney(e['unitPrice']), numeric: true),
-                  ColumnSpec('Tabela', (e) => e['listPrice'] == null ? '' : fmtNum(e['listPrice'], 4), numeric: true),
                   ColumnSpec('Desc. %', (e) => e['discountPercent'] == null || e['discountPercent'] == 0 ? '' : fmt(e['discountPercent']), numeric: true),
                   col('IPI %', 'ipiPercent', numeric: true),
-                  col('ICMS %', 'icmsPercent', numeric: true),
                   ColumnSpec(
                     'Entrega',
                     (e) => e['deliveryDate'] != null ? fmtDay(e['deliveryDate']) : (e['leadTimeDays'] != null ? '${e['leadTimeDays']} dias' : ''),
@@ -830,6 +961,10 @@ class _QuoteScreenState extends State<QuoteScreen> {
           ),
         ),
         gap,
+        if (const ['Accepted', 'PurchaseOrder', 'Converted'].contains(q['status']) || q['requestFileName'] != null || '${q['requestText'] ?? ''}'.isNotEmpty) ...[
+          _requestSection(q),
+          gap,
+        ],
         Section(
           title: 'Detalhes',
           child: InfoGrid([

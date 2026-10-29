@@ -11,15 +11,17 @@ const flowSteps = [
   PathStep('Orçamento', icon: Icons.edit_note),
   PathStep('Enviada ao cliente', icon: Icons.send_outlined),
   PathStep('Aprovada', icon: Icons.thumb_up_alt_outlined),
+  PathStep('Pedido de compra', icon: Icons.assignment_turned_in_outlined),
   PathStep('Pedido de venda', icon: Icons.receipt_long_outlined),
-  PathStep('Produção', icon: Icons.precision_manufacturing_outlined),
+  PathStep('Ordem de Produção', icon: Icons.precision_manufacturing_outlined),
+  PathStep('Certificado', icon: Icons.verified_outlined),
   PathStep('Entrega', icon: Icons.local_shipping_outlined),
 ];
 
 Tone quoteTone(Object? s) => switch (s) {
   'Draft' => Tone.neutral,
   'PendingApproval' => Tone.warning,
-  'Approved' || 'Sent' => Tone.info,
+  'Approved' || 'Sent' || 'PurchaseOrder' => Tone.info,
   'Accepted' || 'Converted' => Tone.success,
   _ => Tone.danger,
 };
@@ -49,24 +51,25 @@ Tone productionTone(Object? s) => switch (s) {
   'Draft' || 'PendingApproval' || 'Approved' => (0, null),
   'Sent' => (1, null),
   'Accepted' => (2, null),
-  'Converted' => (3, null),
+  'PurchaseOrder' => (3, null),
+  'Converted' => (4, null),
   'Rejected' => (2, 'Recusada'),
   'Expired' => (1, 'Expirada'),
   _ => (0, 'Cancelada'),
 };
 
-(int, String?) orderPath(Object? s) => switch (s) {
-  'Created' => (3, null),
-  'Released' || 'PartiallyShipped' => (4, null),
-  'Shipped' => (5, null),
-  'Delivered' => (6, null),
-  _ => (3, 'Cancelado'),
+(int, String?) orderPath(Object? s, {bool ready = false, bool certified = false}) => switch (s) {
+  'Created' => (4, null),
+  'Released' || 'PartiallyShipped' => (ready ? (certified ? 7 : 6) : 5, null),
+  'Shipped' => (7, null),
+  'Delivered' => (8, null),
+  _ => (4, 'Cancelado'),
 };
 
 (int, String?) deliveryPath(Object? s) => switch (s) {
-  'Planned' || 'Shipped' => (5, null),
-  'Delivered' => (6, null),
-  _ => (5, 'Cancelada'),
+  'Planned' || 'Shipped' => (7, null),
+  'Delivered' => (8, null),
+  _ => (7, 'Cancelada'),
 };
 
 String statusLabel(Object? s) => quoteStatuses[s] ?? salesOrderStatuses[s] ?? deliveryStatuses[s] ?? '${s ?? ''}';
@@ -93,6 +96,7 @@ List<TimelineEntry> timeline(List<dynamic> history) => [
         'created' => Icons.add,
         'sent' => Icons.send,
         'accepted' || 'approved' => Icons.thumb_up_alt,
+        'po-received' => Icons.assignment_turned_in,
         'declined' || 'approval-rejected' => Icons.thumb_down_alt,
         'cancelled' || 'expired' => Icons.close,
         'converted' => Icons.receipt_long,
@@ -141,7 +145,7 @@ class SideBySide extends StatelessWidget {
           child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 8, 16), children: main),
         ),
         SizedBox(
-          width: 380,
+          width: 300,
           child: ListView(padding: const EdgeInsets.fromLTRB(8, 16, 16, 16), children: side),
         ),
       ],

@@ -8,6 +8,8 @@ import '../reports/nf_doc.dart';
 import '../widgets/actions.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
+import 'certificates.dart';
+import 'fiscal.dart';
 import 'orders.dart';
 import 'sales_common.dart';
 import 'stock_documents.dart';
@@ -63,6 +65,8 @@ class DeliveryScreen extends StatefulWidget {
 
 class _DeliveryScreenState extends State<DeliveryScreen> {
   Map<String, dynamic>? _d;
+  Map<String, dynamic>? _nf;
+  List<Map<String, dynamic>> _certs = const [];
   String? _error;
 
   ApiClient get api => widget.session.api;
@@ -78,8 +82,20 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
   Future<void> _load() async {
     try {
       final d = await api.get(base) as Map<String, dynamic>;
+      // The NF lookup is optional: a fiscal failure must not hide the delivery.
+      List<Map<String, dynamic>> nfItems = const [];
+      try {
+        final nfs = await api.get('/api/fiscal/documents', {'deliveryId': widget.id, 'status': 'Authorized'}) as Map<String, dynamic>;
+        nfItems = (nfs['items'] as List).cast<Map<String, dynamic>>();
+      } catch (_) {}
+      var certs = const <Map<String, dynamic>>[];
+      try {
+        certs = (await api.list('/api/sales/certificates', query: {'deliveryId': widget.id}, take: 100)).items;
+      } catch (_) {}
       if (mounted) {
         setState(() {
+          _certs = certs;
+          _nf = nfItems.isEmpty ? null : nfItems.first;
           _d = d;
           _error = null;
         });
@@ -97,7 +113,9 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       title: 'Expedir ${d['reference']}',
       fields: [
         FieldSpec('date', 'Data de saída', type: FieldType.date, required: true, defaultValue: isoDate(DateTime.now())),
-        const FieldSpec('invoiceNumber', 'Nº da NF', hint: 'Até o Faturamento entrar, informe a NF emitida'),
+        const FieldSpec('invoiceNumber', 'Nº da NF', hint: 'Vazio = emitir a NF-e automaticamente (emissor ligado); preencha só se a NF foi emitida fora'),
+        const FieldSpec('cfop', 'CFOP', hint: 'Vazio = CFOP do endereço de entrega ou 5101'),
+        const FieldSpec('freight', 'Frete na NF (R\$)', type: FieldType.decimal),
         FieldSpec('grossWeightKg', 'Peso bruto (kg)', type: FieldType.decimal, defaultValue: d['grossWeightKg']),
       ],
       submit: (b) => api.post('$base/ship', b),
@@ -260,6 +278,60 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
             rows: (d['lines'] as List).cast<Map<String, dynamic>>(),
           ),
         ),
+        gap,
+        Section(
+          title: 'Certificados de qualidade (${_certs.length})',
+          actions: [
+            if (s.canCertificate && ['Planned', 'Shipped'].contains(d['status']))
+              FilledButton.tonalIcon(
+                key: const ValueKey('delivery-new-certificate'),
+                onPressed: () async {
+                  final order = await api.get('/api/sales/orders/${d['orderId']}') as Map<String, dynamic>;
+                  if (mounted && await newCertificate(context, s, order, deliveryId: d['id'] as int)) _load();
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Emitir certificado'),
+              ),
+          ],
+          child: SimpleTable(
+            columns: [
+              col('Certificado', 'reference'),
+              dateCol('Data', 'issueDate'),
+              labelCol('Situação', 'status', certificateStatuses),
+              col('Produto', 'description'),
+              ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
+            ],
+            rows: _certs,
+            actions: (c) => [
+              IconButton(
+                tooltip: 'Abrir',
+                icon: const Icon(Icons.open_in_new, size: 20),
+                onPressed: () => openCertificate(context, s, c['id'] as int).then((_) => _load()),
+              ),
+            ],
+          ),
+        ),
+        if (_nf != null) ...[
+          gap,
+          Section(
+            title: 'Nota fiscal eletrônica',
+            actions: [
+              TextButton.icon(
+                key: const ValueKey('delivery-open-nf'),
+                onPressed: () => openFiscalDocument(context, s, _nf!['id'] as int).then((_) => _load()),
+                icon: const Icon(Icons.description_outlined),
+                label: const Text('Abrir NF'),
+              ),
+            ],
+            child: InfoGrid([
+              ('Número', '${_nf!['number']} · série ${_nf!['series']}'),
+              ('CFOP', fmt(_nf!['cfopCode'])),
+              ('Valor', fmtMoney(_nf!['invoiceTotal'])),
+              ('Chave', fmt(_nf!['accessKey'])),
+              ('Autorização', _nf!['simulated'] == true ? 'SIMULADA (sem valor fiscal)' : 'SEFAZ'),
+            ]),
+          ),
+        ],
         gap,
         Section(
           title: 'Detalhes',

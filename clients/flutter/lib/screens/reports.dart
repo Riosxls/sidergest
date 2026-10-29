@@ -241,43 +241,47 @@ class _MaterialConsumptionScreenState extends State<MaterialConsumptionScreen> {
     1 => '${e['materialDescription']}',
     2 => '${e['unit']}',
     3 => '${e['date']}',
-    4 => '${e['docType']} ${e['docNumber']}',
+    4 => '${e['docNumber']}',
     5 => _n(e['quantityKg']),
     6 => '${e['invoiceNumber'] ?? ''}',
     _ => '${e['note']}',
   };
 
   ReportDoc _doc() {
-    final byMaterial = <String, List<Map<String, dynamic>>>{};
+    final byGroup = <String, Map<String, List<Map<String, dynamic>>>>{};
     for (final e in _rows) {
-      byMaterial.putIfAbsent('${e['materialCode']}', () => []).add(e);
+      final g = '${e['groupName'] ?? 'Sem categoria'}';
+      byGroup.putIfAbsent(g, () => {}).putIfAbsent('${e['materialCode']}', () => []).add(e);
     }
-    final codes = byMaterial.keys.toList()..sort();
     final rows = <ReportRow>[];
     double total = 0;
-    for (final code in codes) {
-      final list = [...byMaterial[code]!];
-      if (_sortCol != null) {
-        list.sort((a, b) => _asc ? _key(a, _sortCol!).compareTo(_key(b, _sortCol!)) : _key(b, _sortCol!).compareTo(_key(a, _sortCol!)));
+    for (final g in (byGroup.keys.toList()..sort())) {
+      rows.add(ReportRow(['Categoria: $g'], ReportRowKind.section));
+      final materials = byGroup[g]!;
+      for (final code in (materials.keys.toList()..sort())) {
+        final list = [...materials[code]!];
+        if (_sortCol != null) {
+          list.sort((a, b) => _asc ? _key(a, _sortCol!).compareTo(_key(b, _sortCol!)) : _key(b, _sortCol!).compareTo(_key(a, _sortCol!)));
+        }
+        double sub = 0;
+        for (final e in list) {
+          sub += _n(e['quantityKg']);
+          rows.add(ReportRow([
+            '${e['materialCode']}',
+            '${e['materialDescription']}',
+            '${e['unit']}',
+            fmtDay(e['date']),
+            '${e['docNumber']}',
+            fmtNum(e['quantityKg'], 3),
+            fmt(e['invoiceNumber']),
+            '${e['note']}',
+          ]));
+        }
+        total += sub;
+        rows.add(ReportRow(['Total retirado do material $code', '', '', '', '', fmtNum(sub, 3), '', ''], ReportRowKind.subtotal));
       }
-      double sub = 0;
-      for (final e in list) {
-        sub += _n(e['quantityKg']);
-        rows.add(ReportRow([
-          '${e['materialCode']}',
-          '${e['materialDescription']}',
-          '${e['unit']}',
-          fmtDay(e['date']),
-          '${e['docType']} ${e['docNumber']}',
-          fmtNum(e['quantityKg'], 3),
-          fmt(e['invoiceNumber']),
-          '${e['note']}',
-        ]));
-      }
-      total += sub;
-      rows.add(ReportRow(['Subtotal $code', list.first['materialDescription'] as String, '', '', '', fmtNum(sub, 3), '', ''], ReportRowKind.subtotal));
     }
-    if (rows.isNotEmpty) rows.add(ReportRow(['Total geral', '', '', '', '', fmtNum(total, 3), '', ''], ReportRowKind.total));
+    if (rows.isNotEmpty) rows.add(ReportRow(['Total geral retirado do estoque', '', '', '', '', fmtNum(total, 3), '', ''], ReportRowKind.total));
     return ReportDoc(
       title: 'Relatório de Consumo de Material Vendido (Consolidado)',
       filters: [

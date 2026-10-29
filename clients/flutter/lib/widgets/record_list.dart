@@ -6,6 +6,15 @@ import 'package:flutter/material.dart';
 import '../api.dart';
 import '../entities.dart';
 
+/// One entry of a [RecordList] row menu; the list reloads after [run].
+class RowAction {
+  const RowAction(this.label, this.icon, this.run);
+
+  final String label;
+  final IconData icon;
+  final Future<void> Function() run;
+}
+
 class RecordList extends StatefulWidget {
   const RecordList({
     super.key,
@@ -21,6 +30,7 @@ class RecordList extends StatefulWidget {
     this.fab,
     this.enrich,
     this.rowColor,
+    this.rowActions,
     this.emptyText = 'Nenhum registro',
     this.pageSize = 50,
   });
@@ -37,6 +47,8 @@ class RecordList extends StatefulWidget {
   final Widget? fab;
   final Future<void> Function(List<Map<String, dynamic>> items)? enrich;
   final Color? Function(BuildContext context, Map<String, dynamic> e)? rowColor;
+  /// Per-row ⋮ menu (e.g. quick cancel); an empty list hides the menu for that row.
+  final List<RowAction> Function(Map<String, dynamic> e)? rowActions;
   final String emptyText;
   final int pageSize;
 
@@ -181,7 +193,10 @@ class RecordListState extends State<RecordList> {
         headingRowHeight: 40,
         dataRowMinHeight: 36,
         dataRowMaxHeight: 44,
-        columns: [for (final c in widget.columns) DataColumn(label: Text(c.label), numeric: c.numeric)],
+        columns: [
+          for (final c in widget.columns) DataColumn(label: Text(c.label), numeric: c.numeric),
+          if (widget.rowActions != null) const DataColumn(label: SizedBox.shrink()),
+        ],
         rows: [
           for (final e in items)
             DataRow(
@@ -195,12 +210,28 @@ class RecordListState extends State<RecordList> {
                       child: Text(c.value(e), overflow: TextOverflow.ellipsis),
                     ),
                   ),
+                if (widget.rowActions != null) DataCell(_menu(e)),
               ],
             ),
         ],
       ),
     ),
   );
+
+  Widget _menu(Map<String, dynamic> e) {
+    final actions = widget.rowActions?.call(e) ?? const <RowAction>[];
+    if (actions.isEmpty) return const SizedBox.shrink();
+    return PopupMenuButton<RowAction>(
+      tooltip: 'Ações',
+      onSelected: (a) async {
+        await a.run();
+        if (mounted) reload();
+      },
+      itemBuilder: (_) => [
+        for (final a in actions) PopupMenuItem(value: a, child: ListTile(leading: Icon(a.icon), title: Text(a.label))),
+      ],
+    );
+  }
 
   Widget _list(List<Map<String, dynamic>> items) => ListView.separated(
     padding: const EdgeInsets.only(bottom: 80),
@@ -214,6 +245,7 @@ class RecordListState extends State<RecordList> {
         tileColor: widget.rowColor?.call(context, e),
         title: Text('${cols[0].value(e)}  ${cols.length > 1 ? cols[1].value(e) : ''}', maxLines: 2, overflow: TextOverflow.ellipsis),
         subtitle: subtitle.isEmpty ? null : Text(subtitle, maxLines: 3, overflow: TextOverflow.ellipsis),
+        trailing: widget.rowActions == null ? null : _menu(e),
         onTap: widget.onTap == null ? null : () => _tap(e),
       );
     },
@@ -424,7 +456,7 @@ class Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
     child: Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

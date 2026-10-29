@@ -30,7 +30,8 @@ public record QuoteSummaryOut(int Id, int Number, int Revision, string Reference
 public record QuoteOut(int Id, int Number, int Revision, string Reference, int CustomerId, string CustomerName, int? AddressId, string? AddressText, string? ContactName, string? ContactEmail, string? CustomerReference,
     int? PaymentTermId, string? PaymentTermName, string? CustomPaymentTerm, FreightTerms Freight, int ValidityDays, DateOnly? ValidUntil, string? Conditions, string? Notes, QuoteStatus Status, bool NeedsApproval, string? ApprovedBy, DateTimeOffset? ApprovedAt,
     DateTimeOffset? SentAt, string? SentTo, DateTimeOffset? DecidedAt, string? DecisionBy, string? DecisionNote, string? CustomerPo, int? SalesOrderId, string? SalesOrderReference, string? CreatedBy, DateTimeOffset CreatedAt,
-    QuoteTotals Totals, IReadOnlyList<QuoteLineOut> Lines, IReadOnlyList<SalesEventOut> History);
+    QuoteTotals Totals, IReadOnlyList<QuoteLineOut> Lines, IReadOnlyList<SalesEventOut> History, string? RequestText = null, string? RequestFileName = null, string? RequestFileType = null, long? RequestFileSize = null);
+public record QuoteRequestIn(string? Text);
 
 public record SalesOrderLineOut(int Id, int Sequence, int ProductId, string ProductCode, string? CustomerPartNumber, string Description, decimal Quantity, string Unit, decimal UnitPrice, decimal IpiPercent, decimal IcmsPercent,
     DateOnly DueDate, decimal Total, decimal FromStock, int? ProductionOrderId, string? ProductionReference, ProductionOrderStatus? ProductionStatus, decimal Produced, decimal Shipped, decimal Planned, decimal Remaining, decimal Available, bool Ready);
@@ -40,7 +41,7 @@ public record DeliverySummaryOut(int Id, int Number, string Reference, int Order
     string? InvoiceNumber, string? Carrier, DateTimeOffset? ShippedAt, DateTimeOffset? DeliveredAt);
 public record SalesOrderOut(int Id, int Number, string Reference, int CustomerId, string CustomerName, int AddressId, string AddressText, string? CustomerPo, int? PaymentTermId, string? PaymentTermName, string? CustomPaymentTerm, FreightTerms Freight,
     SalesOrderStatus Status, string? StatusReason, string? Notes, int? QuoteId, string? QuoteReference, string? CreatedBy, DateTimeOffset CreatedAt, string? ReleasedBy, DateTimeOffset? ReleasedAt,
-    decimal Products, decimal Ipi, decimal Total, decimal Progress, bool Ready, bool Late, CreditCheck Credit, IReadOnlyList<SalesOrderLineOut> Lines, IReadOnlyList<DeliverySummaryOut> Deliveries, IReadOnlyList<SalesEventOut> History);
+    decimal Products, decimal Ipi, decimal Total, decimal Progress, bool Ready, bool Late, CreditCheck Credit, IReadOnlyList<SalesOrderLineOut> Lines, IReadOnlyList<DeliverySummaryOut> Deliveries, IReadOnlyList<SalesEventOut> History, bool CertificateWaived = false);
 public record DeliveryLineOut(int Id, int OrderLineId, int Sequence, int ProductId, string ProductCode, string Description, decimal Quantity, string Unit, int Packages);
 public record DeliveryOut(int Id, int Number, string Reference, int OrderId, string OrderReference, int CustomerId, string CustomerName, int AddressId, string AddressText, DateOnly PlannedDate, DeliveryStatus Status,
     string? Carrier, string? VehiclePlate, string? InvoiceNumber, int Packages, decimal? GrossWeightKg, int? StockDocumentId, string? Notes, string? CreatedBy, DateTimeOffset CreatedAt, string? ShippedBy, DateTimeOffset? ShippedAt,
@@ -206,12 +207,70 @@ public static class SalesEndpoints
             return Results.NoContent();
         }).RequireAuthorization(SalesPolicies.Sell);
 
+        // Customer's purchase order (text and/or file): attached once the customer approved the quote, up to the conversion to a sales order.
+        g.MapPut("/{id:int}/request", async (int id, QuoteRequestIn i, EbtDbContext db, CancellationToken ct) =>
+        {
+            var q = await db.Quotes.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (q is null) return Results.NotFound();
+            if (!PoOpen(q)) return PoClosed(q);
+            q.RequestText = Clean(i.Text);
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(await LoadQuote(db, id, ct));
+        }).RequireAuthorization(SalesPolicies.Sell);
+
+        g.MapPost("/{id:int}/request-file", async (int id, IFormFile file, EbtDbContext db, CancellationToken ct) =>
+        {
+            var q = await db.Quotes.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (q is null) return Results.NotFound();
+            if (!PoOpen(q)) return PoClosed(q);
+            if (file.Length is 0 or > MaxRequestFileBytes) return Results.BadRequest(new { message = "Arquivo vazio ou maior que 10 MB", field = "file" });
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!RequestFileTypes.TryGetValue(ext, out var type)) return Results.BadRequest(new { message = "Formato não aceito (PDF, imagem ou texto)", field = "file" });
+            await using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, ct);
+            var stored = await db.QuoteRequestFiles.FirstOrDefaultAsync(x => x.QuoteId == id, ct);
+            if (stored is null) db.QuoteRequestFiles.Add(new QuoteRequestFile { QuoteId = id, Data = ms.ToArray() });
+            else stored.Data = ms.ToArray();
+            q.RequestFileName = Path.GetFileName(file.FileName);
+            q.RequestFileType = type;
+            q.RequestFileSize = file.Length;
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(await LoadQuote(db, id, ct));
+        }).RequireAuthorization(SalesPolicies.Sell).DisableAntiforgery();
+
+        g.MapGet("/{id:int}/request-file", async (int id, EbtDbContext db, CancellationToken ct) =>
+        {
+            var q = await db.Quotes.AsNoTracking().Where(x => x.Id == id).Select(x => new { x.RequestFileName, x.RequestFileType }).FirstOrDefaultAsync(ct);
+            var data = q?.RequestFileName is null ? null : await db.QuoteRequestFiles.AsNoTracking().Where(x => x.QuoteId == id).Select(x => x.Data).FirstOrDefaultAsync(ct);
+            return data is null ? Results.NotFound() : Results.File(data, q!.RequestFileType ?? "application/octet-stream", q.RequestFileName);
+        });
+
+        g.MapDelete("/{id:int}/request-file", async (int id, EbtDbContext db, CancellationToken ct) =>
+        {
+            var q = await db.Quotes.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (q is null) return Results.NotFound();
+            if (!PoOpen(q)) return PoClosed(q);
+            if (q.Status == QuoteStatus.PurchaseOrder && Clean(q.RequestText) is null) return Results.Conflict(new { message = "O pedido de compra precisa de arquivo ou texto" });
+            await db.QuoteRequestFiles.Where(x => x.QuoteId == id).ExecuteDeleteAsync(ct);
+            q.RequestFileName = null;
+            q.RequestFileType = null;
+            q.RequestFileSize = null;
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(await LoadQuote(db, id, ct));
+        }).RequireAuthorization(SalesPolicies.Sell);
+
         QuoteAction(g, "send", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.SendAsync(id, i.SentTo, i.Note, u, ct));
         QuoteAction(g, "approve", SalesPolicies.Approve, (svc, id, i, u, ct) => svc.ApproveAsync(id, i.Note, u, ct));
         QuoteAction(g, "reject-approval", SalesPolicies.Approve, (svc, id, i, u, ct) => svc.RejectApprovalAsync(id, i.Note, u, ct));
+        QuoteAction(g, "purchase-order", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.ReceivePurchaseOrderAsync(id, i.CustomerPo, i.Note, u, ct));
         QuoteAction(g, "accept", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.AcceptAsync(id, i.CustomerPo, i.Note, u, ct));
         QuoteAction(g, "decline", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.DeclineAsync(id, i.Note, u, ct));
-        QuoteAction(g, "revise", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.ReviseAsync(id, i.Note, u, ct));
+        // Cancels the quote (note = reason) and returns the NEW revision draft, linked by the shared quote number (PROP 4685-A → -B).
+        g.MapPost("/{id:int}/revise", async (int id, QuoteActionIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            var q = await svc.ReviseAsync(id, i.Note, i.CustomerPo, Who(user), ct);
+            return Results.Created($"/api/sales/quotes/{q.Id}", await LoadQuote(db, q.Id, ct));
+        }).RequireAuthorization(SalesPolicies.Sell);
         QuoteAction(g, "cancel", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.CancelQuoteAsync(id, i.Note, u, ct));
 
         g.MapPost("/{id:int}/convert", async (int id, ConvertInput i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
@@ -220,6 +279,17 @@ public static class SalesEndpoints
             return Results.Created($"/api/sales/orders/{o.Id}", await LoadOrder(db, svc, o.Id, ct));
         }).RequireAuthorization(SalesPolicies.Sell);
     }
+
+    private static bool PoOpen(Quote q) => q.Status is QuoteStatus.Accepted or QuoteStatus.PurchaseOrder;
+
+    private static IResult PoClosed(Quote q) => Results.Conflict(new { message = $"Pedido de compra só pode ser anexado após a aprovação do cliente (status atual: {q.Status})" });
+
+    private const long MaxRequestFileBytes = 10 * 1024 * 1024;
+
+    private static readonly Dictionary<string, string> RequestFileTypes = new()
+    {
+        [".pdf"] = "application/pdf", [".png"] = "image/png", [".jpg"] = "image/jpeg", [".jpeg"] = "image/jpeg", [".webp"] = "image/webp", [".txt"] = "text/plain",
+    };
 
     private static void QuoteAction(RouteGroupBuilder g, string action, string policy, Func<SalesService, int, QuoteActionIn, string?, CancellationToken, Task<Quote>> run) =>
         g.MapPost($"/{{id:int}}/{action}", async (int id, QuoteActionIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
@@ -358,14 +428,21 @@ public static class SalesEndpoints
             }
 
             var inProgress = orderRows.Where(o => o.Status is SalesOrderStatus.Released or SalesOrderStatus.PartiallyShipped).ToList();
+            // Finished production waits in "certificate" until a quality certificate exists for the order (or the customer does not need one).
+            var readyIds = inProgress.Where(o => o.Ready).Select(o => o.Id).ToList();
+            var certified = await db.QualityCertificates.Where(c => readyIds.Contains(c.OrderId) && c.Status == CertificateStatus.Issued).Select(c => c.OrderId).Distinct().ToListAsync(ct);
+            var waived = await db.SalesOrders.Where(o => readyIds.Contains(o.Id) && o.CertificateWaived).Select(o => o.Id).ToListAsync(ct);
+            var needsCertificate = readyIds.Except(certified).Except(waived).ToHashSet();
             var stages = new List<PipelineStage>
             {
                 Stage("quote", quoteRows.Where(q => q.Status is QuoteStatus.Draft or QuoteStatus.PendingApproval or QuoteStatus.Approved).Select(QuoteCard)),
                 Stage("sent", quoteRows.Where(q => q.Status == QuoteStatus.Sent).Select(QuoteCard)),
                 Stage("accepted", quoteRows.Where(q => q.Status == QuoteStatus.Accepted).Select(QuoteCard)),
+                Stage("po", quoteRows.Where(q => q.Status == QuoteStatus.PurchaseOrder).Select(QuoteCard)),
                 Stage("order", orderRows.Where(o => o.Status == SalesOrderStatus.Created).Select(OrderCard)),
                 Stage("production", inProgress.Where(o => !o.Ready).Select(OrderCard)),
-                Stage("ready", inProgress.Where(o => o.Ready).Select(OrderCard)),
+                Stage("certificate", inProgress.Where(o => needsCertificate.Contains(o.Id)).Select(OrderCard)),
+                Stage("ready", inProgress.Where(o => o.Ready && !needsCertificate.Contains(o.Id)).Select(OrderCard)),
                 Stage("shipped", orderRows.Where(o => o.Status == SalesOrderStatus.Shipped).Select(OrderCard)),
                 Stage("delivered", orderRows.Where(o => o.Status == SalesOrderStatus.Delivered).Select(OrderCard).Reverse()),
             };
@@ -373,11 +450,11 @@ public static class SalesEndpoints
             var since = DateTimeOffset.UtcNow.AddDays(-90);
             var decided = await db.Quotes.AsNoTracking().Where(q => q.DecidedAt >= since || q.Status == QuoteStatus.Converted && q.CreatedAt >= since)
                 .Where(q => customerId == null || q.CustomerId == customerId)
-                .GroupBy(q => q.Status == QuoteStatus.Accepted || q.Status == QuoteStatus.Converted).Select(x => new { Won = x.Key, N = x.Count() }).ToListAsync(ct);
+                .GroupBy(q => q.Status == QuoteStatus.Accepted || q.Status == QuoteStatus.PurchaseOrder || q.Status == QuoteStatus.Converted).Select(x => new { Won = x.Key, N = x.Count() }).ToListAsync(ct);
             var won = decided.Where(d => d.Won).Sum(d => d.N);
             var all = decided.Sum(d => d.N);
             var openOrders = orderRows.Where(o => SalesService.OpenOrder.Contains(o.Status)).ToList();
-            var kpis = new PipelineKpis(quoteRows.Where(q => q.Status != QuoteStatus.Accepted).Sum(q => q.Total), quoteRows.Count(q => q.Status != QuoteStatus.Accepted),
+            var kpis = new PipelineKpis(quoteRows.Where(q => q.Status is not (QuoteStatus.Accepted or QuoteStatus.PurchaseOrder)).Sum(q => q.Total), quoteRows.Count(q => q.Status is not (QuoteStatus.Accepted or QuoteStatus.PurchaseOrder)),
                 all == 0 ? null : Math.Round((decimal)won / all, 4), openOrders.Sum(o => o.Total), openOrders.Count, openOrders.Count(o => o.Late), inProgress.Count(o => o.Ready),
                 quoteRows.Count(q => q.Status == QuoteStatus.PendingApproval));
             return Results.Ok(new PipelineOut(kpis, stages));
@@ -427,7 +504,7 @@ public static class SalesEndpoints
             l.ListPrice is > 0 ? Math.Round((1 - l.UnitPrice / l.ListPrice.Value) * 100m, 2) : null, l.IpiPercent, l.IcmsPercent, l.LeadTimeDays, l.DeliveryDate, Math.Round(l.Quantity * l.UnitPrice, 2))).ToList();
         return new QuoteOut(q.Id, q.Number, q.Revision, q.Reference, q.CustomerId, q.Customer!.Name, q.AddressId, q.Address is null ? null : AddressText(q.Address), q.ContactName, q.ContactEmail, q.CustomerReference,
             q.PaymentTermId, q.PaymentTerm?.Name, q.CustomPaymentTerm, q.Freight, q.ValidityDays, q.ValidUntil, q.Conditions, q.Notes, q.Status, q.NeedsApproval, q.ApprovedBy, q.ApprovedAt, q.SentAt, q.SentTo, q.DecidedAt, q.DecisionBy, q.DecisionNote,
-            q.CustomerPo, q.SalesOrderId, order, q.CreatedBy, q.CreatedAt, SalesService.Totals(q), lines, await History(db, SalesRecordKind.Quote, id, ct));
+            q.CustomerPo, q.SalesOrderId, order, q.CreatedBy, q.CreatedAt, SalesService.Totals(q), lines, await History(db, SalesRecordKind.Quote, id, ct), q.RequestText, q.RequestFileName, q.RequestFileType, q.RequestFileSize);
     }
 
     private static async Task<SalesOrderOut> LoadOrder(EbtDbContext db, SalesService svc, int id, CancellationToken ct)
@@ -445,7 +522,7 @@ public static class SalesEndpoints
         var deliveries = await db.Deliveries.AsNoTracking().Where(d => d.OrderId == id).OrderBy(d => d.Number).Select(DeliverySummary).ToListAsync(ct);
         return new SalesOrderOut(o.Id, o.Number, o.Reference, o.CustomerId, o.Customer!.Name, o.AddressId, AddressText(o.Address), o.CustomerPo, o.PaymentTermId, o.PaymentTerm?.Name, o.CustomPaymentTerm, o.Freight, o.Status, o.StatusReason, o.Notes,
             o.QuoteId, o.Quote?.Reference, o.CreatedBy, o.CreatedAt, o.ReleasedBy, o.ReleasedAt, totals.Products, totals.Ipi, totals.Total, progress?.Progress ?? 0, progress?.Ready ?? false, progress?.Late ?? false,
-            credit, lines, deliveries, await History(db, SalesRecordKind.Order, id, ct));
+            credit, lines, deliveries, await History(db, SalesRecordKind.Order, id, ct), o.CertificateWaived);
     }
 
     private static async Task<DeliveryOut> LoadDelivery(EbtDbContext db, int id, CancellationToken ct)

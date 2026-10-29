@@ -505,15 +505,35 @@ pw.Widget _opCell(pw.Widget child, int i, {double height = 17}) => pw.Expanded(
 
 pw.Widget _opRow(List<pw.Widget> cells) => pw.Row(children: [for (final (i, w) in cells.indexed) _opCell(w, i)]);
 
-/// Ordem de fabricação (OF N), conforme o modelo oficial.
+String _mm(Object? v) => v is num ? fmtNum(v, v == v.roundToDouble() ? 0 : 2) : '';
+
+/// Dimensões do tubo a partir do cadastro do produto (engenharia); sem medidas, usa o nome.
+String _tubeDimensions(Map<String, dynamic>? p, String fallback) {
+  if (p == null) return fallback;
+  final size = p['shape'] == 'Rectangular' || p['shape'] == 1
+      ? [_mm(p['widthMm']), _mm(p['heightMm'])].where((e) => e.isNotEmpty).join(' x ')
+      : (_mm(p['diameterMm']).isEmpty ? '' : 'Ø ${_mm(p['diameterMm'])}');
+  final parts = [size, _mm(p['thicknessMm']), _mm(p['lengthMm'])].where((e) => e.isNotEmpty).toList();
+  return parts.isEmpty ? fallback : parts.join(' x ');
+}
+
+/// Especificação do material: matérias-primas da estrutura (BOM) da ordem.
+String _materialSpec(List<Map<String, dynamic>> mats) =>
+    mats.map((m) => _s(m['description']).isNotEmpty ? _s(m['description']) : _s(m['code'])).where((e) => e.isNotEmpty).toSet().join('; ');
+
+/// Ordem de produção (OF N), conforme o modelo oficial.
 Future<Uint8List> buildProductionOrderPdf(ApiClient api, Map<String, dynamic> o) async {
   final customer = await _customer(api, o['customerId']);
   final c = _CustomerBlock(_s(customer?['name']), customer, '');
+  Map<String, dynamic>? product;
+  try {
+    product = await api.get('/api/products/${o['productId']}') as Map<String, dynamic>;
+  } catch (_) {}
   final ops = (o['operations'] as List).cast<Map<String, dynamic>>();
   final mats = (o['materials'] as List).cast<Map<String, dynamic>>();
   final qty = (o['quantity'] as num?) ?? 0;
   final rawMaterial = mats.isEmpty ? '' : (_s(mats.first['description']).isNotEmpty ? _s(mats.first['description']) : _s(mats.first['code']));
-  final blankRows = ops.length >= 9 ? 1 : 9 - ops.length;
+  final blankRows = ops.length >= 7 ? 1 : 14 - ops.length * 2;
   final none = pw.SizedBox();
   pw.Widget small(String t) => pw.Text(t, style: _t(8.5));
   pw.Widget head(String t, {bool left = true, double? height, double? width}) => pw.Container(
@@ -527,17 +547,17 @@ Future<Uint8List> buildProductionOrderPdf(ApiClient api, Map<String, dynamic> o)
   final page = pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.stretch,
     children: [
-      _titleBar('ORDEM DE FABRICAÇÃO', _s(o['reference'])),
+      _titleBar('ORDEM DE PRODUÇÃO', _s(o['customerPo']).isNotEmpty ? _s(o['customerPo']) : _s(o['reference'])),
       pw.SizedBox(height: 4),
       _identBox(productCode: _s(o['productCode']), customerCode: c.code),
       _orderedBy(),
       _customerBox(c),
       pw.SizedBox(height: 4),
-      _specBox(dimensions: _s(o['productName']), quantity: _qty(qty, _s(o['productUnit'])), material: '', delivery: fmtDay(o['dueDate']), notes: _s(o['notes'])),
+      _specBox(dimensions: _tubeDimensions(product, _s(o['productName'])), quantity: _qty(qty, _s(o['productUnit'])), material: _materialSpec(mats), delivery: fmtDay(o['dueDate']), notes: _s(o['notes'])),
       _frame([
         _sectionTitle('PROCESSO', fill: true),
         _formRow([(1, _centered(small('Materia Prima:'))), (2, small(rawMaterial)), (1, _centered(small('Lote'))), (1, none)], height: 17),
-        _formRow([(2, _lbl('Tubo Primario ( Perfila ):', '', 8)), (3, none)], height: 20, lastRow: true),
+        _formRow([(2, _lbl('Tubo Primario ( Perfila ):', '', 8)), (3, pw.Center(child: pw.Text(_s(o['primaryTube']), style: _t(9.5, bold: true))))], height: 20, lastRow: true),
       ]),
       pw.SizedBox(height: 4),
       _frame([
@@ -554,7 +574,10 @@ Future<Uint8List> buildProductionOrderPdf(ApiClient api, Map<String, dynamic> o)
             pw.Expanded(flex: _opFlex[5], child: pw.Column(children: [head('Recursos necessário', height: 15, width: double.infinity), head('Maq. / Ferramenta', height: 15, width: double.infinity)])),
           ],
         ),
-        for (final op in ops) _opRow([small(_s(op['sequence'])), small(_s(op['description'])), none, none, none, small(op['external'] == true ? 'Terceiro' : _s(op['machineCode']))]),
+        for (final op in ops) ...[
+          _opRow([small(_s(op['sequence'])), small(_s(op['description'])), small(_s(op['tolerance'])), small(_s(op['measureStart'])), small(_s(op['measureEnd'])), small(op['external'] == true ? 'Terceiro' : _s(op['machineCode']))]),
+          _opRow([none, none, none, none, none, none]),
+        ],
         for (var i = 0; i < blankRows; i++) _opRow([none, none, none, none, none, none]),
       ]),
       pw.SizedBox(height: 4),
@@ -620,15 +643,16 @@ Future<Uint8List> buildProductionOrderPdf(ApiClient api, Map<String, dynamic> o)
 
 /// App bar print button shared by the three detail screens.
 class PrintButton extends StatelessWidget {
-  const PrintButton({super.key, required this.name, required this.builder, this.enabled = true});
+  const PrintButton({super.key, required this.name, required this.builder, this.enabled = true, this.tooltip = 'Imprimir'});
 
   final String name;
   final Future<Uint8List> Function() builder;
   final bool enabled;
+  final String tooltip;
 
   @override
   Widget build(BuildContext context) => IconButton(
-    tooltip: 'Imprimir',
+    tooltip: tooltip,
     icon: const Icon(Icons.print_outlined),
     onPressed: enabled
         ? () async {

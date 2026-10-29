@@ -12,13 +12,14 @@ public sealed class ProductionException(int status, string message, string? fiel
     public static ProductionException NotFound(string what) => new(404, $"{what} not found");
 }
 
-public sealed record OrderInput(int ProductId, decimal Quantity, DateOnly DueDate, ProductionOrderKind Kind = ProductionOrderKind.Standard, int? CustomerId = null, int? ParentOrderId = null, int? PreviousOrderId = null, int? Bales = null, string? Notes = null);
-public sealed record OrderUpdate(decimal Quantity, DateOnly DueDate, int? CustomerId, int? Bales, string? Notes);
+public sealed record OrderInput(int ProductId, decimal Quantity, DateOnly DueDate, ProductionOrderKind Kind = ProductionOrderKind.Standard, int? CustomerId = null, int? ParentOrderId = null, int? PreviousOrderId = null, int? Bales = null, string? Notes = null, string? PrimaryTube = null);
+public sealed record OrderUpdate(decimal Quantity, DateOnly DueDate, int? CustomerId, int? Bales, string? Notes, string? PrimaryTube = null);
+public sealed record OperationDetailsInput(string? Tolerance, string? MeasureStart, string? MeasureEnd);
 public sealed record IssueLineInput(int MaterialLineId, decimal Quantity, int? LotId = null);
 public sealed record IssueInput(DateOnly Date, int? LocationId = null, IReadOnlyList<IssueLineInput>? Lines = null);
 public sealed record FinishedGoodsInput(DateOnly Date, decimal Quantity, int? LocationId = null, string? LotCode = null);
 public sealed record OutsourceInput(int SupplierId, int? LeadDays);
-public sealed record OutsideSendInput(DateOnly Date, decimal Quantity, string? InvoiceNumber, string? Notes);
+public sealed record OutsideSendInput(DateOnly Date, decimal Quantity, string? InvoiceNumber, string? Notes, decimal? UnitValue = null, string? Cfop = null);
 public sealed record OutsideReturnInput(DateOnly Date, decimal GoodQuantity, decimal ScrapQuantity, decimal ServiceUnitPrice, int? ScrapOccurrenceId, string? InvoiceNumber, string? Notes);
 public sealed record ReportInput(int OrderId, int OperationSequence, DateOnly Date, decimal GoodQuantity, decimal ScrapQuantity = 0, int? ScrapOccurrenceId = null, int? ShiftId = null, int? EmployeeId = null, int? MachineId = null,
     TimeOnly? StartTime = null, TimeOnly? EndTime = null, decimal? Hours = null, decimal? SetupHours = null, decimal? Operators = null, decimal? DowntimeHours = null, int? DowntimeOccurrenceId = null, decimal? WeightKg = null, string? Notes = null);

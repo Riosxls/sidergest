@@ -229,6 +229,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
           key: ValueKey('field-${f.key}'),
           controller: _text[f.key],
           readOnly: widget.readOnly,
+          obscureText: f.obscure,
           keyboardType: f.type == FieldType.text
               ? TextInputType.text
               : (f.type == FieldType.date || f.type == FieldType.time ? TextInputType.datetime : const TextInputType.numberWithOptions(decimal: true)),

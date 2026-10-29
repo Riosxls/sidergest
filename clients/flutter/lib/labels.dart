@@ -70,6 +70,7 @@ const quoteStatuses = {
   'Approved': 'Aprovada internamente',
   'Sent': 'Enviada ao cliente',
   'Accepted': 'Aceita pelo cliente',
+  'PurchaseOrder': 'Pedido de compra recebido',
   'Rejected': 'Recusada',
   'Expired': 'Expirada',
   'Cancelled': 'Cancelada',
@@ -84,13 +85,16 @@ const salesOrderStatuses = {
   'Cancelled': 'Cancelado',
 };
 const deliveryStatuses = {'Planned': 'Programada', 'Shipped': 'Expedida', 'Delivered': 'Entregue', 'Cancelled': 'Cancelada'};
+const certificateStatuses = {'Draft': 'Rascunho', 'Issued': 'Emitido', 'Cancelled': 'Cancelado'};
 const freightTerms = {'Cif': 'CIF (frete nosso)', 'Fob': 'FOB (frete do cliente)', 'CustomerPickup': 'Retira na fábrica'};
 const pipelineStages = {
   'quote': 'Orçamento',
   'sent': 'Enviada',
   'accepted': 'Aceita',
+  'po': 'Pedido de compra',
   'order': 'Pedido',
-  'production': 'Em produção',
+  'production': 'Ordem de Produção',
+  'certificate': 'Certificado',
   'ready': 'Pronto p/ expedir',
   'shipped': 'Expedido',
   'delivered': 'Entregue',
@@ -102,6 +106,7 @@ const salesActions = {
   'approved': 'Desconto aprovado',
   'approval-rejected': 'Desconto recusado',
   'sent': 'Enviado ao cliente',
+  'po-received': 'Pedido de compra recebido',
   'accepted': 'Aceito pelo cliente',
   'declined': 'Recusado pelo cliente',
   'revised': 'Revisado',
