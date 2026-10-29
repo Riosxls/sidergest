@@ -2,4 +2,9 @@
 **/obj
 **/TestResults
 .git
+.github
+clients
+tests
+**/*.md
+legacy
 .env

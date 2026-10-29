@@ -6,6 +6,7 @@ import 'package:ebt_engenharia/screens/production_floor.dart';
 import 'package:ebt_engenharia/screens/production_orders.dart';
 import 'package:ebt_engenharia/screens/shell.dart';
 import 'package:ebt_engenharia/session.dart';
+import 'role_permissions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -202,7 +203,8 @@ Future<Session> pumpScreen(WidgetTester tester, Fake fake, Widget Function(Sessi
           api: ApiClient(baseUrl: 'http://api.test', client: fake.client, token: 'tok'),
         )
         ..username = 'u'
-        ..role = fake.role;
+        ..role = fake.role
+        ..permissions = rolePermissions[fake.role]!;
   await tester.pumpWidget(
     MaterialApp(
       locale: const Locale('pt', 'BR'),
@@ -217,7 +219,7 @@ Future<Session> pumpScreen(WidgetTester tester, Fake fake, Widget Function(Sessi
 
 void main() {
   test('production role permissions; times are parsed', () {
-    final s = Session(api: ApiClient(baseUrl: 'http://x'))..role = 'Production';
+    final s = Session(api: ApiClient(baseUrl: 'http://x'))..role = 'Production'..permissions = rolePermissions['Production']!;
     expect(s.canProduce, isTrue);
     expect(s.canMoveProduction, isTrue);
     expect(parseTime('7:30'), '07:30:00');

@@ -96,6 +96,6 @@ public class DbfImportTests(ApiFixture api) : IDisposable
 
         Assert.Equal(4, await check.BomItems.CountAsync(b => b.RoutingOperation!.Product!.Code == "TUBO-A" || b.RoutingOperation!.Product!.Code == "COMP-B"));
         var exp = await new BomService(check).ExplodeAsync(tube.Id, 1m);
-        Assert.Equal(1.2m + 2m * 0.1m, exp.Materials.Single(m => m.Code == "BOB150").TotalQuantity);
+        Assert.Equal(1.2m + 2m * 0.1m, exp!.Materials.Single(m => m.Code == "BOB150").TotalQuantity);
     }
 }

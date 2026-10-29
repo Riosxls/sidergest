@@ -5,6 +5,7 @@ import 'package:ebt_engenharia/entities.dart';
 import 'package:ebt_engenharia/main.dart';
 import 'package:ebt_engenharia/session.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -47,6 +48,7 @@ MockClient fakeBackend(List<http.Request> log) => MockClient((r) async {
       'expiresAt': DateTime.now().add(const Duration(hours: 8)).toUtc().toIso8601String(),
       'username': 'eng',
       'role': 'Engineering',
+      'permissions': ['read', 'write', 'purchasing-request'],
     });
   }
   if (r.headers['Authorization'] != 'Bearer tok') return http.Response('', 401);
@@ -124,6 +126,7 @@ MockClient fakeBackend(List<http.Request> log) => MockClient((r) async {
 
 Future<Session> pumpApp(WidgetTester tester, List<http.Request> log) async {
   SharedPreferences.setMockInitialValues({});
+  FlutterSecureStorage.setMockInitialValues({});
   tester.view.physicalSize = const Size(1400, 900);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);

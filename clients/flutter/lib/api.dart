@@ -26,12 +26,31 @@ class PageResult {
 }
 
 class ApiClient {
-  ApiClient({required this.baseUrl, this.token, http.Client? client, this.onUnauthorized}) : _http = client ?? http.Client();
+  // ignore: prefer_initializing_formals
+  ApiClient({required String baseUrl, this.token, http.Client? client, this.onUnauthorized}) : _baseUrl = baseUrl, _http = client ?? http.Client();
 
-  String baseUrl;
+  String _baseUrl;
+  String get baseUrl => _baseUrl;
+  set baseUrl(String v) {
+    if (v != _baseUrl) _versions.clear();
+    _baseUrl = v;
+  }
+
   String? token;
   void Function()? onUnauthorized;
   final http.Client _http;
+  final _versions = <String, String>{};
+  static final _idKey = RegExp(r'^(.*?/\d+)(?:[/?]|$)');
+
+  static String? _versionKey(String path) => _idKey.firstMatch(path)?.group(1);
+
+  void clearVersions() => _versions.clear();
+
+  Map<String, String> _writeHeaders(String path) {
+    final k = _versionKey(path);
+    final tag = k == null ? null : _versions[k];
+    return {..._headers, 'If-Match': ?tag};
+  }
 
   Uri _uri(String path, [Map<String, dynamic>? query]) {
     final base = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
@@ -41,13 +60,13 @@ class ApiClient {
 
   Map<String, String> get _headers => {'Content-Type': 'application/json', 'Accept': 'application/json', if (token != null) 'Authorization': 'Bearer $token'};
 
-  Future<dynamic> get(String path, [Map<String, dynamic>? query]) => _send(() => _http.get(_uri(path, query), headers: _headers));
+  Future<dynamic> get(String path, [Map<String, dynamic>? query]) => _send(path, () => _http.get(_uri(path, query), headers: _headers));
 
-  Future<dynamic> post(String path, Object body) => _send(() => _http.post(_uri(path), headers: _headers, body: jsonEncode(body)));
+  Future<dynamic> post(String path, Object body) => _send(path, () => _http.post(_uri(path), headers: _writeHeaders(path), body: jsonEncode(body)));
 
-  Future<dynamic> put(String path, Object body) => _send(() => _http.put(_uri(path), headers: _headers, body: jsonEncode(body)));
+  Future<dynamic> put(String path, Object body) => _send(path, () => _http.put(_uri(path), headers: _writeHeaders(path), body: jsonEncode(body)));
 
-  Future<dynamic> delete(String path) => _send(() => _http.delete(_uri(path), headers: _headers));
+  Future<dynamic> delete(String path) => _send(path, () => _http.delete(_uri(path), headers: _writeHeaders(path)));
 
   Future<PageResult> list(String path, {String? q, int skip = 0, int take = 50, Map<String, dynamic> query = const {}}) async {
     final r = await get(path, {...query, 'q': q, 'skip': skip, 'take': take});
@@ -66,7 +85,7 @@ class ApiClient {
     }
   }
 
-  Future<dynamic> _send(Future<http.Response> Function() call) async {
+  Future<dynamic> _send(String path, Future<http.Response> Function() call) async {
     http.Response r;
     try {
       r = await call();
@@ -75,6 +94,9 @@ class ApiClient {
     }
     if (r.statusCode == 401 && token != null) onUnauthorized?.call();
     if (r.statusCode >= 200 && r.statusCode < 300) {
+      final tag = r.headers['etag'];
+      final k = _versionKey(path);
+      if (tag != null && k != null) _versions[k] = tag;
       return r.body.isEmpty ? null : jsonDecode(utf8.decode(r.bodyBytes));
     }
     throw _error(r);
@@ -86,6 +108,8 @@ class ApiClient {
         return ApiException(401, 'Usuário ou senha inválidos, ou sessão expirada');
       case 403:
         return ApiException(403, 'Sem permissão para esta ação');
+      case 412:
+        return ApiException(412, 'O registro foi alterado por outra pessoa; recarregue e tente novamente');
       case 404:
         return ApiException(404, 'Registro não encontrado');
     }

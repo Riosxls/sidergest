@@ -241,3 +241,12 @@ Flow (PCP.EXE / APONT.EXE): order → release (reserve) → issue material → r
 - Explosion multiplies quantity × factor through every level and totals materials.
 - Tube net weight is computed from shape, diameter/width/height, wall and length (steel 7.85 g/cm³) when not given.
 - CPF/CNPJ, CEP, IBGE and NCM accept formatted input and are stored as digits.
+
+## Security and operations notes
+
+- **Who may do what** lives in one place: `src/Ebt.Api/Infrastructure/Access.cs`. `POST /api/auth/login` and `GET /api/auth/me` return the caller's `permissions` (policy names); the Flutter client reads those instead of keeping its own role lists.
+- **Token revocation**: tokens carry a version; deactivating a user, changing role or resetting a password invalidates their tokens at once. Failed logins lock the account for 15 minutes after 5 attempts.
+- **Optimistic concurrency**: GET/PUT/POST on quotes, sales orders, deliveries, production orders and purchase orders return an `ETag`; send it back as `If-Match` on writes. A stale tag gets `412 Precondition Failed`.
+- **Quote expiry** runs as a background service every 10 minutes (GET endpoints are read-only).
+- **Container**: the API image has a `HEALTHCHECK` (`dotnet Ebt.Api.dll --healthcheck`), base images are pinned by digest (Dependabot keeps them current), and compose runs it read-only with all capabilities dropped.
+- **CI** (`.github/workflows/ci.yml`) builds with warnings as errors, runs the API tests against Postgres, fails on vulnerable NuGet packages, and runs `flutter analyze` and `flutter test`.

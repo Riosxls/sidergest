@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../entities.dart';
 import '../session.dart';
-import '../api.dart';
 import '../widgets/alerts.dart';
 import 'orders.dart';
 import 'production_orders.dart';
@@ -17,134 +15,13 @@ import 'quick_actions.dart';
 import 'sales_orders.dart';
 import 'sales_quotes.dart';
 import 'requisitions.dart';
+import 'dashboard/cards.dart';
+import 'dashboard/loader.dart';
+import 'dashboard/models.dart';
+import 'dashboard/widgets.dart';
 
-class DashboardData {
-  DashboardData(this.counts, this.products);
+export 'dashboard/models.dart';
 
-  final Map<EntitySpec, int> counts;
-  final List<Map<String, dynamic>> products;
-
-  List<Map<String, dynamic>> get withoutRouting => products.where((p) => (p['operationCount'] ?? 0) == 0).toList();
-  List<Map<String, dynamic>> get blocked => products.where((p) => p['blocked'] == true).toList();
-
-  Map<String, int> countBy(String Function(Map<String, dynamic>) key) {
-    final m = <String, int>{};
-    for (final p in products) {
-      m.update(key(p), (v) => v + 1, ifAbsent: () => 1);
-    }
-    return Map.fromEntries(m.entries.toList()..sort((a, b) => b.value.compareTo(a.value)));
-  }
-}
-
-class StockDashboard {
-  StockDashboard({
-    required this.quarantine,
-    required this.quarantineLots,
-    required this.openReservations,
-    required this.lastClosing,
-    required this.locations,
-    this.belowMinimum = const [],
-  });
-
-  final int quarantine;
-  final List<Map<String, dynamic>> quarantineLots;
-  final int openReservations;
-  final Map<String, dynamic>? lastClosing;
-  final int locations;
-  final List<Map<String, dynamic>> belowMinimum;
-}
-
-class PurchasingDashboard {
-  PurchasingDashboard({
-    required this.pendingApproval,
-    required this.approved,
-    required this.openQuotations,
-    required this.openOrders,
-    required this.overdue,
-    required this.performance,
-  });
-
-  final int pendingApproval;
-  final int approved;
-  final int openQuotations;
-  final int openOrders;
-  final List<Map<String, dynamic>> overdue;
-  final List<Map<String, dynamic>> performance;
-
-  Map<String, num> get overdueBySupplier {
-    final m = <String, num>{};
-    for (final l in overdue) {
-      m.update('${l['supplierName']}', (v) => v + 1, ifAbsent: () => 1);
-    }
-    return Map.fromEntries(m.entries.toList()..sort((a, b) => b.value.compareTo(a.value)));
-  }
-}
-
-class ProductionDashboard {
-  ProductionDashboard({required this.orders, required this.shipments, required this.load});
-
-  final List<Map<String, dynamic>> orders;
-  final List<Map<String, dynamic>> shipments;
-  final List<Map<String, dynamic>> load;
-
-  int count(String status) => orders.where((o) => o['status'] == status).length;
-  List<Map<String, dynamic>> get late => orders.where(productionLate).toList();
-
-  Map<String, num> get peakLoad {
-    final m = <String, num>{};
-    for (final r in load) {
-      final pct = r['loadPercent'] as num;
-      m.update('${r['code']}', (v) => pct > v ? pct : v, ifAbsent: () => pct);
-    }
-    return Map.fromEntries((m.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(8));
-  }
-}
-
-typedef Navigate = void Function(String id, [String? filter]);
-
-class SalesDashboard {
-  SalesDashboard({required this.openOrders, required this.openQuotes, required this.lateOrders, required this.readyToShip, required this.pendingApprovals});
-
-  factory SalesDashboard.fromJson(Map<String, dynamic> k) => SalesDashboard(
-    openOrders: (k['openOrders'] as num?)?.toInt() ?? 0,
-    openQuotes: (k['openQuotes'] as num?)?.toInt() ?? 0,
-    lateOrders: (k['lateOrders'] as num?)?.toInt() ?? 0,
-    readyToShip: (k['readyToShip'] as num?)?.toInt() ?? 0,
-    pendingApprovals: (k['pendingApprovals'] as num?)?.toInt() ?? 0,
-  );
-
-  final int openOrders;
-  final int openQuotes;
-  final int lateOrders;
-  final int readyToShip;
-  final int pendingApprovals;
-}
-
-class ModuleInfo {
-  const ModuleInfo(this.id, this.title, this.icon);
-
-  final String id;
-  final String title;
-  final IconData icon;
-
-  String get navId => 'module-$id';
-}
-
-const moduleInfos = [
-  ModuleInfo('sales', 'Comercial', Icons.storefront_outlined),
-  ModuleInfo('engineering', 'Engenharia', Icons.architecture),
-  ModuleInfo('stock', 'Estoque', Icons.inventory_outlined),
-  ModuleInfo('purchasing', 'Suprimentos', Icons.shopping_cart_outlined),
-  ModuleInfo('production', 'PCP', Icons.precision_manufacturing_outlined),
-];
-
-class ModuleLink {
-  const ModuleLink(this.id, this.icon, this.title);
-
-  final String id;
-  final IconData icon;
-  final String title;
-}
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, required this.session, this.onNavigate, this.module, this.links = const []});
@@ -160,17 +37,19 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   static const _maxWidth = 1280.0;
-  late Future<DashboardData> _eng = _fetchEngineering();
-  late Future<StockDashboard> _stock = _fetchStock();
-  late Future<PurchasingDashboard> _purchasing = _fetchPurchasing();
-  late Future<ProductionDashboard> _production = _fetchProduction();
-  late Future<SalesDashboard> _sales = _fetchSales();
+  late Future<DashboardData> _eng = _loader.engineering();
+  late Future<StockDashboard> _stock = _loader.stock();
+  late Future<PurchasingDashboard> _purchasing = _loader.purchasing();
+  late Future<ProductionDashboard> _production = _loader.production();
+  late Future<SalesDashboard> _sales = _loader.sales();
   late Future<List<Object?>> _all = _combine();
   DateTime? _updated;
   final _focus = FocusNode();
   Timer? _timer;
   bool? _tutorialHidden;
   static const _tutorialKey = 'tutorialDismissed';
+
+  DashboardLoader get _loader => DashboardLoader(widget.session.api);
 
   bool _need(String m) => widget.module == null || widget.module == m;
 
@@ -207,90 +86,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {}
   }
 
-  static final _counted = [products, materials, machines, standardOperations, workCenters, tools];
-
-  Future<DashboardData> _fetchEngineering() async {
-    final api = widget.session.api;
-    final pages = await Future.wait(_counted.map((s) => api.list(s.path, take: 1)));
-    final all = await api.listAll(products.path);
-    return DashboardData({for (var i = 0; i < _counted.length; i++) _counted[i]: pages[i].total}, all);
-  }
-
-  Future<StockDashboard> _fetchStock() async {
-    final api = widget.session.api;
-    final r = await Future.wait([
-      api.list('/api/stock/lots', take: 8, query: {'status': 'Quarantine'}),
-      api.list('/api/stock/reservations', take: 1, query: {'status': 'Open'}),
-      api.get('/api/stock/closings'),
-      api.list('/api/stock-locations', take: 1),
-      api.listAll(materials.path),
-      api.listAll('/api/stock/balances'),
-    ]);
-    final lots = r[0] as PageResult;
-    final closings = (r[2] as List).cast<Map<String, dynamic>>();
-    final onHand = <int, num>{};
-    for (final b in r[5] as List<Map<String, dynamic>>) {
-      final id = b['materialId'];
-      if (id is int && b['locationKind'] != 'ThirdParty') onHand.update(id, (v) => v + (b['quantity'] as num), ifAbsent: () => b['quantity'] as num);
-    }
-    final below = [
-      for (final m in r[4] as List<Map<String, dynamic>>)
-        if (m['active'] != false && m['minStock'] is num && (m['minStock'] as num) > 0 && (onHand[m['id']] ?? 0) < (m['minStock'] as num)) m,
-    ];
-    return StockDashboard(
-      quarantine: lots.total,
-      quarantineLots: lots.items,
-      openReservations: (r[1] as PageResult).total,
-      lastClosing: closings.isEmpty ? null : closings.first,
-      locations: (r[3] as PageResult).total,
-      belowMinimum: below,
-    );
-  }
-
-  Future<PurchasingDashboard> _fetchPurchasing() async {
-    final api = widget.session.api;
-    final r = await Future.wait([
-      api.list('/api/requisitions', take: 1, query: {'status': 'PendingApproval'}),
-      api.list('/api/requisitions', take: 1, query: {'status': 'Approved'}),
-      api.list('/api/quotations', take: 1, query: {'status': 'Open'}),
-      api.list('/api/purchase-orders', take: 200, query: {'open': true}),
-      api.get('/api/purchasing/overdue'),
-    ]);
-    final orders = r[3] as PageResult;
-    final now = DateTime.now();
-    final from = isoDate(DateTime(now.year - 1, now.month, now.day));
-    final supplierIds = orders.items.map((o) => o['supplierId'] as int).toSet().take(8);
-    final perf = await Future.wait(supplierIds.map((id) => api.get('/api/suppliers/$id/performance', {'from': from, 'to': isoDate(now)})));
-    return PurchasingDashboard(
-      pendingApproval: (r[0] as PageResult).total,
-      approved: (r[1] as PageResult).total,
-      openQuotations: (r[2] as PageResult).total,
-      openOrders: orders.total,
-      overdue: (r[4] as List).cast<Map<String, dynamic>>(),
-      performance: perf.cast<Map<String, dynamic>>(),
-    );
-  }
-
-  Future<ProductionDashboard> _fetchProduction() async {
-    final api = widget.session.api;
-    final now = DateTime.now();
-    final r = await Future.wait([
-      api.listAll('/api/production/orders', query: {'open': true}),
-      api.get('/api/production/outside-shipments', {'open': true}),
-      api.get('/api/production/load', {'from': isoDate(now), 'to': isoDate(now.add(const Duration(days: 27)))}),
-    ]);
-    return ProductionDashboard(
-      orders: r[0] as List<Map<String, dynamic>>,
-      shipments: (r[1] as List).cast<Map<String, dynamic>>(),
-      load: (r[2] as List).cast<Map<String, dynamic>>(),
-    );
-  }
-
-  Future<SalesDashboard> _fetchSales() async {
-    final r = await widget.session.api.get('/api/sales/pipeline') as Map<String, dynamic>;
-    return SalesDashboard.fromJson((r['kpis'] as Map).cast<String, dynamic>());
-  }
-
   Future<Object?> _opt<T>(String m, Future<T> f) => _need(m) ? f.then<Object?>((v) => v, onError: (_) => null) : Future<Object?>.value(null);
 
   Future<List<Object?>> _combine() => Future.wait<Object?>([
@@ -313,11 +108,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _refresh() {
     setState(() {
-      if (_need('engineering')) _eng = _fetchEngineering();
-      if (_need('stock')) _stock = _fetchStock();
-      if (_need('purchasing')) _purchasing = _fetchPurchasing();
-      if (_need('production')) _production = _fetchProduction();
-      if (_need('sales')) _sales = _fetchSales();
+      if (_need('engineering')) _eng = _loader.engineering();
+      if (_need('stock')) _stock = _loader.stock();
+      if (_need('purchasing')) _purchasing = _loader.purchasing();
+      if (_need('production')) _production = _loader.production();
+      if (_need('sales')) _sales = _loader.sales();
       _all = _combine();
     });
     return _settle();
@@ -378,18 +173,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ProductionDashboard? _o(List<Object?> d) => d[3] as ProductionDashboard?;
   SalesDashboard? _c(List<Object?> d) => d[4] as SalesDashboard?;
 
-  List<_Alert> _alerts(List<Object?> d) {
+  List<DashAlert> _alerts(List<Object?> d) {
     final e = _e(d), s = _s(d), p = _p(d), o = _o(d), c = _c(d);
     final late = o == null ? <Map<String, dynamic>>[] : (o.late..sort((a, b) => '${a['dueDate']}'.compareTo('${b['dueDate']}')));
     final overdue = p == null ? <Map<String, dynamic>>[] : ([...p.overdue]..sort((a, b) => (b['daysLate'] as num).compareTo(a['daysLate'] as num)));
     String productLabel(Map<String, dynamic> x) => '${x['code']}  ${x['name']}';
     return [
       if (c != null) ...[
-        _Alert('sales', Icons.event_busy_outlined, 'Pedidos atrasados', c.lateOrders, 'sales-orders', null, _go('sales-orders')),
-        _Alert('sales', Icons.gavel_outlined, 'Propostas a aprovar', c.pendingApprovals, 'sales-quotes', null, _go('sales-quotes')),
+        DashAlert('sales', Icons.event_busy_outlined, 'Pedidos atrasados', c.lateOrders, 'sales-orders', null, _go('sales-orders')),
+        DashAlert('sales', Icons.gavel_outlined, 'Propostas a aprovar', c.pendingApprovals, 'sales-quotes', null, _go('sales-quotes')),
       ],
       if (o != null) ...[
-        _Alert(
+        DashAlert(
           'production',
           Icons.schedule,
           'OFs atrasadas',
@@ -404,7 +199,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             all: 'production-orders',
           ),
         ),
-        _Alert(
+        DashAlert(
           'production',
           Icons.pause_circle_outline,
           'OFs paradas',
@@ -415,7 +210,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ],
       if (p != null) ...[
-        _Alert(
+        DashAlert(
           'purchasing',
           Icons.local_shipping_outlined,
           'Entregas em atraso',
@@ -430,7 +225,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             all: 'overdue',
           ),
         ),
-        _Alert(
+        DashAlert(
           'purchasing',
           Icons.assignment_late_outlined,
           'Requisições a aprovar',
@@ -441,7 +236,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ],
       if (s != null) ...[
-        _Alert(
+        DashAlert(
           'stock',
           Icons.trending_down,
           'Itens abaixo do mínimo',
@@ -456,10 +251,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             all: 'balances',
           ),
         ),
-        _Alert('stock', Icons.verified_outlined, 'Lotes em quarentena', s.quarantine, 'lots', 'Quarantine', _go('lots', 'Quarantine')),
+        DashAlert('stock', Icons.verified_outlined, 'Lotes em quarentena', s.quarantine, 'lots', 'Quarantine', _go('lots', 'Quarantine')),
       ],
       if (e != null) ...[
-        _Alert(
+        DashAlert(
           'engineering',
           Icons.block,
           'Produtos bloqueados',
@@ -468,7 +263,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           null,
           _showList('Produtos bloqueados', e.blocked, productLabel, _openProduct),
         ),
-        _Alert(
+        DashAlert(
           'engineering',
           Icons.warning_amber,
           'Produtos sem roteiro',
@@ -496,35 +291,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ];
   }
 
-  Widget _quickActionsCard() {
-    final actions = _painelActions();
-    if (actions.isEmpty) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Card(
-        key: const ValueKey('quick-actions'),
-        margin: EdgeInsets.zero,
-        shape: _cardShape(context),
-        color: theme.colorScheme.surfaceContainerHigh,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Ações rápidas', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [for (final a in actions) FilledButton.tonalIcon(onPressed: () => a.run(context), icon: Icon(a.icon), label: Text(a.label))],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _quickActionsCard() => QuickActionsCard(_painelActions());
 
   Widget _onboarding(List<Object?> d) {
     final e = _e(d), st = _s(d), pu = _p(d), pr = _o(d);
@@ -539,54 +306,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       ('Criar a primeira ordem de fabricação', 'production', pr == null || pr.orders.isNotEmpty || pr.shipments.isNotEmpty, 'production-orders'),
     ];
-    final done = steps.where((s) => s.$3).length;
-    if (done == steps.length || _tutorialHidden != false) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Card(
-        margin: EdgeInsets.zero,
-        shape: _cardShape(context),
-        color: cs.surfaceContainerHigh,
-        child: ExpansionTile(
-          key: const ValueKey('onboarding'),
-          shape: const Border(),
-          collapsedShape: const Border(),
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          leading: Icon(Icons.rocket_launch_outlined, color: cs.primary),
-          title: Text('Primeiros passos', style: theme.textTheme.titleMedium),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: LinearProgressIndicator(value: done / steps.length),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('$done de ${steps.length}', style: theme.textTheme.bodySmall),
-              const SizedBox(width: 8),
-              const Icon(Icons.expand_more),
-              IconButton(key: const ValueKey('tutorial-dismiss'), tooltip: 'Dispensar', onPressed: _dismissTutorial, icon: const Icon(Icons.close)),
-            ],
-          ),
-          children: [
-            for (final s in steps)
-              ListTile(
-                key: ValueKey('step-${s.$2}'),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(s.$3 ? Icons.check_circle : Icons.radio_button_unchecked, color: s.$3 ? cs.primary : cs.onSurfaceVariant),
-                title: Text(
-                  s.$1,
-                  style: s.$3 ? TextStyle(decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant) : null,
-                ),
-                trailing: s.$3 || widget.onNavigate == null ? null : FilledButton.tonal(onPressed: _go(s.$4), child: const Text('Abrir')),
-              ),
-          ],
-        ),
-      ),
-    );
+    if (_tutorialHidden != false) return const SizedBox.shrink();
+    return OnboardingCard(steps: steps, onDismiss: _dismissTutorial, onOpen: _go);
   }
 
   Widget _heading(String text, {Widget? trailing}) => Padding(
@@ -601,18 +322,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ),
   );
 
-  List<_ModuleCard> _cards(List<Object?> d) {
+  List<DashModuleCard> _cards(List<Object?> d) {
     final alerts = _alerts(d);
     int badge(String m) => alerts.where((a) => a.module == m).fold(0, (n, a) => n + a.count);
     final e = _e(d), s = _s(d), p = _p(d), o = _o(d), c = _c(d);
     return [
       for (final m in moduleInfos)
         switch (m.id) {
-          'sales' => _ModuleCard(m, c?.openOrders, 'pedidos abertos', badge(m.id), _go(m.navId)),
-          'engineering' => _ModuleCard(m, e == null ? null : e.products.length - e.blocked.length, 'produtos ativos', badge(m.id), _go(m.navId)),
-          'stock' => _ModuleCard(m, s?.belowMinimum.length, 'itens abaixo do mínimo', badge(m.id), _go(m.navId)),
-          'purchasing' => _ModuleCard(m, p?.openOrders, 'OCs pendentes', badge(m.id), _go(m.navId)),
-          _ => _ModuleCard(m, o?.count('InProduction'), 'OFs em produção', badge(m.id), _go(m.navId)),
+          'sales' => DashModuleCard(m, c?.openOrders, 'pedidos abertos', badge(m.id), _go(m.navId)),
+          'engineering' => DashModuleCard(m, e == null ? null : e.products.length - e.blocked.length, 'produtos ativos', badge(m.id), _go(m.navId)),
+          'stock' => DashModuleCard(m, s?.belowMinimum.length, 'itens abaixo do mínimo', badge(m.id), _go(m.navId)),
+          'purchasing' => DashModuleCard(m, p?.openOrders, 'OCs pendentes', badge(m.id), _go(m.navId)),
+          _ => DashModuleCard(m, o?.count('InProduction'), 'OFs em produção', badge(m.id), _go(m.navId)),
         },
     ];
   }
@@ -645,7 +366,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          _Grid(minColumn: 260, items: [for (final c in cards) _GridItem.sized(c, _ModuleCard.height)]),
+          DashGrid(minColumn: 260, items: [for (final c in cards) DashGridItem.sized(c, DashModuleCard.height)]),
         ],
       );
     },
@@ -667,78 +388,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
     };
   }
 
-  List<_GridItem> _kpis(String m, List<Object?> d) {
+  List<DashGridItem> _kpis(String m, List<Object?> d) {
     switch (m) {
       case 'sales':
         final c = _c(d)!;
         return [
-          _GridItem(_Tile(icon: Icons.receipt_long_outlined, label: 'Pedidos abertos', value: '${c.openOrders}', onTap: _go('sales-orders'))),
-          _GridItem(_Tile(icon: Icons.request_quote_outlined, label: 'Propostas pendentes', value: '${c.openQuotes}', onTap: _go('sales-quotes'))),
-          _GridItem(_Tile(icon: Icons.event_busy_outlined, label: 'Entregas atrasadas', value: '${c.lateOrders}', onTap: _go('sales-orders'))),
-          _GridItem(_Tile(icon: Icons.local_shipping_outlined, label: 'Prontos para entregar', value: '${c.readyToShip}', onTap: _go('deliveries'))),
+          DashGridItem(DashTile(icon: Icons.receipt_long_outlined, label: 'Pedidos abertos', value: '${c.openOrders}', onTap: _go('sales-orders'))),
+          DashGridItem(DashTile(icon: Icons.request_quote_outlined, label: 'Propostas pendentes', value: '${c.openQuotes}', onTap: _go('sales-quotes'))),
+          DashGridItem(DashTile(icon: Icons.event_busy_outlined, label: 'Entregas atrasadas', value: '${c.lateOrders}', onTap: _go('sales-orders'))),
+          DashGridItem(DashTile(icon: Icons.local_shipping_outlined, label: 'Prontos para entregar', value: '${c.readyToShip}', onTap: _go('deliveries'))),
         ];
       case 'engineering':
         final e = _e(d)!;
         final pendingRevision = e.products.where((p) => p['drawingRevision'] == null || p['processRevision'] == null).length;
         return [
-          _GridItem(_Tile(icon: Icons.architecture, label: 'Produtos ativos', value: '${e.products.length - e.blocked.length}', onTap: _go(products.path))),
-          _GridItem(_Tile(icon: Icons.rate_review_outlined, label: 'Revisões pendentes', value: '$pendingRevision', onTap: _go(products.path))),
-          _GridItem(_Tile(icon: Icons.warning_amber, label: 'Sem roteiro', value: '${e.withoutRouting.length}', onTap: _go(products.path))),
+          DashGridItem(DashTile(icon: Icons.architecture, label: 'Produtos ativos', value: '${e.products.length - e.blocked.length}', onTap: _go(products.path))),
+          DashGridItem(DashTile(icon: Icons.rate_review_outlined, label: 'Revisões pendentes', value: '$pendingRevision', onTap: _go(products.path))),
+          DashGridItem(DashTile(icon: Icons.warning_amber, label: 'Sem roteiro', value: '${e.withoutRouting.length}', onTap: _go(products.path))),
           for (final x in e.counts.entries.where((x) => x.key != products))
-            _GridItem(_Tile(icon: x.key.icon, label: x.key.title, value: '${x.value}', onTap: _go(x.key.path))),
-          _GridItem.panel(_BarPanel(title: 'Produtos por tipo', data: e.countBy((p) => kinds[p['kind']] ?? '—'))),
-          _GridItem.panel(_BarPanel(title: 'Produtos por formato', data: e.countBy((p) => shapes[p['shape']] ?? 'Sem formato'))),
-          _GridItem.panel(_BarPanel(title: 'Operações por produto', data: e.countBy((p) => _bucket(p['operationCount'] as int? ?? 0)))),
+            DashGridItem(DashTile(icon: x.key.icon, label: x.key.title, value: '${x.value}', onTap: _go(x.key.path))),
+          DashGridItem.panel(DashBarPanel(title: 'Produtos por tipo', data: e.countBy((p) => kinds[p['kind']] ?? '—'))),
+          DashGridItem.panel(DashBarPanel(title: 'Produtos por formato', data: e.countBy((p) => shapes[p['shape']] ?? 'Sem formato'))),
+          DashGridItem.panel(DashBarPanel(title: 'Operações por produto', data: e.countBy((p) => _bucket(p['operationCount'] as int? ?? 0)))),
         ];
       case 'stock':
         final s = _s(d)!;
         return [
-          _GridItem(_Tile(icon: Icons.trending_down, label: 'Itens abaixo do mínimo', value: '${s.belowMinimum.length}', onTap: _go('balances'))),
-          _GridItem(_Tile(icon: Icons.verified_outlined, label: 'Lotes em quarentena', value: '${s.quarantine}', onTap: _go('lots', 'Quarantine'))),
-          _GridItem(_Tile(icon: Icons.bookmark_border, label: 'Reservas abertas', value: '${s.openReservations}', onTap: _go('reservations'))),
-          _GridItem(
-            _Tile(
+          DashGridItem(DashTile(icon: Icons.trending_down, label: 'Itens abaixo do mínimo', value: '${s.belowMinimum.length}', onTap: _go('balances'))),
+          DashGridItem(DashTile(icon: Icons.verified_outlined, label: 'Lotes em quarentena', value: '${s.quarantine}', onTap: _go('lots', 'Quarantine'))),
+          DashGridItem(DashTile(icon: Icons.bookmark_border, label: 'Reservas abertas', value: '${s.openReservations}', onTap: _go('reservations'))),
+          DashGridItem(
+            DashTile(
               icon: Icons.lock_outline,
               label: 'Último mês fechado',
               value: s.lastClosing == null ? '—' : fmtPeriod(s.lastClosing!['period']),
               onTap: _go('closing'),
             ),
           ),
-          _GridItem(_Tile(icon: Icons.place_outlined, label: 'Locais de estoque', value: '${s.locations}', onTap: _go('locations'))),
+          DashGridItem(DashTile(icon: Icons.place_outlined, label: 'Locais de estoque', value: '${s.locations}', onTap: _go('locations'))),
         ];
       case 'purchasing':
         final p = _p(d)!;
         final perf = {for (final x in p.performance.where((x) => (x['receivedLines'] as num) > 0)) '${x['supplierName']}': x['onTimePercent'] as num};
         return [
-          _GridItem(
-            _Tile(icon: Icons.assignment_outlined, label: 'Requisições abertas', value: '${p.pendingApproval + p.approved}', onTap: _go('requisitions')),
+          DashGridItem(
+            DashTile(icon: Icons.assignment_outlined, label: 'Requisições abertas', value: '${p.pendingApproval + p.approved}', onTap: _go('requisitions')),
           ),
-          _GridItem(_Tile(icon: Icons.receipt_long_outlined, label: 'OCs pendentes', value: '${p.openOrders}', onTap: _go('orders'))),
-          _GridItem(
-            _Tile(icon: Icons.assignment_turned_in_outlined, label: 'Aprovadas sem cotação', value: '${p.approved}', onTap: _go('requisitions', 'Approved')),
+          DashGridItem(DashTile(icon: Icons.receipt_long_outlined, label: 'OCs pendentes', value: '${p.openOrders}', onTap: _go('orders'))),
+          DashGridItem(
+            DashTile(icon: Icons.assignment_turned_in_outlined, label: 'Aprovadas sem cotação', value: '${p.approved}', onTap: _go('requisitions', 'Approved')),
           ),
-          _GridItem(_Tile(icon: Icons.request_quote_outlined, label: 'Cotações abertas', value: '${p.openQuotations}', onTap: _go('quotations'))),
-          _GridItem.panel(_BarPanel(title: 'Atrasos por fornecedor', data: p.overdueBySupplier)),
-          _GridItem.panel(_BarPanel(title: 'Pontualidade 12 meses (%)', data: perf, max: 100)),
+          DashGridItem(DashTile(icon: Icons.request_quote_outlined, label: 'Cotações abertas', value: '${p.openQuotations}', onTap: _go('quotations'))),
+          DashGridItem.panel(DashBarPanel(title: 'Atrasos por fornecedor', data: p.overdueBySupplier)),
+          DashGridItem.panel(DashBarPanel(title: 'Pontualidade 12 meses (%)', data: perf, max: 100)),
         ];
       default:
         final o = _o(d)!;
         return [
-          _GridItem(
-            _Tile(
+          DashGridItem(
+            DashTile(
               icon: Icons.precision_manufacturing_outlined,
               label: 'OFs em produção',
               value: '${o.count('InProduction')}',
               onTap: _go('production-orders', 'InProduction'),
             ),
           ),
-          _GridItem(_Tile(icon: Icons.schedule, label: 'OFs atrasadas', value: '${o.late.length}', onTap: _go('production-orders'))),
-          _GridItem(_Tile(icon: Icons.assignment_outlined, label: 'OFs a liberar', value: '${o.count('Created')}', onTap: _go('production-orders', 'Created'))),
-          _GridItem(_Tile(icon: Icons.play_circle_outline, label: 'Liberadas', value: '${o.count('Released')}', onTap: _go('production-orders', 'Released'))),
-          _GridItem(
-            _Tile(icon: Icons.local_shipping_outlined, label: 'Remessas em terceiros', value: '${o.shipments.length}', onTap: _go('outside-processing')),
+          DashGridItem(DashTile(icon: Icons.schedule, label: 'OFs atrasadas', value: '${o.late.length}', onTap: _go('production-orders'))),
+          DashGridItem(DashTile(icon: Icons.assignment_outlined, label: 'OFs a liberar', value: '${o.count('Created')}', onTap: _go('production-orders', 'Created'))),
+          DashGridItem(DashTile(icon: Icons.play_circle_outline, label: 'Liberadas', value: '${o.count('Released')}', onTap: _go('production-orders', 'Released'))),
+          DashGridItem(
+            DashTile(icon: Icons.local_shipping_outlined, label: 'Remessas em terceiros', value: '${o.shipments.length}', onTap: _go('outside-processing')),
           ),
-          _GridItem.panel(_BarPanel(title: 'Pico de carga 4 semanas (%)', data: o.peakLoad)),
+          DashGridItem.panel(DashBarPanel(title: 'Pico de carga 4 semanas (%)', data: o.peakLoad)),
         ];
     }
   }
@@ -770,7 +491,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const slot = {'engineering': 0, 'stock': 1, 'purchasing': 2, 'production': 3, 'sales': 4};
           if (d[slot[m.id]!] == null) {
             body.add(
-              const _Notice(
+              const DashNotice(
                 icon: Icons.cloud_off_outlined,
                 title: 'Indicadores indisponíveis',
                 subtitle: 'Não foi possível carregar os dados deste módulo. Tente atualizar.',
@@ -781,13 +502,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             body.addAll([
               _heading('Atenção'),
               alerts.isEmpty
-                  ? const _Notice(icon: Icons.check_circle_outline, title: 'Nada pendente', subtitle: 'Nenhum alerta neste módulo.')
-                  : _Grid(
-                      items: [for (final a in alerts) _GridItem(_Tile(icon: a.icon, label: a.label, value: '${a.count}', alert: true, onTap: a.onTap))],
+                  ? const DashNotice(icon: Icons.check_circle_outline, title: 'Nada pendente', subtitle: 'Nenhum alerta neste módulo.')
+                  : DashGrid(
+                      items: [for (final a in alerts) DashGridItem(DashTile(icon: a.icon, label: a.label, value: '${a.count}', alert: true, onTap: a.onTap))],
                     ),
               const SizedBox(height: 16),
               _heading('Indicadores'),
-              _Grid(items: _kpis(m.id, d)),
+              DashGrid(items: _kpis(m.id, d)),
             ]);
           }
           assert(idx >= 0);
@@ -858,326 +579,3 @@ class _DashboardScreenState extends State<DashboardScreen> {
       : '7+';
 }
 
-class _Alert {
-  const _Alert(this.module, this.icon, this.label, this.count, this.navId, this.filter, this.onTap);
-
-  final String module;
-  final IconData icon;
-  final String label;
-  final int count;
-  final String navId;
-  final String? filter;
-  final void Function()? onTap;
-}
-
-class _ModuleCard extends StatelessWidget {
-  const _ModuleCard(this.info, this.metric, this.metricLabel, this.badge, this.onTap);
-
-  static const height = 160.0;
-
-  final ModuleInfo info;
-  final int? metric;
-  final String metricLabel;
-  final int badge;
-  final void Function()? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return Semantics(
-      button: true,
-      label: '${info.title}: ${metric ?? 'indisponível'} $metricLabel',
-      excludeSemantics: true,
-      child: Card(
-        key: ValueKey('module-card-${info.id}'),
-        margin: EdgeInsets.zero,
-        clipBehavior: Clip.antiAlias,
-        shape: _cardShape(context),
-        color: cs.surfaceContainerHigh,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(info.icon, size: 28, color: cs.primary),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(info.title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
-                    ),
-                    if (badge > 0)
-                      Container(
-                        key: ValueKey('module-badge-${info.id}'),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(12)),
-                        child: Text(
-                          '$badge',
-                          style: TextStyle(color: cs.onErrorContainer, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    const SizedBox(width: 4),
-                    Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
-                  ],
-                ),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.bottomLeft,
-                    child: metric == null
-                        ? Text('Indisponível', style: TextStyle(color: cs.onSurfaceVariant))
-                        : FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.bottomLeft,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '$metric',
-                                  style: theme.textTheme.headlineMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    fontFeatures: const [FontFeature.tabularFigures()],
-                                  ),
-                                ),
-                                Text(metricLabel, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-                              ],
-                            ),
-                          ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GridItem {
-  const _GridItem(this.child) : span = 1, height = _Tile.height;
-  const _GridItem.panel(this.child) : span = 2, height = _BarPanel.height;
-  const _GridItem.sized(this.child, this.height) : span = 1;
-
-  final Widget child;
-  final int span;
-  final double height;
-}
-
-class _Grid extends StatelessWidget {
-  const _Grid({required this.items, this.minColumn = 180});
-
-  static const gap = 12.0;
-
-  final double minColumn;
-  final List<_GridItem> items;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, c) {
-      final cols = math.max(1, ((c.maxWidth + gap) / (minColumn + gap)).floor());
-      final colWidth = (c.maxWidth - gap * (cols - 1)) / cols;
-      return Wrap(
-        spacing: gap,
-        runSpacing: gap,
-        children: [
-          for (final i in items)
-            SizedBox(
-              width: (() {
-                final span = math.min(i.span, cols);
-                return colWidth * span + gap * (span - 1) - 0.01;
-              })(),
-              height: i.height,
-              child: i.child,
-            ),
-        ],
-      );
-    },
-  );
-}
-
-ShapeBorder _cardShape(BuildContext context) => RoundedRectangleBorder(
-  borderRadius: BorderRadius.circular(12),
-  side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-);
-
-class _Tile extends StatelessWidget {
-  const _Tile({required this.icon, required this.label, required this.value, this.alert = false, this.onTap});
-
-  static const height = 104.0;
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final bool alert;
-  final void Function()? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final fg = alert ? cs.onErrorContainer : null;
-    return Semantics(
-      button: onTap != null,
-      label: '$value $label',
-      excludeSemantics: true,
-      child: Card(
-        margin: EdgeInsets.zero,
-        clipBehavior: Clip.antiAlias,
-        shape: _cardShape(context),
-        color: alert ? cs.errorContainer : cs.surfaceContainerHigh,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(alert ? Icons.error_outline : icon, size: 20, color: alert ? cs.onErrorContainer : cs.primary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Tooltip(
-                        message: label,
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(color: fg),
-                        ),
-                      ),
-                    ),
-                    if (onTap != null) Icon(Icons.chevron_right, size: 18, color: fg ?? cs.onSurfaceVariant),
-                  ],
-                ),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.bottomLeft,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        value,
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: fg,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Notice extends StatelessWidget {
-  const _Notice({required this.icon, required this.title, required this.subtitle});
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
-      shape: _cardShape(context),
-      color: theme.colorScheme.surfaceContainerHigh,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(icon, size: 32, color: theme.colorScheme.primary),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: theme.textTheme.titleMedium),
-                  Text(subtitle, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BarPanel extends StatelessWidget {
-  const _BarPanel({required this.title, required this.data, this.max});
-
-  static const height = 268.0;
-
-  final String title;
-  final Map<String, num> data;
-  final num? max;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final rows = data.entries.take(8).toList();
-    final top = max ?? rows.fold<num>(1, (m, e) => e.value > m ? e.value : m);
-    return Card(
-      margin: EdgeInsets.zero,
-      shape: _cardShape(context),
-      color: theme.colorScheme.surfaceContainerHigh,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(title, style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            if (rows.isEmpty)
-              Expanded(
-                child: Center(
-                  child: Text('Sem dados ainda', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-                ),
-              ),
-            for (final e in rows)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    SizedBox(width: 120, child: Text(e.key, overflow: TextOverflow.ellipsis)),
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: FractionallySizedBox(
-                          widthFactor: (e.value / top).clamp(0, 1).toDouble(),
-                          child: Container(
-                            height: 16,
-                            decoration: BoxDecoration(color: theme.colorScheme.primary, borderRadius: BorderRadius.circular(3)),
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 56,
-                      child: Text(
-                        fmtNum(e.value, e.value is int ? 0 : 1),
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}

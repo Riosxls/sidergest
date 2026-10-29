@@ -58,7 +58,7 @@ class EntitySpec {
     required this.columns,
     this.whereUsed = false,
     this.searchable = true,
-    this.writeRoles = const ['Admin', 'Engineering'],
+    this.writePolicy = 'write',
   });
 
   final String title;
@@ -69,7 +69,7 @@ class EntitySpec {
   final List<ColumnSpec> columns;
   final bool whereUsed;
   final bool searchable;
-  final List<String> writeRoles;
+  final String writePolicy;
 }
 
 String fmt(Object? v) {
@@ -357,7 +357,7 @@ final stockLocations = EntitySpec(
     labelCol('Tipo', 'kind', locationKinds),
     ColumnSpec('Ativo', (e) => e['active'] == true ? 'Sim' : 'Não'),
   ],
-  writeRoles: const ['Admin', 'Stock'],
+  writePolicy: 'stock',
 );
 
 final suppliers = EntitySpec(
@@ -385,7 +385,6 @@ final masterData = [products, materials, machines, standardOperations, workCente
 
 const occurrenceKindLabels = {'Downtime': 'Parada', 'Scrap': 'Refugo'};
 
-const productionWriters = ['Admin', 'Production'];
 
 final shifts = EntitySpec(
   title: 'Turnos',
@@ -406,7 +405,7 @@ final shifts = EntitySpec(
     col('Horas', 'hours', numeric: true),
   ],
   searchable: false,
-  writeRoles: productionWriters,
+  writePolicy: 'production',
 );
 
 final employees = EntitySpec(
@@ -430,7 +429,7 @@ final employees = EntitySpec(
     col('Função', 'function'),
     ColumnSpec('Ativo', (e) => e['active'] == true ? 'Sim' : 'Não'),
   ],
-  writeRoles: productionWriters,
+  writePolicy: 'production',
 );
 
 final occurrences = EntitySpec(
@@ -451,7 +450,7 @@ final occurrences = EntitySpec(
     ColumnSpec('Para a OF', (e) => e['stopsOrder'] == true ? 'Sim' : ''),
   ],
   searchable: false,
-  writeRoles: productionWriters,
+  writePolicy: 'production',
 );
 
 final holidays = EntitySpec(
@@ -465,7 +464,7 @@ final holidays = EntitySpec(
   ],
   columns: [dateCol('Data', 'date'), col('Descrição', 'name')],
   searchable: false,
-  writeRoles: productionWriters,
+  writePolicy: 'production',
 );
 
 final productionMasters = [employees, shifts, occurrences, holidays];
@@ -489,7 +488,7 @@ final paymentTerms = EntitySpec(
     moneyCol('Limite de crédito', 'creditLimit'),
     ColumnSpec('Ativa', (e) => e['active'] == true ? 'Sim' : 'Não'),
   ],
-  writeRoles: const ['Admin', 'SalesManager'],
+  writePolicy: 'sales-approve',
 );
 
 final priceList = EntitySpec(
@@ -515,7 +514,7 @@ final priceList = EntitySpec(
     dateCol('De', 'validFrom'),
     dateCol('Até', 'validTo'),
   ],
-  writeRoles: const ['Admin', 'Sales', 'SalesManager'],
+  writePolicy: 'sales',
 );
 
 final salesMasters = [priceList, paymentTerms];

@@ -24,6 +24,8 @@ jobs:
           dotnet-version: 8.0.x
       - run: dotnet restore Ebt.sln
       - run: dotnet build Ebt.sln -c Release --no-restore
+        env:
+          CI: "true"
       - run: dotnet test Ebt.sln -c Release --no-build
       - name: Vulnerable packages
         run: |

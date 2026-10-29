@@ -64,7 +64,7 @@ public class TokenService(JwtOptions options)
 }
 
 public record LoginRequest(string? Username, string? Password);
-public record LoginResponse(string Token, DateTimeOffset ExpiresAt, string Username, UserRole Role);
+public record LoginResponse(string Token, DateTimeOffset ExpiresAt, string Username, UserRole Role, string[] Permissions);
 public record UserDto(int Id, string Username, UserRole Role, bool Active);
 public record CreateUserRequest(string Username, string Password, UserRole Role);
 public record UpdateUserRequest(UserRole Role, bool Active, string? Password);
@@ -119,7 +119,7 @@ public static class AuthEndpoints
             await db.SaveChangesAsync(ct);
             var (token, expires) = tokens.Issue(user);
             log.LogInformation("User {User} logged in from {Ip}", user.Username, http.Connection.RemoteIpAddress);
-            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role));
+            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role)));
         }).AllowAnonymous().RequireRateLimiting(Policies.LoginLimiter);
 
         auth.MapGet("/me", (ClaimsPrincipal principal) => Results.Ok(new

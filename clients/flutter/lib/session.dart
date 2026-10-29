@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show ThemeMode;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
@@ -8,44 +11,54 @@ import 'widgets/alerts.dart';
 const defaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://localhost:8080');
 
 class Session extends ChangeNotifier {
-  Session({ApiClient? api}) : api = api ?? ApiClient(baseUrl: defaultApiUrl) {
+  Session({ApiClient? api, FlutterSecureStorage? storage})
+    : api = api ?? ApiClient(baseUrl: defaultApiUrl),
+      _storage = storage ?? const FlutterSecureStorage() {
     this.api.onUnauthorized = logout;
   }
 
   final ApiClient api;
+  final FlutterSecureStorage _storage;
+  static const _secureKeys = ['token', 'username', 'role', 'expiresAt', 'permissions'];
   String? username;
   String? role;
+  Set<String> permissions = const {};
   DateTime? expiresAt;
   ThemeMode themeMode = ThemeMode.system;
   final alerts = AlertCenter();
 
   bool get loggedIn => api.token != null && (expiresAt == null || expiresAt!.isAfter(DateTime.now()));
-  bool hasRole(Iterable<String> roles) => roles.contains(role);
-  bool get canWrite => hasRole(const ['Admin', 'Engineering']);
-  bool get isAdmin => role == 'Admin';
-  bool get canStock => hasRole(const ['Admin', 'Stock']);
-  bool get canRequest => hasRole(const ['Admin', 'Engineering', 'Stock', 'Purchasing']);
-  bool get canBuy => hasRole(const ['Admin', 'Purchasing']);
-  bool get canReceive => hasRole(const ['Admin', 'Purchasing', 'Stock']);
-  bool get canProduce => hasRole(const ['Admin', 'Production']);
-  bool get canMoveProduction => hasRole(const ['Admin', 'Production', 'Stock']);
-  bool get canSell => hasRole(const ['Admin', 'Sales', 'SalesManager']);
-  bool get canApproveSales => hasRole(const ['Admin', 'SalesManager']);
-  bool get canReleaseSales => hasRole(const ['Admin', 'Sales', 'SalesManager', 'Production']);
-  bool get canShip => hasRole(const ['Admin', 'Sales', 'SalesManager', 'Stock']);
+  bool get canWrite => permissions.contains('write');
+  bool get isAdmin => permissions.contains('admin');
+  bool get canStock => permissions.contains('stock');
+  bool get canRequest => permissions.contains('purchasing-request');
+  bool get canBuy => permissions.contains('purchasing');
+  bool get canReceive => permissions.contains('receiving');
+  bool get canProduce => permissions.contains('production');
+  bool get canMoveProduction => permissions.contains('production-materials');
+  bool get canSell => permissions.contains('sales');
+  bool get canApproveSales => permissions.contains('sales-approve');
+  bool get canReleaseSales => permissions.contains('sales-release');
+  bool get canShip => permissions.contains('sales-ship');
   String get baseUrl => api.baseUrl;
 
   Future<void> restore() async {
-    final p = await SharedPreferences.getInstance();
-    api.baseUrl = p.getString('apiUrl') ?? defaultApiUrl;
-    themeMode = ThemeMode.values.asNameMap()[p.getString('themeMode')] ?? ThemeMode.system;
-    final exp = DateTime.tryParse(p.getString('expiresAt') ?? '');
-    if (exp != null && exp.isAfter(DateTime.now())) {
-      api.token = p.getString('token');
-      username = p.getString('username');
-      role = p.getString('role');
-      expiresAt = exp;
-    }
+    try {
+      final p = await SharedPreferences.getInstance();
+      api.baseUrl = p.getString('apiUrl') ?? defaultApiUrl;
+      themeMode = ThemeMode.values.asNameMap()[p.getString('themeMode')] ?? ThemeMode.system;
+    } catch (_) {}
+    try {
+      final v = await _storage.readAll();
+      final exp = DateTime.tryParse(v['expiresAt'] ?? '');
+      if (exp != null && exp.isAfter(DateTime.now()) && v['token'] != null) {
+        api.token = v['token'];
+        username = v['username'];
+        role = v['role'];
+        permissions = (jsonDecode(v['permissions'] ?? '[]') as List).cast<String>().toSet();
+        expiresAt = exp;
+      }
+    } catch (_) {}
     notifyListeners();
   }
 
@@ -56,13 +69,19 @@ class Session extends ChangeNotifier {
     api.token = r['token'] as String;
     username = r['username'] as String;
     role = r['role'] as String;
+    permissions = ((r['permissions'] as List?) ?? const []).cast<String>().toSet();
     expiresAt = DateTime.parse(r['expiresAt'] as String);
-    final p = await SharedPreferences.getInstance();
-    await p.setString('apiUrl', api.baseUrl);
-    await p.setString('token', api.token!);
-    await p.setString('username', username!);
-    await p.setString('role', role!);
-    await p.setString('expiresAt', expiresAt!.toIso8601String());
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString('apiUrl', api.baseUrl);
+    } catch (_) {}
+    try {
+      await _storage.write(key: 'token', value: api.token);
+      await _storage.write(key: 'username', value: username);
+      await _storage.write(key: 'role', value: role);
+      await _storage.write(key: 'expiresAt', value: expiresAt!.toIso8601String());
+      await _storage.write(key: 'permissions', value: jsonEncode(permissions.toList()));
+    } catch (_) {}
     notifyListeners();
   }
 
@@ -77,13 +96,16 @@ class Session extends ChangeNotifier {
 
   Future<void> logout() async {
     api.token = null;
+    api.clearVersions();
     username = null;
     role = null;
+    permissions = const {};
     expiresAt = null;
     alerts.value = const [];
-    final p = await SharedPreferences.getInstance();
-    for (final k in ['token', 'username', 'role', 'expiresAt']) {
-      await p.remove(k);
+    for (final k in _secureKeys) {
+      try {
+        await _storage.delete(key: k);
+      } catch (_) {}
     }
     notifyListeners();
   }

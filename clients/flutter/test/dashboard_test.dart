@@ -4,6 +4,7 @@ import 'package:ebt_engenharia/api.dart';
 import 'package:ebt_engenharia/main.dart' show appTheme;
 import 'package:ebt_engenharia/screens/shell.dart';
 import 'package:ebt_engenharia/session.dart';
+import 'role_permissions.dart';
 import 'package:ebt_engenharia/widgets/alerts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -67,7 +68,8 @@ Future<(Session, List<http.Request>)> pumpShell(
           api: ApiClient(baseUrl: 'http://api.test', client: client, token: 'tok'),
         )
         ..username = 'ana'
-        ..role = role;
+        ..role = role
+        ..permissions = rolePermissions[role]!;
   await tester.pumpWidget(
     MaterialApp(
       locale: const Locale('pt', 'BR'),

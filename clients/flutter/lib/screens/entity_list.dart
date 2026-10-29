@@ -31,7 +31,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
   ApiClient get api => widget.session.api;
   EntitySpec get spec => widget.spec;
   bool get isProduct => spec.path == products.path;
-  bool get canWrite => widget.session.hasRole(spec.writeRoles);
+  bool get canWrite => widget.session.permissions.contains(spec.writePolicy);
 
   @override
   void initState() {

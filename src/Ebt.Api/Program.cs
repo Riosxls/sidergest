@@ -14,6 +14,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
+if (args.Contains("--healthcheck"))
+{
+    // Used by the container HEALTHCHECK: the runtime image has no curl/wget.
+    var port = (Environment.GetEnvironmentVariable("ASPNETCORE_HTTP_PORTS") ?? "8080").Split(';')[0];
+    using var probe = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+    try { Environment.Exit((await probe.GetAsync($"http://localhost:{port}/health")).IsSuccessStatusCode ? 0 : 1); }
+    catch { Environment.Exit(1); }
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 var jwt = builder.Configuration.GetSection("Jwt").Get<JwtOptions>() ?? new JwtOptions();

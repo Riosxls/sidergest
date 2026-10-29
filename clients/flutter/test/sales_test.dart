@@ -8,6 +8,7 @@ import 'package:ebt_engenharia/screens/sales_pipeline.dart';
 import 'package:ebt_engenharia/screens/sales_quotes.dart';
 import 'package:ebt_engenharia/screens/shell.dart';
 import 'package:ebt_engenharia/session.dart';
+import 'role_permissions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -294,7 +295,8 @@ Future<Session> pumpScreen(WidgetTester tester, SalesFake fake, Widget Function(
           api: ApiClient(baseUrl: 'http://api.test', client: fake.client, token: 'tok'),
         )
         ..username = 'ana'
-        ..role = fake.role;
+        ..role = fake.role
+        ..permissions = rolePermissions[fake.role]!;
   await tester.pumpWidget(
     MaterialApp(
       locale: const Locale('pt', 'BR'),
@@ -309,7 +311,7 @@ Future<Session> pumpScreen(WidgetTester tester, SalesFake fake, Widget Function(
 
 void main() {
   test('sales role permissions and statuses map onto the flow path', () {
-    final s = Session(api: ApiClient(baseUrl: 'http://x'))..role = 'Sales';
+    final s = Session(api: ApiClient(baseUrl: 'http://x'))..role = 'Sales'..permissions = rolePermissions['Sales']!;
     expect(s.canSell, isTrue);
     expect(s.canApproveSales, isFalse);
     expect(s.canShip, isTrue);
