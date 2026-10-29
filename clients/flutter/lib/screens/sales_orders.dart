@@ -1,13 +1,17 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
+import '../reports/print_docs.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
+import 'certificates.dart';
 import 'production_orders.dart';
 import 'sales_common.dart';
 import 'sales_quotes.dart';
@@ -35,6 +39,21 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
   final _list = GlobalKey<RecordListState>();
   String? _status;
   bool _open = true;
+  bool _late = false;
+  String? _month;
+  String? _billTo;
+
+  static Map<String, String> _months() {
+    final now = DateTime.now();
+    const names = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+    return {
+      for (var i = -2; i <= 9; i++)
+        () {
+          final d = DateTime(now.year, now.month + i);
+          return '${d.year}-${d.month.toString().padLeft(2, '0')}';
+        }(): '${names[DateTime(now.year, now.month + i).month - 1]}/${DateTime(now.year, now.month + i).year}',
+    };
+  }
 
   Future<void> _new() => newSalesOrder(context, widget.session, onSaved: () => _list.currentState?.reload());
 
@@ -43,11 +62,14 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
     key: _list,
     api: widget.session.api,
     path: '/api/sales/orders',
-    query: {'status': _status, 'open': _open && _status == null ? true : null},
+    query: {'status': _status, 'open': _open && _status == null ? true : null, 'month': _month, 'late': _late ? true : null, 'billTo': _billTo},
     searchHint: 'Pedido, cliente ou pedido do cliente',
     filters: [
       ChoiceFilter(label: 'Situação', value: _status, choices: salesOrderStatuses, onChanged: (v) => setState(() => _status = v)),
       FilterChip(label: const Text('Somente abertos'), selected: _open, onSelected: (v) => setState(() => _open = v)),
+      ChoiceFilter(label: 'Entrega no mês', value: _month, choices: _months(), onChanged: (v) => setState(() => _month = v)),
+      FilterChip(key: const ValueKey('orders-late'), label: const Text('Atrasados'), selected: _late, onSelected: (v) => setState(() => _late = v)),
+      ChoiceFilter(label: 'Faturar para', value: _billTo, choices: billToLabels, onChanged: (v) => setState(() => _billTo = v)),
     ],
     fab: widget.session.canSell
         ? FloatingActionButton.extended(heroTag: 'new-sales-order', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo pedido'))
@@ -57,7 +79,10 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
       col('Cliente', 'customerName'),
       col('Pedido do cliente', 'customerPo'),
       labelCol('Situação', 'status', salesOrderStatuses),
+      labelCol('Faturar p/', 'billTo', billToLabels),
       moneyCol('Total', 'total'),
+      moneyCol('Saldo R\$', 'balanceValue'),
+      ColumnSpec('Saldo kg', (e) => e['balanceKg'] == null ? '' : fmt(e['balanceKg']), numeric: true),
       dateCol('Entrega', 'nextDue'),
       ColumnSpec('Pronto', (e) => '${(_n(e['progress']) * 100).round()}%', numeric: true),
       ColumnSpec(
@@ -76,6 +101,20 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
   );
 }
 
+String _measures(Object? spec) {
+  if (spec is! Map) return '';
+  return [
+    if (spec['outsideDiameter'] != null) 'Ø${fmt(spec['outsideDiameter'])}',
+    if (spec['thickness'] != null) 'e${fmt(spec['thickness'])}',
+    if (spec['length'] != null) 'c${fmt(spec['length'])}',
+  ].join(' × ');
+}
+
+String _standard(Object? spec) {
+  if (spec is! Map) return '';
+  return [spec['standard'], if (spec['condition'] != null) deliveryConditions[spec['condition']]].whereType<Object>().join(' · ');
+}
+
 class SalesOrderScreen extends StatefulWidget {
   const SalesOrderScreen({super.key, required this.session, required this.id});
 
@@ -88,12 +127,23 @@ class SalesOrderScreen extends StatefulWidget {
 
 class _SalesOrderScreenState extends State<SalesOrderScreen> {
   Map<String, dynamic>? _o;
+  List<Map<String, dynamic>> _certs = const [];
   String? _error;
 
   ApiClient get api => widget.session.api;
   Session get s => widget.session;
   String get base => '/api/sales/orders/${widget.id}';
   String get status => '${_o?['status']}';
+  bool get _certified => _o?['certificateWaived'] == true || _certs.any((c) => c['status'] == 'Issued');
+
+  Future<void> _newCertificate() async {
+    if (await newCertificate(context, s, _o!) && mounted) _load();
+  }
+
+  Future<void> _waiveCertificate(bool waived) async {
+    final r = await runAction(context, () => api.post('$base/certificate-waiver', {'waived': waived}), success: waived ? 'Certificado dispensado' : 'Certificado exigido novamente');
+    if (r != null) _load();
+  }
 
   @override
   void initState() {
@@ -104,9 +154,15 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
   Future<void> _load() async {
     try {
       final o = await api.get(base) as Map<String, dynamic>;
+      // Certificates are optional context: a failure here must not hide the order.
+      var certs = const <Map<String, dynamic>>[];
+      try {
+        certs = (await api.list('/api/sales/certificates', query: {'orderId': widget.id}, take: 200)).items;
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _o = o;
+          _certs = certs;
           _error = null;
         });
       }
@@ -198,6 +254,18 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         message: 'O estoque livre é reservado para o pedido e as OFs do restante vão para o PCP.',
         actions: [if (s.canReleaseSales) primary('order-release', 'Liberar para produção', Icons.play_arrow, _release)],
       ),
+      'Released' || 'PartiallyShipped' when o['ready'] == true && !_certified => NextStepCard(
+        title: 'Produção pronta · falta o certificado',
+        message: 'Emita o certificado de qualidade antes de programar a entrega. Se o cliente não exige certificado, dispense.',
+        tone: Tone.warning,
+        actions: [
+          if (s.canCertificate) primary('order-certificate', 'Emitir certificado', Icons.verified_outlined, _newCertificate),
+          if (s.canShip)
+            OutlinedButton.icon(key: const ValueKey('order-deliver'), onPressed: _planDelivery, icon: const Icon(Icons.local_shipping_outlined), label: const Text('Programar entrega')),
+          if (s.canCertificate)
+            TextButton(key: const ValueKey('order-certificate-waive'), onPressed: () => _waiveCertificate(true), child: const Text('Dispensar certificado')),
+        ],
+      ),
       'Released' || 'PartiallyShipped' when o['ready'] == true => NextStepCard(
         title: 'Pronto para expedir',
         message: 'Há produto acabado para os itens em aberto. Programe a entrega.',
@@ -226,6 +294,25 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     };
   }
 
+  /// Na etapa Produção o botão da barra imprime a Ordem de Produção; nas demais, o pedido de venda.
+  List<Widget> _printActions(Map<String, dynamic> o) {
+    Future<Uint8List> ofPdf(Object? id) async => buildProductionOrderPdf(api, await api.get('/api/production/orders/$id') as Map<String, dynamic>);
+    final ofs = (o['lines'] as List)
+        .cast<Map<String, dynamic>>()
+        .where((l) => l['productionOrderId'] != null)
+        .fold(<int, String>{}, (m, l) => m..[l['productionOrderId'] as int] = '${l['productionReference']}');
+    final inProduction = ['Released', 'PartiallyShipped'].contains(o['status']);
+    if (!inProduction || ofs.isEmpty) return [PrintButton(name: 'Pedido de venda ${o['reference']}', builder: () => buildSalesOrderPdf(api, o))];
+    if (ofs.length == 1) {
+      final e = ofs.entries.first;
+      return [PrintButton(key: const ValueKey('print-of'), name: 'Ordem de produção ${e.value}', builder: () => ofPdf(e.key))];
+    }
+    return [
+      for (final e in ofs.entries)
+        PrintButton(key: ValueKey('print-of-${e.key}'), name: 'Ordem de produção ${e.value}', builder: () => ofPdf(e.key)),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final o = _o;
@@ -249,7 +336,10 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(o == null ? 'Pedido de venda' : '${o['reference']} · ${o['customerName']}', overflow: TextOverflow.ellipsis),
-        actions: [if (menu.isNotEmpty) PopupMenuButton<VoidCallback>(key: const ValueKey('order-menu'), onSelected: (f) => f(), itemBuilder: (_) => menu)],
+        actions: [
+          if (o != null) ..._printActions(o),
+          if (menu.isNotEmpty) PopupMenuButton<VoidCallback>(key: const ValueKey('order-menu'), onSelected: (f) => f(), itemBuilder: (_) => menu),
+        ],
       ),
       body: _error != null && o == null
           ? Center(child: Text(_error!))
@@ -260,7 +350,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
   }
 
   Widget _body(Map<String, dynamic> o) {
-    final (step, failed) = orderPath(o['status']);
+    final (step, failed) = orderPath(o['status'], ready: o['ready'] == true, certified: _certified);
     final lines = (o['lines'] as List).cast<Map<String, dynamic>>();
     final deliveries = (o['deliveries'] as List).cast<Map<String, dynamic>>();
     final credit = o['credit'] as Map<String, dynamic>;
@@ -276,9 +366,12 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
           fields: [
             ('Cliente', '${o['customerName']}'),
             ('Pedido do cliente', fmt(o['customerPo'])),
-            ('Pagamento', fmt(o['paymentTermName'])),
+            ('Faturar para', billToLabels[o['billTo']] ?? fmt(o['billTo'])),
+            ('Origem', orderOrigins[o['origin']] ?? fmt(o['origin'])),
+            ('Responsável de vendas', fmt(o['salesperson'])),
+            ('Prazo', fmt(o['paymentTermName'] ?? o['customPaymentTerm'])),
             ('Frete', freightTerms[o['freight']] ?? fmt(o['freight'])),
-            ('Proposta', fmt(o['quoteReference'])),
+            ('Orçamento', fmt(o['quoteReference'])),
             ('Crédito', credit['limit'] == null ? 'Sem limite' : '${fmtMoney(credit['open'])} em aberto de ${fmtMoney(credit['limit'])}'),
           ],
         ),
@@ -295,7 +388,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
               TextButton.icon(
                 onPressed: () => openQuote(context, s, o['quoteId'] as int).then((_) => _load()),
                 icon: const Icon(Icons.request_quote_outlined),
-                label: const Text('Ver proposta'),
+                label: const Text('Ver orçamento'),
               ),
           ],
           child: SimpleTable(
@@ -304,12 +397,17 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
               ColumnSpec('Produto', (e) => '${e['productCode']}${e['customerPartNumber'] == null ? '' : ' (${e['customerPartNumber']})'}'),
               col('Descrição', 'description'),
               ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
+              ColumnSpec('Medidas', (e) => _measures(e['spec'])),
+              ColumnSpec('Norma', (e) => _standard(e['spec'])),
+              ColumnSpec('MP (kg)', (e) => fmt((e['spec'] as Map?)?['materialNeedKg']), numeric: true),
+              col('Viabilidade', 'feasibilityReference'),
               ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
               col('IPI %', 'ipiPercent', numeric: true),
               dateCol('Entrega', 'dueDate'),
               moneyCol('Total', 'total'),
               col('Expedido', 'shipped', numeric: true),
               col('Saldo', 'remaining', numeric: true),
+              moneyCol('Saldo R\$', 'balanceValue'),
             ],
             rows: lines,
           ),
@@ -328,7 +426,6 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
               labelCol('Situação', 'status', deliveryStatuses),
               col('NF', 'invoiceNumber'),
               col('Volumes', 'packages', numeric: true),
-              col('Transportadora', 'carrier'),
             ],
             rows: deliveries,
             actions: (d) => [
@@ -340,6 +437,37 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
             ],
           ),
         ),
+        if (released) ...[
+          gap,
+          Section(
+            title: 'Certificados de qualidade (${_certs.length})',
+            actions: [
+              if (o['certificateWaived'] == true)
+                TextButton(onPressed: s.canCertificate ? () => _waiveCertificate(false) : null, child: const Text('Dispensado · exigir novamente'))
+              else if (s.canCertificate && status != 'Cancelled')
+                FilledButton.tonalIcon(key: const ValueKey('order-new-certificate'), onPressed: _newCertificate, icon: const Icon(Icons.add), label: const Text('Emitir certificado')),
+            ],
+            child: SimpleTable(
+              columns: [
+                col('Certificado', 'reference'),
+                dateCol('Data', 'issueDate'),
+                labelCol('Situação', 'status', certificateStatuses),
+                col('Produto', 'description'),
+                ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
+                col('Entrega', 'deliveryReference'),
+                col('NF', 'invoiceNumber'),
+              ],
+              rows: _certs,
+              actions: (c) => [
+                IconButton(
+                  tooltip: 'Abrir',
+                  icon: const Icon(Icons.open_in_new, size: 20),
+                  onPressed: () => openCertificate(context, s, c['id'] as int).then((_) => _load()),
+                ),
+              ],
+            ),
+          ),
+        ],
         gap,
         Section(
           title: 'Detalhes',
@@ -399,6 +527,12 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
                       ),
                     ),
                   ),
+                if (l['productionOrderId'] != null)
+                  PrintButton(
+                    key: ValueKey('print-of-${l['productionOrderId']}'),
+                    name: 'Ordem de produção ${l['productionReference']}',
+                    builder: () async => buildProductionOrderPdf(api, await api.get('/api/production/orders/${l['productionOrderId']}') as Map<String, dynamic>),
+                  ),
                 if (l['ready'] == true && _n(l['remaining']) > 0)
                   const Padding(
                     padding: EdgeInsets.only(right: 8),
@@ -433,7 +567,6 @@ class _DeliveryDialog extends StatefulWidget {
 
 class _DeliveryDialogState extends State<_DeliveryDialog> {
   late final _date = TextEditingController(text: fmtDay(isoDate(DateTime.now())));
-  final _carrier = TextEditingController();
   final _notes = TextEditingController();
   late final _qty = {
     for (final l in widget.lines)
@@ -447,7 +580,7 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
 
   @override
   void dispose() {
-    for (final c in [_date, _carrier, _notes, ..._qty.values]) {
+    for (final c in [_date, _notes, ..._qty.values]) {
       c.dispose();
     }
     super.dispose();
@@ -463,7 +596,6 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
     if (lines.isEmpty) return setState(() => _error = 'Informe a quantidade de ao menos um item');
     Navigator.pop(context, {
       'plannedDate': date,
-      'carrier': _carrier.text.trim().isEmpty ? null : _carrier.text.trim(),
       'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       'lines': lines,
     });
@@ -485,13 +617,6 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
                   child: TextField(
                     controller: _date,
                     decoration: const InputDecoration(labelText: 'Data *', border: OutlineInputBorder(), isDense: true),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _carrier,
-                    decoration: const InputDecoration(labelText: 'Transportadora', border: OutlineInputBorder(), isDense: true),
                   ),
                 ),
               ],

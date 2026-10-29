@@ -36,10 +36,18 @@ class Session extends ChangeNotifier {
   bool get canReceive => permissions.contains('receiving');
   bool get canProduce => permissions.contains('production');
   bool get canMoveProduction => permissions.contains('production-materials');
+  bool get canCustomers => permissions.contains('customers');
   bool get canSell => permissions.contains('sales');
   bool get canApproveSales => permissions.contains('sales-approve');
   bool get canReleaseSales => permissions.contains('sales-release');
   bool get canShip => permissions.contains('sales-ship');
+  bool get canCertificate => permissions.contains('certificates');
+  bool get canSignQuality => permissions.contains('viability-quality');
+  bool get canSignProduction => permissions.contains('viability-production');
+  bool get canSignCommercial => permissions.contains('viability-commercial');
+  bool get canSteel => permissions.contains('steel');
+  bool get canFiscalPrices => permissions.contains('fiscal-prices');
+  bool get canFiscalCancel => permissions.contains('fiscal-cancel');
   String get baseUrl => api.baseUrl;
 
   Future<void> restore() async {

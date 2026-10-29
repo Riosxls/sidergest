@@ -110,4 +110,59 @@ public class AuthTests(ApiFixture api)
         var admin = await api.AdminAsync();
         Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/products?q=%25")).StatusCode);
     }
+
+    private static async Task<LoginResponse> LoginFull(ApiFixture api, string user, string pass) =>
+        await (await api.Anonymous().PostAsJsonAsync("/api/auth/login", new LoginRequest(user, pass))).Read<LoginResponse>();
+
+    [Fact]
+    public async Task Refresh_rotates_tokens_and_reuse_revokes_everything()
+    {
+        var admin = await api.AdminAsync();
+        var name = $"refr{Guid.NewGuid():N}"[..18];
+        await admin.Post("/api/users", new CreateUserRequest(name, "user-password-123", UserRole.Reader));
+        var first = await LoginFull(api, name, "user-password-123");
+        Assert.False(string.IsNullOrEmpty(first.RefreshToken));
+
+        var anon = api.Anonymous();
+        var second = await (await anon.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(first.RefreshToken))).Read<LoginResponse>();
+        Assert.NotEqual(first.RefreshToken, second.RefreshToken);
+
+        // replaying the already-rotated token is treated as theft: it fails and kills the new session too
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(first.RefreshToken))).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(second.RefreshToken))).StatusCode);
+        var probe = api.Anonymous();
+        probe.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", second.Token);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await probe.GetAsync("/api/products")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Logout_invalidates_the_refresh_token()
+    {
+        var admin = await api.AdminAsync();
+        var name = $"logo{Guid.NewGuid():N}"[..18];
+        await admin.Post("/api/users", new CreateUserRequest(name, "user-password-123", UserRole.Reader));
+        var login = await LoginFull(api, name, "user-password-123");
+        var anon = api.Anonymous();
+        Assert.Equal(HttpStatusCode.NoContent, (await anon.PostAsJsonAsync("/api/auth/logout", new RefreshRequest(login.RefreshToken))).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(login.RefreshToken))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Master_data_changes_are_audited_without_secrets()
+    {
+        var admin = await api.AdminAsync();
+        var code = $"AUD{Guid.NewGuid():N}"[..10].ToUpper();
+        var cust = await (await admin.Post("/api/customers", new CustomerIn("Cliente " + code, null, null, ConsumerType.Normal))).Read<CustomerOut>();
+        (await admin.Put($"/api/customers/{cust.Id}", new CustomerIn("Cliente Novo " + code, null, null, ConsumerType.Normal))).EnsureSuccessStatusCode();
+        var page = await (await admin.GetAsync($"/api/audit?entity=Customer&entityId={cust.Id}")).Read<Page<AuditOut>>();
+        Assert.Contains(page.Items, a => a.Action == "Insert");
+        var update = Assert.Single(page.Items, a => a.Action == "Update");
+        Assert.Contains("Cliente Novo", update.Changes);
+        Assert.Equal(ApiFixture.AdminUser, update.User);
+
+        var reader = await api.UserAsync(UserRole.Reader);
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync("/api/audit")).StatusCode);
+        var users = await (await admin.GetAsync("/api/audit?entity=AppUser")).Read<Page<AuditOut>>();
+        Assert.DoesNotContain(users.Items, a => a.Changes.Contains("PasswordHash", StringComparison.OrdinalIgnoreCase));
+    }
 }

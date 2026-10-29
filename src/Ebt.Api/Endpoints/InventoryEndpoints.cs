@@ -53,7 +53,7 @@ public static class InventoryEndpoints
         {
             var doc = await svc.ReverseAsync(id, User(user), body?.Notes, ct);
             return Results.Created($"/api/stock/documents/{doc.Id}", await LoadDocument(db, doc.Id, ct));
-        }).RequireAuthorization(Policies.Stock);
+        }).RequireAuthorization(Policies.Stock).AddEndpointFilter(new RowVersionFilter<StockDocument>());
 
         stock.MapGet("/documents", async (EbtDbContext db, MovementType? type, DateOnly? from, DateOnly? to, string? reference, int? skip, int? take, CancellationToken ct) =>
         {
@@ -71,7 +71,7 @@ public static class InventoryEndpoints
         });
 
         stock.MapGet("/documents/{id:int}", async (int id, EbtDbContext db, CancellationToken ct) =>
-            await LoadDocument(db, id, ct) is { } d ? Results.Ok(d) : Results.NotFound());
+            await LoadDocument(db, id, ct) is { } d ? Results.Ok(d) : Results.NotFound()).AddEndpointFilter(new RowVersionFilter<StockDocument>());
 
         stock.MapGet("/movements", async (EbtDbContext db, int? materialId, int? productId, int? locationId, int? lotId, DateOnly? from, DateOnly? to, int? skip, int? take, CancellationToken ct) =>
         {
@@ -180,7 +180,7 @@ public static class InventoryEndpoints
         {
             await svc.ReleaseAsync(id, ct);
             return Results.Ok(await db.StockReservations.AsNoTracking().Where(x => x.Id == id).Select(ReservationProjection).FirstAsync(ct));
-        }).RequireAuthorization(Policies.Stock);
+        }).RequireAuthorization(Policies.Stock).AddEndpointFilter(new RowVersionFilter<StockReservation>());
 
         stock.MapGet("/settings", async (StockService svc, CancellationToken ct) => Results.Ok(ToIn(await svc.SettingsAsync(ct))));
 

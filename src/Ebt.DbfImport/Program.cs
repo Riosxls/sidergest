@@ -11,7 +11,7 @@ if (dir is null || conn is null || args.Contains("--help"))
     Console.WriteLine("""
         Usage: Ebt.DbfImport --dir <folder with legacy DBFs> --conn <PostgreSQL connection string>
                              [--codepage 850] [--default-ncm 73063010] [--dry-run] [--migrate]
-                             [--opening-date yyyy-mm-dd]
+                             [--opening-date yyyy-mm-dd] [--extra <file> ...]
 
         Imports HDS Engenharia master data (materials, machines, customers, suppliers,
         products, routing and BOM) and Suprimentos data (requisitions, quotations,
@@ -36,6 +36,21 @@ if (!Directory.Exists(dir))
     return 2;
 }
 
+var extras = args.Select((a, i) => (a, i)).Where(x => x.a == "--extra" && x.i + 1 < args.Length).Select(x => args[x.i + 1]).ToList();
+if (extras.Count > 0)
+{
+    var merged = Path.Combine(Path.GetTempPath(), "ebt-import-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(merged);
+    foreach (var f in Directory.EnumerateFiles(dir).Where(f => f.EndsWith(".dbf", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".dbt", StringComparison.OrdinalIgnoreCase)))
+        File.Copy(f, Path.Combine(merged, Path.GetFileName(f)), true);
+    foreach (var f in extras)
+    {
+        if (!File.Exists(f)) { Console.Error.WriteLine($"Extra file not found: {f}"); return 2; }
+        File.Copy(f, Path.Combine(merged, Path.GetFileName(f)), true);
+    }
+    dir = merged;
+}
+
 var options = new ImportOptions
 {
     Directory = dir,
@@ -55,7 +70,7 @@ var stock = await new StockImporter(db, new StockImportOptions
     Directory = dir,
     CodePage = options.CodePage,
     DryRun = options.DryRun,
-    OpeningDate = DateOnly.TryParse(Arg("--opening-date"), out var od) ? od : DateOnly.FromDateTime(DateTime.Today)
+    OpeningDate = DateOnly.TryParse(Arg("--opening-date"), out var od) ? od : Ebt.Core.Services.Clock.Today()
 }).RunAsync();
 foreach (var (name, t) in stock.Tables) report.Tables[name] = t;
 report.Warnings.AddRange(stock.Warnings);

@@ -76,6 +76,7 @@ class StagePath extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, box) {
         final compact = box.maxWidth < 640;
+        final roomy = box.maxWidth / steps.length >= 150;
         return Row(
           children: [
             for (final (i, s) in steps.indexed)
@@ -86,9 +87,9 @@ class StagePath extends StatelessWidget {
                     clipper: _Chevron(first: i == 0, last: i == steps.length - 1),
                     child: Container(
                       key: ValueKey('path-$i'),
-                      height: 36,
+                      height: 44,
                       margin: const EdgeInsets.only(right: 2),
-                      padding: EdgeInsets.only(left: i == 0 ? 10 : 18, right: 12),
+                      padding: EdgeInsets.only(left: i == 0 ? 8 : 16, right: 8),
                       color: i < current
                           ? done
                           : i == current
@@ -100,15 +101,19 @@ class StagePath extends StatelessWidget {
                         children: [
                           if (i < current)
                             const Icon(Icons.check, size: 16, color: Colors.white)
-                          else if (s.icon != null && !compact)
+                          else if (s.icon != null)
                             Icon(s.icon, size: 16, color: i == current ? Colors.white : cs.onSurfaceVariant),
                           if (!compact || i == current) ...[
                             const SizedBox(width: 4),
                             Flexible(
                               child: Text(
                                 i == current && failed ? failedLabel! : s.label,
+                                maxLines: 2,
+                                textAlign: TextAlign.center,
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  fontSize: roomy ? null : 11.5,
+                                  height: 1.1,
                                   color: i <= current ? Colors.white : cs.onSurfaceVariant,
                                   fontWeight: i == current ? FontWeight.w700 : FontWeight.w500,
                                 ),

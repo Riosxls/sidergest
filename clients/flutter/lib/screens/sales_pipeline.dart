@@ -8,6 +8,7 @@ import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
+import 'certificates.dart';
 import 'sales_common.dart';
 import 'sales_quotes.dart';
 
@@ -15,8 +16,10 @@ const _stageTones = {
   'quote': Tone.neutral,
   'sent': Tone.info,
   'accepted': Tone.success,
+  'po': Tone.success,
   'order': Tone.info,
   'production': Tone.progress,
+  'certificate': Tone.warning,
   'ready': Tone.success,
   'shipped': Tone.progress,
   'delivered': Tone.success,
@@ -26,14 +29,16 @@ const _stageIcons = {
   'quote': Icons.edit_note,
   'sent': Icons.send_outlined,
   'accepted': Icons.thumb_up_alt_outlined,
+  'po': Icons.assignment_turned_in_outlined,
   'order': Icons.receipt_long_outlined,
   'production': Icons.precision_manufacturing_outlined,
+  'certificate': Icons.verified_outlined,
   'ready': Icons.inventory_2_outlined,
   'shipped': Icons.local_shipping_outlined,
   'delivered': Icons.task_alt,
 };
 
-const _moves = {'quote': 'sent', 'sent': 'accepted', 'accepted': 'order', 'order': 'production'};
+const _moves = {'quote': 'sent', 'sent': 'accepted', 'accepted': 'po', 'po': 'order', 'order': 'production', 'certificate': 'ready'};
 
 class SalesPipelineScreen extends StatefulWidget {
   const SalesPipelineScreen({super.key, required this.session});
@@ -86,7 +91,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
           if (!await confirmStep(
             context,
             title: 'Aprovar desconto de $ref?',
-            message: 'A proposta fica liberada para envio ao cliente.',
+            message: 'O orçamento fica liberado para envio ao cliente.',
             confirmLabel: 'Aprovar',
           )) {
             return;
@@ -110,7 +115,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
           return;
         }
         call = api.post('/api/sales/quotes/$id/send', {'sentTo': q['contactEmail'] ?? q['contactName']});
-        success = approval ? 'Enviada para aprovação' : 'Proposta enviada ao cliente';
+        success = approval ? 'Enviada para aprovação' : 'Orçamento enviado ao cliente';
       case 'sent':
         if (!s.canSell) return;
         final po = await promptText(context, title: 'Cliente aprovou $ref', label: 'Nº do pedido de compra do cliente', confirmLabel: 'Registrar aprovação');
@@ -118,6 +123,11 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
         call = api.post('/api/sales/quotes/$id/accept', {'customerPo': po.isEmpty ? null : po});
         success = 'Aprovação do cliente registrada';
       case 'accepted':
+        if (!s.canSell) return;
+        // The purchase order file/text is attached on the quote itself.
+        await openQuote(context, s, id as int);
+        return _reload();
+      case 'po':
         if (!s.canSell) return;
         if (!await confirmStep(
           context,
@@ -143,6 +153,18 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
         }
         call = api.post('/api/sales/orders/$id/release', {'useStock': true});
         success = 'Pedido liberado para produção';
+      case 'certificate':
+        if (!s.canCertificate) return;
+        final drafts = await api.list('/api/sales/certificates', query: {'orderId': id, 'status': 'Draft'});
+        if (!mounted) return;
+        if (drafts.items.isNotEmpty) {
+          await openCertificate(context, s, drafts.items.first['id'] as int);
+        } else {
+          final order = await api.get('/api/sales/orders/$id') as Map<String, dynamic>;
+          if (!mounted) return;
+          await newCertificate(context, s, order);
+        }
+        return _reload();
       default:
         return _open(c);
     }
@@ -170,9 +192,9 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 KpiTile(
-                  label: 'Propostas em aberto',
+                  label: 'Orçamentos em aberto',
                   value: fmtMoney(k['openQuotesValue']),
-                  caption: '${k['openQuotes']} propostas',
+                  caption: '${k['openQuotes']} orçamentos',
                   icon: Icons.request_quote_outlined,
                 ),
                 KpiTile(
@@ -367,7 +389,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
                     ),
                 ],
               ),
-              if (isQuote && c['status'] != 'Sent' && c['status'] != 'Accepted')
+              if (isQuote && c['status'] != 'Sent' && c['status'] != 'PurchaseOrder' && c['status'] != 'Accepted')
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: StatusBadge(quoteStatuses[c['status']] ?? '${c['status']}', tone: quoteTone(c['status'])),

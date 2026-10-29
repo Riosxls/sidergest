@@ -64,6 +64,7 @@ public partial class EbtDbContext
             e.HasIndex(x => x.DueDate);
             e.HasIndex(x => x.ProductId);
             e.Property(x => x.Reference).HasMaxLength(40);
+            e.Property(x => x.PrimaryTube).HasMaxLength(120);
             Qty(e.Property(x => x.Quantity));
             e.Property(x => x.MaterialCost).HasPrecision(18, 4);
             e.Property(x => x.ServiceCost).HasPrecision(18, 4);
@@ -81,6 +82,9 @@ public partial class EbtDbContext
             e.Property(x => x.PiecesPerHour).HasPrecision(12, 3);
             e.Property(x => x.Operators).HasPrecision(6, 2);
             e.Property(x => x.PlannedHours).HasPrecision(12, 4);
+            e.Property(x => x.Tolerance).HasMaxLength(60);
+            e.Property(x => x.MeasureStart).HasMaxLength(60);
+            e.Property(x => x.MeasureEnd).HasMaxLength(60);
             Qty(e.Property(x => x.OverrunReleased));
             e.ToTable(t => t.HasCheckConstraint("ck_production_order_operations_external", "NOT external OR supplier_id IS NOT NULL"));
             e.HasOne(x => x.Order).WithMany(x => x.Operations).OnDelete(DeleteBehavior.Cascade);

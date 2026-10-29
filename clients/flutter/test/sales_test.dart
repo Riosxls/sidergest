@@ -16,6 +16,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'nav.dart';
+
 http.Response json(Object? body, [int status = 200]) => http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json; charset=utf-8'});
 
 Map<String, dynamic> page(List<Map<String, dynamic>> items) => {'items': items, 'total': items.length, 'skip': 0, 'take': 50};
@@ -28,6 +30,7 @@ class SalesFake {
   String orderStatus = 'Created';
   bool ready = false;
   String deliveryStatus = 'Planned';
+  String? requestFileName;
 
   List<Map<String, dynamic>> history(String action) => [
     {'id': 2, 'action': action, 'fromStatus': 'Draft', 'toStatus': 'Sent', 'note': null, 'user': 'ana', 'at': '2026-10-26T12:00:00Z'},
@@ -63,6 +66,9 @@ class SalesFake {
     'decisionBy': null,
     'decisionNote': null,
     'customerPo': null,
+    'requestText': null,
+    'requestFileName': requestFileName,
+    'requestFileSize': requestFileName == null ? null : 2048,
     'salesOrderId': quoteStatus == 'Converted' ? 9 : null,
     'salesOrderReference': quoteStatus == 'Converted' ? 'PV 9' : null,
     'createdBy': 'ana',
@@ -203,7 +209,7 @@ class SalesFake {
       'pendingApprovals': 0,
     },
     'stages': [
-      for (final k in ['quote', 'sent', 'accepted', 'order', 'production', 'ready', 'shipped', 'delivered'])
+      for (final k in ['quote', 'sent', 'accepted', 'po', 'order', 'production', 'ready', 'shipped', 'delivered'])
         {
           'key': k,
           'count': k == 'sent' || k == 'order' ? 1 : 0,
@@ -261,6 +267,10 @@ class SalesFake {
       quoteStatus = 'Approved';
       return json(quote());
     }
+    if (p == '/api/sales/quotes/5/purchase-order') {
+      quoteStatus = 'PurchaseOrder';
+      return json(quote());
+    }
     if (p == '/api/sales/quotes/5/accept') {
       quoteStatus = 'Accepted';
       return json(quote());
@@ -316,17 +326,22 @@ void main() {
     expect(s.canApproveSales, isFalse);
     expect(s.canShip, isTrue);
     expect(quotePath('Sent'), (1, null));
+    expect(quotePath('Accepted'), (2, null));
+    expect(quotePath('PurchaseOrder'), (3, null));
     expect(quotePath('Rejected'), (2, 'Recusada'));
-    expect(orderPath('Released'), (4, null));
-    expect(orderPath('Delivered'), (6, null));
-    expect(deliveryPath('Cancelled'), (5, 'Cancelada'));
+    expect(orderPath('Released'), (5, null));
+    expect(orderPath('Released', ready: true), (6, null));
+    expect(orderPath('Released', ready: true, certified: true), (7, null));
+    expect(orderPath('Delivered'), (8, null));
+    expect(deliveryPath('Cancelled'), (7, 'Cancelada'));
   });
 
   testWidgets('pipeline shows the stages and advances a sent proposal to accepted', (tester) async {
     final fake = SalesFake()..quoteStatus = 'Sent';
     await pumpScreen(tester, fake, (s) => SalesPipelineScreen(session: s));
-    expect(find.text('Propostas em aberto'), findsOneWidget);
+    expect(find.text('Orçamentos em aberto'), findsOneWidget);
     expect(find.text('50%'), findsOneWidget);
+    expect(find.byKey(const ValueKey('stage-po')), findsOneWidget);
     expect(find.byKey(const ValueKey('stage-production')), findsOneWidget);
     expect(find.text('PROP 31'), findsOneWidget);
     expect(find.text('Vence em breve'), findsOneWidget);
@@ -337,6 +352,37 @@ void main() {
     await tester.tap(find.text('Registrar aprovação'));
     await tester.pumpAndSettle();
     expect(fake.body(fake.last('POST', '/api/sales/quotes/5/accept'))['customerPo'], 'PO-4521');
+  });
+
+  testWidgets('purchase order is attached on its own step after approval', (tester) async {
+    final fake = SalesFake()..quoteStatus = 'Accepted';
+    await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+    expect(find.byKey(const ValueKey('quote-po-attach')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('quote-po')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Anexe o arquivo ou o texto'), findsOneWidget);
+    expect(fake.log.where((r) => r.url.path.endsWith('/purchase-order')), isEmpty);
+  });
+
+  testWidgets('registered purchase order unlocks the sales order', (tester) async {
+    final withFile = SalesFake()
+      ..quoteStatus = 'Accepted'
+      ..requestFileName = 'pedido-4521.pdf';
+    await pumpScreen(tester, withFile, (s) => QuoteScreen(session: s, id: 5));
+    expect(find.textContaining('pedido-4521.pdf'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('quote-po')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    expect(withFile.last('POST', '/api/sales/quotes/5/purchase-order'), isNotNull);
+    expect(find.byKey(const ValueKey('quote-convert')), findsOneWidget);
+  });
+
+  testWidgets('new quote form has no purchase order attachment', (tester) async {
+    final fake = SalesFake();
+    await pumpScreen(tester, fake, (s) => QuoteEditorScreen(session: s));
+    expect(find.byKey(const ValueKey('quote-request-attach')), findsNothing);
+    expect(find.text('Observação do cliente'), findsNothing);
   });
 
   testWidgets('dragging an order card onto production releases it', (tester) async {
@@ -380,8 +426,8 @@ void main() {
     expect(find.text('Desconto aprovado'), findsWidgets);
   });
 
-  testWidgets('accepted proposal becomes a sales order', (tester) async {
-    final fake = SalesFake()..quoteStatus = 'Accepted';
+  testWidgets('proposal with purchase order becomes a sales order', (tester) async {
+    final fake = SalesFake()..quoteStatus = 'PurchaseOrder';
     await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
     await tester.tap(find.byKey(const ValueKey('quote-convert')));
     await tester.pumpAndSettle();
@@ -423,19 +469,20 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('delivery-ship')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('field-invoiceNumber')), '2581');
+    await tester.enterText(find.byKey(const ValueKey('field-lotNumber')), 'L-77');
+    await tester.enterText(find.byKey(const ValueKey('field-invoicedValue')), '420,5');
     await tester.tap(find.text('Salvar'));
     await tester.pumpAndSettle();
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['invoiceNumber'], '2581');
+    expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['lotNumber'], 'L-77');
+    expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['invoicedValue'], 420.5);
     expect(find.byKey(const ValueKey('delivery-confirm')), findsOneWidget);
   });
 
   testWidgets('reader sees the pipeline without actions', (tester) async {
     final fake = SalesFake()..role = 'Reader';
     await pumpScreen(tester, fake, (s) => Shell(session: s));
-    await tester.tap(find.byKey(const ValueKey('module-card-sales')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Funil de vendas').first);
-    await tester.pumpAndSettle();
+    await openScreen(tester, 'Comercial', 'sales-pipeline');
     expect(find.byKey(const ValueKey('pipeline-new')), findsNothing);
     await tester.tap(find.text('PROP 31'));
     await tester.pumpAndSettle();

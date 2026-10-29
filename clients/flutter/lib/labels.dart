@@ -70,6 +70,7 @@ const quoteStatuses = {
   'Approved': 'Aprovada internamente',
   'Sent': 'Enviada ao cliente',
   'Accepted': 'Aceita pelo cliente',
+  'PurchaseOrder': 'Pedido de compra recebido',
   'Rejected': 'Recusada',
   'Expired': 'Expirada',
   'Cancelled': 'Cancelada',
@@ -84,13 +85,16 @@ const salesOrderStatuses = {
   'Cancelled': 'Cancelado',
 };
 const deliveryStatuses = {'Planned': 'Programada', 'Shipped': 'Expedida', 'Delivered': 'Entregue', 'Cancelled': 'Cancelada'};
+const certificateStatuses = {'Draft': 'Rascunho', 'Issued': 'Emitido', 'Cancelled': 'Cancelado'};
 const freightTerms = {'Cif': 'CIF (frete nosso)', 'Fob': 'FOB (frete do cliente)', 'CustomerPickup': 'Retira na fábrica'};
 const pipelineStages = {
-  'quote': 'Proposta',
+  'quote': 'Orçamento',
   'sent': 'Enviada',
   'accepted': 'Aceita',
+  'po': 'Pedido de compra',
   'order': 'Pedido',
-  'production': 'Em produção',
+  'production': 'Ordem de Produção',
+  'certificate': 'Certificado',
   'ready': 'Pronto p/ expedir',
   'shipped': 'Expedido',
   'delivered': 'Entregue',
@@ -102,6 +106,7 @@ const salesActions = {
   'approved': 'Desconto aprovado',
   'approval-rejected': 'Desconto recusado',
   'sent': 'Enviado ao cliente',
+  'po-received': 'Pedido de compra recebido',
   'accepted': 'Aceito pelo cliente',
   'declined': 'Recusado pelo cliente',
   'revised': 'Revisado',
@@ -117,3 +122,23 @@ const salesActions = {
   'delivered': 'Entrega confirmada',
 };
 const salesBadges = {'discount': 'Desconto acima do limite', 'expiring': 'Vence em breve', 'late': 'Atrasado', 'ready': 'Pronto', 'partial': 'Parcial'};
+
+const billToLabels = {'Ebt': 'EBT', 'Bts': 'BTS'};
+const orderOrigins = {'Email': 'E-mail', 'Fax': 'Fax', 'Verbal': 'Verbal', 'System': 'Sistema'};
+const deliveryConditions = {'Bk': 'BK', 'Nbk': 'NBK', 'Gbk': 'GBK'};
+const saleUnits = {'KG': 'KG', 'PC': 'PÇ'};
+
+const feasibilityStatuses = {'Draft': 'Rascunho', 'InReview': 'Em análise', 'Approved': 'Aprovada', 'Rejected': 'Reprovada'};
+const signoffAreas = {'Quality': 'Qualidade', 'Production': 'Produção', 'Commercial': 'Comercial'};
+const feasibilityActions = {
+  'created': 'Criada',
+  'edited': 'Editada',
+  'submitted': 'Enviada para análise',
+  'signed-quality': 'Qualidade assinou',
+  'signed-production': 'Produção assinou',
+  'signed-commercial': 'Comercial assinou',
+  'rejected-quality': 'Qualidade reprovou',
+  'rejected-production': 'Produção reprovou',
+  'rejected-commercial': 'Comercial reprovou',
+  'reopened': 'Reaberta',
+};

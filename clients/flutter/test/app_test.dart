@@ -11,6 +11,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'nav.dart';
+
 http.Response json(Object body, [int status = 200]) => http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json; charset=utf-8'});
 
 Map<String, dynamic> page(List<Map<String, dynamic>> items) => {'items': items, 'total': items.length, 'skip': 0, 'take': 50};
@@ -186,10 +188,7 @@ void main() {
     await pumpApp(tester, log);
     await login(tester, 'senha-correta');
 
-    await tester.tap(find.byKey(const ValueKey('module-card-engineering')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Produtos').first);
-    await tester.pumpAndSettle();
+    await openScreen(tester, 'Engenharia', '/api/products');
     expect(find.text('T-100'), findsOneWidget);
 
     await tester.tap(find.text('Novo'));
@@ -233,12 +232,13 @@ void main() {
     await pumpApp(tester, log);
     tester.view.physicalSize = const Size(400, 800);
     await login(tester, 'senha-correta');
-    await tester.tap(find.byKey(const ValueKey('module-card-engineering')));
-    await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Produtos').last);
+    expect(find.widgetWithText(ListTile, 'Painel'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Saldos'), findsNothing);
+    await tester.tap(find.widgetWithText(ListTile, 'Painel'));
     await tester.pumpAndSettle();
+    await openScreen(tester, 'Engenharia', '/api/products');
     expect(find.byType(DataTable), findsNothing);
     expect(find.widgetWithText(ListTile, 'T-100  Tubo 25x1,5'), findsOneWidget);
   });

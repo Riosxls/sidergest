@@ -13,6 +13,7 @@ public sealed class CrudSpec<TEntity, TIn, TOut> where TEntity : class
     public required Action<TIn, TEntity> Apply { get; init; }
     public Func<TIn, EbtDbContext, CancellationToken, Task<Dictionary<string, string[]>>>? Validate { get; init; }
     public Func<IQueryable<TEntity>, string, IQueryable<TEntity>>? Search { get; init; }
+    public Func<IQueryable<TEntity>, IQueryCollection, IQueryable<TEntity>>? Filter { get; init; }
     public Func<IQueryable<TEntity>, IQueryable<TEntity>>? Order { get; init; }
     public Func<int, EbtDbContext, CancellationToken, Task<string?>>? BeforeDelete { get; init; }
     public string WritePolicy { get; init; } = Policies.Write;
@@ -23,9 +24,10 @@ public static class Crud
     public static RouteGroupBuilder MapCrud<TEntity, TIn, TOut>(this RouteGroupBuilder group, CrudSpec<TEntity, TIn, TOut> spec)
         where TEntity : class
     {
-        group.MapGet("/", async (EbtDbContext db, string? q, int? skip, int? take, CancellationToken ct) =>
+        group.MapGet("/", async (EbtDbContext db, HttpContext http, string? q, int? skip, int? take, CancellationToken ct) =>
         {
             IQueryable<TEntity> query = db.Set<TEntity>().AsNoTracking();
+            if (spec.Filter is not null) query = spec.Filter(query, http.Request.Query);
             if (!string.IsNullOrWhiteSpace(q) && spec.Search is not null) query = spec.Search(query, q.Trim());
             var total = await query.CountAsync(ct);
             query = spec.Order is not null ? spec.Order(query) : query.OrderBy(e => EF.Property<int>(e, "Id"));
@@ -96,7 +98,7 @@ public static class Crud
     /// <summary>Contains-pattern for ILIKE with the caller's own wildcard characters escaped (backslash is the default escape).</summary>
     public static string Like(string? value) => "%" + (value ?? "").Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
 
-    public static bool Has(string? value) => !string.IsNullOrWhiteSpace(value);
+    public static bool Has([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? value) => !string.IsNullOrWhiteSpace(value);
     public static bool Digits(string? value, params int[] lengths) => Numeric(value) is { } v && v.All(char.IsDigit) && lengths.Contains(v.Length);
     public static string? Numeric(string? value) => Clean(value) is { } v && string.Concat(v.Where(c => c is not ('.' or '-' or '/' or ' '))) is { Length: > 0 } n ? n : null;
     public static string? Clean(string? value) => Ebt.Core.Services.Text.Clean(value);

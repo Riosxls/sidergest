@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../entities.dart';
+import '../reports/nf_doc.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
@@ -199,6 +200,28 @@ class _ShipmentsViewState extends State<ShipmentsView> {
   Session get s => widget.session;
 
   Future<void> _tap(Map<String, dynamic> e) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(leading: const Icon(Icons.open_in_new), title: const Text('Abrir'), onTap: () => Navigator.pop(ctx, 'open')),
+            ListTile(leading: const Icon(Icons.print_outlined), title: const Text('Imprimir NF de remessa'), onTap: () => Navigator.pop(ctx, 'nf')),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    if (action == 'nf') {
+      await printNf(
+        context,
+        name: 'NF remessa ${e['reference']}',
+        number: e['invoiceNumber'] == null ? '' : '${e['invoiceNumber']}',
+        build: (f) => buildOutsideNfPdf(s.api, e, f),
+      );
+      return;
+    }
     if (!s.canProduce || (e['open'] as num) <= 0) {
       if (widget.orderId == null) await openProductionOrder(context, s, e['orderId'] as int);
       return;

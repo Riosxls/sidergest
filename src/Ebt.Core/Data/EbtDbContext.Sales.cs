@@ -14,6 +14,7 @@ public partial class EbtDbContext
     public DbSet<PriceListEntry> PriceList => Set<PriceListEntry>();
     public DbSet<Quote> Quotes => Set<Quote>();
     public DbSet<QuoteLine> QuoteLines => Set<QuoteLine>();
+    public DbSet<QuoteRequestFile> QuoteRequestFiles => Set<QuoteRequestFile>();
     public DbSet<SalesOrder> SalesOrders => Set<SalesOrder>();
     public DbSet<SalesOrderLine> SalesOrderLines => Set<SalesOrderLine>();
     public DbSet<Delivery> Deliveries => Set<Delivery>();
@@ -65,6 +66,13 @@ public partial class EbtDbContext
             e.HasOne(x => x.Address).WithMany().OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.PaymentTerm).WithMany().OnDelete(DeleteBehavior.Restrict);
         });
+        b.Entity<QuoteRequestFile>(e =>
+        {
+            e.HasKey(x => x.QuoteId);
+            e.HasOne(x => x.Quote).WithOne().HasForeignKey<QuoteRequestFile>(x => x.QuoteId).OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<Quote>().Property(x => x.RequestFileName).HasMaxLength(255);
+        b.Entity<Quote>().Property(x => x.RequestFileType).HasMaxLength(100);
         b.Entity<QuoteLine>(e =>
         {
             e.HasIndex(x => new { x.QuoteId, x.Sequence }).IsUnique();
@@ -87,6 +95,8 @@ public partial class EbtDbContext
             e.HasIndex(x => x.QuoteId).IsUnique();
             e.Property(x => x.Reference).HasMaxLength(40);
             e.Property(x => x.CustomerPo).HasMaxLength(40);
+            e.Property(x => x.Company).HasMaxLength(10).HasDefaultValue("EBT");
+            e.Property(x => x.Salesperson).HasMaxLength(60);
             e.HasOne(x => x.Quote).WithMany().OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Customer).WithMany().OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Address).WithMany().OnDelete(DeleteBehavior.Restrict);
@@ -107,6 +117,18 @@ public partial class EbtDbContext
             e.HasOne(x => x.Product).WithMany().OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Reservation).WithMany().OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.ProductionOrder).WithMany().OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.FeasibilityStudy).WithMany().OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => x.FeasibilityStudyId);
+            e.Property(x => x.OutsideDiameter).HasPrecision(10, 3);
+            e.Property(x => x.Thickness).HasPrecision(10, 3);
+            e.Property(x => x.Length).HasPrecision(10, 1);
+            e.Property(x => x.Standard).HasMaxLength(40);
+            e.Property(x => x.SaleUnit).HasMaxLength(3);
+            e.Property(x => x.PieceWeightKg).HasPrecision(14, 4);
+            e.Property(x => x.MaterialNeedKg).HasPrecision(14, 3);
+            e.Property(x => x.ToleranceDiameter).HasPrecision(8, 3);
+            e.Property(x => x.ToleranceThickness).HasPrecision(8, 3);
+            e.Property(x => x.ToleranceLengthPlus).HasPrecision(8, 1);
         });
         b.Entity<Delivery>(e =>
         {
@@ -118,6 +140,8 @@ public partial class EbtDbContext
             e.Property(x => x.InvoiceNumber).HasMaxLength(15);
             e.Property(x => x.VehiclePlate).HasMaxLength(10);
             e.Property(x => x.GrossWeightKg).HasPrecision(14, 3);
+            e.Property(x => x.LotNumber).HasMaxLength(30);
+            e.Property(x => x.InvoicedValue).HasPrecision(18, 2);
             e.HasOne(x => x.Order).WithMany().OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Address).WithMany().OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.StockDocument).WithMany().OnDelete(DeleteBehavior.Restrict);

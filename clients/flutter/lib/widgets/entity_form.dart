@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'discard_guard.dart';
 
 import '../api.dart';
 import '../entities.dart';
@@ -68,6 +71,11 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
   final _clientErrors = <String, String>{};
   String? _message;
   bool _busy = false;
+  late final String _initial;
+
+  String _signature() => jsonEncode([
+    for (final f in widget.fields) _text[f.key]?.text ?? _values[f.key],
+  ]);
 
   bool _isText(FieldSpec f) =>
       f.type == FieldType.text || f.type == FieldType.integer || f.type == FieldType.decimal || f.type == FieldType.date || f.type == FieldType.time;
@@ -87,6 +95,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
     }
     final labels = widget.initial?['_labels'];
     if (labels is Map) _labels.addAll(labels.cast<String, String>());
+    _initial = _signature();
   }
 
   @override
@@ -167,7 +176,28 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
   Future<void> _pickDate(FieldSpec f) async {
     final current = DateTime.tryParse(parseDate(_text[f.key]!.text) ?? '') ?? DateTime.now();
     final d = await showDatePicker(context: context, initialDate: current, firstDate: DateTime(2000), lastDate: DateTime(2100));
-    if (d != null) setState(() => _text[f.key]!.text = fmtDay(isoDate(d)));
+    if (d != null) {
+      setState(() {
+        _text[f.key]!.text = fmtDay(isoDate(d));
+        _syncLinked(f);
+      });
+    }
+  }
+
+  DateTime get _today {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  void _syncLinked(FieldSpec f) {
+    final days = f.daysFor, date = f.dateFor;
+    if (days != null) {
+      final n = int.tryParse(_text[f.key]!.text.trim());
+      if (n != null && _text.containsKey(days)) _text[days]!.text = fmtDay(isoDate(_today.add(Duration(days: n))));
+    } else if (date != null) {
+      final d = DateTime.tryParse(parseDate(_text[f.key]!.text) ?? '');
+      if (d != null && _text.containsKey(date)) _text[date]!.text = '${DateTime(d.year, d.month, d.day).difference(_today).inDays}';
+    }
   }
 
   String? _errorFor(String key) => _clientErrors[key] ?? _serverErrors[key]?.join('; ');
@@ -199,6 +229,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
           key: ValueKey('field-${f.key}'),
           controller: _text[f.key],
           readOnly: widget.readOnly,
+          obscureText: f.obscure,
           keyboardType: f.type == FieldType.text
               ? TextInputType.text
               : (f.type == FieldType.date || f.type == FieldType.time ? TextInputType.datetime : const TextInputType.numberWithOptions(decimal: true)),
@@ -214,12 +245,20 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
                 : null,
           ),
           onSubmitted: (_) => widget.readOnly ? null : _save(),
-          onChanged: (_) => _serverErrors.containsKey(f.key) || _clientErrors.containsKey(f.key)
-              ? setState(() {
-                  _serverErrors.remove(f.key);
-                  _clientErrors.remove(f.key);
-                })
-              : null,
+          onChanged: (_) {
+            if (f.daysFor != null || f.dateFor != null) {
+              _syncLinked(f);
+              _serverErrors.remove(f.daysFor ?? f.dateFor);
+              _clientErrors.remove(f.daysFor ?? f.dateFor);
+              setState(() {});
+            }
+            if (_serverErrors.containsKey(f.key) || _clientErrors.containsKey(f.key)) {
+              setState(() {
+                _serverErrors.remove(f.key);
+                _clientErrors.remove(f.key);
+              });
+            }
+          },
         );
       case FieldType.boolean:
         return InputDecorator(
@@ -320,19 +359,19 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
         Row(children: actions),
       ],
     );
-    if (narrow) {
-      return Dialog.fullscreen(
-        child: SafeArea(
-          child: Padding(padding: const EdgeInsets.all(16), child: content),
-        ),
-      );
-    }
-    return Dialog(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 760),
-        child: Padding(padding: const EdgeInsets.all(20), child: content),
-      ),
-    );
+    final dialog = narrow
+        ? Dialog.fullscreen(
+            child: SafeArea(
+              child: Padding(padding: const EdgeInsets.all(16), child: content),
+            ),
+          )
+        : Dialog(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720, maxHeight: 760),
+              child: Padding(padding: const EdgeInsets.all(20), child: content),
+            ),
+          );
+    return widget.readOnly ? dialog : DiscardGuard(isDirty: () => _signature() != _initial, child: dialog);
   }
 }
 
@@ -348,6 +387,7 @@ class LookupField extends StatefulWidget {
     this.error,
     this.enabled = true,
     this.initialDisplay,
+    this.onCustom,
   });
 
   final ApiClient api;
@@ -358,6 +398,9 @@ class LookupField extends StatefulWidget {
   final String? error;
   final int? value;
   final bool enabled;
+
+  /// When set, the picker offers a free-text prazo that is kept only by the caller (not saved as a record).
+  final ValueChanged<String>? onCustom;
   final void Function(int? id, Map<String, dynamic>? entity) onChanged;
 
   @override
@@ -394,9 +437,11 @@ class _LookupFieldState extends State<LookupField> {
   Future<void> _pick() async {
     final picked = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => LookupPicker(api: widget.api, path: widget.spec.path, title: widget.label, query: widget.spec.query),
+      builder: (_) => LookupPicker(api: widget.api, path: widget.spec.path, title: widget.label, query: widget.spec.query, selectedId: widget.value, create: widget.onCustom == null ? null : askCustomPrazo, createLabel: 'Prazo personalizado'),
     );
     if (picked == null) return;
+    final custom = picked['_custom'];
+    if (custom is String) return widget.onCustom?.call(custom);
     setState(() => _display = LookupSpec.display(picked));
     widget.onChanged(picked['id'] as int, picked);
   }
@@ -431,12 +476,17 @@ class _LookupFieldState extends State<LookupField> {
 }
 
 class LookupPicker extends StatefulWidget {
-  const LookupPicker({super.key, required this.api, required this.path, required this.title, this.query = const {}});
+  const LookupPicker({super.key, required this.api, required this.path, required this.title, this.query = const {}, this.selectedId, this.create, this.createLabel = 'Novo'});
 
   final ApiClient api;
   final Map<String, dynamic> query;
   final String path;
   final String title;
+  final int? selectedId;
+
+  /// Optional "create new" flow; the created record is returned as the picked item.
+  final Future<Map<String, dynamic>?> Function(BuildContext context)? create;
+  final String createLabel;
 
   @override
   State<LookupPicker> createState() => _LookupPickerState();
@@ -473,8 +523,13 @@ class _LookupPickerState extends State<LookupPicker> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final title = widget.title.replaceAll(' *', '');
     return AlertDialog(
-      title: Text(widget.title.replaceAll(' *', '')),
+      titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+      contentPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      title: Text(title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
       content: SizedBox(
         width: 520,
         height: 440,
@@ -482,21 +537,117 @@ class _LookupPickerState extends State<LookupPicker> {
           children: [
             TextField(
               autofocus: true,
-              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar por código ou nome', isDense: true),
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search),
+                hintText: 'Buscar ${title.toLowerCase()}',
+                filled: true,
+                fillColor: cs.surfaceContainerHigh,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
+              ),
               onChanged: _search,
             ),
-            if (_loading) const LinearProgressIndicator(),
+            const SizedBox(height: 8),
+            SizedBox(height: 3, child: _loading ? const LinearProgressIndicator() : null),
             if (_error != null) Padding(padding: const EdgeInsets.all(8), child: Text(_error!)),
             Expanded(
-              child: ListView.builder(
-                itemCount: _items.length,
-                itemBuilder: (_, i) => ListTile(dense: true, title: Text(LookupSpec.display(_items[i])), onTap: () => Navigator.pop(context, _items[i])),
-              ),
+              child: !_loading && _error == null && _items.isEmpty
+                  ? Center(child: Text('Nenhum resultado', style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)))
+                  : ListView.separated(
+                      itemCount: _items.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 2),
+                      itemBuilder: (_, i) {
+                        final item = _items[i];
+                        final selected = widget.selectedId != null && item['id'] == widget.selectedId;
+                        return ListTile(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                          selected: selected,
+                          selectedTileColor: cs.secondaryContainer,
+                          selectedColor: cs.onSecondaryContainer,
+                          hoverColor: cs.onSurface.withValues(alpha: 0.06),
+                          title: Text(LookupSpec.display(item), style: theme.textTheme.bodyLarge, maxLines: 2, overflow: TextOverflow.ellipsis),
+                          trailing: selected ? const Icon(Icons.check) : null,
+                          onTap: () => Navigator.pop(context, item),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
       ),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar'))],
+      actionsAlignment: MainAxisAlignment.spaceBetween,
+      actions: [
+        if (widget.create != null)
+          TextButton.icon(
+            key: const ValueKey('picker-create'),
+            icon: const Icon(Icons.add),
+            label: Text(widget.createLabel),
+            onPressed: () async {
+              final r = await widget.create!(context);
+              if (r != null && context.mounted) Navigator.pop(context, r);
+            },
+          )
+        else
+          const SizedBox.shrink(),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+      ],
     );
   }
+}
+
+/// Asks for a free-text prazo that belongs to a single quote; returned as `{'_custom': text}`.
+Future<Map<String, dynamic>?> askCustomPrazo(BuildContext context) async {
+  final text = await showDialog<String>(context: context, builder: (_) => const _CustomPrazoDialog());
+  return text == null ? null : {'_custom': text};
+}
+
+class _CustomPrazoDialog extends StatefulWidget {
+  const _CustomPrazoDialog();
+
+  @override
+  State<_CustomPrazoDialog> createState() => _CustomPrazoDialogState();
+}
+
+class _CustomPrazoDialogState extends State<_CustomPrazoDialog> {
+  final _text = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _ok() {
+    final t = _text.text.trim();
+    if (t.isEmpty) return setState(() => _error = 'Informe o prazo');
+    Navigator.pop(context, t);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Prazo personalizado'),
+    content: SizedBox(
+      width: 380,
+      child: TextField(
+        key: const ValueKey('prazo-custom'),
+        controller: _text,
+        autofocus: true,
+        decoration: InputDecoration(
+          labelText: 'Prazo *',
+          hintText: 'ex.: 45 dias, 20% entrada + 30/60',
+          helperText: 'Vale só para este orçamento; não entra na lista de prazos.',
+          errorText: _error,
+          border: const OutlineInputBorder(),
+          isDense: true,
+        ),
+        onSubmitted: (_) => _ok(),
+      ),
+    ),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+      FilledButton(onPressed: _ok, child: const Text('Usar neste orçamento')),
+    ],
+  );
 }

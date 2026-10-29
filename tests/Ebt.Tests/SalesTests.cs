@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Net;
 using Ebt.Api.Endpoints;
 using Ebt.Api.Infrastructure;
+using Ebt.Core.Certificates;
 using Ebt.Core.Entities;
 using Ebt.Core.Inventory;
 using Ebt.Core.Sales;
@@ -71,8 +72,16 @@ public class SalesTests(ApiFixture api)
         Assert.Equal("compras@cliente.com", quote.SentTo);
         Assert.Equal(Today.AddDays(15), quote.ValidUntil);
 
-        quote = await (await Act(sales, quote.Id, "accept", new QuoteActionIn(CustomerPo: "PO-4521"))).Read<QuoteOut>();
+        Assert.Equal(HttpStatusCode.Conflict, (await Act(sales, quote.Id, "purchase-order")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await sales.Put($"/api/sales/quotes/{quote.Id}/request", new QuoteRequestIn("cedo demais"))).StatusCode);
+        quote = await (await Act(sales, quote.Id, "accept")).Read<QuoteOut>();
         Assert.Equal(QuoteStatus.Accepted, quote.Status);
+        Assert.Equal(HttpStatusCode.Conflict, (await sales.Post($"/api/sales/quotes/{quote.Id}/convert", new ConvertInput())).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Act(sales, quote.Id, "purchase-order")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await sales.Put($"/api/sales/quotes/{quote.Id}/request", new QuoteRequestIn("Pedido 4521 por e-mail"))).StatusCode);
+        quote = await (await Act(sales, quote.Id, "purchase-order", new QuoteActionIn(CustomerPo: "PO-4521"))).Read<QuoteOut>();
+        Assert.Equal(QuoteStatus.PurchaseOrder, quote.Status);
+        Assert.Equal("Pedido 4521 por e-mail", quote.RequestText);
         var order = await (await sales.Post($"/api/sales/quotes/{quote.Id}/convert", new ConvertInput())).Read<SalesOrderOut>();
         Assert.Equal(SalesOrderStatus.Created, order.Status);
         Assert.Equal("PO-4521", order.CustomerPo);
@@ -81,7 +90,7 @@ public class SalesTests(ApiFixture api)
         quote = await (await sales.GetAsync($"/api/sales/quotes/{quote.Id}")).Read<QuoteOut>();
         Assert.Equal(QuoteStatus.Converted, quote.Status);
         Assert.Equal(order.Id, quote.SalesOrderId);
-        Assert.Equal(["converted", "accepted", "sent", "approved", "submitted", "created"], quote.History.Select(h => h.Action));
+        Assert.Equal(["converted", "po-received", "accepted", "sent", "approved", "submitted", "created"], quote.History.Select(h => h.Action));
 
         Assert.Equal(HttpStatusCode.Conflict, (await sales.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today))).StatusCode);
         order = await (await sales.Post($"/api/sales/orders/{order.Id}/release", new SalesReleaseIn())).Read<SalesOrderOut>();
@@ -137,11 +146,34 @@ public class SalesTests(ApiFixture api)
         Assert.Null(order.Lines[0].ProductionOrderId);
         Assert.True(order.Ready);
         var pipeline = await (await admin.GetAsync($"/api/sales/pipeline?customerId={s.Customer.Id}")).Read<PipelineOut>();
+        Assert.Contains(pipeline.Stages.First(x => x.Key == "certificate").Cards, c => c.Id == order.Id && c.Badges.Contains("ready"));
+        Assert.DoesNotContain(pipeline.Stages.First(x => x.Key == "ready").Cards, c => c.Id == order.Id);
+
+        var certificate = await (await admin.Post("/api/sales/certificates", new CertificateInput(order.Id, RawMaterialLot: "700261", Hardness: "66 HRB"))).Read<CertificateOut>();
+        Assert.Equal(CertificateStatus.Draft, certificate.Status);
+        Assert.Equal("PO-1", certificate.CustomerPo);
+        Assert.Equal(40m, certificate.Quantity);
+        Assert.Equal(order.Lines[0].Id, certificate.OrderLineId);
+        Assert.Matches(@"^\d+-\d\d$", certificate.Reference);
+        Assert.Equal(2146, certificate.Number);
+        Assert.Contains(certificate.Measures, m => m.Kind == CertificateMeasureKind.Dimensional && m.Name == "Espessura" && m.Specified == "1,50");
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Post($"/api/sales/certificates/{certificate.Id}/issue", new object())).StatusCode);
+        var measures = certificate.Measures.Select(m => new CertificateMeasureInput(m.Kind, m.Name, m.Specified, m.Name == "C" ? "0,081" : null)).ToList();
+        certificate = await (await admin.Put($"/api/sales/certificates/{certificate.Id}", new CertificateInput(order.Id, CustomerPo: "PO-1", Quantity: 40m, Measures: measures, RawMaterialLot: "700261"))).Read<CertificateOut>();
+        certificate = await (await admin.Post($"/api/sales/certificates/{certificate.Id}/issue", new object())).Read<CertificateOut>();
+        Assert.Equal(CertificateStatus.Issued, certificate.Status);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.Put($"/api/sales/certificates/{certificate.Id}", new CertificateInput(order.Id))).StatusCode);
+        pipeline = await (await admin.GetAsync($"/api/sales/pipeline?customerId={s.Customer.Id}")).Read<PipelineOut>();
         Assert.Contains(pipeline.Stages.First(x => x.Key == "ready").Cards, c => c.Id == order.Id && c.Badges.Contains("ready"));
 
         var delivery = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
         Assert.Equal(40m, delivery.Lines.Single().Quantity);
-        (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today))).EnsureSuccessStatusCode();
+        certificate = await (await admin.Post($"/api/sales/certificates/{certificate.Id}/link-delivery", new CertificateLinkIn(delivery.Id))).Read<CertificateOut>();
+        Assert.Equal(delivery.Reference, certificate.DeliveryReference);
+        (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, "2581"))).EnsureSuccessStatusCode();
+        certificate = await (await admin.GetAsync($"/api/sales/certificates/{certificate.Id}")).Read<CertificateOut>();
+        Assert.Equal("2581", certificate.EffectiveInvoiceNumber);
+        Assert.Contains((await (await admin.GetAsync("/api/sales/certificates?q=2581")).Read<Page<CertificateSummaryOut>>()).Items, c => c.Id == certificate.Id);
         order = await (await admin.GetAsync($"/api/sales/orders/{order.Id}")).Read<SalesOrderOut>();
         Assert.Equal(SalesOrderStatus.Shipped, order.Status);
 
@@ -155,6 +187,29 @@ public class SalesTests(ApiFixture api)
         (await admin.Post($"/api/sales/deliveries/{delivery.Id}/confirm", new ConfirmDeliveryIn())).EnsureSuccessStatusCode();
         order = await (await admin.GetAsync($"/api/sales/orders/{order.Id}")).Read<SalesOrderOut>();
         Assert.Equal(SalesOrderStatus.Delivered, order.Status);
+    }
+
+    [Fact]
+    public async Task Customer_default_term_and_custom_term_flow_to_quote_and_order()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var company = new CustomerCompany("26133636000103", "148061942112", true, "Av. Brasil", "100", null, "Centro", "Embu", "SP", "06800000", null, null, null, s.Term.Id);
+        var updated = await (await admin.Put($"/api/customers/{s.Customer.Id}", new CustomerIn(s.Customer.Name, null, null, ConsumerType.Normal, Company: company))).Read<CustomerOut>();
+        Assert.Equal(s.Term.Id, updated.Company!.PaymentTermId);
+        Assert.Equal(s.Term.Name, updated.Company.PaymentTermName);
+
+        var custom = Quote(s) with { PaymentTermId = null, CustomPaymentTerm = "30/60/90" };
+        var quote = await (await admin.Post("/api/sales/quotes", custom)).Read<QuoteOut>();
+        Assert.Null(quote.PaymentTermId);
+        Assert.Equal("30/60/90", quote.CustomPaymentTerm);
+        var fromTerm = await (await admin.Post("/api/sales/quotes", Quote(s))).Read<QuoteOut>();
+        Assert.Equal(s.Term.Id, fromTerm.PaymentTermId);
+        Assert.Equal(s.Term.Name, fromTerm.PaymentTermName);
+
+        var order = await (await admin.Post("/api/sales/orders", new SalesOrderIn(s.Customer.Id, s.Address.Id, [new SalesLineInput(s.Tube.Id, 10m)], null, null, FreightTerms.Cif, null, false, null, "45 dias"))).Read<SalesOrderOut>();
+        Assert.Equal("45 dias", order.CustomPaymentTerm);
+        Assert.Null(order.PaymentTermName);
     }
 
     [Fact]
@@ -186,9 +241,19 @@ public class SalesTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.BadRequest, (await Act(admin, quote.Id, "decline")).StatusCode);
         quote = await (await Act(admin, quote.Id, "decline", new QuoteActionIn("Preço alto"))).Read<QuoteOut>();
         Assert.Equal(QuoteStatus.Rejected, quote.Status);
-        quote = await (await Act(admin, quote.Id, "revise")).Read<QuoteOut>();
+        var original = quote;
+        Assert.EndsWith($"{original.Number}", original.Reference);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Act(admin, quote.Id, "revise")).StatusCode);
+        quote = await (await Act(admin, quote.Id, "revise", new QuoteActionIn("Cliente mudou o pedido", CustomerPo: "PO-9"))).Read<QuoteOut>();
         Assert.Equal(QuoteStatus.Draft, quote.Status);
-        Assert.EndsWith("/R1", quote.Reference);
+        Assert.EndsWith("-B", quote.Reference);
+        Assert.Equal(original.Number, quote.Number);
+        Assert.Equal("PO-9", quote.CustomerPo);
+        Assert.Equal(original.Lines.Count, quote.Lines.Count);
+        var cancelled = await (await admin.GetAsync($"/api/sales/quotes/{original.Id}")).Read<QuoteOut>();
+        Assert.Equal(QuoteStatus.Cancelled, cancelled.Status);
+        Assert.EndsWith("-A", cancelled.Reference);
+        Assert.Equal("Cliente mudou o pedido", cancelled.DecisionNote);
         var edit = Quote(s, otherPrice: 19.5m) with { Notes = "Nova condição" };
         quote = await (await admin.Put($"/api/sales/quotes/{quote.Id}", edit)).Read<QuoteOut>();
         Assert.Equal(19.5m, quote.Lines[1].UnitPrice);

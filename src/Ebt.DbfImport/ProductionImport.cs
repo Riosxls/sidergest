@@ -13,9 +13,9 @@ public sealed class ProductionImport : IImportStep
 {
     public static readonly (string Prefix, string Preferred, string Name)[] Sources =
     [
-        ("G29", "", "shifts"),
-        ("G28", "", "employees"),
-        ("G27", "", "occurrences"),
+        ("G29", "GE290", "shifts"),
+        ("G28", "GE280", "employees"),
+        ("G27", "GE270", "occurrences"),
         ("X09", "XY090", "production orders"),
         ("X31", "XY310", "internal orders"),
         ("X06", "XY060", "order materials"),
@@ -200,7 +200,7 @@ public sealed class ProductionImport : IImportStep
             var qty = r.Dec($"{p}QTDPRO") ?? 0m;
             if (qty <= 0) { Skip(table, $"{ProductionService.ReferenceFor(kind, number)}: quantity is zero"); continue; }
             var created = r.Date($"{p}DTCAD");
-            var due = r.Date(kind == ProductionOrderKind.Internal ? "X31DTPROD" : "X09DTENTR") ?? created ?? DateOnly.FromDateTime(DateTime.Today);
+            var due = r.Date(kind == ProductionOrderKind.Internal ? "X31DTPROD" : "X09DTENTR") ?? created ?? Ebt.Core.Services.Clock.Today();
             var inserted = !orders.TryGetValue((kind, number), out var o);
             if (inserted)
             {
@@ -326,7 +326,7 @@ public sealed class ProductionImport : IImportStep
                 rep = new ProductionReport { Order = o, Operation = op, LegacyKey = key, ReportedAt = DateTimeOffset.UtcNow };
                 db.ProductionReports.Add(reports[key] = rep);
             }
-            rep!.Date = r.Date("X13DTCADAS") ?? DateOnly.FromDateTime(DateTime.Today);
+            rep!.Date = r.Date("X13DTCADAS") ?? Ebt.Core.Services.Clock.Today();
             rep.GoodQuantity = Math.Max(0, r.Dec("X13QTD") ?? 0m);
             rep.Operators = r.Dec("X13QTOPERA") is > 0 and var ops ? ops : rep.Operators;
             rep.WeightKg = r.Dec("X13QTD_KG") is > 0 and var kg ? kg : rep.WeightKg;
@@ -356,7 +356,7 @@ public sealed class ProductionImport : IImportStep
             var inserted = !reports.TryGetValue(key, out var rep);
             if (inserted)
             {
-                rep = new ProductionReport { Order = o, Operation = op, LegacyKey = key, ReportedBy = "import", ReportedAt = DateTimeOffset.UtcNow, Date = DateOnly.FromDateTime(DateTime.Today) };
+                rep = new ProductionReport { Order = o, Operation = op, LegacyKey = key, ReportedBy = "import", ReportedAt = DateTimeOffset.UtcNow, Date = Ebt.Core.Services.Clock.Today() };
                 db.ProductionReports.Add(reports[key] = rep);
             }
             rep!.ScrapQuantity = qty;

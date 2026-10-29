@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -83,6 +84,27 @@ class ApiClient {
       skip += page.items.length;
       if (page.items.isEmpty || skip >= page.total) return all;
     }
+  }
+
+  /// Multipart upload of a single file; returns the decoded JSON response.
+  Future<dynamic> upload(String path, String field, String filename, Uint8List bytes) => _send(path, () async {
+    final req = http.MultipartRequest('POST', _uri(path))
+      ..headers.addAll({'Accept': 'application/json', if (token != null) 'Authorization': 'Bearer $token'})
+      ..files.add(http.MultipartFile.fromBytes(field, bytes, filename: filename));
+    return http.Response.fromStream(await _http.send(req));
+  });
+
+  /// Raw bytes of a file endpoint.
+  Future<Uint8List> download(String path) async {
+    http.Response r;
+    try {
+      r = await _http.get(_uri(path), headers: {if (token != null) 'Authorization': 'Bearer $token'});
+    } catch (e) {
+      throw ApiException(0, 'Servidor indisponível ($baseUrl)');
+    }
+    if (r.statusCode == 401 && token != null) onUnauthorized?.call();
+    if (r.statusCode >= 200 && r.statusCode < 300) return r.bodyBytes;
+    throw _error(r);
   }
 
   Future<dynamic> _send(String path, Future<http.Response> Function() call) async {

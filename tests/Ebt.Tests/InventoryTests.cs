@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Net;
 using Ebt.Api.Endpoints;
 using Ebt.Api.Infrastructure;
@@ -264,5 +265,24 @@ public class InventoryTests(ApiFixture api)
         Assert.Equal(3, results.Count(r => r.StatusCode == HttpStatusCode.Created));
         Assert.All(results.Where(r => r.StatusCode != HttpStatusCode.Created), r => Assert.Equal(HttpStatusCode.Conflict, r.StatusCode));
         Assert.Equal(1m, await Balance(c, m.Id, loc.Id));
+    }
+
+    [Fact]
+    public async Task Stock_document_reversal_honours_if_match()
+    {
+        var c = await api.AdminAsync();
+        var m = await Material(c);
+        var loc = await Location(c);
+        var doc = await Post(c, MovementType.Receipt, Today, new StockLine(m.Id, null, loc.Id, 5m, UnitCost: 2m));
+        var etag = (await c.GetAsync($"/api/stock/documents/{doc.Id}")).Headers.ETag?.ToString();
+        Assert.False(string.IsNullOrEmpty(etag));
+
+        var stale = new HttpRequestMessage(HttpMethod.Post, $"/api/stock/documents/{doc.Id}/reverse") { Content = JsonContent.Create(new ReverseIn(null), options: ApiFixture.Json) };
+        stale.Headers.TryAddWithoutValidation("If-Match", "\"1\"");
+        Assert.Equal(HttpStatusCode.PreconditionFailed, (await c.SendAsync(stale)).StatusCode);
+
+        var fresh = new HttpRequestMessage(HttpMethod.Post, $"/api/stock/documents/{doc.Id}/reverse") { Content = JsonContent.Create(new ReverseIn(null), options: ApiFixture.Json) };
+        fresh.Headers.TryAddWithoutValidation("If-Match", etag);
+        Assert.Equal(HttpStatusCode.Created, (await c.SendAsync(fresh)).StatusCode);
     }
 }

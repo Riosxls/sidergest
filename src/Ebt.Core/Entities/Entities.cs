@@ -14,6 +14,22 @@ public class Customer
     public string? TradeName { get; set; }
     public ConsumerType ConsumerType { get; set; }
     public bool Active { get; set; } = true;
+    // Company (fiscal/contact) data; independent from the delivery addresses.
+    public string? Document { get; set; }
+    public string? StateRegistration { get; set; }
+    public bool IcmsContributor { get; set; }
+    public string? Street { get; set; }
+    public string? Number { get; set; }
+    public string? Complement { get; set; }
+    public string? District { get; set; }
+    public string? City { get; set; }
+    public string? Uf { get; set; }
+    public string? ZipCode { get; set; }
+    public string? Contact { get; set; }
+    public string? Email { get; set; }
+    public string? Phone { get; set; }
+    public int? DefaultPaymentTermId { get; set; }
+    public PaymentTerm? DefaultPaymentTerm { get; set; }
     public List<CustomerAddress> Addresses { get; set; } = new();
 }
 

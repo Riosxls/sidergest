@@ -117,6 +117,10 @@ class LinesEditor extends StatelessWidget {
     required this.lines,
     required this.onChanged,
     this.enabled = true,
+    this.newTitle = 'Nova linha',
+    this.editTitle,
+    this.addLabel = 'Adicionar linha',
+    this.addEnabled = true,
   });
 
   final ApiClient api;
@@ -126,12 +130,16 @@ class LinesEditor extends StatelessWidget {
   final List<Map<String, dynamic>> lines;
   final ValueChanged<List<Map<String, dynamic>>> onChanged;
   final bool enabled;
+  final String newTitle;
+  final String? editTitle;
+  final String addLabel;
+  final bool addEnabled;
 
   Future<void> _edit(BuildContext context, [int? index]) async {
     final r = await showEntityForm(
       context,
       api: api,
-      title: index == null ? 'Nova linha' : 'Linha ${index + 1}',
+      title: index == null ? newTitle : (editTitle ?? 'Linha ${index + 1}'),
       fields: fields,
       initial: index == null ? null : lines[index],
       onSubmit: (_) async => null,
@@ -163,9 +171,9 @@ class LinesEditor extends StatelessWidget {
                 if (enabled)
                   FilledButton.tonalIcon(
                     key: const ValueKey('add-line'),
-                    onPressed: () => _edit(context),
+                    onPressed: addEnabled ? () => _edit(context) : null,
                     icon: const Icon(Icons.add),
-                    label: const Text('Adicionar linha'),
+                    label: Text(addLabel),
                   ),
               ],
             ),

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
+import '../reports/nf_doc.dart';
+import '../reports/print_docs.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
@@ -36,6 +38,7 @@ const productionOrderFields = [
   ),
   FieldSpec('previousOrderId', 'OF anterior', type: FieldType.lookup, lookup: LookupSpec('/api/production/orders')),
   FieldSpec('bales', 'Amarrados', type: FieldType.integer),
+  FieldSpec('primaryTube', 'Tubo primário (perfila)', hint: 'Ex.: Rolo 14,00 x 0,90 mm'),
   FieldSpec('notes', 'Observações'),
 ];
 
@@ -44,6 +47,7 @@ const productionUpdateFields = [
   FieldSpec('dueDate', 'Data de entrega', type: FieldType.date, required: true),
   FieldSpec('customerId', 'Cliente', type: FieldType.lookup, lookup: LookupSpec('/api/customers')),
   FieldSpec('bales', 'Amarrados', type: FieldType.integer),
+  FieldSpec('primaryTube', 'Tubo primário (perfila)', hint: 'Ex.: Rolo 14,00 x 0,90 mm'),
   FieldSpec('notes', 'Observações'),
 ];
 
@@ -328,6 +332,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
       if (s.canProduce && status == 'Created') PopupMenuItem(value: _delete, child: const Text('Excluir')),
     ];
     return [
+      if (_o != null) PrintButton(name: 'Ordem de fabricação ${_o!['reference']}', builder: () => buildProductionOrderPdf(s.api, _o!)),
       if (s.canProduce && status == 'Created')
         TextButton.icon(key: const ValueKey('of-release'), onPressed: _release, icon: const Icon(Icons.play_arrow), label: const Text('Liberar')),
       if (s.canProduce && status == 'Stopped')
@@ -404,6 +409,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
             ('Programado', o['plannedStart'] == null ? '' : '${fmtDay(o['plannedStart'])} a ${fmtDay(o['plannedEnd'])}'),
             ('Ajustado', o['adjustedStart'] == null ? '' : '${fmtDay(o['adjustedStart'])} a ${fmtDay(o['adjustedEnd'])}'),
             ('Amarrados', fmt(o['bales'])),
+            ('Tubo primário', fmt(o['primaryTube'])),
             ('Observações', fmt(o['notes'])),
             ('Criada', '${fmt(o['createdBy'])} · ${fmtDate(o['createdAt'])}'),
             ('Liberada', fmtDate(o['releasedAt'])),
@@ -462,6 +468,22 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
     if (r != null) _load();
   }
 
+  Future<void> _details(Map<String, dynamic> op) async {
+    final r = await submitForm(
+      context,
+      api: api,
+      title: 'Tolerância e medidas · operação ${op['sequence']}',
+      fields: const [
+        FieldSpec('tolerance', 'Requisitos/Tolerância', hint: 'Ex.: ± 0,10'),
+        FieldSpec('measureStart', 'Medida início'),
+        FieldSpec('measureEnd', 'Medida final'),
+      ],
+      initial: {'tolerance': op['tolerance'], 'measureStart': op['measureStart'], 'measureEnd': op['measureEnd']},
+      submit: (b) => api.put('$base/operations/${op['sequence']}/details', b),
+    );
+    if (r != null) _set(r);
+  }
+
   Future<void> _outsource(Map<String, dynamic> op) async {
     final r = await submitForm(
       context,
@@ -505,12 +527,23 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
       fields: [
         FieldSpec('date', 'Data', type: FieldType.date, required: true, defaultValue: isoDate(DateTime.now())),
         FieldSpec('quantity', 'Quantidade', type: FieldType.decimal, required: true, defaultValue: op['remaining']),
-        const FieldSpec('invoiceNumber', 'NF de remessa'),
+        const FieldSpec('unitValue', 'Valor de referência (R\$/un.)', type: FieldType.decimal, hint: 'Obrigatório para emitir a NF 5901 automaticamente'),
+        const FieldSpec('invoiceNumber', 'NF de remessa', hint: 'Vazio = emitir NF-e (quando o emissor estiver ligado)'),
         const FieldSpec('notes', 'Observações'),
       ],
       submit: (b) => api.post('$base/operations/${op['sequence']}/outside-shipments', b),
     );
-    if (r != null) _load();
+    if (r != null) {
+      _load();
+      if (mounted) {
+        await printNf(
+          context,
+          name: 'NF remessa ${r['reference']}',
+          number: r['invoiceNumber'] == null ? '' : '${r['invoiceNumber']}',
+          build: (f) => buildOutsideNfPdf(api, r, f),
+        );
+      }
+    }
   }
 
   Widget _operations(Map<String, dynamic> o) {
@@ -526,6 +559,8 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
               col('Seq.', 'sequence'),
               ColumnSpec('Descrição', (e) => '${e['description'] ?? ''}${e['external'] == true ? ' (terceiro)' : ''}'),
               col('Máquina', 'machineCode'),
+              col('Tolerância', 'tolerance'),
+              ColumnSpec('Medidas', (e) => [e['measureStart'], e['measureEnd']].where((m) => m != null).join(' / ')),
               col('Setup (h)', 'setupHours', numeric: true),
               col('Peças/h', 'piecesPerHour', numeric: true),
               ColumnSpec('Horas', (e) => fmtNum(e['plannedHours']), numeric: true),
@@ -561,6 +596,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
                         PopupMenuItem(value: () => _outsource(op), child: Text(op['external'] == true ? 'Trocar fornecedor' : 'Beneficiamento externo')),
                         if (op['external'] == true) PopupMenuItem(value: () => _internal(op), child: const Text('Voltar para interno')),
                         PopupMenuItem(value: () => _overrun(op), child: const Text('Liberar excedente')),
+                        PopupMenuItem(value: () => _details(op), child: const Text('Tolerância e medidas')),
                       ],
                     ),
                   ]

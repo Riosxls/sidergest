@@ -1,5 +1,6 @@
 using static Ebt.Core.Services.Text;
 using Ebt.Core.Entities;
+using Ebt.Core.Fiscal;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ebt.Core.Production;
@@ -7,6 +8,21 @@ namespace Ebt.Core.Production;
 public sealed partial class ProductionService
 {
     private static readonly ProductionOrderStatus[] Reportable = [ProductionOrderStatus.Released, ProductionOrderStatus.InProduction];
+
+    public async Task<ProductionOrderOperation> UpdateOperationDetailsAsync(int orderId, int sequence, OperationDetailsInput i, CancellationToken ct = default)
+    {
+        return await InTransaction(async () =>
+        {
+            var order = await LockAsync(orderId, ct);
+            if (!Open.Contains(order.Status)) throw ProductionException.Conflict($"Order is {order.Status}");
+            var op = Operation(order, sequence);
+            op.Tolerance = Clean(i.Tolerance);
+            op.MeasureStart = Clean(i.MeasureStart);
+            op.MeasureEnd = Clean(i.MeasureEnd);
+            await db.SaveChangesAsync(ct);
+            return op;
+        }, ct);
+    }
 
     public async Task<ProductionOrderOperation> OutsourceAsync(int orderId, int sequence, OutsourceInput? i, CancellationToken ct = default)
     {
@@ -54,6 +70,13 @@ public sealed partial class ProductionService
             db.OutsideShipments.Add(shipment);
             if (order.Status == ProductionOrderStatus.Released) order.Status = ProductionOrderStatus.InProduction;
             await db.SaveChangesAsync(ct);
+            // Remessa para industrialização (5901): the NF is authorized by SEFAZ before the shipment is kept; a rejection rolls the whole send back.
+            if (fiscal is not null && shipment.InvoiceNumber is null && await fiscal.EnabledAsync(ct))
+            {
+                var nf = await fiscal.IssueOutsideShipmentAsync(shipment, order, op, new OutsideInvoiceOptions(i.UnitValue ?? 0m, i.Cfop), user, ct);
+                shipment.InvoiceNumber = nf.Number.ToString();
+                await db.SaveChangesAsync(ct);
+            }
             return shipment;
         }, ct);
     }

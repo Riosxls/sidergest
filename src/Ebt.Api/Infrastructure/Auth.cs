@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
@@ -24,12 +25,27 @@ public class JwtOptions
     public string Issuer { get; set; } = "ebt-erp";
     public string Audience { get; set; } = "ebt-erp-clients";
     public string SigningKey { get; set; } = "";
-    public int ExpiresMinutes { get; set; } = 480;
+    public int ExpiresMinutes { get; set; } = 60;
+    public int RefreshDays { get; set; } = 14;
 }
 
 public class TokenService(JwtOptions options)
 {
     public const string VersionClaim = "tv";
+
+    public static string HashRefresh(string token) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
+
+    /// <summary>Creates, stores and returns a new opaque refresh token for the user (only its hash is persisted).</summary>
+    public async Task<(string Token, DateTimeOffset ExpiresAt)> NewRefreshAsync(AppUser user, EbtDbContext db, CancellationToken ct)
+    {
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var now = DateTimeOffset.UtcNow;
+        var expires = now.AddDays(options.RefreshDays);
+        db.RefreshTokens.Add(new RefreshToken { UserId = user.Id, TokenHash = HashRefresh(token), CreatedAt = now, ExpiresAt = expires });
+        await db.RefreshTokens.Where(r => r.UserId == user.Id && r.ExpiresAt < now).ExecuteDeleteAsync(ct);
+        await db.SaveChangesAsync(ct);
+        return (token, expires);
+    }
 
     public (string Token, DateTimeOffset ExpiresAt) Issue(AppUser user)
     {
@@ -64,7 +80,8 @@ public class TokenService(JwtOptions options)
 }
 
 public record LoginRequest(string? Username, string? Password);
-public record LoginResponse(string Token, DateTimeOffset ExpiresAt, string Username, UserRole Role, string[] Permissions);
+public record LoginResponse(string Token, DateTimeOffset ExpiresAt, string Username, UserRole Role, string[] Permissions, string RefreshToken, DateTimeOffset RefreshExpiresAt);
+public record RefreshRequest(string? RefreshToken);
 public record UserDto(int Id, string Username, UserRole Role, bool Active);
 public record CreateUserRequest(string Username, string Password, UserRole Role);
 public record UpdateUserRequest(UserRole Role, bool Active, string? Password);
@@ -74,10 +91,12 @@ public static class AuthEndpoints
     public const int MinPasswordLength = 10;
     public const int MaxFailedLogins = 5;
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
-    private static readonly PasswordHasher<AppUser> DummyHasher = new();
+    private static readonly PasswordHasher<AppUser> Hasher = new();
     private static readonly AppUser Dummy = new() { Username = "", PasswordHash = "" };
-    private static readonly string DummyHash = DummyHasher.HashPassword(Dummy, "dummy-password-for-timing");
+    private static readonly string DummyHash = Hasher.HashPassword(Dummy, "dummy-password-for-timing");
 
+
+    public static bool VerifyPassword(AppUser user, string password) => Hasher.VerifyHashedPassword(user, user.PasswordHash, password) != PasswordVerificationResult.Failed;
 
     public static void MapAuth(this WebApplication app)
     {
@@ -119,7 +138,41 @@ public static class AuthEndpoints
             await db.SaveChangesAsync(ct);
             var (token, expires) = tokens.Issue(user);
             log.LogInformation("User {User} logged in from {Ip}", user.Username, http.Connection.RemoteIpAddress);
-            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role)));
+            var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct);
+            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires));
+        }).AllowAnonymous().RequireRateLimiting(Policies.LoginLimiter);
+
+        auth.MapPost("/refresh", async (RefreshRequest req, EbtDbContext db, TokenService tokens, ILoggerFactory logs, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(req.RefreshToken)) return Results.Unauthorized();
+            var hash = TokenService.HashRefresh(req.RefreshToken.Trim());
+            var stored = await db.RefreshTokens.Include(r => r.User).FirstOrDefaultAsync(r => r.TokenHash == hash, ct);
+            if (stored?.User is not { } user) return Results.Unauthorized();
+            var now = DateTimeOffset.UtcNow;
+            if (stored.RevokedAt is not null)
+            {
+                // A rotated token came back: treat it as stolen and sign the user out everywhere.
+                user.TokenVersion++;
+                await db.RefreshTokens.Where(r => r.UserId == user.Id).ExecuteDeleteAsync(ct);
+                await db.SaveChangesAsync(ct);
+                logs.CreateLogger("Ebt.Auth").LogWarning("Refresh token reuse detected for {User}; all sessions revoked", user.Username);
+                return Results.Unauthorized();
+            }
+            if (stored.ExpiresAt <= now || !user.Active) return Results.Unauthorized();
+            stored.RevokedAt = now;
+            var (token, expires) = tokens.Issue(user);
+            var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct);
+            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires));
+        }).AllowAnonymous().RequireRateLimiting(Policies.LoginLimiter);
+
+        auth.MapPost("/logout", async (RefreshRequest req, EbtDbContext db, CancellationToken ct) =>
+        {
+            if (!string.IsNullOrWhiteSpace(req.RefreshToken))
+            {
+                var hash = TokenService.HashRefresh(req.RefreshToken.Trim());
+                await db.RefreshTokens.Where(r => r.TokenHash == hash).ExecuteDeleteAsync(ct);
+            }
+            return Results.NoContent();
         }).AllowAnonymous().RequireRateLimiting(Policies.LoginLimiter);
 
         auth.MapGet("/me", (ClaimsPrincipal principal) => Results.Ok(new
@@ -164,6 +217,7 @@ public static class AuthEndpoints
             if (revoke)
             {
                 user.TokenVersion++;
+                await db.RefreshTokens.Where(r => r.UserId == user.Id).ExecuteDeleteAsync(ct);
                 user.FailedLogins = 0;
                 user.LockedUntil = null;
                 logs.CreateLogger("Ebt.Auth").LogInformation("User {Target} changed by {Actor}: role {Role}, active {Active}, password changed {Pwd}", user.Username, actor.Identity?.Name, user.Role, user.Active, req.Password is not null);

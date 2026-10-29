@@ -33,14 +33,22 @@ if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("
     throw new InvalidOperationException("Jwt:SigningKey is a placeholder value; set a real random secret (Jwt__SigningKey / EBT_JWT_KEY).");
 Ebt.Core.Services.Clock.Configure(builder.Configuration["Clock:TimeZone"]);
 
-builder.Services.AddDbContext<EbtDbContext>(o => o
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
+builder.Services.AddScoped<AuditInterceptor>();
+builder.Services.AddDbContext<EbtDbContext>((sp, o) => o
     .UseNpgsql(builder.Configuration.GetConnectionString("Ebt") ?? throw new InvalidOperationException("ConnectionStrings:Ebt is not set."))
-    .UseSnakeCaseNamingConvention());
+    .UseSnakeCaseNamingConvention()
+    .AddInterceptors(sp.GetRequiredService<AuditInterceptor>()));
 builder.Services.AddScoped<BomService>();
 builder.Services.AddScoped<StockService>();
 builder.Services.AddPurchasing();
 builder.Services.AddProduction();
+builder.Services.AddFiscal(builder.Configuration);
 builder.Services.AddSales();
+builder.Services.AddCertificates();
+builder.Services.AddViability();
+builder.Services.AddSteel();
 builder.Services.AddSingleton(jwt);
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
@@ -131,12 +139,18 @@ using (var scope = app.Services.CreateScope())
 app.MapGet("/", (IConfiguration c, IWebHostEnvironment e) => Results.Redirect(c.GetValue("Swagger:Enabled", e.IsDevelopment()) ? "/swagger" : "/health")).AllowAnonymous().ExcludeFromDescription();
 app.MapGet("/health", async (EbtDbContext db) => await db.Database.CanConnectAsync() ? Results.Ok(new { status = "ok" }) : Results.StatusCode(503)).AllowAnonymous();
 app.MapAuth();
+app.MapAudit();
 app.MapMasterData();
 app.MapProducts();
 app.MapInventory();
 app.MapPurchasing();
 app.MapProduction();
 app.MapSales();
+app.MapCertificates();
+app.MapFiscal();
+app.MapReports();
+app.MapViability();
+app.MapSteel();
 
 app.Run();
 
