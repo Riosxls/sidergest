@@ -44,7 +44,8 @@ public sealed class PurchasingFixture : IAsyncLifetime
             .UseSetting("ConnectionStrings:Ebt", ConnectionString)
             .UseSetting("Jwt:SigningKey", "test-signing-key-that-is-at-least-32-bytes-long")
             .UseSetting("Database:MigrateOnStartup", "true")
-            .UseSetting("Logging:LogLevel:Default", "None")
+            .UseSetting("RateLimit:LoginPerMinute", "100000")
+            .UseSetting("Logging:LogLevel:Default", Environment.GetEnvironmentVariable("EBT_TEST_LOG") ?? "None")
             .UseSetting("Bootstrap:AdminUser", ApiFixture.AdminUser)
             .UseSetting("Bootstrap:AdminPassword", ApiFixture.AdminPassword)
             .ConfigureTestServices(s => s.AddSingleton<IGoodsReceiptHandler>(Handler)));

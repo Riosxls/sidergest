@@ -376,9 +376,9 @@ public sealed class PurchasingImport : IImportStep
 
     private async Task Advance(string sequence, string table, int counter, CancellationToken ct)
     {
-        var max = await db.Database.SqlQueryRaw<int>($"SELECT COALESCE(MAX(number), 0) AS \"Value\" FROM {table}").SingleAsync(ct);
+        var max = await db.Database.SqlQueryRaw<int>("SELECT COALESCE(MAX(number), 0) AS \"Value\" FROM " + SqlIdentifier.Safe(table)).SingleAsync(ct);
         var last = Math.Max(max, counter);
-        if (last > 0) await db.Database.ExecuteSqlRawAsync($"SELECT setval('{sequence}', GREATEST({last}, (SELECT last_value FROM {sequence})))", ct);
+        if (last > 0) await db.Database.ExecuteSqlRawAsync("SELECT setval('" + SqlIdentifier.Safe(sequence) + "', GREATEST(" + last + ", (SELECT last_value FROM " + SqlIdentifier.Safe(sequence) + ")))", ct);
     }
 
     private static bool Same(QuotationItem item, Material? m, string? code) =>

@@ -260,4 +260,8 @@ public class AppUser
     public required string PasswordHash { get; set; }
     public UserRole Role { get; set; }
     public bool Active { get; set; } = true;
+    /// <summary>Embedded in issued tokens; bumping it revokes every token already issued to this user.</summary>
+    public int TokenVersion { get; set; }
+    public int FailedLogins { get; set; }
+    public DateTimeOffset? LockedUntil { get; set; }
 }

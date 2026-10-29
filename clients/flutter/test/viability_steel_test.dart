@@ -12,6 +12,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'role_permissions.dart';
+
 http.Response json(Object body) => http.Response(jsonEncode(body), 200, headers: {'content-type': 'application/json; charset=utf-8'});
 
 Map<String, dynamic> study({String status = 'InReview', bool quality = false}) => {
@@ -141,7 +143,8 @@ Future<(Session, Fake)> pump(WidgetTester tester, Fake fake, Widget Function(Ses
           api: ApiClient(baseUrl: 'http://api.test', client: fake.client, token: 'tok'),
         )
         ..username = 'ana'
-        ..role = fake.role;
+        ..role = fake.role
+        ..permissions = rolePermissions[fake.role]!;
   await tester.pumpWidget(
     MaterialApp(
       locale: const Locale('pt', 'BR'),

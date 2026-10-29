@@ -1,3 +1,4 @@
+using static Ebt.Api.Infrastructure.Crud;
 using System.Security.Claims;
 using Ebt.Api.Infrastructure;
 using Ebt.Core.Certificates;
@@ -28,7 +29,6 @@ public static class CertificateEndpoints
     public static IServiceCollection AddCertificates(this IServiceCollection services)
     {
         services.AddScoped<CertificateService>();
-        services.AddAuthorization(o => o.AddPolicy(CertificatePolicies.Manage, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Engineering), nameof(UserRole.Production), nameof(UserRole.Sales), nameof(UserRole.SalesManager))));
         return services;
     }
 
@@ -48,9 +48,9 @@ public static class CertificateEndpoints
             if (!string.IsNullOrWhiteSpace(company)) x = x.Where(c => c.Company == company.Trim().ToUpper());
             if (!string.IsNullOrWhiteSpace(q))
             {
-                var t = $"%{q.Trim()}%";
+                var t = Like(q);
                 x = x.Where(c => EF.Functions.ILike(c.Reference, t) || EF.Functions.ILike(c.Order!.Reference, t) || EF.Functions.ILike(c.Order.Customer!.Name, t) || EF.Functions.ILike(c.Description, t)
-                    || c.CustomerPo != null && EF.Functions.ILike(c.CustomerPo, t) || c.InvoiceNumber != null && EF.Functions.ILike(c.InvoiceNumber, t) || c.Delivery!.InvoiceNumber != null && EF.Functions.ILike(c.Delivery.InvoiceNumber, t));
+                    || c.CustomerPo != null && EF.Functions.ILike(c.CustomerPo!, t) || c.InvoiceNumber != null && EF.Functions.ILike(c.InvoiceNumber!, t) || c.Delivery!.InvoiceNumber != null && EF.Functions.ILike(c.Delivery.InvoiceNumber, t));
             }
             var (sk, n) = (Math.Max(skip ?? 0, 0), Math.Clamp(take ?? 50, 1, 500));
             var total = await x.CountAsync(ct);

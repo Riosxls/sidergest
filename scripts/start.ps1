@@ -109,9 +109,23 @@ if (-not $NoDocker) {
 
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 
+function New-Secret([int]$Bytes = 32) {
+    $b = New-Object byte[] $Bytes
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+    [Convert]::ToBase64String($b).TrimEnd('=').Replace('+', 'A').Replace('/', 'B')
+}
+
 if (-not $NoDocker) {
     Push-Location $Root
-    $runningApi = Get-ComposePort 'api' 8080
+    $EnvFile = Join-Path $Root '.env'
+    if (-not (Test-Path $EnvFile)) {
+        # Generate local secrets once. An existing database volume keeps its old password, so reuse the old dev one then.
+        $hasVolume = (& docker volume ls -q 2>$null) -match 'pgdata'
+        $dbPass = if ($hasVolume) { 'ebt-dev-password' } else { New-Secret 18 }
+        @("EBT_DB_PASSWORD=$dbPass", "EBT_JWT_KEY=$(New-Secret 48)", 'EBT_ADMIN_USER=admin', "EBT_ADMIN_PASSWORD=$(New-Secret 12)", 'EBT_SWAGGER=true') | Set-Content -Path $EnvFile -Encoding ascii
+        Write-Host "Created .env with generated secrets (the admin password in it only applies to a new database)." -ForegroundColor Yellow
+    }
+    $runningApi =Get-ComposePort 'api' 8080
     $runningDb = Get-ComposePort 'db' 5432
     $ApiPort = if ($runningApi) { $runningApi } else { Find-Port $ApiPort 'api' }
     $DbPort = if ($runningDb) { $runningDb } else { Find-Port $DbPort 'db' }
@@ -173,7 +187,7 @@ Write-Host ""
 Write-Host "API      $ApiUrl   (Swagger: $ApiUrl/swagger)" -ForegroundColor Green
 if (-not $NoDocker) { Write-Host "Postgres localhost:$DbPort  (ebt / ebt-dev-password)" -ForegroundColor Green }
 if ($Web -or $Device -in @('chrome', 'edge', 'web-server')) { Write-Host "Web app  http://localhost:$WebPort" -ForegroundColor Green }
-Write-Host "Login    admin / sidergest123" -ForegroundColor Green
+Write-Host "Login    admin / (password in .env: EBT_ADMIN_PASSWORD; local mode: sidergest123)" -ForegroundColor Green
 Write-Host "Stop     stop.bat" -ForegroundColor Green
 Write-Host ""
 

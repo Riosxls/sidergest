@@ -1,3 +1,4 @@
+using static Ebt.Core.Services.Text;
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
 using Ebt.Core.Fiscal;
@@ -442,8 +443,8 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
         var reservationIds = lines.Where(l => l.ReservationId != null).Select(l => l.ReservationId!.Value).ToList();
         var reserved = await db.StockReservations.Where(r => reservationIds.Contains(r.Id) && r.Status == ReservationStatus.Open)
             .ToDictionaryAsync(r => r.Id, r => r.Quantity - r.Consumed, ct);
-        var free = new Dictionary<int, decimal>();
-        foreach (var p in lines.Select(l => l.ProductId).Distinct()) free[p] = Math.Max(0, await stock.FreeQuantityAsync(new StockItem(null, p), null, ct));
+        var freeRaw = await stock.FreeQuantitiesAsync(lines.Select(l => l.ProductId).Distinct().ToList(), ct);
+        var free = freeRaw.ToDictionary(kv => kv.Key, kv => Math.Max(0, kv.Value));
         var today = Today();
 
         var result = new Dictionary<int, OrderProgressInfo>();
@@ -706,7 +707,7 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
         db.SalesEvents.Add(new SalesEvent { Kind = kind, RecordId = id, Action = action, FromStatus = from?.ToString(), ToStatus = to?.ToString(), Note = Clean(note), User = user, At = DateTimeOffset.UtcNow });
 
     private async Task<int> NextAsync(string sequence, CancellationToken ct) =>
-        await db.Database.SqlQueryRaw<int>($"SELECT nextval('{sequence}')::int AS \"Value\"").SingleAsync(ct);
+        await db.Database.SqlQueryRaw<int>("SELECT nextval('" + SqlIdentifier.Safe(sequence) + "')::int AS \"Value\"").SingleAsync(ct);
 
     private async Task<Quote> LockQuoteAsync(int id, CancellationToken ct)
     {
@@ -732,25 +733,8 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
         return d;
     }
 
-    private async Task<T> InTransaction<T>(Func<Task<T>> work, CancellationToken ct)
-    {
-        if (db.Database.CurrentTransaction is not null) return await work();
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-        try
-        {
-            var result = await work();
-            await tx.CommitAsync(ct);
-            return result;
-        }
-        catch
-        {
-            await tx.RollbackAsync(CancellationToken.None);
-            db.ChangeTracker.Clear();
-            throw;
-        }
-    }
+    private Task<T> InTransaction<T>(Func<Task<T>> work, CancellationToken ct) => db.InTransactionAsync(work, ct);
 
-    public static DateOnly Today() => DateOnly.FromDateTime(DateTime.Today);
+    public static DateOnly Today() => Ebt.Core.Services.Clock.Today();
     private static decimal Money(decimal d) => Math.Round(d, 2, MidpointRounding.AwayFromZero);
-    private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 }

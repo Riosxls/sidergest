@@ -128,6 +128,14 @@ class QuotesScreen extends StatefulWidget {
   State<QuotesScreen> createState() => _QuotesScreenState();
 }
 
+Future<void> newQuote(BuildContext context, Session session, {VoidCallback? onSaved}) async {
+  final q = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => QuoteEditorScreen(session: session)));
+  onSaved?.call();
+  if (q == null || !context.mounted) return;
+  await openQuote(context, session, q['id'] as int);
+  onSaved?.call();
+}
+
 class _QuotesScreenState extends State<QuotesScreen> {
   final _list = GlobalKey<RecordListState>();
   String? _status;
@@ -142,13 +150,7 @@ class _QuotesScreenState extends State<QuotesScreen> {
     await runAction(context, () => widget.session.api.post('/api/sales/quotes/${e['id']}/cancel', {'note': reason}), success: '${e['reference']} cancelado');
   }
 
-  Future<void> _new() async {
-    final q = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => QuoteEditorScreen(session: widget.session)));
-    _list.currentState?.reload();
-    if (q == null || !mounted) return;
-    await openQuote(context, widget.session, q['id'] as int);
-    _list.currentState?.reload();
-  }
+  Future<void> _new() => newQuote(context, widget.session, onSaved: () => _list.currentState?.reload());
 
   @override
   Widget build(BuildContext context) => RecordList(

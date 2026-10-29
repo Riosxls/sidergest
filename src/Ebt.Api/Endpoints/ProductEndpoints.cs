@@ -30,7 +30,7 @@ public static class ProductEndpoints
             Create = i => { var p = new Product { Code = "", Name = "", Ncm = "", StockUnit = "" }; ApplyProduct(i, p); return p; },
             Apply = ApplyProduct,
             Validate = (i, _, _) => Task.FromResult(ValidateProduct(i)),
-            Search = (q, s) => q.Where(p => p.Code.StartsWith(s) || EF.Functions.ILike(p.Name, $"%{s}%")),
+            Search = (q, s) => q.Where(p => p.Code.StartsWith(s) || EF.Functions.ILike(p.Name, Like(s))),
             Order = q => q.OrderBy(p => p.Code),
             BeforeDelete = async (id, db, ct) => await db.BomItems.AnyAsync(b => b.ComponentProductId == id, ct) ? "Product is used as a component in another bill of materials" : null
         });

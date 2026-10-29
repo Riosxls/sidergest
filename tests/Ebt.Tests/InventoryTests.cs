@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Net;
 using Ebt.Api.Endpoints;
 using Ebt.Api.Infrastructure;
@@ -9,7 +10,7 @@ namespace Ebt.Tests;
 [Collection("api")]
 public class InventoryTests(ApiFixture api)
 {
-    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.Today);
+    private static readonly DateOnly Today = Ebt.Core.Services.Clock.Today();
 
     private static string Code(string prefix) => $"{prefix}{Guid.NewGuid():N}"[..12].ToUpper();
 
@@ -238,7 +239,7 @@ public class InventoryTests(ApiFixture api)
 
         await Post(stock, MovementType.Receipt, feb, new StockLine(b.Id, null, loc.Id, 20.5m, UnitCost: 11m));
         (await stock.PostAsync("/api/stock/closings/200102", null)).EnsureSuccessStatusCode();
-        var febRow = (await (await c.GetAsync($"/api/stock/average-costs?period=200102&thicknessMm={thickness}")).Read<List<AverageCostOut>>()).Single();
+        var febRow = (await (await c.GetAsync($"/api/stock/average-costs?period=200102&thicknessMm={thickness.ToString(System.Globalization.CultureInfo.InvariantCulture)}")).Read<List<AverageCostOut>>()).Single();
         var openingFeb = 200m + 100.6m + 50.7m + 29.9m - 30m;
         var mFeb = 11m + 0.05m * (11m - 1m);
         Assert.Equal(openingFeb, febRow.OpeningQuantity);
@@ -247,7 +248,7 @@ public class InventoryTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.Forbidden, (await stock.DeleteAsync("/api/stock/closings/200102")).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await c.DeleteAsync("/api/stock/closings/200101")).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await c.DeleteAsync("/api/stock/closings/200102")).StatusCode);
-        Assert.Empty(await (await c.GetAsync($"/api/stock/average-costs?period=200102&thicknessMm={thickness}")).Read<List<AverageCostOut>>());
+        Assert.Empty(await (await c.GetAsync($"/api/stock/average-costs?period=200102&thicknessMm={thickness.ToString(System.Globalization.CultureInfo.InvariantCulture)}")).Read<List<AverageCostOut>>());
         await Post(stock, MovementType.Receipt, feb, new StockLine(b.Id, null, loc.Id, 1m, UnitCost: 11m));
         Assert.Equal(HttpStatusCode.NoContent, (await c.DeleteAsync("/api/stock/closings/200101")).StatusCode);
         (await c.Put("/api/stock/settings", new StockSettingsIn(false, true, 0, 0, 0))).EnsureSuccessStatusCode();
@@ -264,5 +265,24 @@ public class InventoryTests(ApiFixture api)
         Assert.Equal(3, results.Count(r => r.StatusCode == HttpStatusCode.Created));
         Assert.All(results.Where(r => r.StatusCode != HttpStatusCode.Created), r => Assert.Equal(HttpStatusCode.Conflict, r.StatusCode));
         Assert.Equal(1m, await Balance(c, m.Id, loc.Id));
+    }
+
+    [Fact]
+    public async Task Stock_document_reversal_honours_if_match()
+    {
+        var c = await api.AdminAsync();
+        var m = await Material(c);
+        var loc = await Location(c);
+        var doc = await Post(c, MovementType.Receipt, Today, new StockLine(m.Id, null, loc.Id, 5m, UnitCost: 2m));
+        var etag = (await c.GetAsync($"/api/stock/documents/{doc.Id}")).Headers.ETag?.ToString();
+        Assert.False(string.IsNullOrEmpty(etag));
+
+        var stale = new HttpRequestMessage(HttpMethod.Post, $"/api/stock/documents/{doc.Id}/reverse") { Content = JsonContent.Create(new ReverseIn(null), options: ApiFixture.Json) };
+        stale.Headers.TryAddWithoutValidation("If-Match", "\"1\"");
+        Assert.Equal(HttpStatusCode.PreconditionFailed, (await c.SendAsync(stale)).StatusCode);
+
+        var fresh = new HttpRequestMessage(HttpMethod.Post, $"/api/stock/documents/{doc.Id}/reverse") { Content = JsonContent.Create(new ReverseIn(null), options: ApiFixture.Json) };
+        fresh.Headers.TryAddWithoutValidation("If-Match", etag);
+        Assert.Equal(HttpStatusCode.Created, (await c.SendAsync(fresh)).StatusCode);
     }
 }

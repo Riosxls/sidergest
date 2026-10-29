@@ -1,3 +1,4 @@
+using static Ebt.Core.Services.Text;
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -34,7 +35,7 @@ public readonly record struct StockItem(int? MaterialId, int? ProductId)
     public long LockKey => MaterialId is { } m ? m : -(long)ProductId!.Value;
 }
 
-public class StockService(EbtDbContext db)
+public partial class StockService(EbtDbContext db)
 {
     public static readonly MovementType[] Inbound = [MovementType.OpeningBalance, MovementType.Receipt, MovementType.ProductionReceipt, MovementType.CustomerReturn, MovementType.AdjustmentIn];
     public static readonly MovementType[] Outbound = [MovementType.Issue, MovementType.IndirectIssue, MovementType.Shipment, MovementType.ReturnToSupplier, MovementType.AdjustmentOut];
@@ -153,11 +154,18 @@ public class StockService(EbtDbContext db)
 
     public async Task<StockReservation> ReleaseAsync(int reservationId, CancellationToken ct = default)
     {
-        var r = await db.StockReservations.FirstOrDefaultAsync(x => x.Id == reservationId, ct) ?? throw StockException.NotFound("Reservation not found");
-        if (r.Status != ReservationStatus.Open) throw StockException.Conflict("Reservation is not open");
-        r.Status = ReservationStatus.Released;
-        await db.SaveChangesAsync(ct);
-        return r;
+        return await InTransaction(async () =>
+        {
+            var head = await db.StockReservations.AsNoTracking().Where(x => x.Id == reservationId).Select(x => new { x.MaterialId, x.ProductId }).FirstOrDefaultAsync(ct)
+                ?? throw StockException.NotFound("Reservation not found");
+            await LockAsync([new StockItem(head.MaterialId, head.ProductId)], ct);
+            var r = await db.StockReservations.FirstAsync(x => x.Id == reservationId, ct);
+            await db.Entry(r).ReloadAsync(ct); // re-read under the item lock
+            if (r.Status != ReservationStatus.Open) throw StockException.Conflict("Reservation is not open");
+            r.Status = ReservationStatus.Released;
+            await db.SaveChangesAsync(ct);
+            return r;
+        }, ct);
     }
 
     public async Task<decimal> FreeQuantityAsync(StockItem item, int? excludeReservationId, CancellationToken ct = default)
@@ -173,141 +181,21 @@ public class StockService(EbtDbContext db)
         return onHand - reserved;
     }
 
-    public async Task<decimal> CurrentAverageAsync(int materialId, DateOnly date, CancellationToken ct = default)
+    /// <summary>Free quantity (on hand minus open reservations) for many products in two queries.</summary>
+    public async Task<Dictionary<int, decimal>> FreeQuantitiesAsync(IReadOnlyCollection<int> productIds, CancellationToken ct = default)
     {
-        var material = materials.TryGetValue(materialId, out var m) ? m : await db.Materials.AsNoTracking().FirstAsync(x => x.Id == materialId, ct);
-        var period = PeriodOf(date);
-        var thickness = Bucket(material);
-        var row = await db.AverageCosts.AsNoTracking()
-            .Where(a => a.Period < period && (thickness != null ? a.ThicknessMm == thickness : a.MaterialId == materialId))
-            .OrderByDescending(a => a.Period).FirstOrDefaultAsync(ct);
-        if (row is not null) return row.Average;
-        var ids = await BucketMaterialIdsAsync(material, ct);
-        var priced = db.StockMovements.Where(x => ids.Contains(x.MaterialId!.Value) && ValuedInbound.Contains(x.Type) && x.Location!.Kind != StockLocationKind.ThirdParty && x.UnitCost > 0);
-        var qty = await priced.SumAsync(x => x.Quantity, ct);
-        return qty > 0 ? Math.Round(await priced.SumAsync(x => x.Quantity * x.UnitCost, ct) / qty, 6) : 0m;
+        var onHand = await db.StockBalances
+            .Where(b => b.ProductId != null && productIds.Contains(b.ProductId.Value))
+            .Where(b => b.Location!.Kind == StockLocationKind.Internal || b.Location!.Kind == StockLocationKind.Shipping)
+            .Where(b => b.LotId == null || b.Lot!.Status == LotStatus.Released)
+            .GroupBy(b => b.ProductId!.Value).Select(g => new { Id = g.Key, Qty = g.Sum(b => b.Quantity) })
+            .ToDictionaryAsync(x => x.Id, x => x.Qty, ct);
+        var reserved = await db.StockReservations
+            .Where(r => r.ProductId != null && productIds.Contains(r.ProductId.Value) && r.Status == ReservationStatus.Open)
+            .GroupBy(r => r.ProductId!.Value).Select(g => new { Id = g.Key, Qty = g.Sum(r => r.Quantity - r.Consumed) })
+            .ToDictionaryAsync(x => x.Id, x => x.Qty, ct);
+        return productIds.Distinct().ToDictionary(id => id, id => onHand.GetValueOrDefault(id) - reserved.GetValueOrDefault(id));
     }
-
-    public async Task<StockClosing> ClosePeriodAsync(int period, string user, DateOnly today, CancellationToken ct = default)
-    {
-        if (period % 100 is < 1 or > 12 || period < 190001) throw StockException.Invalid("Use yyyymm", "period");
-        if (period >= PeriodOf(today)) throw StockException.Invalid("Only past months can be closed", "period");
-        return await InTransaction(async () =>
-        {
-            await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0}, 0)", [GlobalLockClass], ct);
-            settings = await SettingsAsync(ct);
-            var last = await LastClosedPeriodAsync(ct);
-            if (last is { } l && period <= l) throw StockException.Conflict($"Period {period} is already closed (last closed: {l})");
-            if (last is { } l2 && period != PeriodOf(StartOf(l2).AddMonths(1))) throw StockException.Conflict($"Close {PeriodOf(StartOf(l2).AddMonths(1))} first");
-
-            await db.AverageCosts.Where(a => a.Period == period).ExecuteDeleteAsync(ct);
-            foreach (var row in await ComputeAveragesAsync(period, ct)) db.AverageCosts.Add(row);
-            var closing = new StockClosing { Period = period, ClosedBy = user, ClosedAt = DateTimeOffset.UtcNow };
-            db.StockClosings.Add(closing);
-            await db.SaveChangesAsync(ct);
-            return closing;
-        }, ct);
-    }
-
-    public async Task ReopenPeriodAsync(int period, CancellationToken ct = default)
-    {
-        await InTransaction(async () =>
-        {
-            await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0}, 0)", [GlobalLockClass], ct);
-            var last = await LastClosedPeriodAsync(ct);
-            if (last != period) throw StockException.Conflict(last is null ? "No period is closed" : $"Only the last closed period ({last}) can be reopened");
-            await db.AverageCosts.Where(a => a.Period == period && !a.Imported).ExecuteDeleteAsync(ct);
-            await db.StockClosings.Where(c => c.Period == period).ExecuteDeleteAsync(ct);
-            return 0;
-        }, ct);
-    }
-
-    public async Task<List<AverageCost>> ComputeAveragesAsync(int period, CancellationToken ct = default)
-    {
-        settings ??= await SettingsAsync(ct);
-        var start = StartOf(period);
-        var end = start.AddMonths(1);
-        var mats = await db.Materials.AsNoTracking().Select(m => new { m.Id, m.ThicknessMm }).ToListAsync(ct);
-        var bucketOf = mats.ToDictionary(m => m.Id, m => m.ThicknessMm is > 0 ? (m.ThicknessMm, (int?)null) : ((decimal?)null, (int?)m.Id));
-
-        var moves = await db.StockMovements.AsNoTracking()
-            .Where(x => x.MaterialId != null && x.Date < end)
-            .Select(x => new { MaterialId = x.MaterialId!.Value, x.Type, x.Date, x.Quantity, x.UnitCost, x.IcmsRate, ThirdParty = x.Location!.Kind == StockLocationKind.ThirdParty })
-            .ToListAsync(ct);
-        var previous = await db.AverageCosts.AsNoTracking().Where(a => a.Period < period)
-            .GroupBy(a => new { a.ThicknessMm, a.MaterialId })
-            .Select(g => g.OrderByDescending(a => a.Period).First())
-            .ToListAsync(ct);
-        var prevByBucket = previous.ToDictionary(a => (a.ThicknessMm, a.MaterialId));
-
-        var buckets = moves.Select(x => bucketOf[x.MaterialId]).Concat(prevByBucket.Keys).Distinct();
-        decimal Net(decimal cost, decimal icms) => settings.DeductIcmsFromAverage ? cost * (1 - icms / 100m) : cost;
-        var rows = new List<AverageCost>();
-        foreach (var bucket in buckets)
-        {
-            var mv = moves.Where(x => bucketOf[x.MaterialId] == bucket).ToList();
-            var before = mv.Where(x => x.Date < start).ToList();
-            var inPeriod = mv.Where(x => x.Date >= start).ToList();
-            var opening = inPeriod.Where(x => x.Type == MovementType.OpeningBalance && !x.ThirdParty).ToList();
-            var purchases = inPeriod.Where(x => x.Type == MovementType.Receipt && !x.ThirdParty).ToList();
-            var services = inPeriod.Where(x => x.Type == MovementType.ThirdPartyReturn && !x.ThirdParty).ToList();
-
-            var qtyBefore = before.Sum(x => x.Quantity);
-            decimal openingAvg;
-            if (prevByBucket.TryGetValue(bucket, out var prev))
-            {
-                var q = Math.Max(0, qtyBefore);
-                var oq = opening.Sum(x => x.Quantity);
-                openingAvg = q + oq > 0 ? (prev.Average * q + opening.Sum(x => x.Quantity * x.UnitCost)) / (q + oq) : prev.Average;
-            }
-            else
-            {
-                var priced = before.Where(x => ValuedInbound.Contains(x.Type) && !x.ThirdParty && x.UnitCost > 0).Concat(opening).ToList();
-                var pq = priced.Sum(x => x.Quantity);
-                openingAvg = pq > 0 ? priced.Sum(x => x.Quantity * Net(x.UnitCost, x.IcmsRate)) / pq : 0m;
-            }
-            var openingQty = Math.Max(0, qtyBefore + opening.Sum(x => x.Quantity));
-
-            var purchaseQty = purchases.Sum(x => x.Quantity);
-            var purchaseNet = purchases.Sum(x => x.Quantity * Net(x.UnitCost, x.IcmsRate));
-            var purchaseGross = purchases.Sum(x => x.Quantity * x.UnitCost);
-            var serviceQty = services.Sum(x => x.Quantity);
-            var cutting = serviceQty > 0 ? serviceQty * settings.CuttingServicePerKg : 0m;
-            var serviceNet = services.Sum(x => x.Quantity * Net(x.UnitCost, x.IcmsRate)) + cutting;
-            var serviceGross = services.Sum(x => x.Quantity * x.UnitCost) + cutting;
-
-            var inflow = purchaseQty + serviceQty;
-            decimal monthAvg = 0, avg = openingAvg, avgGross = prev?.AverageGross ?? openingAvg;
-            if (inflow > 0)
-            {
-                monthAvg = WithScrap((purchaseNet + serviceNet) / inflow);
-                var monthGross = WithScrap((purchaseGross + serviceGross) / inflow);
-                avg = Blend(openingAvg, openingQty, monthAvg, inflow);
-                avgGross = Blend(prev?.AverageGross ?? openingAvg, openingQty, monthGross, inflow);
-            }
-            if (inflow == 0 && openingQty == 0 && prev is null && openingAvg == 0) continue;
-
-            rows.Add(new AverageCost
-            {
-                Period = period, ThicknessMm = bucket.Item1, MaterialId = bucket.Item2,
-                OpeningQuantity = openingQty, OpeningAverage = Math.Round(openingAvg, 6),
-                PurchaseQuantity = purchaseQty, PurchaseValue = Math.Round(purchaseNet, 4),
-                ServiceQuantity = serviceQty, ServiceValue = Math.Round(serviceNet, 4),
-                MonthAverage = Math.Round(monthAvg, 6), Average = Math.Round(avg, 6), AverageGross = Math.Round(avgGross, 6)
-            });
-        }
-        return rows;
-    }
-
-    private decimal WithScrap(decimal m) => m + settings.ScrapPercent / 100m * (m - settings.ScrapResalePerKg);
-
-    private static decimal Blend(decimal prevAvg, decimal prevQty, decimal monthAvg, decimal monthQty) =>
-        prevQty + monthQty > 0 ? (prevAvg * prevQty + monthAvg * monthQty) / (prevQty + monthQty) : monthAvg;
-
-    private static decimal? Bucket(Material m) => m.ThicknessMm is > 0 ? m.ThicknessMm : null;
-
-    private async Task<List<int>> BucketMaterialIdsAsync(Material m, CancellationToken ct) =>
-        Bucket(m) is { } t ? await db.Materials.Where(x => x.ThicknessMm == t).Select(x => x.Id).ToListAsync(ct) : [m.Id];
 
     private async Task ApplyLineAsync(StockDocument doc, StockLine line, string field, CancellationToken ct)
     {
@@ -547,23 +435,7 @@ public class StockService(EbtDbContext db)
             await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0}, {1})", [ItemLockClass, (int)key], ct);
     }
 
-    private async Task<T> InTransaction<T>(Func<Task<T>> work, CancellationToken ct)
-    {
-        if (db.Database.CurrentTransaction is not null) return await work();
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-        try
-        {
-            var result = await work();
-            await tx.CommitAsync(ct);
-            return result;
-        }
-        catch
-        {
-            await tx.RollbackAsync(CancellationToken.None);
-            db.ChangeTracker.Clear();
-            throw;
-        }
-    }
+    private Task<T> InTransaction<T>(Func<Task<T>> work, CancellationToken ct) => db.InTransactionAsync(work, ct);
 
     private async Task<string> DescribeAsync(StockItem item, CancellationToken ct) => item.MaterialId is { } m
         ? "material " + (materials.TryGetValue(m, out var mat) ? mat.Code : await db.Materials.Where(x => x.Id == m).Select(x => x.Code).FirstAsync(ct))
@@ -571,5 +443,4 @@ public class StockService(EbtDbContext db)
 
     private static StockItem Item(StockLine l) => new(l.MaterialId, l.ProductId);
     private static (int?, int?, int, int?) Key(StockItem i, int loc, int? lot) => (i.MaterialId, i.ProductId, loc, lot);
-    private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 }

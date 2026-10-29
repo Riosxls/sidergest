@@ -35,7 +35,7 @@ public static class InventoryEndpoints
             Create = i => new StockLocation { Code = i.Code.Trim().ToUpper(), Name = i.Name.Trim(), Kind = i.Kind, Active = i.Active },
             Apply = (i, l) => { l.Code = i.Code.Trim().ToUpper(); l.Name = i.Name.Trim(); l.Kind = i.Kind; l.Active = i.Active; },
             Validate = (i, _, _) => Task.FromResult(Errors().Require(Has(i.Code), "code", "Required").Require(Has(i.Name), "name", "Required")),
-            Search = (q, s) => q.Where(l => EF.Functions.ILike(l.Code, $"%{s}%") || EF.Functions.ILike(l.Name, $"%{s}%")),
+            Search = (q, s) => q.Where(l => EF.Functions.ILike(l.Code, Like(s)) || EF.Functions.ILike(l.Name, Like(s))),
             Order = q => q.OrderBy(l => l.Code),
             BeforeDelete = async (id, db, ct) => await db.StockMovements.AnyAsync(m => m.LocationId == id, ct) ? "Location has movements; deactivate it instead" : null,
             WritePolicy = Policies.Stock
@@ -53,7 +53,7 @@ public static class InventoryEndpoints
         {
             var doc = await svc.ReverseAsync(id, User(user), body?.Notes, ct);
             return Results.Created($"/api/stock/documents/{doc.Id}", await LoadDocument(db, doc.Id, ct));
-        }).RequireAuthorization(Policies.Stock);
+        }).RequireAuthorization(Policies.Stock).AddEndpointFilter(new RowVersionFilter<StockDocument>());
 
         stock.MapGet("/documents", async (EbtDbContext db, MovementType? type, DateOnly? from, DateOnly? to, string? reference, int? skip, int? take, CancellationToken ct) =>
         {
@@ -71,7 +71,7 @@ public static class InventoryEndpoints
         });
 
         stock.MapGet("/documents/{id:int}", async (int id, EbtDbContext db, CancellationToken ct) =>
-            await LoadDocument(db, id, ct) is { } d ? Results.Ok(d) : Results.NotFound());
+            await LoadDocument(db, id, ct) is { } d ? Results.Ok(d) : Results.NotFound()).AddEndpointFilter(new RowVersionFilter<StockDocument>());
 
         stock.MapGet("/movements", async (EbtDbContext db, int? materialId, int? productId, int? locationId, int? lotId, DateOnly? from, DateOnly? to, int? skip, int? take, CancellationToken ct) =>
         {
@@ -101,7 +101,7 @@ public static class InventoryEndpoints
             if (locationId is { } l) b = b.Where(x => x.LocationId == l);
             if (lotId is { } lot) b = b.Where(x => x.LotId == lot);
             if (includeZero != true) b = b.Where(x => x.Quantity != 0);
-            if (Has(q)) b = b.Where(x => EF.Functions.ILike(x.Material != null ? x.Material.Code : x.Product!.Code, $"%{q!.Trim()}%"));
+            if (Has(q)) b = b.Where(x => EF.Functions.ILike(x.Material != null ? x.Material.Code : x.Product!.Code, Like(q!)));
             var total = await b.CountAsync(ct);
             var (s, n) = Paging(skip, take);
             var items = await b.OrderBy(x => x.Material != null ? x.Material.Code : x.Product!.Code).ThenBy(x => x.Location!.Code).ThenBy(x => x.LotId).Skip(s).Take(n)
@@ -122,7 +122,7 @@ public static class InventoryEndpoints
             var own = rows.Where(r => r.Kind != StockLocationKind.ThirdParty).ToList();
             var released = own.Where(r => r.Released && r.Kind != StockLocationKind.Quarantine).Sum(r => r.Quantity);
             var reserved = await db.StockReservations.Where(r => r.MaterialId == materialId && r.ProductId == productId && r.Status == ReservationStatus.Open).SumAsync(r => r.Quantity - r.Consumed, ct);
-            var avg = materialId is { } m ? await svc.CurrentAverageAsync(m, DateOnly.FromDateTime(DateTime.Today), ct) : 0m;
+            var avg = materialId is { } m ? await svc.CurrentAverageAsync(m, Ebt.Core.Services.Clock.Today(), ct) : 0m;
             var byLocation = rows.GroupBy(r => new { r.LocationId, r.Code, r.Kind }).Select(g => new LocationQuantity(g.Key.LocationId, g.Key.Code, g.Key.Kind, g.Sum(r => r.Quantity))).Where(x => x.Quantity != 0).OrderBy(x => x.LocationCode).ToList();
             return Results.Ok(new AvailabilityOut(materialId, productId, own.Sum(r => r.Quantity), released, own.Sum(r => r.Quantity) - released,
                 rows.Where(r => r.Kind == StockLocationKind.ThirdParty).Sum(r => r.Quantity), reserved, await svc.FreeQuantityAsync(new StockItem(materialId, productId), null, ct), avg, byLocation));
@@ -180,7 +180,7 @@ public static class InventoryEndpoints
         {
             await svc.ReleaseAsync(id, ct);
             return Results.Ok(await db.StockReservations.AsNoTracking().Where(x => x.Id == id).Select(ReservationProjection).FirstAsync(ct));
-        }).RequireAuthorization(Policies.Stock);
+        }).RequireAuthorization(Policies.Stock).AddEndpointFilter(new RowVersionFilter<StockReservation>());
 
         stock.MapGet("/settings", async (StockService svc, CancellationToken ct) => Results.Ok(ToIn(await svc.SettingsAsync(ct))));
 
@@ -206,7 +206,7 @@ public static class InventoryEndpoints
 
         stock.MapPost("/closings/{period:int}", async (int period, StockService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
-            var c = await svc.ClosePeriodAsync(period, User(user), DateOnly.FromDateTime(DateTime.Today), ct);
+            var c = await svc.ClosePeriodAsync(period, User(user), Ebt.Core.Services.Clock.Today(), ct);
             return Results.Created($"/api/stock/average-costs?period={period}", new ClosingOut(c.Period, c.ClosedBy, c.ClosedAt));
         }).RequireAuthorization(Policies.Stock);
 
@@ -252,6 +252,5 @@ public static class InventoryEndpoints
     }
 
     private static StockSettingsIn ToIn(StockSettings s) => new(s.AllowNegativeStock, s.DeductIcmsFromAverage, s.CuttingServicePerKg, s.ScrapResalePerKg, s.ScrapPercent);
-    private static (int, int) Paging(int? skip, int? take) => (Math.Max(skip ?? 0, 0), Math.Clamp(take ?? 50, 1, 500));
     private static string User(ClaimsPrincipal p) => p.Identity?.Name ?? "unknown";
 }

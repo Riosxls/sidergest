@@ -11,9 +11,11 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'nav.dart';
+import 'role_permissions.dart';
 
 http.Response json(Object body) => http.Response(jsonEncode(body), 200, headers: {'content-type': 'application/json; charset=utf-8'});
 
@@ -63,7 +65,8 @@ Future<(Session, List<http.Request>)> pumpShell(
           api: ApiClient(baseUrl: 'http://api.test', client: client, token: 'tok'),
         )
         ..username = 'ana'
-        ..role = role;
+        ..role = role
+        ..permissions = rolePermissions[role]!;
   await tester.pumpWidget(
     MaterialApp(
       locale: const Locale('pt', 'BR'),
@@ -164,17 +167,17 @@ void main() {
 
   testWidgets('quick actions follow the role', (tester) async {
     await pumpShell(tester, 'Production');
-    expect(find.text('Nova OF'), findsOneWidget);
+    expect(find.text('Nova Ordem de Fabricação'), findsOneWidget);
     expect(find.text('Novo pedido'), findsNothing);
     expect(find.text('Novo produto'), findsNothing);
   });
 
   testWidgets('admin quick actions open the creation forms', (tester) async {
     await pumpShell(tester, 'Admin');
-    for (final l in ['Novo produto', 'Nova OF', 'Nova requisição', 'Novo pedido']) {
+    for (final l in ['Novo produto', 'Nova Ordem de Fabricação', 'Nova requisição', 'Novo pedido']) {
       expect(find.text(l), findsOneWidget);
     }
-    await tester.tap(find.text('Nova OF'));
+    await tester.tap(find.text('Nova Ordem de Fabricação'));
     await tester.pumpAndSettle();
     expect(find.text('Nova ordem de fabricação'), findsOneWidget);
   });
@@ -215,7 +218,7 @@ void main() {
   testWidgets('command palette: keyboard navigation, actions, products and recents', (tester) async {
     final (_, log) = await pumpShell(tester, 'Admin');
     await openPalette(tester);
-    expect(find.text('Nova OF'), findsWidgets);
+    expect(find.text('Nova Ordem de Fabricação'), findsWidgets);
     await tester.enterText(find.descendant(of: find.byType(Dialog), matching: find.byType(TextField)), 'saldo');
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);

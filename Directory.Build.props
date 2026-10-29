@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <!-- CI builds fail on any compiler warning; local builds stay forgiving. -->
+    <!-- RouteHandlerAnalyzer crashes on some endpoint lambdas (AD0001); the crash is in the analyzer, not our code. -->
+    <NoWarn>$(NoWarn);AD0001</NoWarn>
+    <TreatWarningsAsErrors Condition="'$(CI)' == 'true'">true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

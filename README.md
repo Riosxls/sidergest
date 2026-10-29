@@ -6,7 +6,7 @@ Prerequisites: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
 1. `git clone https://github.com/Riosxls/sidergest` (or `git pull`)
 2. Double-click `start.bat` (or run it in a terminal). It starts PostgreSQL + API in Docker, applies migrations, creates the admin user and opens the Windows app.
-3. Log in with `admin` / `sidergest123`. Stop everything with `stop.bat`.
+3. Log in with `admin` and the `EBT_ADMIN_PASSWORD` from the `.env` file `start.bat` generates on first run (random secrets; Swagger on for local use). Stop everything with `stop.bat`.
 
 | Command | What it does |
 |---------|--------------|
@@ -17,7 +17,7 @@ Prerequisites: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 | `stop.bat` | stop API and containers, data kept |
 | `stop.bat -Purge` | also delete the database volume |
 
-API http://localhost:8080, Swagger http://localhost:8080/swagger. Dev defaults (DB password `ebt-dev-password`, JWT key, admin password) are built in, so no `.env` is needed for development. The admin user is only created when the database has no users. Ports: API 8080, Postgres 25432 (Docker, bound to 127.0.0.1), web app 8081. If one is taken or reserved by Windows, `start.bat` picks the next free one and prints the URLs; the app and CORS follow it. Override with `EBT_API_PORT`, `EBT_DB_PORT`, `EBT_WEB_PORT`. For production copy `.env.example` to `.env` and set real secrets.
+API http://localhost:8080, Swagger http://localhost:8080/swagger. `start.bat` generates a gitignored `.env` with random secrets on first run; `docker compose` itself refuses to start without `EBT_DB_PASSWORD`, `EBT_JWT_KEY` and `EBT_ADMIN_PASSWORD`. The API is bound to 127.0.0.1; put a TLS reverse proxy in front for remote use and set `EBT_BEHIND_PROXY=true`, `EBT_ALLOWED_HOSTS`, `EBT_CORS_ORIGIN`. Logins are rate limited (`RateLimit:LoginPerMinute`, default 10/IP) and accounts lock for 15 minutes after 5 failures. Business-day timezone: `Clock:TimeZone` (default America/Sao_Paulo). The admin user is only created when the database has no users. Ports: API 8080, Postgres 25432 (Docker, bound to 127.0.0.1), web app 8081. If one is taken or reserved by Windows, `start.bat` picks the next free one and prints the URLs; the app and CORS follow it. Override with `EBT_API_PORT`, `EBT_DB_PORT`, `EBT_WEB_PORT`. For production copy `.env.example` to `.env` and set real secrets.
 
 ASP.NET Core 8 + EF Core + PostgreSQL 16. First module of the HDS "Emissor NF" replacement (see `system-map.md` §9). Clients (Flutter: Windows, Android, Web) live in `clients/flutter` and talk to this REST API.
 
@@ -241,3 +241,14 @@ Flow (PCP.EXE / APONT.EXE): order → release (reserve) → issue material → r
 - Explosion multiplies quantity × factor through every level and totals materials.
 - Tube net weight is computed from shape, diameter/width/height, wall and length (steel 7.85 g/cm³) when not given.
 - CPF/CNPJ, CEP, IBGE and NCM accept formatted input and are stored as digits.
+
+## Security and operations notes
+
+- **Who may do what** lives in one place: `src/Ebt.Api/Infrastructure/Access.cs`. `POST /api/auth/login` and `GET /api/auth/me` return the caller's `permissions` (policy names); the Flutter client reads those instead of keeping its own role lists.
+- **Token revocation**: tokens carry a version; deactivating a user, changing role or resetting a password invalidates their tokens at once. Failed logins lock the account for 15 minutes after 5 attempts.
+- **Optimistic concurrency**: GET/PUT/POST on quotes, sales orders, deliveries, production orders and purchase orders return an `ETag`; send it back as `If-Match` on writes. A stale tag gets `412 Precondition Failed`.
+- **Quote expiry** runs as a background service every 10 minutes (GET endpoints are read-only).
+- **Container**: the API image has a `HEALTHCHECK` (`dotnet Ebt.Api.dll --healthcheck`), base images are pinned by digest (Dependabot keeps them current), and compose runs it read-only with all capabilities dropped.
+- **CI** (`.github/workflows/ci.yml`) builds with warnings as errors, runs the API tests against Postgres, fails on vulnerable NuGet packages, and runs `flutter analyze` and `flutter test`.
+- **Sessions**: access tokens last 60 minutes (`Jwt:ExpiresMinutes`); login also returns a single-use refresh token (14 days, `Jwt:RefreshDays`) for `POST /api/auth/refresh`. Replaying a used refresh token signs the user out everywhere. `POST /api/auth/logout` revokes it.
+- **Audit log**: inserts, updates and deletes of master data and configuration (customers, suppliers, materials, products, users, stock locations/settings/closings) are recorded in `audit_log` (secrets excluded); Admins read it at `GET /api/audit`.

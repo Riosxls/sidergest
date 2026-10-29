@@ -87,18 +87,9 @@ public static class SalesEndpoints
     {
         services.AddScoped<SalesService>();
         services.AddExceptionHandler<SalesExceptionHandler>();
-        services.AddAuthorization(o =>
-        {
-            o.AddPolicy(SalesPolicies.Customers, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Engineering), nameof(UserRole.Sales), nameof(UserRole.SalesManager)));
-            o.AddPolicy(SalesPolicies.Sell, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Sales), nameof(UserRole.SalesManager)));
-            o.AddPolicy(SalesPolicies.Approve, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.SalesManager)));
-            o.AddPolicy(SalesPolicies.Release, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Sales), nameof(UserRole.SalesManager), nameof(UserRole.Production)));
-            o.AddPolicy(SalesPolicies.Ship, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Sales), nameof(UserRole.SalesManager), nameof(UserRole.Stock)));
-        });
         return services;
     }
 
-    private static string? Who(ClaimsPrincipal user) => user.Identity?.Name;
     private static bool IsManager(ClaimsPrincipal user) => user.IsInRole(nameof(UserRole.Admin)) || user.IsInRole(nameof(UserRole.SalesManager));
 
     public static void MapSales(this WebApplication app)
@@ -141,7 +132,7 @@ public static class SalesEndpoints
             Validate = (i, _, _) => Task.FromResult(Errors().Require(Has(i.Code), "code", "Required").Require(Has(i.Name), "name", "Required")
                 .Require(Has(i.Days) && i.Days.Split('/', StringSplitOptions.TrimEntries).All(d => int.TryParse(d, out var n) && n >= 0), "days", "Days separated by '/', e.g. 28/35/42 or 0")
                 .Require(i.CreditLimit is null or >= 0, "creditLimit", "Cannot be negative")),
-            Search = (q, s) => q.Where(p => EF.Functions.ILike(p.Code, $"%{s}%") || EF.Functions.ILike(p.Name, $"%{s}%")),
+            Search = (q, s) => q.Where(p => EF.Functions.ILike(p.Code, Like(s)) || EF.Functions.ILike(p.Name, Like(s))),
             Order = q => q.OrderBy(p => p.Code),
             BeforeDelete = async (id, db, ct) => await db.Quotes.AnyAsync(q => q.PaymentTermId == id, ct) || await db.SalesOrders.AnyAsync(o => o.PaymentTermId == id, ct) ? "Payment term is in use; deactivate it instead" : null,
             WritePolicy = SalesPolicies.Approve
@@ -159,7 +150,7 @@ public static class SalesEndpoints
                 .Require(i.IpiPercent is null or (>= 0 and <= 100), "ipiPercent", "Between 0 and 100")
                 .Require(i.IcmsPercent is null or (>= 0 and <= 100), "icmsPercent", "Between 0 and 100")
                 .Require(i.ValidTo is null || i.ValidTo >= i.ValidFrom, "validTo", "Before the start date"),
-            Search = (q, s) => q.Where(p => EF.Functions.ILike(p.Product!.Code, $"%{s}%") || EF.Functions.ILike(p.Product.Name, $"%{s}%") || EF.Functions.ILike(p.Customer!.Name ?? "", $"%{s}%")),
+            Search = (q, s) => q.Where(p => EF.Functions.ILike(p.Product!.Code, Like(s)) || EF.Functions.ILike(p.Product.Name, Like(s)) || EF.Functions.ILike(p.Customer!.Name, Like(s))),
             Order = q => q.OrderBy(p => p.Product!.Code).ThenBy(p => p.CustomerId).ThenByDescending(p => p.ValidFrom),
             WritePolicy = SalesPolicies.Sell
         });
@@ -176,16 +167,15 @@ public static class SalesEndpoints
 
     private static void MapQuotes(WebApplication app)
     {
-        var g = app.MapGroup("/api/sales/quotes").WithTags("Sales").RequireAuthorization(Policies.Read);
+        var g = app.MapGroup("/api/sales/quotes").WithTags("Sales").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<Quote>());
 
         g.MapGet("/", async (EbtDbContext db, SalesService svc, QuoteStatus? status, int? customerId, bool? open, string? q, int? skip, int? take, CancellationToken ct) =>
         {
-            await svc.ExpireOverdueAsync(ct);
             var x = db.Quotes.AsNoTracking();
             if (status is { } st) x = x.Where(o => o.Status == st);
             if (open == true) x = x.Where(o => SalesService.OpenQuote.Contains(o.Status));
             if (customerId is { } c) x = x.Where(o => o.CustomerId == c);
-            if (Has(q)) x = x.Where(o => EF.Functions.ILike(o.Reference, $"%{q!.Trim()}%") || EF.Functions.ILike(o.Customer!.Name, $"%{q.Trim()}%") || EF.Functions.ILike(o.CustomerReference ?? "", $"%{q.Trim()}%"));
+            if (Has(q)) x = x.Where(o => EF.Functions.ILike(o.Reference, Like(q!)) || EF.Functions.ILike(o.Customer!.Name, Like(q)) || EF.Functions.ILike(o.CustomerReference!, Like(q)));
             var total = await x.CountAsync(ct);
             var (s, n) = Paging(skip, take);
             var items = await QuoteSummaries(x.OrderByDescending(o => o.CreatedAt).Skip(s).Take(n), ct);
@@ -305,7 +295,7 @@ public static class SalesEndpoints
 
     private static void MapOrders(WebApplication app)
     {
-        var g = app.MapGroup("/api/sales/orders").WithTags("Sales").RequireAuthorization(Policies.Read);
+        var g = app.MapGroup("/api/sales/orders").WithTags("Sales").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<SalesOrder>());
 
         g.MapGet("/", async (EbtDbContext db, SalesService svc, SalesOrderStatus? status, int? customerId, bool? open, string? month, bool? late, BillTo? billTo, string? q, int? skip, int? take, CancellationToken ct) =>
         {
@@ -320,7 +310,7 @@ public static class SalesEndpoints
             if (status is { } st) x = x.Where(o => o.Status == st);
             if (open == true) x = x.Where(o => SalesService.OpenOrder.Contains(o.Status));
             if (customerId is { } c) x = x.Where(o => o.CustomerId == c);
-            if (Has(q)) x = x.Where(o => EF.Functions.ILike(o.Reference, $"%{q!.Trim()}%") || EF.Functions.ILike(o.Customer!.Name, $"%{q.Trim()}%") || EF.Functions.ILike(o.CustomerPo ?? "", $"%{q.Trim()}%"));
+            if (Has(q)) x = x.Where(o => EF.Functions.ILike(o.Reference, Like(q!)) || EF.Functions.ILike(o.Customer!.Name, Like(q)) || EF.Functions.ILike(o.CustomerPo!, Like(q)));
             var total = await x.CountAsync(ct);
             var (s, n) = Paging(skip, take);
             var items = await OrderSummaries(db, svc, x.OrderByDescending(o => o.CreatedAt).Skip(s).Take(n), ct);
@@ -363,7 +353,7 @@ public static class SalesEndpoints
 
     private static void MapDeliveries(WebApplication app)
     {
-        var g = app.MapGroup("/api/sales/deliveries").WithTags("Sales").RequireAuthorization(Policies.Read);
+        var g = app.MapGroup("/api/sales/deliveries").WithTags("Sales").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<Delivery>());
 
         g.MapGet("/", async (EbtDbContext db, DeliveryStatus? status, int? orderId, int? customerId, DateOnly? from, DateOnly? to, string? q, int? skip, int? take, CancellationToken ct) =>
         {
@@ -373,7 +363,7 @@ public static class SalesEndpoints
             if (customerId is { } c) x = x.Where(d => d.Order!.CustomerId == c);
             if (from is { } f) x = x.Where(d => d.PlannedDate >= f);
             if (to is { } t) x = x.Where(d => d.PlannedDate <= t);
-            if (Has(q)) x = x.Where(d => EF.Functions.ILike(d.Reference, $"%{q!.Trim()}%") || EF.Functions.ILike(d.Order!.Reference, $"%{q.Trim()}%") || EF.Functions.ILike(d.Order.Customer!.Name, $"%{q.Trim()}%") || EF.Functions.ILike(d.InvoiceNumber ?? "", $"%{q.Trim()}%"));
+            if (Has(q)) x = x.Where(d => EF.Functions.ILike(d.Reference, Like(q!)) || EF.Functions.ILike(d.Order!.Reference, Like(q)) || EF.Functions.ILike(d.Order.Customer!.Name, Like(q)) || EF.Functions.ILike(d.InvoiceNumber!, Like(q)));
             var total = await x.CountAsync(ct);
             var (s, n) = Paging(skip, take);
             var items = await x.OrderBy(d => d.Status).ThenBy(d => d.PlannedDate).ThenBy(d => d.Number).Skip(s).Take(n).Select(DeliverySummary).ToListAsync(ct);
@@ -405,7 +395,6 @@ public static class SalesEndpoints
     {
         app.MapGet("/api/sales/pipeline", async (EbtDbContext db, SalesService svc, int? customerId, CancellationToken ct) =>
         {
-            await svc.ExpireOverdueAsync(ct);
             var today = SalesService.Today();
             var quotes = db.Quotes.AsNoTracking().Where(q => SalesService.OpenQuote.Contains(q.Status));
             var orders = db.SalesOrders.AsNoTracking().Where(o => SalesService.OpenOrder.Contains(o.Status) || o.Status == SalesOrderStatus.Shipped
@@ -563,5 +552,4 @@ public static class SalesEndpoints
         new DeliverySummaryOut(d.Id, d.Number, d.Reference, d.OrderId, d.Order!.Reference, d.Order.CustomerId, d.Order.Customer!.Name, d.PlannedDate, d.Status, d.Packages, d.GrossWeightKg, d.InvoiceNumber, d.Carrier, d.ShippedAt, d.DeliveredAt);
 
     private static SalesSettingsDto ToDto(SalesSettings s) => new(s.MaxDiscountPercent, s.DefaultValidityDays, s.MinimumOrderValue, s.ShippingLocationId, s.DefaultConditions);
-    private static (int, int) Paging(int? skip, int? take) => (Math.Max(skip ?? 0, 0), Math.Clamp(take ?? 50, 1, 500));
 }

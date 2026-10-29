@@ -119,7 +119,7 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
   @override
   Widget build(BuildContext context) {
     final d = _d;
-    final canCancel = s.canApproveSales && d?['status'] == 'Authorized';
+    final canCancel = s.canFiscalCancel && d?['status'] == 'Authorized';
     return Scaffold(
       appBar: AppBar(
         title: Text(d == null ? 'Nota fiscal' : 'NF ${d['number']} · ${d['recipientName']}', overflow: TextOverflow.ellipsis),

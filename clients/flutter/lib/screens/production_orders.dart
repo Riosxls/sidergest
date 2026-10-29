@@ -103,7 +103,7 @@ class _ProductionOrdersScreenState extends State<ProductionOrdersScreen> {
         FilterChip(label: const Text('Somente abertas'), selected: _open, onSelected: (v) => setState(() => _open = v)),
       ],
       fab: widget.session.canProduce
-          ? FloatingActionButton.extended(heroTag: 'new-of', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Nova OF'))
+          ? FloatingActionButton.extended(heroTag: 'new-of', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Nova Ordem de Fabricação'))
           : null,
       columns: [
         col('Referência', 'reference'),

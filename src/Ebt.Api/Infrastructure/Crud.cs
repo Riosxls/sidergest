@@ -95,8 +95,13 @@ public static class Crud
         return errors;
     }
 
-    public static bool Has(string? value) => !string.IsNullOrWhiteSpace(value);
+    /// <summary>Contains-pattern for ILIKE with the caller's own wildcard characters escaped (backslash is the default escape).</summary>
+    public static string Like(string? value) => "%" + (value ?? "").Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+
+    public static bool Has([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? value) => !string.IsNullOrWhiteSpace(value);
     public static bool Digits(string? value, params int[] lengths) => Numeric(value) is { } v && v.All(char.IsDigit) && lengths.Contains(v.Length);
     public static string? Numeric(string? value) => Clean(value) is { } v && string.Concat(v.Where(c => c is not ('.' or '-' or '/' or ' '))) is { Length: > 0 } n ? n : null;
-    public static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    public static string? Clean(string? value) => Ebt.Core.Services.Text.Clean(value);
+    public static string? Who(System.Security.Claims.ClaimsPrincipal user) => user.Identity?.Name;
+    public static (int, int) Paging(int? skip, int? take) => (Math.Max(skip ?? 0, 0), Math.Clamp(take ?? 50, 1, 500));
 }

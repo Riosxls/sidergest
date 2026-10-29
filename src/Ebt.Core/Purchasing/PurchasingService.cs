@@ -1,3 +1,4 @@
+using static Ebt.Core.Services.Text;
 using System.Text.RegularExpressions;
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
@@ -493,5 +494,4 @@ public sealed partial class PurchasingService(EbtDbContext db, IEnumerable<IGood
     }
 
     private static bool Has(string? value) => !string.IsNullOrWhiteSpace(value);
-    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

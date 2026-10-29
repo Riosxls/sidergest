@@ -31,7 +31,8 @@ public sealed class ApiFixture : IAsyncLifetime
             .UseSetting("ConnectionStrings:Ebt", ConnectionString)
             .UseSetting("Jwt:SigningKey", "test-signing-key-that-is-at-least-32-bytes-long")
             .UseSetting("Database:MigrateOnStartup", "true")
-            .UseSetting("Logging:LogLevel:Default", "None")
+            .UseSetting("Logging:LogLevel:Default", Environment.GetEnvironmentVariable("EBT_TEST_LOG") ?? "None")
+            .UseSetting("RateLimit:LoginPerMinute", "100000")
             .UseSetting("Bootstrap:AdminUser", AdminUser)
             .UseSetting("Bootstrap:AdminPassword", AdminPassword));
         factory.CreateClient().Dispose();

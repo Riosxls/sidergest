@@ -71,7 +71,7 @@ public static class MasterDataEndpoints
                     foreach (var (k, v) in ValidateAddress(a)) errors[$"address.{char.ToLowerInvariant(k[0])}{k[1..]}"] = v;
                 return errors;
             },
-            Search = (q, s) => q.Where(c => EF.Functions.ILike(c.Name, $"%{s}%") || EF.Functions.ILike(c.TradeName ?? "", $"%{s}%") || c.LegacyCode == s
+            Search = (q, s) => q.Where(c => EF.Functions.ILike(c.Name, Like(s)) || EF.Functions.ILike(c.TradeName!, Like(s)) || c.LegacyCode == s
                 || (c.Document != null && c.Document.StartsWith(s.Replace(".", "").Replace("-", "").Replace("/", "")))),
             Filter = (q, query) => query["active"] is { Count: > 0 } v && bool.TryParse(v[0], out var active) ? q.Where(c => c.Active == active) : q,
             Order = q => q.OrderBy(c => c.Name),
@@ -86,7 +86,7 @@ public static class MasterDataEndpoints
             Create = i => new Supplier { Name = i.Name.Trim(), TradeName = Clean(i.TradeName), LegacyCode = Clean(i.LegacyCode), GroupCode = Clean(i.GroupCode), Active = i.Active },
             Apply = (i, s) => { s.Name = i.Name.Trim(); s.TradeName = Clean(i.TradeName); s.LegacyCode = Clean(i.LegacyCode); s.GroupCode = Clean(i.GroupCode); s.Active = i.Active; },
             Validate = (i, _, _) => Task.FromResult(Errors().Require(Has(i.Name), "name", "Required")),
-            Search = (q, s) => q.Where(x => EF.Functions.ILike(x.Name, $"%{s}%") || EF.Functions.ILike(x.TradeName ?? "", $"%{s}%") || x.LegacyCode == s),
+            Search = (q, s) => q.Where(x => EF.Functions.ILike(x.Name, Like(s)) || EF.Functions.ILike(x.TradeName!, Like(s)) || x.LegacyCode == s),
             Order = q => q.OrderBy(x => x.Name)
         });
         MapSupplierAddresses(app);
@@ -120,7 +120,7 @@ public static class MasterDataEndpoints
                 .Require(i.PurchaseFactor > 0, "purchaseFactor", "Must be greater than zero")
                 .Require(i.Ncm is null || Digits(i.Ncm, 8), "ncm", "NCM must have 8 digits")
                 .Require(i.MinStock is null || i.MaxStock is null || i.MinStock <= i.MaxStock, "minStock", "Must not exceed maxStock")),
-            Search = (q, s) => q.Where(m => m.Code.StartsWith(s) || EF.Functions.ILike(m.Description, $"%{s}%")),
+            Search = (q, s) => q.Where(m => m.Code.StartsWith(s) || EF.Functions.ILike(m.Description, Like(s))),
             Order = q => q.OrderBy(m => m.Code),
             BeforeDelete = async (id, db, ct) => await db.BomItems.AnyAsync(b => b.MaterialId == id, ct) ? "Material is used in a bill of materials" : null
         });
@@ -141,7 +141,7 @@ public static class MasterDataEndpoints
             Create = i => new Machine { Code = i.Code.Trim(), Name = i.Name.Trim(), WorkCenterId = i.WorkCenterId, Family = Clean(i.Family) },
             Apply = (i, m) => { m.Code = i.Code.Trim(); m.Name = i.Name.Trim(); m.WorkCenterId = i.WorkCenterId; m.Family = Clean(i.Family); },
             Validate = (i, _, _) => Task.FromResult(Errors().Require(Has(i.Code), "code", "Required").Require(Has(i.Name), "name", "Required")),
-            Search = (q, s) => q.Where(m => m.Code.StartsWith(s) || EF.Functions.ILike(m.Name, $"%{s}%")),
+            Search = (q, s) => q.Where(m => m.Code.StartsWith(s) || EF.Functions.ILike(m.Name, Like(s))),
             Order = q => q.OrderBy(m => m.Code),
             BeforeDelete = async (id, db, ct) => await db.RoutingOperations.AnyAsync(o => o.MachineId == id, ct) ? "Machine is used in routings" : null
         });

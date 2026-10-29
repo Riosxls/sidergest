@@ -108,6 +108,8 @@ public class ViabilitySteelTests(ApiFixture api)
             (await admin.Post($"/api/viability/{linked.Id}/{step}", new FeasibilityNoteIn())).EnsureSuccessStatusCode();
         foreach (var step in new[] { "send", "accept" })
             (await admin.Post($"/api/sales/quotes/{quote.Id}/{step}", new QuoteActionIn(SentTo: "a@b.com", CustomerPo: "PO-1"))).EnsureSuccessStatusCode();
+        (await admin.Put($"/api/sales/quotes/{quote.Id}/request", new QuoteRequestIn("Pedido PO-1"))).EnsureSuccessStatusCode();
+        (await admin.Post($"/api/sales/quotes/{quote.Id}/purchase-order", new QuoteActionIn(CustomerPo: "PO-1"))).EnsureSuccessStatusCode();
         var order = await (await admin.Post($"/api/sales/quotes/{quote.Id}/convert", new ConvertInput())).Read<SalesOrderOut>();
         Assert.Equal(linked.Id, order.Lines[0].FeasibilityId);
         Assert.Equal(linked.Reference, order.Lines[0].FeasibilityReference);

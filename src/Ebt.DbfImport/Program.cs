@@ -70,7 +70,7 @@ var stock = await new StockImporter(db, new StockImportOptions
     Directory = dir,
     CodePage = options.CodePage,
     DryRun = options.DryRun,
-    OpeningDate = DateOnly.TryParse(Arg("--opening-date"), out var od) ? od : DateOnly.FromDateTime(DateTime.Today)
+    OpeningDate = DateOnly.TryParse(Arg("--opening-date"), out var od) ? od : Ebt.Core.Services.Clock.Today()
 }).RunAsync();
 foreach (var (name, t) in stock.Tables) report.Tables[name] = t;
 report.Warnings.AddRange(stock.Warnings);

@@ -11,7 +11,7 @@ public sealed class StockImportOptions
     public required string Directory { get; init; }
     public int CodePage { get; init; } = 850;
     public bool DryRun { get; init; }
-    public DateOnly OpeningDate { get; init; } = DateOnly.FromDateTime(DateTime.Today);
+    public DateOnly OpeningDate { get; init; } = Ebt.Core.Services.Clock.Today();
     public string OwnLocation { get; init; } = "ALM";
     public string ThirdPartyLocation { get; init; } = "TER";
     public string User { get; init; } = "dbf-import";

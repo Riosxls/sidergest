@@ -43,6 +43,60 @@ namespace Ebt.Core.Data.Migrations
             modelBuilder.HasSequence<int>("sales_quote_numbers");
 
             modelBuilder.HasSequence("stock_lot_numbers");
+
+            modelBuilder.Entity("Ebt.Core.Data.AuditEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("action");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<string>("Changes")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("changes");
+
+                    b.Property<string>("Entity")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("entity");
+
+                    b.Property<string>("EntityId")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("User")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("user");
+
+                    b.HasKey("Id")
+                        .HasName("pk_audit_log");
+
+                    b.HasIndex("At")
+                        .HasDatabaseName("ix_audit_log_at");
+
+                    b.HasIndex("Entity", "EntityId")
+                        .HasDatabaseName("ix_audit_log_entity_entity_id");
+
+                    b.ToTable("audit_log", (string)null);
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.AppUser", b =>
                 {
                     b.Property<int>("Id")
@@ -56,6 +110,14 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("active");
 
+                    b.Property<int>("FailedLogins")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_logins");
+
+                    b.Property<DateTimeOffset?>("LockedUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("locked_until");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("text")
@@ -64,6 +126,10 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<int>("Role")
                         .HasColumnType("integer")
                         .HasColumnName("role");
+
+                    b.Property<int>("TokenVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("token_version");
 
                     b.Property<string>("Username")
                         .IsRequired()
@@ -744,6 +810,12 @@ namespace Ebt.Core.Data.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
                         .HasColumnName("vehicle_plate");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_deliveries");
@@ -2538,6 +2610,12 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("numeric(18,6)")
                         .HasColumnName("unit_cost");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_production_orders");
 
@@ -3004,6 +3082,12 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<int>("SupplierId")
                         .HasColumnType("integer")
                         .HasColumnName("supplier_id");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_purchase_orders");
@@ -3741,6 +3825,12 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("validity_days");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_quotes");
 
@@ -3863,6 +3953,50 @@ namespace Ebt.Core.Data.Migrations
                         .HasName("pk_quote_request_files");
 
                     b.ToTable("quote_request_files", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.RefreshToken", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_refresh_tokens");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_refresh_tokens_token_hash");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_refresh_tokens_user_id");
+
+                    b.ToTable("refresh_tokens", (string)null);
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.Revision", b =>
@@ -4147,6 +4281,12 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<string>("StatusReason")
                         .HasColumnType("text")
                         .HasColumnName("status_reason");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_sales_orders");
@@ -4798,6 +4938,12 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("type");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_stock_documents");
 
@@ -5073,6 +5219,12 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer")
                         .HasColumnName("status");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_stock_reservations");
@@ -6290,6 +6442,18 @@ namespace Ebt.Core.Data.Migrations
                         .HasConstraintName("fk_quote_request_files_quotes_quote_id");
 
                     b.Navigation("Quote");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.RefreshToken", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_refresh_tokens_users_user_id");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.Revision", b =>

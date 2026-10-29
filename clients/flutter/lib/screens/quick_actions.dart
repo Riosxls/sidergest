@@ -29,7 +29,7 @@ Future<void> newProduct(BuildContext context, Session session) async {
 
 List<QuickAction> quickActionsFor(Session s) => [
   if (s.canWrite) QuickAction(Icons.add_box_outlined, 'Novo produto', (c) => newProduct(c, s)),
-  if (s.canProduce) QuickAction(Icons.add_task, 'Nova OF', (c) => newProductionOrder(c, s)),
+  if (s.canProduce) QuickAction(Icons.add_task, 'Nova Ordem de Fabricação', (c) => newProductionOrder(c, s)),
   if (s.canRequest) QuickAction(Icons.post_add, 'Nova requisição', (c) => newRequisition(c, s)),
   if (s.canBuy) QuickAction(Icons.add_shopping_cart, 'Novo pedido', (c) => newPurchaseOrder(c, s)),
 ];

@@ -59,11 +59,6 @@ public static class FiscalEndpoints
         else
             services.AddSingleton<ISefazClient, StubSefazClient>(); // simulated authorization, see FISCAL.md
         services.AddExceptionHandler<FiscalExceptionHandler>();
-        services.AddAuthorization(o =>
-        {
-            o.AddPolicy(FiscalPolicies.Prices, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.SalesManager)));
-            o.AddPolicy(FiscalPolicies.Cancel, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.SalesManager)));
-        });
         return services;
     }
 
@@ -170,7 +165,7 @@ public static class FiscalEndpoints
                 .Require(await db.Cfops.AnyAsync(c => c.Code == i.CfopCode, ct), "cfopCode", "Not found")
                 .Require(i.IcmsPercent is >= 0 and <= 100 && i.IcmsBaseReductionPercent is >= 0 and <= 100 && i.IpiPercent is >= 0 and <= 100, "icmsPercent", "Rates between 0 and 100")
                 .Require(i.PisPercent is null or (>= 0 and <= 100) && i.CofinsPercent is null or (>= 0 and <= 100), "pisPercent", "Rates between 0 and 100"),
-            Search = (q, s) => q.Where(r => EF.Functions.ILike(r.Product!.Code, $"%{s}%") || EF.Functions.ILike(r.CfopCode, $"%{s}%") || EF.Functions.ILike(r.Customer!.Name ?? "", $"%{s}%")),
+            Search = (q, s) => q.Where(r => EF.Functions.ILike(r.Product!.Code, Like(s)) || EF.Functions.ILike(r.CfopCode, Like(s)) || EF.Functions.ILike(r.Customer!.Name, Like(s))),
             Order = q => q.OrderBy(r => r.Product!.Code).ThenBy(r => r.CfopCode).ThenBy(r => r.CustomerId),
             WritePolicy = FiscalPolicies.Prices
         });
@@ -187,7 +182,7 @@ public static class FiscalEndpoints
                 .Require(i.Year is >= 2000 and <= 2100, "year", "Between 2000 and 2100")
                 .Require(i.Month is >= 1 and <= 12, "month", "Between 1 and 12")
                 .Require(i.UnitPrice > 0, "unitPrice", "Must be greater than zero"),
-            Search = (q, s) => q.Where(p => EF.Functions.ILike(p.Product!.Code, $"%{s}%") || EF.Functions.ILike(p.Product.Name, $"%{s}%") || EF.Functions.ILike(p.Customer!.Name, $"%{s}%")),
+            Search = (q, s) => q.Where(p => EF.Functions.ILike(p.Product!.Code, Like(s)) || EF.Functions.ILike(p.Product.Name, Like(s)) || EF.Functions.ILike(p.Customer!.Name, Like(s))),
             Filter = (q, query) =>
             {
                 if (int.TryParse(query["year"], out var y)) q = q.Where(p => p.Year == y);
@@ -226,7 +221,7 @@ public static class FiscalEndpoints
             if (status is { } s) x = x.Where(d => d.Status == s);
             if (deliveryId is { } di) x = x.Where(d => d.DeliveryId == di);
             if (outsideShipmentId is { } si) x = x.Where(d => d.OutsideShipmentId == si);
-            if (Has(q)) x = x.Where(d => EF.Functions.ILike(d.RecipientName, $"%{q!.Trim()}%") || d.AccessKey == q.Trim() || d.Number.ToString() == q.Trim());
+            if (Has(q)) x = x.Where(d => EF.Functions.ILike(d.RecipientName!, Like(q!)) || d.AccessKey == q.Trim() || d.Number.ToString() == q.Trim());
             var total = await x.CountAsync(ct);
             var sk = Math.Max(skip ?? 0, 0);
             var tk = Math.Clamp(take ?? 50, 1, 200);

@@ -23,6 +23,8 @@ public partial class EbtDbContext(DbContextOptions<EbtDbContext> options) : DbCo
     public DbSet<BomItem> BomItems => Set<BomItem>();
     public DbSet<Revision> Revisions => Set<Revision>();
     public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<AuditEntry> AuditLog => Set<AuditEntry>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -130,10 +132,33 @@ public partial class EbtDbContext(DbContextOptions<EbtDbContext> options) : DbCo
             e.ToTable("users");
             e.HasIndex(x => x.Username).IsUnique();
         });
+        b.Entity<RefreshToken>(e =>
+        {
+            e.ToTable("refresh_tokens");
+            e.Property(x => x.TokenHash).HasMaxLength(64);
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            e.HasIndex(x => x.UserId);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<AuditEntry>(e =>
+        {
+            e.ToTable("audit_log");
+            e.Property(x => x.Entity).HasMaxLength(80);
+            e.Property(x => x.EntityId).HasMaxLength(80);
+            e.Property(x => x.Action).HasMaxLength(16);
+            e.Property(x => x.User).HasMaxLength(120);
+            e.Property(x => x.Changes).HasColumnType("jsonb");
+            e.HasIndex(x => new { x.Entity, x.EntityId });
+            e.HasIndex(x => x.At);
+        });
         ConfigureInventory(b);
         ConfigurePurchasing(b);
         ConfigureProduction(b);
         ConfigureSales(b);
+
+        // Postgres row version: read-modify-write on these aggregates fails with a concurrency error instead of silently overwriting.
+        foreach (var type in new[] { typeof(Quote), typeof(SalesOrder), typeof(Delivery), typeof(StockReservation), typeof(StockDocument), typeof(ProductionOrder), typeof(PurchaseOrder) })
+            b.Entity(type).Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
         ConfigureFiscal(b);
         ConfigureCertificates(b);
         ConfigureViability(b);

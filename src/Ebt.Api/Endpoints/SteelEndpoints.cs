@@ -26,7 +26,6 @@ public static class SteelEndpoints
 {
     public static IServiceCollection AddSteel(this IServiceCollection services)
     {
-        services.AddAuthorization(o => o.AddPolicy(SteelPolicies.Write, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Stock), nameof(UserRole.Purchasing))));
         return services;
     }
 
@@ -46,7 +45,7 @@ public static class SteelEndpoints
                 x.SlitterJobs.Count(j => j.FinishedKg == null), x.Notes, x.CreatedAt),
             Create = i => Apply(i, new SteelLot { LotCode = i.LotCode.Trim(), CreatedAt = DateTimeOffset.UtcNow }),
             Apply = (i, x) => Apply(i, x),
-            Search = (q, s) => q.Where(x => EF.Functions.ILike(x.LotCode, $"%{s}%") || EF.Functions.ILike(x.PurchaseInvoice ?? "", $"%{s}%") || EF.Functions.ILike(x.Supplier!.Name, $"%{s}%") || EF.Functions.ILike(x.Specification ?? "", $"%{s}%")),
+            Search = (q, s) => q.Where(x => EF.Functions.ILike(x.LotCode, Like(s)) || EF.Functions.ILike(x.PurchaseInvoice!, Like(s)) || EF.Functions.ILike(x.Supplier!.Name, Like(s)) || EF.Functions.ILike(x.Specification!, Like(s))),
             Order = q => q.OrderByDescending(x => x.ReceivedDate).ThenByDescending(x => x.Id),
             Validate = async (i, db, ct) =>
             {
@@ -71,7 +70,7 @@ public static class SteelEndpoints
             Project = JobProject,
             Create = i => Apply(i, new SlitterJob()),
             Apply = (i, x) => Apply(i, x),
-            Search = (q, s) => q.Where(x => EF.Functions.ILike(x.Lot!.LotCode, $"%{s}%") || EF.Functions.ILike(x.ShipmentInvoice ?? "", $"%{s}%") || EF.Functions.ILike(x.ReturnInvoice ?? "", $"%{s}%") || EF.Functions.ILike(x.Processor!.Name, $"%{s}%")),
+            Search = (q, s) => q.Where(x => EF.Functions.ILike(x.Lot!.LotCode, Like(s)) || EF.Functions.ILike(x.ShipmentInvoice!, Like(s)) || EF.Functions.ILike(x.ReturnInvoice!, Like(s)) || EF.Functions.ILike(x.Processor!.Name, Like(s))),
             Order = q => q.OrderBy(x => x.FinishedKg != null).ThenByDescending(x => x.ShipmentDate).ThenByDescending(x => x.Id),
             Validate = async (i, db, ct) =>
             {
@@ -96,7 +95,7 @@ public static class SteelEndpoints
             Project = UsageProject,
             Create = i => Apply(i, new SteelUsage()),
             Apply = (i, x) => Apply(i, x),
-            Search = (q, s) => q.Where(x => EF.Functions.ILike(x.Lot!.LotCode, $"%{s}%") || EF.Functions.ILike(x.Reference ?? "", $"%{s}%")),
+            Search = (q, s) => q.Where(x => EF.Functions.ILike(x.Lot!.LotCode, Like(s)) || EF.Functions.ILike(x.Reference!, Like(s))),
             Order = q => q.OrderByDescending(x => x.Date).ThenByDescending(x => x.Id),
             Validate = async (i, db, ct) => Errors()
                 .Require(i.Kg > 0, "kg", "Must be greater than zero")

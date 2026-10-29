@@ -10,7 +10,7 @@ namespace Ebt.Tests;
 [Collection("api")]
 public class ProductionTests(ApiFixture api)
 {
-    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.Today);
+    private static readonly DateOnly Today = Ebt.Core.Services.Clock.Today();
 
     private static string Code(string prefix, int length = 12) => $"{prefix}{Guid.NewGuid():N}"[..length].ToUpper();
 

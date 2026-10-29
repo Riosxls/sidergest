@@ -1,6 +1,7 @@
 param([switch]$Purge)
 
 $ErrorActionPreference = 'Continue'
+foreach ($v in "EBT_DB_PASSWORD", "EBT_JWT_KEY", "EBT_ADMIN_PASSWORD") { if (-not (Get-Item "env:$v" -ErrorAction SilentlyContinue)) { Set-Item "env:$v" "unused-for-teardown" } }
 $Root = Split-Path -Parent $PSScriptRoot
 $RunDir = Join-Path $Root '.run'
 $PidFile = Join-Path $RunDir 'api.pid'

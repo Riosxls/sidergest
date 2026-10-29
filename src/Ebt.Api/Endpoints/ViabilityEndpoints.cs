@@ -33,12 +33,6 @@ public static class ViabilityEndpoints
 {
     public static IServiceCollection AddViability(this IServiceCollection services)
     {
-        services.AddAuthorization(o =>
-        {
-            o.AddPolicy(ViabilityPolicies.Quality, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Engineering)));
-            o.AddPolicy(ViabilityPolicies.Production, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Production)));
-            o.AddPolicy(ViabilityPolicies.Commercial, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Sales), nameof(UserRole.SalesManager)));
-        });
         return services;
     }
 
@@ -55,7 +49,7 @@ public static class ViabilityEndpoints
             if (customerId is { } c) x = x.Where(f => f.CustomerId == c);
             if (quoteId is { } qi) x = x.Where(f => f.QuoteId == qi);
             if (productId is { } pi) x = x.Where(f => f.ProductId == pi || f.ProductId == null);
-            if (Has(q)) x = x.Where(f => EF.Functions.ILike(f.Reference, $"%{q!.Trim()}%") || EF.Functions.ILike(f.Title, $"%{q.Trim()}%") || EF.Functions.ILike(f.Customer!.Name, $"%{q.Trim()}%"));
+            if (Has(q)) x = x.Where(f => EF.Functions.ILike(f.Reference, Like(q!)) || EF.Functions.ILike(f.Title, Like(q)) || EF.Functions.ILike(f.Customer!.Name, Like(q)));
             var rows = await x.OrderByDescending(f => f.Number).Select(f => new { F = f, Customer = f.Customer!.Name, Quote = f.Quote == null ? null : f.Quote.Reference, Product = f.Product == null ? null : f.Product.Code }).ToListAsync(ct);
             var used = await ViabilityRules.UsedOrdersAsync(db, rows.Select(r => r.F.Id).ToList(), null, ct);
             var items = rows.Select(r => new FeasibilitySummaryOut(r.F.Id, r.F.Number, r.F.Reference, r.F.QuoteId, r.Quote, r.F.CustomerId, r.Customer, r.F.ProductId, r.Product, r.F.Title, r.F.Status,
