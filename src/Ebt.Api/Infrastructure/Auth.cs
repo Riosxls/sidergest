@@ -82,7 +82,7 @@ public class TokenService(JwtOptions options)
 public record LoginRequest(string? Username, string? Password);
 public record LoginResponse(string Token, DateTimeOffset ExpiresAt, string Username, UserRole Role, string[] Permissions, string RefreshToken, DateTimeOffset RefreshExpiresAt);
 public record RefreshRequest(string? RefreshToken);
-public record UserDto(int Id, string Username, UserRole Role, bool Active);
+public record UserDto(int Id, string Username, UserRole Role, bool Active, bool Locked = false);
 public record CreateUserRequest(string Username, string Password, UserRole Role);
 public record UpdateUserRequest(UserRole Role, bool Active, string? Password);
 
@@ -185,7 +185,7 @@ public static class AuthEndpoints
         var users = app.MapGroup("/api/users").WithTags("Users").RequireAuthorization(Policies.Admin);
 
         users.MapGet("/", async (EbtDbContext db, CancellationToken ct) =>
-            await db.Users.AsNoTracking().OrderBy(u => u.Username).Select(u => new UserDto(u.Id, u.Username, u.Role, u.Active)).ToListAsync(ct));
+            await db.Users.AsNoTracking().OrderBy(u => u.Username).Select(u => new UserDto(u.Id, u.Username, u.Role, u.Active, u.LockedUntil != null && u.LockedUntil > DateTimeOffset.UtcNow)).ToListAsync(ct));
 
         users.MapPost("/", async (CreateUserRequest req, EbtDbContext db, IPasswordHasher<AppUser> hasher, CancellationToken ct) =>
         {
@@ -225,6 +225,23 @@ public static class AuthEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(new UserDto(user.Id, user.Username, user.Role, user.Active));
         });
+
+        users.MapPost("/{id:int}/unlock", async (int id, EbtDbContext db, ILoggerFactory logs, ClaimsPrincipal actor, CancellationToken ct) =>
+        {
+            var user = await db.Users.FindAsync([id], ct);
+            if (user is null) return Results.NotFound();
+            user.FailedLogins = 0;
+            user.LockedUntil = null;
+            await db.SaveChangesAsync(ct);
+            logs.CreateLogger("Ebt.Auth").LogInformation("User {Target} unlocked by {Actor}", user.Username, actor.Identity?.Name);
+            return Results.Ok(new UserDto(user.Id, user.Username, user.Role, user.Active));
+        });
+
+        app.MapGet("/api/access/matrix", () => Results.Ok(new
+        {
+            policies = Access.Matrix.Keys.Prepend(Policies.Read).Order().ToArray(),
+            roles = Enum.GetValues<UserRole>().ToDictionary(r => r.ToString(), r => Access.PoliciesFor(r))
+        })).WithTags("Users").RequireAuthorization(Policies.Admin);
     }
 
     public static async Task EnsureBootstrapAdminAsync(EbtDbContext db, IPasswordHasher<AppUser> hasher, IConfiguration config, ILogger logger)

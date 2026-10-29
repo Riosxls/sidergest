@@ -16,6 +16,8 @@ import 'fiscal.dart';
 import 'modules.dart';
 import 'orders.dart';
 import 'product_detail.dart';
+import 'audit.dart';
+import 'permissions.dart';
 import 'production_floor.dart';
 import 'production_orders.dart';
 import 'quick_actions.dart';
@@ -32,16 +34,20 @@ import 'stock_documents.dart';
 import 'stock_lots.dart';
 import 'steel.dart';
 import 'suppliers.dart';
+import 'users.dart';
 import 'viability.dart';
 
 class NavItem {
-  const NavItem(this.id, this.icon, this.title, this.section, this.build);
+  const NavItem(this.id, this.icon, this.title, this.section, this.build, {this.admin = false});
 
   final String id;
   final IconData icon;
   final String title;
   final String section;
   final Widget Function(Session s, String? filter, Navigate go) build;
+
+  /// Listed only for sessions with the 'admin' permission.
+  final bool admin;
 }
 
 const hiddenSection = '_module';
@@ -98,6 +104,9 @@ List<NavItem> _screens() => [
   for (final spec in productionMasters) NavItem(spec.path, spec.icon, spec.title, 'PCP', (s, f, go) => EntityListScreen(session: s, spec: spec)),
   NavItem('settings', Icons.tune, 'Parâmetros', 'Sistema', (s, f, go) => SettingsScreen(session: s)),
   NavItem('fiscal-settings', Icons.receipt_outlined, 'Parâmetros fiscais', 'Sistema', (s, f, go) => FiscalSettingsScreen(session: s)),
+  NavItem('users', Icons.group_outlined, 'Usuários', 'Sistema', (s, f, go) => UsersScreen(session: s), admin: true),
+  NavItem('permissions', Icons.lock_outline, 'Permissões', 'Sistema', (s, f, go) => PermissionsScreen(session: s), admin: true),
+  NavItem('audit', Icons.history, 'Auditoria', 'Sistema', (s, f, go) => AuditScreen(session: s), admin: true),
 ];
 
 class Shell extends StatefulWidget {
@@ -110,7 +119,7 @@ class Shell extends StatefulWidget {
 }
 
 class _ShellState extends State<Shell> {
-  final _items = navItems();
+  late final _items = [for (final i in navItems()) if (!i.admin || widget.session.isAdmin) i];
   String _current = 'dashboard';
   String? _filter;
   bool _collapsed = false;

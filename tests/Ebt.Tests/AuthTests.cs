@@ -186,4 +186,27 @@ public class AuthTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.PreconditionFailed, (await admin.SendAsync(Put("Segundo " + code, etag!))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await admin.SendAsync(Put("Segundo " + code, first.Headers.ETag!.ToString()))).StatusCode);
     }
+
+    [Fact]
+    public async Task Admin_can_unlock_a_locked_user_and_read_the_access_matrix()
+    {
+        var admin = await api.AdminAsync();
+        var name = $"unlk{Guid.NewGuid():N}"[..18];
+        var created = await (await admin.Post("/api/users", new CreateUserRequest(name, "user-password-123", UserRole.Reader))).Read<UserDto>();
+        var anon = api.Anonymous();
+        for (var i = 0; i < AuthEndpoints.MaxFailedLogins; i++)
+            await anon.PostAsJsonAsync("/api/auth/login", new LoginRequest(name, $"wrong-password-{i}"));
+        var listed = (await admin.GetFromJsonAsync<List<UserDto>>("/api/users", ApiFixture.Json))!.Single(u => u.Id == created.Id);
+        Assert.True(listed.Locked);
+
+        (await admin.PostAsync($"/api/users/{created.Id}/unlock", null)).EnsureSuccessStatusCode();
+        await api.LoginAsync(name, "user-password-123");
+
+        var matrix = await (await admin.GetAsync("/api/access/matrix")).Read<System.Text.Json.JsonElement>();
+        Assert.Contains("admin", matrix.GetProperty("roles").GetProperty("Admin").EnumerateArray().Select(e => e.GetString()));
+        Assert.DoesNotContain("admin", matrix.GetProperty("roles").GetProperty("Reader").EnumerateArray().Select(e => e.GetString()));
+        var reader = await api.UserAsync(UserRole.Reader);
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync("/api/access/matrix")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.PostAsync($"/api/users/{created.Id}/unlock", null)).StatusCode);
+    }
 }
