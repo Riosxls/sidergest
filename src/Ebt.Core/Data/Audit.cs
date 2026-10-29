@@ -33,10 +33,12 @@ public sealed class AuditInterceptor(ICurrentUser user) : SaveChangesInterceptor
     private static readonly HashSet<Type> Audited =
     [
         typeof(Customer), typeof(CustomerAddress), typeof(Supplier), typeof(SupplierAddress), typeof(Material), typeof(Product),
-        typeof(AppUser), typeof(StockLocation), typeof(StockSettings), typeof(StockClosing)
+        typeof(AppUser), typeof(StockLocation), typeof(StockSettings), typeof(StockClosing),
+        typeof(FiscalSettings), typeof(Cfop), typeof(TaxRule), typeof(MonthlyPrice), typeof(PaymentTerm), typeof(PriceListEntry),
+        typeof(SalesSettings), typeof(ProductionSettings), typeof(SteelLot), typeof(SlitterJob)
     ];
 
-    private static readonly HashSet<string> Hidden = ["PasswordHash", "TokenVersion", "FailedLogins", "LockedUntil", "xmin"];
+    private static readonly HashSet<string> Hidden = ["PasswordHash", "TokenVersion", "FailedLogins", "LockedUntil", "xmin", "NextNumber"];
     private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never };
 
     private readonly List<(EntityEntry Entry, Dictionary<string, object?> Values)> pendingInserts = [];

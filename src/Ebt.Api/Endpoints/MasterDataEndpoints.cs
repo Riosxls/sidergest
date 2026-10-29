@@ -36,7 +36,7 @@ public static class MasterDataEndpoints
 {
     public static void MapMasterData(this WebApplication app)
     {
-        app.MapGroup("/api/customers").WithTags("Customers").MapCrud(new CrudSpec<Customer, CustomerIn, CustomerOut>
+        app.MapGroup("/api/customers").WithTags("Customers").AddEndpointFilter(new RowVersionFilter<Customer>()).MapCrud(new CrudSpec<Customer, CustomerIn, CustomerOut>
         {
             // The default delivery address is the first one (legacy code, then id).
             Project = c => new CustomerOut(c.Id, c.Name, c.TradeName, c.LegacyCode, c.ConsumerType, c.Active, c.Addresses.Count,
@@ -80,7 +80,7 @@ public static class MasterDataEndpoints
         });
         MapCustomerAddresses(app);
 
-        app.MapGroup("/api/suppliers").WithTags("Suppliers").MapCrud(new CrudSpec<Supplier, SupplierIn, SupplierOut>
+        app.MapGroup("/api/suppliers").WithTags("Suppliers").AddEndpointFilter(new RowVersionFilter<Supplier>()).MapCrud(new CrudSpec<Supplier, SupplierIn, SupplierOut>
         {
             Project = s => new SupplierOut(s.Id, s.Name, s.TradeName, s.LegacyCode, s.GroupCode, s.Active, s.Addresses.Count),
             Create = i => new Supplier { Name = i.Name.Trim(), TradeName = Clean(i.TradeName), LegacyCode = Clean(i.LegacyCode), GroupCode = Clean(i.GroupCode), Active = i.Active },
@@ -107,7 +107,7 @@ public static class MasterDataEndpoints
             BeforeDelete = async (id, db, ct) => await db.Materials.AnyAsync(m => m.SubgroupId == id, ct) ? "Subgroup is used by materials" : null
         });
 
-        app.MapGroup("/api/materials").WithTags("Materials").MapCrud(new CrudSpec<Material, MaterialIn, MaterialOut>
+        app.MapGroup("/api/materials").WithTags("Materials").AddEndpointFilter(new RowVersionFilter<Material>()).MapCrud(new CrudSpec<Material, MaterialIn, MaterialOut>
         {
             Project = m => new MaterialOut(m.Id, m.Code, m.Description, m.ClassId, m.GroupId, m.SubgroupId, m.Subgroup != null ? m.Subgroup.Name : null, m.StockUnit, m.PurchaseUnit, m.PurchaseFactor, m.ThicknessMm, m.WidthMm, m.Ncm, m.LeadTimeDays, m.PurchaseLot, m.MinStock, m.MaxStock, m.RequiresInspection, m.GeneratesPurchaseOrder, m.ExternalProcessing, m.Active),
             Create = i => { var m = new Material { Code = i.Code.Trim(), Description = i.Description.Trim(), StockUnit = i.StockUnit.Trim().ToUpper(), PurchaseUnit = i.PurchaseUnit.Trim().ToUpper() }; ApplyMaterial(i, m); return m; },

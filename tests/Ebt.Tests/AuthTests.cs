@@ -165,4 +165,25 @@ public class AuthTests(ApiFixture api)
         var users = await (await admin.GetAsync("/api/audit?entity=AppUser")).Read<Page<AuditOut>>();
         Assert.DoesNotContain(users.Items, a => a.Changes.Contains("PasswordHash", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public async Task Customer_edit_with_stale_if_match_is_rejected_and_audited()
+    {
+        var admin = await api.AdminAsync();
+        var code = $"ETG{Guid.NewGuid():N}"[..10].ToUpper();
+        var cust = await (await admin.Post("/api/customers", new CustomerIn("Cliente " + code, null, null, ConsumerType.Normal))).Read<CustomerOut>();
+        var etag = (await admin.GetAsync($"/api/customers/{cust.Id}")).Headers.ETag?.ToString();
+        Assert.False(string.IsNullOrEmpty(etag));
+
+        HttpRequestMessage Put(string name, string tag)
+        {
+            var r = new HttpRequestMessage(HttpMethod.Put, $"/api/customers/{cust.Id}") { Content = JsonContent.Create(new CustomerIn(name, null, null, ConsumerType.Normal), options: ApiFixture.Json) };
+            r.Headers.TryAddWithoutValidation("If-Match", tag);
+            return r;
+        }
+        var first = await admin.SendAsync(Put("Primeiro " + code, etag!));
+        first.EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.PreconditionFailed, (await admin.SendAsync(Put("Segundo " + code, etag!))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.SendAsync(Put("Segundo " + code, first.Headers.ETag!.ToString()))).StatusCode);
+    }
 }

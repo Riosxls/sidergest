@@ -40,7 +40,7 @@ public static class ViabilityEndpoints
 
     public static void MapViability(this WebApplication app)
     {
-        var g = app.MapGroup("/api/viability").WithTags("Viability").RequireAuthorization(Policies.Read);
+        var g = app.MapGroup("/api/viability").WithTags("Viability").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<FeasibilityStudy>());
 
         g.MapGet("/", async (EbtDbContext db, FeasibilityStatus? status, int? customerId, int? quoteId, int? productId, bool? usable, string? q, int? skip, int? take, CancellationToken ct) =>
         {

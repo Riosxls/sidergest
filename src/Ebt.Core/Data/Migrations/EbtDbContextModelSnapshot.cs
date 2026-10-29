@@ -605,6 +605,12 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("character varying(8)")
                         .HasColumnName("zip_code");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_customers");
 
@@ -1056,6 +1062,12 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("transformations");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_feasibility_studies");
 
@@ -1243,6 +1255,12 @@ namespace Ebt.Core.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("xml");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_fiscal_documents");
@@ -1897,6 +1915,12 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("numeric(10,3)")
                         .HasColumnName("width_mm");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_materials");
 
@@ -2402,6 +2426,12 @@ namespace Ebt.Core.Data.Migrations
                         .HasPrecision(10, 3)
                         .HasColumnType("numeric(10,3)")
                         .HasColumnName("width_mm");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_products");
@@ -3493,6 +3523,12 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<int>("Year")
                         .HasColumnType("integer")
                         .HasColumnName("year");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_quality_certificates");
@@ -4628,6 +4664,12 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("character varying(15)")
                         .HasColumnName("shipment_invoice");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_slitter_jobs");
 
@@ -4736,6 +4778,12 @@ namespace Ebt.Core.Data.Migrations
                         .HasPrecision(10, 2)
                         .HasColumnType("numeric(10,2)")
                         .HasColumnName("width");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_steel_lots");
@@ -5328,6 +5376,12 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<string>("TradeName")
                         .HasColumnType("text")
                         .HasColumnName("trade_name");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_suppliers");

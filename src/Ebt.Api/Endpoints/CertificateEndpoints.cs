@@ -36,7 +36,7 @@ public static class CertificateEndpoints
 
     public static void MapCertificates(this WebApplication app)
     {
-        var g = app.MapGroup("/api/sales/certificates").WithTags("Certificates").RequireAuthorization(Policies.Read);
+        var g = app.MapGroup("/api/sales/certificates").WithTags("Certificates").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<QualityCertificate>());
 
         g.MapGet("/", async (EbtDbContext db, CertificateStatus? status, int? orderId, int? deliveryId, int? customerId, string? company, string? q, int? skip, int? take, CancellationToken ct) =>
         {

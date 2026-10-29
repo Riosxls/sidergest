@@ -31,7 +31,7 @@ public static class SteelEndpoints
 
     public static void MapSteel(this WebApplication app)
     {
-        var lots = app.MapGroup("/api/steel/lots").WithTags("Steel");
+        var lots = app.MapGroup("/api/steel/lots").WithTags("Steel").AddEndpointFilter(new RowVersionFilter<SteelLot>());
         lots.MapCrud(new CrudSpec<SteelLot, SteelLotIn, SteelLotOut>
         {
             WritePolicy = SteelPolicies.Write,
@@ -64,7 +64,7 @@ public static class SteelEndpoints
         lots.MapGet("/{id:int}/usages", async (int id, EbtDbContext db, CancellationToken ct) =>
             Results.Ok(await db.SteelUsages.AsNoTracking().Where(u => u.LotId == id).OrderBy(u => u.Date).ThenBy(u => u.Id).Select(UsageProject).ToListAsync(ct))).RequireAuthorization(Policies.Read);
 
-        app.MapGroup("/api/steel/slitter").WithTags("Steel").MapCrud(new CrudSpec<SlitterJob, SlitterJobIn, SlitterJobOut>
+        app.MapGroup("/api/steel/slitter").WithTags("Steel").AddEndpointFilter(new RowVersionFilter<SlitterJob>()).MapCrud(new CrudSpec<SlitterJob, SlitterJobIn, SlitterJobOut>
         {
             WritePolicy = SteelPolicies.Write,
             Project = JobProject,

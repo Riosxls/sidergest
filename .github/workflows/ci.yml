@@ -46,3 +46,49 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+
+  # Real Flutter ApiClient against a real API + Postgres: login, refresh-on-401, ETag/412, audit log.
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+    env:
+      ConnectionStrings__Ebt: Host=localhost;Database=ebt_it;Username=postgres;Password=postgres
+      Jwt__SigningKey: ci-integration-signing-key-0123456789abcdef
+      Database__MigrateOnStartup: "true"
+      Bootstrap__AdminUser: admin
+      Bootstrap__AdminPassword: ci-integration-admin-pw
+      RateLimit__LoginPerMinute: "1000"
+      ASPNETCORE_URLS: http://localhost:5099
+      ASPNETCORE_ENVIRONMENT: Testing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: dotnet build src/Ebt.Api -c Release
+      - name: Start API
+        run: |
+          nohup dotnet src/Ebt.Api/bin/Release/net8.0/Ebt.Api.dll > api.log 2>&1 &
+          for i in $(seq 1 40); do curl -sf http://localhost:5099/health && exit 0; sleep 2; done
+          cat api.log; exit 1
+      - name: Flutter integration tests
+        working-directory: clients/flutter
+        env:
+          EBT_API_URL: http://localhost:5099
+          EBT_ADMIN_PASSWORD: ci-integration-admin-pw
+        run: |
+          flutter pub get
+          flutter test test/integration
+      - name: API log on failure
+        if: failure()
+        run: cat api.log
