@@ -4,10 +4,15 @@ using Npgsql;
 
 namespace Ebt.Api.Infrastructure;
 
-public class DatabaseExceptionHandler : IExceptionHandler
+public class DatabaseExceptionHandler(ILogger<DatabaseExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext http, Exception exception, CancellationToken ct)
     {
+        if (exception is DbUpdateConcurrencyException)
+        {
+            await Results.Problem("The record was changed by someone else; reload and try again", statusCode: StatusCodes.Status409Conflict, title: "Concurrent update").ExecuteAsync(http);
+            return true;
+        }
         if (exception is not DbUpdateException { InnerException: PostgresException pg }) return false;
         var (status, title) = pg.SqlState switch
         {
@@ -19,8 +24,9 @@ public class DatabaseExceptionHandler : IExceptionHandler
             _ => (0, "")
         };
         if (status == 0) return false;
-        http.Response.StatusCode = status;
-        await http.Response.WriteAsJsonAsync(new { title, status, detail = pg.ConstraintName ?? pg.MessageText }, ct);
+        // Constraint and column names stay in the log; clients only get the generic reason.
+        logger.LogWarning("Database rejected a write: {SqlState} {Constraint} {Table}.{Column}", pg.SqlState, pg.ConstraintName, pg.TableName, pg.ColumnName);
+        await Results.Problem(title: title, statusCode: status, extensions: new Dictionary<string, object?> { ["traceId"] = http.TraceIdentifier }).ExecuteAsync(http);
         return true;
     }
 }

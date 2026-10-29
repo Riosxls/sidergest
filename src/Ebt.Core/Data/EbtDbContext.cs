@@ -130,6 +130,10 @@ public partial class EbtDbContext(DbContextOptions<EbtDbContext> options) : DbCo
         ConfigurePurchasing(b);
         ConfigureProduction(b);
         ConfigureSales(b);
+
+        // Postgres row version: read-modify-write on these aggregates fails with a concurrency error instead of silently overwriting.
+        foreach (var type in new[] { typeof(Quote), typeof(SalesOrder), typeof(Delivery), typeof(StockReservation), typeof(StockDocument), typeof(ProductionOrder), typeof(PurchaseOrder) })
+            b.Entity(type).Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
     }
 
     partial void ConfigureInventory(ModelBuilder b);

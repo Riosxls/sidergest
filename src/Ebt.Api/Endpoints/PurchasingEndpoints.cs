@@ -138,7 +138,7 @@ public static class PurchasingEndpoints
             if (status is { } st) query = query.Where(r => r.Status == st);
             if (materialId is { } m) query = query.Where(r => r.MaterialId == m);
             if (Clean(department) is { } d) query = query.Where(r => r.Department == d);
-            if (Clean(q) is { } s) query = query.Where(r => EF.Functions.ILike(r.Description, $"%{s}%") || r.Number.ToString() == s);
+            if (Clean(q) is { } s) query = query.Where(r => EF.Functions.ILike(r.Description, Like(s)) || r.Number.ToString() == s);
             return await PageAsync(ProjectRequisitions(query.OrderByDescending(r => r.Number)), query, skip, take, ct);
         }).RequireAuthorization(Policies.Read);
 

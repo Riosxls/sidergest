@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: ebt
       POSTGRES_USER: ebt
-      POSTGRES_PASSWORD: ${EBT_DB_PASSWORD:-ebt-dev-password}
+      POSTGRES_PASSWORD: ${EBT_DB_PASSWORD:?set EBT_DB_PASSWORD in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -22,15 +22,21 @@ services:
       db:
         condition: service_healthy
     environment:
-      ConnectionStrings__Ebt: Host=db;Database=ebt;Username=ebt;Password=${EBT_DB_PASSWORD:-ebt-dev-password}
-      Jwt__SigningKey: ${EBT_JWT_KEY:-sidergest-dev-only-signing-key-not-for-production}
+      ConnectionStrings__Ebt: Host=db;Database=ebt;Username=ebt;Password=${EBT_DB_PASSWORD:?set EBT_DB_PASSWORD in .env}
+      Jwt__SigningKey: ${EBT_JWT_KEY:?set EBT_JWT_KEY in .env}
       Database__MigrateOnStartup: "true"
       Bootstrap__AdminUser: ${EBT_ADMIN_USER:-admin}
-      Bootstrap__AdminPassword: ${EBT_ADMIN_PASSWORD:-sidergest123}
-      Swagger__Enabled: ${EBT_SWAGGER:-true}
+      Bootstrap__AdminPassword: ${EBT_ADMIN_PASSWORD:?set EBT_ADMIN_PASSWORD in .env}
+      Swagger__Enabled: ${EBT_SWAGGER:-false}
       Cors__Origins__0: ${EBT_CORS_ORIGIN:-http://localhost:8081}
+      AllowedHosts: ${EBT_ALLOWED_HOSTS:-localhost}
+      Proxy__Trusted: ${EBT_BEHIND_PROXY:-false}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     ports:
-      - "${EBT_API_PORT:-8080}:8080"
+      - "127.0.0.1:${EBT_API_PORT:-8080}:8080"
 
   dbf-import:
     build:
@@ -41,7 +47,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      ConnectionStrings__Ebt: Host=db;Database=ebt;Username=ebt;Password=${EBT_DB_PASSWORD:-ebt-dev-password}
+      ConnectionStrings__Ebt: Host=db;Database=ebt;Username=ebt;Password=${EBT_DB_PASSWORD:?set EBT_DB_PASSWORD in .env}
     volumes:
       - ${EBT_DBF_DIR:-./legacy}:/legacy:ro
     command: ["--dir", "/legacy", "--migrate"]

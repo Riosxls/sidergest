@@ -387,8 +387,8 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
         var reservationIds = lines.Where(l => l.ReservationId != null).Select(l => l.ReservationId!.Value).ToList();
         var reserved = await db.StockReservations.Where(r => reservationIds.Contains(r.Id) && r.Status == ReservationStatus.Open)
             .ToDictionaryAsync(r => r.Id, r => r.Quantity - r.Consumed, ct);
-        var free = new Dictionary<int, decimal>();
-        foreach (var p in lines.Select(l => l.ProductId).Distinct()) free[p] = Math.Max(0, await stock.FreeQuantityAsync(new StockItem(null, p), null, ct));
+        var freeRaw = await stock.FreeQuantitiesAsync(lines.Select(l => l.ProductId).Distinct().ToList(), ct);
+        var free = freeRaw.ToDictionary(kv => kv.Key, kv => Math.Max(0, kv.Value));
         var today = Today();
 
         var result = new Dictionary<int, OrderProgressInfo>();
@@ -668,7 +668,7 @@ public sealed class SalesService(EbtDbContext db, StockService stock, Production
         }
     }
 
-    public static DateOnly Today() => DateOnly.FromDateTime(DateTime.Today);
+    public static DateOnly Today() => Ebt.Core.Services.Clock.Today();
     private static decimal Money(decimal d) => Math.Round(d, 2, MidpointRounding.AwayFromZero);
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 }

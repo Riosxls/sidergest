@@ -128,7 +128,7 @@ public static class ProductionEndpoints
             Validate = async (i, db, ct) => Errors().Require(Has(i.Code), "code", "Required").Require(Has(i.Name), "name", "Required")
                 .Require(i.WorkCenterId is null || await db.WorkCenters.AnyAsync(w => w.Id == i.WorkCenterId, ct), "workCenterId", "Not found")
                 .Require(i.ShiftId is null || await db.Shifts.AnyAsync(s => s.Id == i.ShiftId, ct), "shiftId", "Not found"),
-            Search = (q, s) => q.Where(e => EF.Functions.ILike(e.Code, $"%{s}%") || EF.Functions.ILike(e.Name, $"%{s}%") || EF.Functions.ILike(e.Nickname ?? "", $"%{s}%")),
+            Search = (q, s) => q.Where(e => EF.Functions.ILike(e.Code, Like(s)) || EF.Functions.ILike(e.Name, Like(s)) || EF.Functions.ILike(e.Nickname ?? "", Like(s))),
             Order = q => q.OrderBy(e => e.Name),
             BeforeDelete = async (id, db, ct) => await db.ProductionReports.AnyAsync(r => r.EmployeeId == id, ct) ? "Employee has reports; deactivate instead" : null,
             WritePolicy = ProductionPolicies.Plan
@@ -170,7 +170,7 @@ public static class ProductionEndpoints
             if (parentOrderId is { } par) o = o.Where(x => x.ParentOrderId == par);
             if (dueFrom is { } f) o = o.Where(x => x.DueDate >= f);
             if (dueTo is { } t) o = o.Where(x => x.DueDate <= t);
-            if (Has(q)) o = o.Where(x => EF.Functions.ILike(x.Reference, $"%{q!.Trim()}%") || EF.Functions.ILike(x.Product!.Code, $"%{q.Trim()}%"));
+            if (Has(q)) o = o.Where(x => EF.Functions.ILike(x.Reference, Like(q!)) || EF.Functions.ILike(x.Product!.Code, Like(q)));
             var total = await o.CountAsync(ct);
             var (s, n) = Paging(skip, take);
             var items = await o.OrderBy(x => x.DueDate).ThenBy(x => x.Number).Skip(s).Take(n).Select(Summary).ToListAsync(ct);
@@ -236,7 +236,7 @@ public static class ProductionEndpoints
         g.MapGet("/{id:int}/reconciliation", async (int id, ProductionService svc, CancellationToken ct) => Results.Ok(await svc.ReconcileAsync(id, ct)));
 
         g.MapPost("/{id:int}/schedule", async (int id, ProductionService svc, CancellationToken ct) =>
-            Results.Ok(await svc.ScheduleAsync(id, DateOnly.FromDateTime(DateTime.Today), ct))).RequireAuthorization(ProductionPolicies.Plan);
+            Results.Ok(await svc.ScheduleAsync(id, Ebt.Core.Services.Clock.Today(), ct))).RequireAuthorization(ProductionPolicies.Plan);
 
         g.MapPost("/{id:int}/issues", async (int id, IssueInput i, EbtDbContext db, ProductionService svc, ClaimsPrincipal user, CancellationToken ct) =>
             Created(await svc.IssueAsync(id, i, Who(user), ct))).RequireAuthorization(ProductionPolicies.Materials);
@@ -345,11 +345,11 @@ public static class ProductionEndpoints
         g.MapPost("/availability", async (AvailabilityCheckIn i, ProductionService svc, CancellationToken ct) => Results.Ok(await svc.CheckAvailabilityAsync(i.ProductId, i.Quantity, ct)));
 
         g.MapPost("/schedule", async (ProductionService svc, CancellationToken ct) =>
-            Results.Ok(await svc.ScheduleAsync(null, DateOnly.FromDateTime(DateTime.Today), ct))).RequireAuthorization(ProductionPolicies.Plan);
+            Results.Ok(await svc.ScheduleAsync(null, Ebt.Core.Services.Clock.Today(), ct))).RequireAuthorization(ProductionPolicies.Plan);
 
         g.MapGet("/load", async (ProductionService svc, DateOnly? from, DateOnly? to, string? groupBy, CancellationToken ct) =>
         {
-            var start = from ?? DateOnly.FromDateTime(DateTime.Today);
+            var start = from ?? Ebt.Core.Services.Clock.Today();
             var byWorkCenter = string.Equals(groupBy, "workCenter", StringComparison.OrdinalIgnoreCase);
             if (groupBy is not null && !byWorkCenter && !string.Equals(groupBy, "machine", StringComparison.OrdinalIgnoreCase))
                 return Results.ValidationProblem(Errors().Require(false, "groupBy", "machine or workCenter"));

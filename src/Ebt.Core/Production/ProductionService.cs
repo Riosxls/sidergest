@@ -383,7 +383,7 @@ public sealed partial class ProductionService(EbtDbContext db, StockService stoc
             var inScrap = Round(g.Sum(m => m.QuantityPerUnit * scrapByOp.Where(s => s.Key >= m.OperationSequence).Sum(s => s.Value)));
             var inFg = Round(perUnit * progress.Received);
             var issued = consumption.FirstOrDefault(c => new StockItem(c.MaterialId, c.ProductId) == g.Key)?.Quantity ?? 0m;
-            var price = g.Key.MaterialId is { } mid ? prices.TryGetValue(mid, out var p) ? p : await stock.CurrentAverageAsync(mid, DateOnly.FromDateTime(DateTime.Today), ct) : 0m;
+            var price = g.Key.MaterialId is { } mid ? prices.TryGetValue(mid, out var p) ? p : await stock.CurrentAverageAsync(mid, Ebt.Core.Services.Clock.Today(), ct) : 0m;
             var balance = issued - inScrap - inFg;
             lines.Add(new ReconciliationLine(g.Key.MaterialId, g.Key.ProductId, codes[g.Key].Code, g.First().Unit, perUnit, Round(g.Sum(m => m.RequiredQuantity)), issued, inScrap, inFg, balance, price, Math.Round(balance * price, 2)));
         }

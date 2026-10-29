@@ -153,11 +153,18 @@ public class StockService(EbtDbContext db)
 
     public async Task<StockReservation> ReleaseAsync(int reservationId, CancellationToken ct = default)
     {
-        var r = await db.StockReservations.FirstOrDefaultAsync(x => x.Id == reservationId, ct) ?? throw StockException.NotFound("Reservation not found");
-        if (r.Status != ReservationStatus.Open) throw StockException.Conflict("Reservation is not open");
-        r.Status = ReservationStatus.Released;
-        await db.SaveChangesAsync(ct);
-        return r;
+        return await InTransaction(async () =>
+        {
+            var head = await db.StockReservations.AsNoTracking().Where(x => x.Id == reservationId).Select(x => new { x.MaterialId, x.ProductId }).FirstOrDefaultAsync(ct)
+                ?? throw StockException.NotFound("Reservation not found");
+            await LockAsync([new StockItem(head.MaterialId, head.ProductId)], ct);
+            var r = await db.StockReservations.FirstAsync(x => x.Id == reservationId, ct);
+            await db.Entry(r).ReloadAsync(ct); // re-read under the item lock
+            if (r.Status != ReservationStatus.Open) throw StockException.Conflict("Reservation is not open");
+            r.Status = ReservationStatus.Released;
+            await db.SaveChangesAsync(ct);
+            return r;
+        }, ct);
     }
 
     public async Task<decimal> FreeQuantityAsync(StockItem item, int? excludeReservationId, CancellationToken ct = default)
@@ -171,6 +178,22 @@ public class StockService(EbtDbContext db)
             .Where(r => r.MaterialId == item.MaterialId && r.ProductId == item.ProductId && r.Status == ReservationStatus.Open && r.Id != excludeReservationId)
             .SumAsync(r => r.Quantity - r.Consumed, ct);
         return onHand - reserved;
+    }
+
+    /// <summary>Free quantity (on hand minus open reservations) for many products in two queries.</summary>
+    public async Task<Dictionary<int, decimal>> FreeQuantitiesAsync(IReadOnlyCollection<int> productIds, CancellationToken ct = default)
+    {
+        var onHand = await db.StockBalances
+            .Where(b => b.ProductId != null && productIds.Contains(b.ProductId.Value))
+            .Where(b => b.Location!.Kind == StockLocationKind.Internal || b.Location!.Kind == StockLocationKind.Shipping)
+            .Where(b => b.LotId == null || b.Lot!.Status == LotStatus.Released)
+            .GroupBy(b => b.ProductId!.Value).Select(g => new { Id = g.Key, Qty = g.Sum(b => b.Quantity) })
+            .ToDictionaryAsync(x => x.Id, x => x.Qty, ct);
+        var reserved = await db.StockReservations
+            .Where(r => r.ProductId != null && productIds.Contains(r.ProductId.Value) && r.Status == ReservationStatus.Open)
+            .GroupBy(r => r.ProductId!.Value).Select(g => new { Id = g.Key, Qty = g.Sum(r => r.Quantity - r.Consumed) })
+            .ToDictionaryAsync(x => x.Id, x => x.Qty, ct);
+        return productIds.Distinct().ToDictionary(id => id, id => onHand.GetValueOrDefault(id) - reserved.GetValueOrDefault(id));
     }
 
     public async Task<decimal> CurrentAverageAsync(int materialId, DateOnly date, CancellationToken ct = default)

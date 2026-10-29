@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using System.Text.Json.Serialization;
 using Ebt.Api.Endpoints;
 using Ebt.Api.Infrastructure;
@@ -7,6 +8,7 @@ using Ebt.Core.Entities;
 using Ebt.Core.Inventory;
 using Ebt.Core.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -16,6 +18,10 @@ var builder = WebApplication.CreateBuilder(args);
 var jwt = builder.Configuration.GetSection("Jwt").Get<JwtOptions>() ?? new JwtOptions();
 if (Encoding.UTF8.GetByteCount(jwt.SigningKey) < 32)
     throw new InvalidOperationException("Jwt:SigningKey must be at least 32 bytes. Set it via configuration or the Jwt__SigningKey environment variable.");
+if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing")
+    && (jwt.SigningKey.Contains("change-me", StringComparison.OrdinalIgnoreCase) || jwt.SigningKey.Contains("dev-only", StringComparison.OrdinalIgnoreCase)))
+    throw new InvalidOperationException("Jwt:SigningKey is a placeholder value; set a real random secret (Jwt__SigningKey / EBT_JWT_KEY).");
+Ebt.Core.Services.Clock.Configure(builder.Configuration["Clock:TimeZone"]);
 
 builder.Services.AddDbContext<EbtDbContext>(o => o
     .UseNpgsql(builder.Configuration.GetConnectionString("Ebt") ?? throw new InvalidOperationException("ConnectionStrings:Ebt is not set."))
@@ -27,6 +33,7 @@ builder.Services.AddProduction();
 builder.Services.AddSales();
 builder.Services.AddSingleton(jwt);
 builder.Services.AddSingleton<TokenService>();
+builder.Services.AddHostedService<QuoteExpiryService>();
 builder.Services.AddExceptionHandler<StockExceptionHandler>();
 builder.Services.AddExceptionHandler<DatabaseExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -35,6 +42,7 @@ builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Ad
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
 {
     o.MapInboundClaims = false;
+    o.Events = new JwtBearerEvents { OnTokenValidated = TokenService.ValidateAsync };
     o.TokenValidationParameters = new TokenValidationParameters
     {
         ValidIssuer = jwt.Issuer,
@@ -50,6 +58,21 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy(Policies.Write, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Engineering)))
     .AddPolicy(Policies.Admin, p => p.RequireRole(nameof(UserRole.Admin)))
     .AddPolicy(Policies.Stock, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Stock)));
+
+builder.Services.AddRateLimiter(o =>
+{
+    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    var perMinute = builder.Configuration.GetValue("RateLimit:LoginPerMinute", 10);
+    o.AddPolicy(Policies.LoginLimiter, ctx => RateLimitPartition.GetFixedWindowLimiter(ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = perMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
+if (builder.Configuration.GetValue("Proxy:Trusted", false))
+    builder.Services.Configure<ForwardedHeadersOptions>(o =>
+    {
+        o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        o.KnownNetworks.Clear();
+        o.KnownProxies.Clear();
+    });
 
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
 {
@@ -69,8 +92,19 @@ builder.Services.AddSwaggerGen(o =>
 
 var app = builder.Build();
 
+if (app.Configuration.GetValue("Proxy:Trusted", false)) app.UseForwardedHeaders();
+if (!app.Environment.IsDevelopment()) app.UseHsts();
 app.UseExceptionHandler();
+app.Use(async (ctx, next) =>
+{
+    ctx.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    ctx.Response.Headers["X-Frame-Options"] = "DENY";
+    ctx.Response.Headers["Referrer-Policy"] = "no-referrer";
+    if (ctx.Request.Path.StartsWithSegments("/api")) ctx.Response.Headers.CacheControl = "no-store";
+    await next();
+});
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

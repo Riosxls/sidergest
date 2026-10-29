@@ -6,7 +6,7 @@ Prerequisites: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
 1. `git clone https://github.com/Riosxls/sidergest` (or `git pull`)
 2. Double-click `start.bat` (or run it in a terminal). It starts PostgreSQL + API in Docker, applies migrations, creates the admin user and opens the Windows app.
-3. Log in with `admin` / `sidergest123`. Stop everything with `stop.bat`.
+3. Log in with `admin` and the `EBT_ADMIN_PASSWORD` from the `.env` file `start.bat` generates on first run (random secrets; Swagger on for local use). Stop everything with `stop.bat`.
 
 | Command | What it does |
 |---------|--------------|
@@ -17,7 +17,7 @@ Prerequisites: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 | `stop.bat` | stop API and containers, data kept |
 | `stop.bat -Purge` | also delete the database volume |
 
-API http://localhost:8080, Swagger http://localhost:8080/swagger. Dev defaults (DB password `ebt-dev-password`, JWT key, admin password) are built in, so no `.env` is needed for development. The admin user is only created when the database has no users. Ports: API 8080, Postgres 25432 (Docker, bound to 127.0.0.1), web app 8081. If one is taken or reserved by Windows, `start.bat` picks the next free one and prints the URLs; the app and CORS follow it. Override with `EBT_API_PORT`, `EBT_DB_PORT`, `EBT_WEB_PORT`. For production copy `.env.example` to `.env` and set real secrets.
+API http://localhost:8080, Swagger http://localhost:8080/swagger. `start.bat` generates a gitignored `.env` with random secrets on first run; `docker compose` itself refuses to start without `EBT_DB_PASSWORD`, `EBT_JWT_KEY` and `EBT_ADMIN_PASSWORD`. The API is bound to 127.0.0.1; put a TLS reverse proxy in front for remote use and set `EBT_BEHIND_PROXY=true`, `EBT_ALLOWED_HOSTS`, `EBT_CORS_ORIGIN`. Logins are rate limited (`RateLimit:LoginPerMinute`, default 10/IP) and accounts lock for 15 minutes after 5 failures. Business-day timezone: `Clock:TimeZone` (default America/Sao_Paulo). The admin user is only created when the database has no users. Ports: API 8080, Postgres 25432 (Docker, bound to 127.0.0.1), web app 8081. If one is taken or reserved by Windows, `start.bat` picks the next free one and prints the URLs; the app and CORS follow it. Override with `EBT_API_PORT`, `EBT_DB_PORT`, `EBT_WEB_PORT`. For production copy `.env.example` to `.env` and set real secrets.
 
 ASP.NET Core 8 + EF Core + PostgreSQL 16. First module of the HDS "Emissor NF" replacement (see `system-map.md` §9). Clients (Flutter: Windows, Android, Web) live in `clients/flutter` and talk to this REST API.
 

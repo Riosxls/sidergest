@@ -44,6 +44,7 @@ public sealed class PurchasingFixture : IAsyncLifetime
             .UseSetting("ConnectionStrings:Ebt", ConnectionString)
             .UseSetting("Jwt:SigningKey", "test-signing-key-that-is-at-least-32-bytes-long")
             .UseSetting("Database:MigrateOnStartup", "true")
+            .UseSetting("RateLimit:LoginPerMinute", "100000")
             .UseSetting("Logging:LogLevel:Default", "None")
             .UseSetting("Bootstrap:AdminUser", ApiFixture.AdminUser)
             .UseSetting("Bootstrap:AdminPassword", ApiFixture.AdminPassword)
