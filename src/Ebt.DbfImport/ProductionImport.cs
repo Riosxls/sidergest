@@ -389,7 +389,7 @@ public sealed class ProductionImport : IImportStep
     {
         var max = await db.ProductionOrders.Where(o => o.Kind == kind).MaxAsync(o => (int?)o.Number, ct) ?? 0;
         var last = Math.Max(max, counter);
-        if (last > 0) await db.Database.ExecuteSqlRawAsync($"SELECT setval('{sequence}', GREATEST({last}, (SELECT last_value FROM {sequence})))", ct);
+        if (last > 0) await db.Database.ExecuteSqlRawAsync("SELECT setval('" + SqlIdentifier.Safe(sequence) + "', GREATEST(" + last + ", (SELECT last_value FROM " + SqlIdentifier.Safe(sequence) + ")))", ct);
     }
 
     private static ProductionOrderStatus Status(string? s, ProductionOrderStatus fallback) => s?.Trim() switch

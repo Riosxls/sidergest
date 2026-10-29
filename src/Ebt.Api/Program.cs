@@ -9,6 +9,7 @@ using Ebt.Core.Inventory;
 using Ebt.Core.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -33,6 +34,7 @@ builder.Services.AddProduction();
 builder.Services.AddSales();
 builder.Services.AddSingleton(jwt);
 builder.Services.AddSingleton<TokenService>();
+builder.Services.AddSingleton<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
 builder.Services.AddHostedService<QuoteExpiryService>();
 builder.Services.AddExceptionHandler<StockExceptionHandler>();
 builder.Services.AddExceptionHandler<DatabaseExceptionHandler>();
@@ -53,11 +55,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
         ClockSkew = TimeSpan.FromMinutes(1)
     };
 });
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy(Policies.Read, p => p.RequireAuthenticatedUser())
-    .AddPolicy(Policies.Write, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Engineering)))
-    .AddPolicy(Policies.Admin, p => p.RequireRole(nameof(UserRole.Admin)))
-    .AddPolicy(Policies.Stock, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Stock)));
+builder.Services.AddAuthorization(Access.Register);
 
 builder.Services.AddRateLimiter(o =>
 {
@@ -77,7 +75,7 @@ if (builder.Configuration.GetValue("Proxy:Trusted", false))
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
 {
     var origins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? [];
-    if (origins.Length > 0) p.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod();
+    if (origins.Length > 0) p.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().WithExposedHeaders("ETag");
 }));
 
 builder.Services.AddEndpointsApiExplorer();
@@ -118,7 +116,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<EbtDbContext>();
     if (app.Configuration.GetValue("Database:MigrateOnStartup", false)) await db.Database.MigrateAsync();
-    await AuthEndpoints.EnsureBootstrapAdminAsync(db, app.Configuration, app.Logger);
+    await AuthEndpoints.EnsureBootstrapAdminAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher<AppUser>>(), app.Configuration, app.Logger);
 }
 
 app.MapGet("/", (IConfiguration c, IWebHostEnvironment e) => Results.Redirect(c.GetValue("Swagger:Enabled", e.IsDevelopment()) ? "/swagger" : "/health")).AllowAnonymous().ExcludeFromDescription();

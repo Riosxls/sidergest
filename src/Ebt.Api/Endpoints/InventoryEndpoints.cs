@@ -252,6 +252,5 @@ public static class InventoryEndpoints
     }
 
     private static StockSettingsIn ToIn(StockSettings s) => new(s.AllowNegativeStock, s.DeductIcmsFromAverage, s.CuttingServicePerKg, s.ScrapResalePerKg, s.ScrapPercent);
-    private static (int, int) Paging(int? skip, int? take) => (Math.Max(skip ?? 0, 0), Math.Clamp(take ?? 50, 1, 500));
     private static string User(ClaimsPrincipal p) => p.Identity?.Name ?? "unknown";
 }

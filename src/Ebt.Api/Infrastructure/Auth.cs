@@ -74,25 +74,24 @@ public static class AuthEndpoints
     public const int MinPasswordLength = 10;
     public const int MaxFailedLogins = 5;
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
-    private static readonly PasswordHasher<AppUser> Hasher = new();
+    private static readonly PasswordHasher<AppUser> DummyHasher = new();
     private static readonly AppUser Dummy = new() { Username = "", PasswordHash = "" };
-    private static readonly string DummyHash = Hasher.HashPassword(Dummy, "dummy-password-for-timing");
+    private static readonly string DummyHash = DummyHasher.HashPassword(Dummy, "dummy-password-for-timing");
 
-    public static string Hash(AppUser user, string password) => Hasher.HashPassword(user, password);
 
     public static void MapAuth(this WebApplication app)
     {
         var auth = app.MapGroup("/api/auth").WithTags("Auth");
 
-        auth.MapPost("/login", async (LoginRequest req, EbtDbContext db, TokenService tokens, ILoggerFactory logs, HttpContext http, CancellationToken ct) =>
+        auth.MapPost("/login", async (LoginRequest req, EbtDbContext db, TokenService tokens, IPasswordHasher<AppUser> hasher, ILoggerFactory logs, HttpContext http, CancellationToken ct) =>
         {
             var log = logs.CreateLogger("Ebt.Auth");
             if (!Crud.Has(req.Username) || string.IsNullOrEmpty(req.Password)) return Results.Unauthorized();
-            var name = req.Username.Trim().ToLower();
+            var name = req.Username!.Trim().ToLower();
             var user = await db.Users.FirstOrDefaultAsync(u => u.Username == name, ct);
             if (user is null)
             {
-                Hasher.VerifyHashedPassword(Dummy, DummyHash, req.Password); // same cost as a real check, so timing does not reveal usernames
+                hasher.VerifyHashedPassword(Dummy, DummyHash, req.Password); // same cost as a real check, so timing does not reveal usernames
                 log.LogWarning("Login failed for unknown user {User} from {Ip}", name, http.Connection.RemoteIpAddress);
                 return Results.Unauthorized();
             }
@@ -102,7 +101,7 @@ public static class AuthEndpoints
                 log.LogWarning("Login refused for locked user {User} from {Ip}", name, http.Connection.RemoteIpAddress);
                 return Results.Unauthorized();
             }
-            var result = user.Active ? Hasher.VerifyHashedPassword(user, user.PasswordHash, req.Password) : PasswordVerificationResult.Failed;
+            var result = user.Active ? hasher.VerifyHashedPassword(user, user.PasswordHash, req.Password) : PasswordVerificationResult.Failed;
             if (result == PasswordVerificationResult.Failed)
             {
                 if (user.Active && ++user.FailedLogins >= MaxFailedLogins)
@@ -114,7 +113,7 @@ public static class AuthEndpoints
                 await db.SaveChangesAsync(ct);
                 return Results.Unauthorized();
             }
-            if (result == PasswordVerificationResult.SuccessRehashNeeded) user.PasswordHash = Hash(user, req.Password);
+            if (result == PasswordVerificationResult.SuccessRehashNeeded) user.PasswordHash = hasher.HashPassword(user, req.Password);
             user.FailedLogins = 0;
             user.LockedUntil = null;
             await db.SaveChangesAsync(ct);
@@ -126,7 +125,8 @@ public static class AuthEndpoints
         auth.MapGet("/me", (ClaimsPrincipal principal) => Results.Ok(new
         {
             username = principal.Identity!.Name,
-            role = principal.FindFirstValue(ClaimTypes.Role)
+            role = principal.FindFirstValue(ClaimTypes.Role),
+            permissions = Enum.TryParse<UserRole>(principal.FindFirstValue(ClaimTypes.Role), out var r) ? Access.PoliciesFor(r) : [Policies.Read]
         })).RequireAuthorization(Policies.Read);
 
         var users = app.MapGroup("/api/users").WithTags("Users").RequireAuthorization(Policies.Admin);
@@ -134,20 +134,20 @@ public static class AuthEndpoints
         users.MapGet("/", async (EbtDbContext db, CancellationToken ct) =>
             await db.Users.AsNoTracking().OrderBy(u => u.Username).Select(u => new UserDto(u.Id, u.Username, u.Role, u.Active)).ToListAsync(ct));
 
-        users.MapPost("/", async (CreateUserRequest req, EbtDbContext db, CancellationToken ct) =>
+        users.MapPost("/", async (CreateUserRequest req, EbtDbContext db, IPasswordHasher<AppUser> hasher, CancellationToken ct) =>
         {
             var errors = Crud.Errors()
                 .Require(Crud.Has(req.Username), "username", "Required")
                 .Require((req.Password ?? "").Length >= MinPasswordLength, "password", $"At least {MinPasswordLength} characters");
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             var user = new AppUser { Username = req.Username.Trim().ToLower(), PasswordHash = "", Role = req.Role };
-            user.PasswordHash = Hash(user, req.Password!);
+            user.PasswordHash = hasher.HashPassword(user, req.Password!);
             db.Users.Add(user);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/users/{user.Id}", new UserDto(user.Id, user.Username, user.Role, user.Active));
         });
 
-        users.MapPut("/{id:int}", async (int id, UpdateUserRequest req, EbtDbContext db, ILoggerFactory logs, ClaimsPrincipal actor, CancellationToken ct) =>
+        users.MapPut("/{id:int}", async (int id, UpdateUserRequest req, EbtDbContext db, IPasswordHasher<AppUser> hasher, ILoggerFactory logs, ClaimsPrincipal actor, CancellationToken ct) =>
         {
             var user = await db.Users.FindAsync([id], ct);
             if (user is null) return Results.NotFound();
@@ -160,7 +160,7 @@ public static class AuthEndpoints
             var revoke = req.Role != user.Role || req.Active != user.Active || req.Password is not null;
             user.Role = req.Role;
             user.Active = req.Active;
-            if (req.Password is not null) user.PasswordHash = Hash(user, req.Password);
+            if (req.Password is not null) user.PasswordHash = hasher.HashPassword(user, req.Password);
             if (revoke)
             {
                 user.TokenVersion++;
@@ -173,7 +173,7 @@ public static class AuthEndpoints
         });
     }
 
-    public static async Task EnsureBootstrapAdminAsync(EbtDbContext db, IConfiguration config, ILogger logger)
+    public static async Task EnsureBootstrapAdminAsync(EbtDbContext db, IPasswordHasher<AppUser> hasher, IConfiguration config, ILogger logger)
     {
         if (await db.Users.AnyAsync()) return;
         var username = config["Bootstrap:AdminUser"];
@@ -186,7 +186,7 @@ public static class AuthEndpoints
         if (password.Length < MinPasswordLength)
             throw new InvalidOperationException($"Bootstrap:AdminPassword must have at least {MinPasswordLength} characters.");
         var admin = new AppUser { Username = username.Trim().ToLower(), PasswordHash = "", Role = UserRole.Admin };
-        admin.PasswordHash = Hash(admin, password);
+        admin.PasswordHash = hasher.HashPassword(admin, password);
         db.Users.Add(admin);
         await db.SaveChangesAsync();
         logger.LogInformation("Created bootstrap admin user {User}", admin.Username);

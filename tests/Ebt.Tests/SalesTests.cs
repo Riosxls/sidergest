@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Net;
 using Ebt.Api.Endpoints;
 using Ebt.Api.Infrastructure;
@@ -10,7 +11,7 @@ namespace Ebt.Tests;
 [Collection("api")]
 public class SalesTests(ApiFixture api)
 {
-    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.Today);
+    private static readonly DateOnly Today = Ebt.Core.Services.Clock.Today();
 
     private static string Code(string prefix, int length = 12) => $"{prefix}{Guid.NewGuid():N}"[..length].ToUpper();
 
@@ -210,5 +211,31 @@ public class SalesTests(ApiFixture api)
         var generic = await (await admin.GetAsync($"/api/sales/price?productId={s.Tube.Id}")).Read<PriceOut>();
         Assert.Equal(100m, generic.UnitPrice);
         Assert.Equal(HttpStatusCode.BadRequest, (await admin.Post("/api/sales/payment-terms", new PaymentTermIn("X1", "Errado", "28/abc", null))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Stale_if_match_is_rejected_with_412()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var sales = await api.UserAsync(UserRole.Sales);
+        var quote = await (await sales.Post("/api/sales/quotes", Quote(s))).Read<QuoteOut>();
+
+        var first = await sales.GetAsync($"/api/sales/quotes/{quote.Id}");
+        var etag = first.Headers.ETag?.ToString();
+        Assert.False(string.IsNullOrEmpty(etag));
+
+        var update = new HttpRequestMessage(HttpMethod.Put, $"/api/sales/quotes/{quote.Id}") { Content = JsonContent.Create(Quote(s, 17m), options: ApiFixture.Json) };
+        update.Headers.TryAddWithoutValidation("If-Match", etag);
+        var ok = await sales.SendAsync(update);
+        ok.EnsureSuccessStatusCode();
+        Assert.NotEqual(etag, ok.Headers.ETag?.ToString());
+
+        var stale = new HttpRequestMessage(HttpMethod.Put, $"/api/sales/quotes/{quote.Id}") { Content = JsonContent.Create(Quote(s, 16m), options: ApiFixture.Json) };
+        stale.Headers.TryAddWithoutValidation("If-Match", etag);
+        Assert.Equal(HttpStatusCode.PreconditionFailed, (await sales.SendAsync(stale)).StatusCode);
+
+        var noHeader = await sales.Put($"/api/sales/quotes/{quote.Id}", Quote(s, 16m));
+        Assert.Equal(HttpStatusCode.OK, noHeader.StatusCode);
     }
 }

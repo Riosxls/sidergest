@@ -69,15 +69,9 @@ public static class ProductionEndpoints
     {
         services.AddScoped<ProductionService>();
         services.AddExceptionHandler<ProductionExceptionHandler>();
-        services.AddAuthorization(o =>
-        {
-            o.AddPolicy(ProductionPolicies.Plan, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Production)));
-            o.AddPolicy(ProductionPolicies.Materials, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Production), nameof(UserRole.Stock)));
-        });
         return services;
     }
 
-    private static string? Who(ClaimsPrincipal user) => user.Identity?.Name;
 
     public static void MapProduction(this WebApplication app)
     {
@@ -158,7 +152,7 @@ public static class ProductionEndpoints
 
     private static void MapOrders(WebApplication app)
     {
-        var g = app.MapGroup("/api/production/orders").WithTags("Production").RequireAuthorization(Policies.Read);
+        var g = app.MapGroup("/api/production/orders").WithTags("Production").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<ProductionOrder>());
 
         g.MapGet("/", async (EbtDbContext db, ProductionOrderStatus? status, ProductionOrderKind? kind, int? productId, int? parentOrderId, DateOnly? dueFrom, DateOnly? dueTo, bool? open, string? q, int? skip, int? take, CancellationToken ct) =>
         {
@@ -398,5 +392,4 @@ public static class ProductionEndpoints
             s.Quantity - s.ReturnedQuantity - s.ScrapQuantity, s.ServiceValue, s.InvoiceNumber, s.Notes);
 
     private static ProductionSettingsDto ToDto(ProductionSettings s) => new(s.OverrunTolerancePercent, s.HoursPerDay, s.WorkSaturdays, s.IssueLocationId, s.ReceiptLocationId);
-    private static (int, int) Paging(int? skip, int? take) => (Math.Max(skip ?? 0, 0), Math.Clamp(take ?? 50, 1, 500));
 }

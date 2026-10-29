@@ -74,16 +74,9 @@ public static class PurchasingEndpoints
         services.AddScoped<PurchasingService>();
         services.AddScoped<IGoodsReceiptHandler, StockReceiptHandler>();
         services.AddExceptionHandler<PurchasingExceptionHandler>();
-        services.AddAuthorization(o =>
-        {
-            o.AddPolicy(PurchasingPolicies.Request, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Engineering), nameof(UserRole.Stock), nameof(UserRole.Purchasing)));
-            o.AddPolicy(PurchasingPolicies.Buy, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Purchasing)));
-            o.AddPolicy(PurchasingPolicies.Receive, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Purchasing), nameof(UserRole.Stock)));
-        });
         return services;
     }
 
-    private static string? Who(ClaimsPrincipal user) => user.Identity?.Name;
 
     public static void MapPurchasing(this WebApplication app)
     {
@@ -272,7 +265,7 @@ public static class PurchasingEndpoints
 
     private static void MapOrders(WebApplication app)
     {
-        var g = app.MapGroup("/api/purchase-orders").WithTags("Purchase orders");
+        var g = app.MapGroup("/api/purchase-orders").WithTags("Purchase orders").AddEndpointFilter(new RowVersionFilter<PurchaseOrder>());
 
         g.MapGet("/", async (EbtDbContext db, PurchaseOrderStatus? status, int? supplierId, int? materialId, bool? open, int? skip, int? take, CancellationToken ct) =>
         {

@@ -1,3 +1,4 @@
+using static Ebt.Core.Services.Text;
 using Ebt.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 

@@ -80,17 +80,9 @@ public static class SalesEndpoints
     {
         services.AddScoped<SalesService>();
         services.AddExceptionHandler<SalesExceptionHandler>();
-        services.AddAuthorization(o =>
-        {
-            o.AddPolicy(SalesPolicies.Sell, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Sales), nameof(UserRole.SalesManager)));
-            o.AddPolicy(SalesPolicies.Approve, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.SalesManager)));
-            o.AddPolicy(SalesPolicies.Release, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Sales), nameof(UserRole.SalesManager), nameof(UserRole.Production)));
-            o.AddPolicy(SalesPolicies.Ship, p => p.RequireRole(nameof(UserRole.Admin), nameof(UserRole.Sales), nameof(UserRole.SalesManager), nameof(UserRole.Stock)));
-        });
         return services;
     }
 
-    private static string? Who(ClaimsPrincipal user) => user.Identity?.Name;
     private static bool IsManager(ClaimsPrincipal user) => user.IsInRole(nameof(UserRole.Admin)) || user.IsInRole(nameof(UserRole.SalesManager));
 
     public static void MapSales(this WebApplication app)
@@ -168,7 +160,7 @@ public static class SalesEndpoints
 
     private static void MapQuotes(WebApplication app)
     {
-        var g = app.MapGroup("/api/sales/quotes").WithTags("Sales").RequireAuthorization(Policies.Read);
+        var g = app.MapGroup("/api/sales/quotes").WithTags("Sales").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<Quote>());
 
         g.MapGet("/", async (EbtDbContext db, SalesService svc, QuoteStatus? status, int? customerId, bool? open, string? q, int? skip, int? take, CancellationToken ct) =>
         {
@@ -227,7 +219,7 @@ public static class SalesEndpoints
 
     private static void MapOrders(WebApplication app)
     {
-        var g = app.MapGroup("/api/sales/orders").WithTags("Sales").RequireAuthorization(Policies.Read);
+        var g = app.MapGroup("/api/sales/orders").WithTags("Sales").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<SalesOrder>());
 
         g.MapGet("/", async (EbtDbContext db, SalesService svc, SalesOrderStatus? status, int? customerId, bool? open, string? q, int? skip, int? take, CancellationToken ct) =>
         {
@@ -278,7 +270,7 @@ public static class SalesEndpoints
 
     private static void MapDeliveries(WebApplication app)
     {
-        var g = app.MapGroup("/api/sales/deliveries").WithTags("Sales").RequireAuthorization(Policies.Read);
+        var g = app.MapGroup("/api/sales/deliveries").WithTags("Sales").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<Delivery>());
 
         g.MapGet("/", async (EbtDbContext db, DeliveryStatus? status, int? orderId, int? customerId, DateOnly? from, DateOnly? to, string? q, int? skip, int? take, CancellationToken ct) =>
         {
@@ -458,5 +450,4 @@ public static class SalesEndpoints
         new DeliverySummaryOut(d.Id, d.Number, d.Reference, d.OrderId, d.Order!.Reference, d.Order.CustomerId, d.Order.Customer!.Name, d.PlannedDate, d.Status, d.Packages, d.GrossWeightKg, d.InvoiceNumber, d.Carrier, d.ShippedAt, d.DeliveredAt);
 
     private static SalesSettingsDto ToDto(SalesSettings s) => new(s.MaxDiscountPercent, s.DefaultValidityDays, s.MinimumOrderValue, s.ShippingLocationId, s.DefaultConditions);
-    private static (int, int) Paging(int? skip, int? take) => (Math.Max(skip ?? 0, 0), Math.Clamp(take ?? 50, 1, 500));
 }

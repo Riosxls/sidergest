@@ -1,3 +1,4 @@
+using static Ebt.Core.Services.Text;
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
 using Ebt.Core.Inventory;
@@ -37,7 +38,7 @@ public sealed partial class ProductionService(EbtDbContext db, StockService stoc
         return await InTransaction(async () =>
         {
             var sequence = i.Kind == ProductionOrderKind.Internal ? EbtDbContext.InternalOrderNumbers : EbtDbContext.ProductionOrderNumbers;
-            var number = await db.Database.SqlQueryRaw<int>($"SELECT nextval('{sequence}')::int AS \"Value\"").SingleAsync(ct);
+            var number = await db.Database.SqlQueryRaw<int>("SELECT nextval('" + SqlIdentifier.Safe(sequence) + "')::int AS \"Value\"").SingleAsync(ct);
             var order = new ProductionOrder
             {
                 Kind = i.Kind, Number = number, Reference = ReferenceFor(i.Kind, number), ProductId = product.Id, CustomerId = i.CustomerId, Quantity = i.Quantity,
@@ -544,24 +545,7 @@ public sealed partial class ProductionService(EbtDbContext db, StockService stoc
         return order;
     }
 
-    private async Task<T> InTransaction<T>(Func<Task<T>> work, CancellationToken ct)
-    {
-        if (db.Database.CurrentTransaction is not null) return await work();
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-        try
-        {
-            var result = await work();
-            await tx.CommitAsync(ct);
-            return result;
-        }
-        catch
-        {
-            await tx.RollbackAsync(CancellationToken.None);
-            db.ChangeTracker.Clear();
-            throw;
-        }
-    }
+    private Task<T> InTransaction<T>(Func<Task<T>> work, CancellationToken ct) => db.InTransactionAsync(work, ct);
 
     private static decimal Round(decimal d) => Math.Round(d, 4, MidpointRounding.AwayFromZero);
-    private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 }

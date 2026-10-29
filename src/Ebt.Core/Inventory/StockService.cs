@@ -1,3 +1,4 @@
+using static Ebt.Core.Services.Text;
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -245,66 +246,96 @@ public class StockService(EbtDbContext db)
         }, ct);
     }
 
+    private readonly record struct BucketKey(decimal? ThicknessMm, int? MaterialId);
+    private sealed record BeforeRow(decimal? ThicknessMm, int? MaterialId, decimal Qty, decimal PricedQty, decimal PricedGross, decimal PricedNet);
+    private sealed record PeriodRow(decimal? ThicknessMm, int? MaterialId, MovementType Type, decimal Qty, decimal Gross, decimal Net);
+    private readonly record struct Sums(decimal Qty, decimal Gross, decimal Net);
+
+    /// <summary>Weighted average cost per bucket (thickness, or single material when it has none). Movements are aggregated in SQL, never loaded row by row.</summary>
     public async Task<List<AverageCost>> ComputeAveragesAsync(int period, CancellationToken ct = default)
     {
         settings ??= await SettingsAsync(ct);
         var start = StartOf(period);
         var end = start.AddMonths(1);
-        var mats = await db.Materials.AsNoTracking().Select(m => new { m.Id, m.ThicknessMm }).ToListAsync(ct);
-        var bucketOf = mats.ToDictionary(m => m.Id, m => m.ThicknessMm is > 0 ? (m.ThicknessMm, (int?)null) : ((decimal?)null, (int?)m.Id));
+        var deduct = settings.DeductIcmsFromAverage;
 
-        var moves = await db.StockMovements.AsNoTracking()
-            .Where(x => x.MaterialId != null && x.Date < end)
-            .Select(x => new { MaterialId = x.MaterialId!.Value, x.Type, x.Date, x.Quantity, x.UnitCost, x.IcmsRate, ThirdParty = x.Location!.Kind == StockLocationKind.ThirdParty })
-            .ToListAsync(ct);
+        // Moves before the period: total on hand, plus the priced inbound subset used to seed the first average.
+        var before = (await db.StockMovements.AsNoTracking()
+            .Where(x => x.MaterialId != null && x.Date < start)
+            .Select(x => new
+            {
+                Thickness = x.Material!.ThicknessMm > 0 ? x.Material.ThicknessMm : (decimal?)null,
+                Material = x.Material.ThicknessMm > 0 ? (int?)null : x.MaterialId,
+                x.Quantity, x.UnitCost, x.IcmsRate,
+                Priced = ValuedInbound.Contains(x.Type) && x.Location!.Kind != StockLocationKind.ThirdParty && x.UnitCost > 0
+            })
+            .GroupBy(x => new { x.Thickness, x.Material })
+            .Select(g => new BeforeRow(g.Key.Thickness, g.Key.Material,
+                g.Sum(x => x.Quantity),
+                g.Sum(x => x.Priced ? x.Quantity : 0m),
+                Math.Round(g.Sum(x => x.Priced ? x.Quantity * x.UnitCost : 0m), 10),
+                Math.Round(g.Sum(x => x.Priced ? x.Quantity * x.UnitCost * (1 - x.IcmsRate / 100m) : 0m), 10)))
+            .ToListAsync(ct)).ToDictionary(r => new BucketKey(r.ThicknessMm, r.MaterialId));
+
+        // Moves inside the period that drive the average, grouped by type.
+        var periodTypes = new[] { MovementType.OpeningBalance, MovementType.Receipt, MovementType.ThirdPartyReturn };
+        var inPeriod = (await db.StockMovements.AsNoTracking()
+            .Where(x => x.MaterialId != null && x.Date >= start && x.Date < end && periodTypes.Contains(x.Type) && x.Location!.Kind != StockLocationKind.ThirdParty)
+            .Select(x => new
+            {
+                Thickness = x.Material!.ThicknessMm > 0 ? x.Material.ThicknessMm : (decimal?)null,
+                Material = x.Material.ThicknessMm > 0 ? (int?)null : x.MaterialId,
+                x.Type, x.Quantity, x.UnitCost, x.IcmsRate
+            })
+            .GroupBy(x => new { x.Thickness, x.Material, x.Type })
+            .Select(g => new PeriodRow(g.Key.Thickness, g.Key.Material, g.Key.Type,
+                g.Sum(x => x.Quantity), Math.Round(g.Sum(x => x.Quantity * x.UnitCost), 10), Math.Round(g.Sum(x => x.Quantity * x.UnitCost * (1 - x.IcmsRate / 100m)), 10)))
+            .ToListAsync(ct))
+            .GroupBy(r => new BucketKey(r.ThicknessMm, r.MaterialId))
+            .ToDictionary(g => g.Key, g => g.ToDictionary(r => r.Type, r => new Sums(r.Qty, r.Gross, deduct ? r.Net : r.Gross)));
+
         var previous = await db.AverageCosts.AsNoTracking().Where(a => a.Period < period)
             .GroupBy(a => new { a.ThicknessMm, a.MaterialId })
             .Select(g => g.OrderByDescending(a => a.Period).First())
             .ToListAsync(ct);
-        var prevByBucket = previous.ToDictionary(a => (a.ThicknessMm, a.MaterialId));
+        var prevByBucket = previous.ToDictionary(a => new BucketKey(a.ThicknessMm, a.MaterialId));
 
-        var buckets = moves.Select(x => bucketOf[x.MaterialId]).Concat(prevByBucket.Keys).Distinct();
-        decimal Net(decimal cost, decimal icms) => settings.DeductIcmsFromAverage ? cost * (1 - icms / 100m) : cost;
+        var buckets = before.Keys.Concat(inPeriod.Keys).Concat(prevByBucket.Keys).Distinct();
         var rows = new List<AverageCost>();
         foreach (var bucket in buckets)
         {
-            var mv = moves.Where(x => bucketOf[x.MaterialId] == bucket).ToList();
-            var before = mv.Where(x => x.Date < start).ToList();
-            var inPeriod = mv.Where(x => x.Date >= start).ToList();
-            var opening = inPeriod.Where(x => x.Type == MovementType.OpeningBalance && !x.ThirdParty).ToList();
-            var purchases = inPeriod.Where(x => x.Type == MovementType.Receipt && !x.ThirdParty).ToList();
-            var services = inPeriod.Where(x => x.Type == MovementType.ThirdPartyReturn && !x.ThirdParty).ToList();
+            var b = before.GetValueOrDefault(bucket);
+            var p = inPeriod.GetValueOrDefault(bucket);
+            Sums At(MovementType t) => p is not null && p.TryGetValue(t, out var s) ? s : default;
+            var opening = At(MovementType.OpeningBalance);
+            var purchases = At(MovementType.Receipt);
+            var services = At(MovementType.ThirdPartyReturn);
 
-            var qtyBefore = before.Sum(x => x.Quantity);
+            var qtyBefore = b?.Qty ?? 0m;
             decimal openingAvg;
-            if (prevByBucket.TryGetValue(bucket, out var prev))
+            prevByBucket.TryGetValue(bucket, out var prev);
+            if (prev is not null)
             {
                 var q = Math.Max(0, qtyBefore);
-                var oq = opening.Sum(x => x.Quantity);
-                openingAvg = q + oq > 0 ? (prev.Average * q + opening.Sum(x => x.Quantity * x.UnitCost)) / (q + oq) : prev.Average;
+                openingAvg = q + opening.Qty > 0 ? (prev.Average * q + opening.Gross) / (q + opening.Qty) : prev.Average;
             }
             else
             {
-                var priced = before.Where(x => ValuedInbound.Contains(x.Type) && !x.ThirdParty && x.UnitCost > 0).Concat(opening).ToList();
-                var pq = priced.Sum(x => x.Quantity);
-                openingAvg = pq > 0 ? priced.Sum(x => x.Quantity * Net(x.UnitCost, x.IcmsRate)) / pq : 0m;
+                var pq = (b?.PricedQty ?? 0m) + opening.Qty;
+                openingAvg = pq > 0 ? (((deduct ? b?.PricedNet : b?.PricedGross) ?? 0m) + opening.Net) / pq : 0m;
             }
-            var openingQty = Math.Max(0, qtyBefore + opening.Sum(x => x.Quantity));
+            var openingQty = Math.Max(0, qtyBefore + opening.Qty);
 
-            var purchaseQty = purchases.Sum(x => x.Quantity);
-            var purchaseNet = purchases.Sum(x => x.Quantity * Net(x.UnitCost, x.IcmsRate));
-            var purchaseGross = purchases.Sum(x => x.Quantity * x.UnitCost);
-            var serviceQty = services.Sum(x => x.Quantity);
-            var cutting = serviceQty > 0 ? serviceQty * settings.CuttingServicePerKg : 0m;
-            var serviceNet = services.Sum(x => x.Quantity * Net(x.UnitCost, x.IcmsRate)) + cutting;
-            var serviceGross = services.Sum(x => x.Quantity * x.UnitCost) + cutting;
+            var cutting = services.Qty > 0 ? services.Qty * settings.CuttingServicePerKg : 0m;
+            var serviceNet = services.Net + cutting;
+            var serviceGross = services.Gross + cutting;
 
-            var inflow = purchaseQty + serviceQty;
+            var inflow = purchases.Qty + services.Qty;
             decimal monthAvg = 0, avg = openingAvg, avgGross = prev?.AverageGross ?? openingAvg;
             if (inflow > 0)
             {
-                monthAvg = WithScrap((purchaseNet + serviceNet) / inflow);
-                var monthGross = WithScrap((purchaseGross + serviceGross) / inflow);
+                monthAvg = WithScrap((purchases.Net + serviceNet) / inflow);
+                var monthGross = WithScrap((purchases.Gross + serviceGross) / inflow);
                 avg = Blend(openingAvg, openingQty, monthAvg, inflow);
                 avgGross = Blend(prev?.AverageGross ?? openingAvg, openingQty, monthGross, inflow);
             }
@@ -312,10 +343,10 @@ public class StockService(EbtDbContext db)
 
             rows.Add(new AverageCost
             {
-                Period = period, ThicknessMm = bucket.Item1, MaterialId = bucket.Item2,
+                Period = period, ThicknessMm = bucket.ThicknessMm, MaterialId = bucket.MaterialId,
                 OpeningQuantity = openingQty, OpeningAverage = Math.Round(openingAvg, 6),
-                PurchaseQuantity = purchaseQty, PurchaseValue = Math.Round(purchaseNet, 4),
-                ServiceQuantity = serviceQty, ServiceValue = Math.Round(serviceNet, 4),
+                PurchaseQuantity = purchases.Qty, PurchaseValue = Math.Round(purchases.Net, 4),
+                ServiceQuantity = services.Qty, ServiceValue = Math.Round(serviceNet, 4),
                 MonthAverage = Math.Round(monthAvg, 6), Average = Math.Round(avg, 6), AverageGross = Math.Round(avgGross, 6)
             });
         }
@@ -570,23 +601,7 @@ public class StockService(EbtDbContext db)
             await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0}, {1})", [ItemLockClass, (int)key], ct);
     }
 
-    private async Task<T> InTransaction<T>(Func<Task<T>> work, CancellationToken ct)
-    {
-        if (db.Database.CurrentTransaction is not null) return await work();
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-        try
-        {
-            var result = await work();
-            await tx.CommitAsync(ct);
-            return result;
-        }
-        catch
-        {
-            await tx.RollbackAsync(CancellationToken.None);
-            db.ChangeTracker.Clear();
-            throw;
-        }
-    }
+    private Task<T> InTransaction<T>(Func<Task<T>> work, CancellationToken ct) => db.InTransactionAsync(work, ct);
 
     private async Task<string> DescribeAsync(StockItem item, CancellationToken ct) => item.MaterialId is { } m
         ? "material " + (materials.TryGetValue(m, out var mat) ? mat.Code : await db.Materials.Where(x => x.Id == m).Select(x => x.Code).FirstAsync(ct))
@@ -594,5 +609,4 @@ public class StockService(EbtDbContext db)
 
     private static StockItem Item(StockLine l) => new(l.MaterialId, l.ProductId);
     private static (int?, int?, int, int?) Key(StockItem i, int loc, int? lot) => (i.MaterialId, i.ProductId, loc, lot);
-    private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 }
