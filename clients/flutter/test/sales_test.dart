@@ -566,6 +566,38 @@ void main() {
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['withoutCertificate'], isTrue);
   });
 
+  group('documents to print', () {
+    bool enabled(WidgetTester t, String key) => t.widget<FilledButton>(find.byKey(ValueKey(key))).onPressed != null;
+
+    testWidgets('a released order lists the papers it has and what is still missing', (tester) async {
+      final fake = SalesFake()
+        ..orderStatus = 'Released'
+        ..requestFileName = 'pedido-4521.pdf';
+      await pumpScreen(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
+      expect(find.textContaining('Documentos para imprimir (3 de 5 prontos)'), findsOneWidget);
+      expect(enabled(tester, 'doc-print-customer-po'), isTrue);
+      expect(find.text('pedido-4521.pdf'), findsOneWidget);
+      expect(enabled(tester, 'doc-print-sales-order'), isTrue);
+      expect(enabled(tester, 'doc-print-of-12'), isTrue);
+      expect(find.text('OF 500'), findsWidgets);
+      expect(enabled(tester, 'doc-print-nf'), isFalse);
+      expect(find.text('Disponível depois de expedir a entrega'), findsOneWidget);
+      expect(enabled(tester, 'doc-print-certificate'), isFalse);
+      expect(find.byKey(const ValueKey('order-print-of-12')), findsOneWidget); // shortcut in the step card
+    });
+
+    testWidgets('a new order says what unlocks each paper', (tester) async {
+      final fake = SalesFake();
+      await pumpScreen(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
+      expect(find.textContaining('(1 de 5 prontos)'), findsOneWidget);
+      expect(enabled(tester, 'doc-print-customer-po'), isFalse);
+      expect(find.textContaining('Anexe o pedido de compra no orçamento PROP 31'), findsOneWidget);
+      expect(find.text('Libere o pedido para a produção'), findsOneWidget);
+      expect(enabled(tester, 'doc-print-sales-order'), isTrue);
+      expect(find.byKey(const ValueKey('order-print-card')), findsOneWidget);
+    });
+  });
+
   group('order changes after release', () {
     Future<SalesFake> open(WidgetTester tester, String status, {bool started = false}) async {
       final fake = SalesFake()

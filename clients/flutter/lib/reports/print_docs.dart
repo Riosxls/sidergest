@@ -20,6 +20,9 @@ const _generalConditions =
     'Preços sujeitos a confirmação na data do pedido. Impostos conforme legislação vigente. '
     'Prazo de entrega em dias úteis, contado a partir da confirmação do pedido e da aprovação de desenhos, quando aplicável.';
 
+/// Theme with the embedded fonts, for documents built outside this file.
+Future<pw.ThemeData> printTheme() => _theme();
+
 Future<pw.ThemeData> _theme() async => pw.ThemeData.withFont(
   base: pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-regular.ttf')),
   bold: pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-bold.ttf')),

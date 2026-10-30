@@ -225,6 +225,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       message: 'Saiu em ${fmtDate(d['shippedAt'])}${d['invoiceNumber'] == null ? '' : ' com a NF ${d['invoiceNumber']}'}. Confirme quando o cliente receber.',
       tone: Tone.progress,
       actions: [
+        TextButton.icon(key: const ValueKey('delivery-print-nf-card'), onPressed: _printNf, icon: const Icon(Icons.print_outlined), label: const Text('Imprimir NF')),
         if (s.canShip)
           FilledButton.icon(
             key: const ValueKey('delivery-confirm'),
@@ -238,6 +239,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       title: 'Entregue',
       message: 'Recebida em ${fmtDay(d['deliveredAt'])}${d['receivedBy'] == null ? '' : ' por ${d['receivedBy']}'}.',
       tone: Tone.success,
+      actions: [TextButton.icon(key: const ValueKey('delivery-print-nf-card'), onPressed: _printNf, icon: const Icon(Icons.print_outlined), label: const Text('Imprimir NF'))],
     ),
     _ => const NextStepCard(title: 'Cancelada', message: 'Veja o motivo no histórico.', tone: Tone.danger),
   };

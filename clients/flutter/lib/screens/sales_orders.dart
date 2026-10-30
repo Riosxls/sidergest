@@ -5,11 +5,14 @@ import 'package:flutter/material.dart';
 import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
+import '../reports/certificate_doc.dart';
+import '../reports/nf_doc.dart';
 import '../reports/print_docs.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
+import '../widgets/print_panel.dart';
 import '../widgets/record_list.dart';
 import 'certificates.dart';
 import 'production_orders.dart';
@@ -136,6 +139,7 @@ class SalesOrderScreen extends StatefulWidget {
 class _SalesOrderScreenState extends State<SalesOrderScreen> {
   Map<String, dynamic>? _o;
   List<Map<String, dynamic>> _certs = const [];
+  Map<String, dynamic>? _quote;
   String? _error;
 
   ApiClient get api => widget.session.api;
@@ -171,10 +175,18 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       try {
         certs = (await api.list('/api/sales/certificates', query: {'orderId': widget.id}, take: 200)).items;
       } catch (_) {}
+      // The customer's purchase order lives on the quote; optional as well (orders can be typed without one).
+      Map<String, dynamic>? quote;
+      if (o['quoteId'] != null) {
+        try {
+          quote = await api.get('/api/sales/quotes/${o['quoteId']}') as Map<String, dynamic>;
+        } catch (_) {}
+      }
       if (mounted) {
         setState(() {
           _o = o;
           _certs = certs;
+          _quote = quote;
           _error = null;
         });
       }
@@ -341,6 +353,101 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     if (r != null) setState(() => _o = r);
   }
 
+  Future<void> _printCustomerPo() async {
+    final q = _quote!;
+    try {
+      final fileName = q['requestFileName'] as String?;
+      final bytes = await customerOrderPdf(
+        fileName: fileName,
+        file: fileName == null ? null : await api.download('/api/sales/quotes/${q['id']}/request-file'),
+        text: q['requestText'] as String?,
+        title: 'Pedido de compra do cliente ${_ref()}',
+      );
+      if (bytes == null) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Este tipo de arquivo não imprime daqui. Baixe-o no orçamento e imprima pelo programa que o abre.')));
+        return;
+      }
+      if (mounted) await printPdf(context, 'Pedido de compra ${_ref()}', () async => bytes);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: ${friendlyError(e)}')));
+    }
+  }
+
+  String _ref() => '${_o?['reference'] ?? ''}';
+
+  /// The five papers of a purchase, in the order they are printed.
+  List<PrintDoc> _printDocs(Map<String, dynamic> o) {
+    final status = '${o['status']}';
+    final lines = (o['lines'] as List).cast<Map<String, dynamic>>();
+    final deliveries = (o['deliveries'] as List).cast<Map<String, dynamic>>();
+    final q = _quote;
+    final hasPo = q != null && (q['requestFileName'] != null || '${q['requestText'] ?? ''}'.trim().isNotEmpty);
+    final ofs = lines.where((l) => l['productionOrderId'] != null).fold(<int, String>{}, (m, l) => m..[l['productionOrderId'] as int] = '${l['productionReference']}');
+    final shipped = deliveries.where((d) => ['Shipped', 'Delivered'].contains(d['status'])).toList();
+    final issued = _certs.where((c) => c['status'] != 'Cancelled').toList();
+    return [
+      PrintDoc(
+        id: 'customer-po',
+        label: 'Pedido de compra do cliente',
+        detail: q?['requestFileName'] != null ? '${q?['requestFileName']}' : 'Texto registrado no orçamento',
+        ready: hasPo,
+        waiting: q == null ? 'Pedido digitado sem orçamento: não há pedido de compra anexado' : 'Anexe o pedido de compra no orçamento ${o['quoteReference']}',
+        onPrint: _printCustomerPo,
+      ),
+      PrintDoc(id: 'sales-order', label: 'Pedido interno de venda', detail: _ref(), onPrint: () => printPdf(context, 'Pedido de venda ${_ref()}', () => buildSalesOrderPdf(api, o))),
+      if (ofs.isEmpty)
+        PrintDoc(id: 'of', label: 'Ordem de fabricação', ready: false, waiting: status == 'Created' ? 'Libere o pedido para a produção' : 'Este pedido saiu do estoque, sem OF')
+      else
+        for (final e in ofs.entries)
+          PrintDoc(
+            id: 'of-${e.key}',
+            label: 'Ordem de fabricação',
+            detail: e.value,
+            onPrint: () => printPdf(context, 'Ordem de produção ${e.value}', () async => buildProductionOrderPdf(api, await api.get('/api/production/orders/${e.key}') as Map<String, dynamic>)),
+          ),
+      if (shipped.isEmpty)
+        const PrintDoc(id: 'nf', label: 'Nota fiscal', ready: false, waiting: 'Disponível depois de expedir a entrega')
+      else
+        for (final d in shipped)
+          PrintDoc(
+            id: 'nf-${d['id']}',
+            label: 'Nota fiscal',
+            detail: '${d['invoiceNumber'] == null ? 'sem nº de NF' : 'NF ${d['invoiceNumber']}'} · ${d['reference']}',
+            onPrint: () async {
+              final full = await api.get('/api/sales/deliveries/${d['id']}') as Map<String, dynamic>;
+              if (!mounted) return;
+              await printNf(context, name: 'NF ${d['reference']}', number: d['invoiceNumber'] == null ? '' : '${d['invoiceNumber']}', build: (f) => buildSaleNfPdf(api, full, f));
+            },
+          ),
+      if (issued.isEmpty)
+        PrintDoc(id: 'certificate', label: 'Certificado de qualidade', ready: false, waiting: o['certificateWaived'] == true ? 'Dispensado para este pedido' : 'Emita o certificado de qualidade')
+      else
+        for (final c in issued)
+          PrintDoc(
+            id: 'certificate-${c['id']}',
+            label: 'Certificado de qualidade',
+            detail: '${c['reference']} · ${c['description']}${c['status'] == 'Draft' ? ' · rascunho' : ''}',
+            onPrint: () => printPdf(context, 'Certificado ${c['reference']}', () async => buildCertificatePdf(await api.get('/api/sales/certificates/${c['id']}') as Map<String, dynamic>)),
+          ),
+    ];
+  }
+
+  /// Print shortcut inside the step card: the paper that step needs on the desk.
+  Widget _cardPrint(String key, String label, Future<void> Function() onPressed) =>
+      TextButton.icon(key: ValueKey(key), onPressed: onPressed, icon: const Icon(Icons.print_outlined), label: Text(label));
+
+  List<Widget> _ofPrints(Map<String, dynamic> o) {
+    final ofs = (o['lines'] as List).cast<Map<String, dynamic>>().where((l) => l['productionOrderId'] != null).fold(<int, String>{}, (m, l) => m..[l['productionOrderId'] as int] = '${l['productionReference']}');
+    return [
+      for (final e in ofs.entries)
+        _cardPrint(
+          'order-print-of-${e.key}',
+          ofs.length == 1 ? 'Imprimir OF' : 'Imprimir ${e.value}',
+          () => printPdf(context, 'Ordem de produção ${e.value}', () async => buildProductionOrderPdf(api, await api.get('/api/production/orders/${e.key}') as Map<String, dynamic>)),
+        ),
+    ];
+  }
+
   Widget _nextStep(Map<String, dynamic> o) {
     final pct = '${(_n(o['progress']) * 100).round()}%';
     FilledButton primary(String key, String label, IconData icon, VoidCallback onPressed) =>
@@ -349,7 +456,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       'Created' => NextStepCard(
         title: 'Liberar para produção',
         message: 'O estoque livre é reservado para o pedido e as OFs do restante vão para o PCP.',
-        actions: [if (s.canReleaseSales) primary('order-release', 'Liberar para produção', Icons.play_arrow, _release)],
+        actions: [if (s.canReleaseSales) primary('order-release', 'Liberar para produção', Icons.play_arrow, _release), _cardPrint('order-print-card', 'Imprimir pedido interno', () => printPdf(context, 'Pedido de venda ${_ref()}', () => buildSalesOrderPdf(api, o)))],
       ),
       'Released' || 'PartiallyShipped' when o['ready'] == true && !_certified => NextStepCard(
         title: 'Produção pronta · falta o certificado',
@@ -366,6 +473,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
             ),
           if (s.canCertificate)
             TextButton(key: const ValueKey('order-certificate-waive'), onPressed: () => _waiveCertificate(true), child: const Text('Dispensar certificado')),
+          ..._ofPrints(o),
           ..._closeAction(),
         ],
       ),
@@ -373,7 +481,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         title: 'Pronto para expedir',
         message: 'Há produto acabado para os itens em aberto. Programe a entrega.',
         tone: Tone.success,
-        actions: [if (s.canShip) primary('order-deliver', 'Programar entrega', Icons.local_shipping, _planDelivery), ..._closeAction()],
+        actions: [if (s.canShip) primary('order-deliver', 'Programar entrega', Icons.local_shipping, _planDelivery), ..._closeAction(), ..._ofPrints(o)],
       ),
       'Released' || 'PartiallyShipped' => NextStepCard(
         title: 'Em produção · $pct pronto',
@@ -390,6 +498,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
               label: const Text('Programar entrega'),
             ),
           ..._closeAction(),
+          ..._ofPrints(o),
         ],
       ),
       'Shipped' => const NextStepCard(title: 'Tudo expedido', message: 'Confirme o recebimento pelo cliente em cada entrega.', tone: Tone.progress),
@@ -490,6 +599,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         StagePath(steps: flowSteps, current: step, failedLabel: failed),
         gap,
         _nextStep(o),
+        if (o['status'] != 'Cancelled') ...[gap, PrintPanel(docs: _printDocs(o))],
         if (released) ...[gap, _production(lines)],
         gap,
         Section(

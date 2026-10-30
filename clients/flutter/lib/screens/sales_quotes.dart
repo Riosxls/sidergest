@@ -14,6 +14,7 @@ import '../widgets/discard_guard.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
+import '../widgets/print_panel.dart';
 import '../widgets/record_list.dart';
 import 'sales_common.dart';
 import 'viability.dart';
@@ -985,6 +986,27 @@ class _QuoteScreenState extends State<QuoteScreen> {
     if (r is Map<String, dynamic>) setState(() => _q = r);
   }
 
+  Future<void> _printRequest() async {
+    final q = _q!;
+    try {
+      final fileName = q['requestFileName'] as String?;
+      final bytes = await customerOrderPdf(
+        fileName: fileName,
+        file: fileName == null ? null : await api.download('$base/request-file'),
+        text: q['requestText'] as String?,
+        title: 'Pedido de compra do cliente ${q['reference']}',
+      );
+      if (!mounted) return;
+      if (bytes == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Este tipo de arquivo não imprime daqui. Baixe-o e imprima pelo programa que o abre.')));
+        return;
+      }
+      await printPdf(context, 'Pedido de compra ${q['reference']}', () async => bytes);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: ${friendlyError(e)}')));
+    }
+  }
+
   Future<void> _saveRequest() async {
     try {
       final bytes = await api.download('$base/request-file');
@@ -1151,6 +1173,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
                 const Icon(Icons.description_outlined, size: 18),
                 const SizedBox(width: 6),
                 Expanded(child: Text('$fileName · ${_fmtSize(q['requestFileSize'])}', overflow: TextOverflow.ellipsis)),
+                TextButton.icon(key: const ValueKey('quote-po-print'), onPressed: _printRequest, icon: const Icon(Icons.print_outlined), label: const Text('Imprimir')),
                 TextButton.icon(onPressed: _saveRequest, icon: const Icon(Icons.download_outlined), label: const Text('Baixar')),
                 if (canEdit) IconButton(tooltip: 'Remover anexo', icon: const Icon(Icons.delete_outline), onPressed: _removeRequest),
               ],
