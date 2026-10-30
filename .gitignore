@@ -18,3 +18,4 @@ legacy/
 *.jks
 key.properties
 .run/
+*.dump

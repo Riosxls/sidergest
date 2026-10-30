@@ -14,9 +14,11 @@ EBT (Brazilian steel-tube manufacturer) is replacing its legacy **Emissor NF** s
 ## Workflow rules
 
 - All code changes happen locally on Italo's machine (`C:\Users\italo\Desktop\sidergest`), via Remote Control sessions.
-- **Never push to GitHub unless Italo asks.** Commit locally only. Do not open PRs unless asked.
-- Project root `AGENTS.md` (in `C:\Users\italo`) asks for graphify: use `graphify query/path/explain` before raw grep when `graphify-out/graph.json` exists; run `graphify update .` after modifying code. `graphify-out/` is untracked; dirty is expected.
-- Untracked scratch files (`clients/flutter/devtools_options.yaml`, `flutter_01.png`) are not part of the project; do not commit them.
+- **Never push to GitHub unless Italo asks.** Commit locally only. Do not open PRs unless asked. When he does ask, push to `main` as a fast-forward (`git fetch`, check `origin/main` is an ancestor, then push).
+- Work in `C:\Users\italo\Desktop\sidergest` on branch `main`; this is the folder Italo runs Flutter from. Claude worktrees under `.claude/worktrees/` are disposable copies: a build or edit there does not reach the folder he runs. Never leave work only in a worktree.
+- GitHub CI is disabled on purpose (Italo does not want to spend Actions minutes). Run `dotnet test` and `flutter test` locally instead.
+- Project root `AGENTS.md` (in `C:\Users\italo`) asks for graphify: use `graphify query/path/explain` before raw grep when `graphify-out/graph.json` exists; run `graphify update .` after modifying code. `graphify-out/` is regenerated output: it shows as modified after `graphify update .`; leave those changes out of commits.
+- Untracked scratch files (`clients/flutter/devtools_options.yaml`, `flutter_01.png`, `ebt-backup-*.dump` database backups in the repo root) are not part of the project; do not commit them (the dumps contain real data; `*.dump` is gitignored).
 
 ## Dev setup
 
@@ -37,7 +39,18 @@ stop.bat [-Purge]      # stop; -Purge also deletes DB volume
 | Flutter web | http://localhost:8081 |
 | Login | `admin` / `sidergest123` (created only when DB has no users) |
 
-If a port is taken, `start.ps1` picks the next free one. Override with `EBT_API_PORT`, `EBT_DB_PORT`, `EBT_WEB_PORT`. Dev defaults are built in; no `.env` needed. `compose.yaml` sets `Database__MigrateOnStartup=true`, so migrations apply on API start.
+If a port is taken, `start.ps1` picks the next free one. Override with `EBT_API_PORT`, `EBT_DB_PORT`, `EBT_WEB_PORT`. `compose.yaml` sets `Database__MigrateOnStartup=true`, so migrations apply on API start.
+
+The Docker API needs a real `.env` in the repo root (gitignored): `EBT_DB_PASSWORD`, `EBT_JWT_KEY` (random; the API refuses placeholder keys), `EBT_ADMIN_PASSWORD`, `EBT_SWAGGER`. `start.ps1` creates it when missing; Italo's existing one reuses the DB password `ebt-dev-password`. Changing `EBT_JWT_KEY` signs everyone out.
+
+**Rebuilding the API container.** `docker compose up --build` has left the old image in place on this machine. Build and recreate explicitly, then check that the login response has `permissions` and `refreshToken`:
+
+```
+docker build --target api -t sidergest-api:latest .
+docker compose -p sidergest up -d --no-deps --force-recreate --pull never api
+```
+
+Never recreate the `db` container or run `stop.bat -Purge` without a fresh `pg_dump` (`docker exec sidergest-db-1 pg_dump -U ebt -d ebt -Fc > ebt-backup.dump`).
 
 Manual Flutter run: `cd clients\flutter; flutter pub get; flutter run -d windows --dart-define=API_URL=http://localhost:8080`.
 
@@ -45,20 +58,18 @@ Tests:
 - Backend: `dotnet test` (`tests/Ebt.Tests`, integration tests against real Postgres via `ApiFixture.cs`; also DBF import tests).
 - Flutter: `cd clients\flutter; flutter test` (`clients/flutter/test`).
 
-### Pending migrations (apply on next start)
+### Migrations
 
-All live in `src/Ebt.Core/Data/Migrations/`. Not yet applied to Italo's running DB; they apply automatically on next API start:
+All live in `src/Ebt.Core/Data/Migrations/`. As of 2026-10-30 every migration, up to `QuoteFlowImprovements`, is applied to Italo's running DB. New ones apply automatically on the next API start. Create them from `src/Ebt.Core` with `dotnet ef migrations add <Name> -s ../Ebt.Api` (design-time factory: `Data/DesignTimeFactory.cs`).
 
-`SeedSalesPrazos`, `QuoteCustomPaymentTerm`, `SalesOrderCustomPaymentTerm`, `CustomerCompanyData` (x2: `CustomerCompanyData` + `CustomerDefaultPaymentTerm`), `QuoteCustomerRequest`, `OrderOperationDetails`, `QualityCertificates`.
-
-(`FiscalEmission` is also newer than the first batch; same rule.) Create new migrations from `src/Ebt.Core` with `dotnet ef migrations add <Name> -s ../Ebt.Api` (design-time factory: `Data/DesignTimeFactory.cs`).
+The live DB holds data imported from the old system (hundreds of OFs and purchase orders) next to test records. Treat it as real; never wipe it without a fresh backup.
 
 ## Repo layout
 
 ```
 Ebt.sln
-src/Ebt.Core/        Entities/, Data/ (EbtDbContext partials + Migrations), Services/ (BomService, TubeWeight),
-                     Inventory/, Purchasing/, Production/, Sales/, Fiscal/, Certificates/
+src/Ebt.Core/        Entities/, Data/ (EbtDbContext partials + Migrations), Services/ (BomService, TubeWeight, WorkDays, Clock),
+                     Inventory/, Purchasing/, Production/, Sales/, Fiscal/, Certificates/, Maintenance/ (DataResetService)
 src/Ebt.Api/         Program.cs, Endpoints/*.cs, Infrastructure/ (Crud.cs generic CRUD, Auth.cs, Errors.cs)
 src/Ebt.DbfImport/   CLI migrating legacy DBF data (IImportStep, Importer, StockImporter, PurchasingImport, ProductionImport)
 tests/Ebt.Tests/     xUnit integration tests
@@ -78,7 +89,10 @@ scripts/             start.ps1, stop.ps1
 
 ### Flutter conventions
 
-- API access through `api.dart`; DTOs in `entities.dart`; Portuguese display strings/enums in `labels.dart`.
+- API access through `api.dart`; DTOs in `entities.dart`; Portuguese display strings/enums in `labels.dart`. Show errors with `friendlyError(e)` (never `'$e'`): it keeps API messages, translates field names and hides raw exception text.
+- `workdays.dart` mirrors `Ebt.Core/Services/WorkDays.cs` (Mon-Fri minus national holidays); keep the two in sync.
+- `session.dart` holds the signed-in state and personal preferences (theme, density, text size, remember-me). A stored session re-reads its permissions from `/api/auth/me` on start.
+- Lists use `RecordList` (empty state with clear-filters, retry, sortable columns); wire `filtersActive`/`onClearFilters` when a screen adds filters. Settings dialog: `widgets/user_settings.dart` (opened from the avatar menu), data reset dialog: `screens/data_reset.dart`.
 - Screens in `lib/screens/` (e.g. `sales_pipeline.dart`, `sales_quotes.dart`, `sales_orders.dart`, `production_orders.dart`, `deliveries.dart`, `certificates.dart`, `customers.dart`, `reports.dart`, `dashboard.dart`, `fiscal.dart`, `shell.dart`). Reusable widgets in `lib/widgets/` (`entity_form`, `record_list`, `pipeline`, `discard_guard`, `command_palette`...).
 - Unsaved-edit guard: forms confirm before discard (`discard_guard.dart`).
 - All PDF output goes through `lib/reports/`: `print_docs.dart` (quote, sales order, OF, delivery, viabilidade, controle de aço...), `certificate_doc.dart`, `nf_doc.dart`, `report_doc.dart`.
@@ -90,7 +104,8 @@ scripts/             start.ps1, stop.ps1
 (8-step pipeline shown in `sales_pipeline.dart` / `widgets/pipeline.dart`. "Proposta" was renamed "Orçamento"; "condição de pagamento" renamed **Prazo**.)
 
 - Quote requires customer and Prazo before lines can be added. Quote can carry a **custom prazo** (stored on quote, copied to the sales order). Customer has a default prazo.
-- Quote estimate includes ICMS on top of IPI. Lines have lead-time days synced with delivery date.
+- Quote estimate includes ICMS on top of IPI. IPI and ICMS are not typed on the item card; they come from the price table. Lines have lead-time **working days** (Mon-Fri, national holidays) synced with the delivery date; the server uses the same math when a quote becomes an order.
+- Admins can delete draft, cancelled, rejected and expired quotes; a quote that already has a sales order is never deleted.
 - Quote **revisions** use letter suffixes (A, B, C...).
 - Sales order carries company (EBT/BST), customer PO ("pedido de compra") step, and custom prazo.
 - Production order (OF, "Ordem de Produção") is generated from the sales order; shop-floor operations in `ProductionService.ShopFloor.cs`. Operations can be done outside ("remessa para industrialização").
@@ -109,6 +124,8 @@ scripts/             start.ps1, stop.ps1
 - **Painel** (`screens/dashboard.dart`): module cards with badges, quick actions (`quick_actions.dart`), command palette.
 - **Análise de viabilidade** and **Controle de aço** print documents (in `reports/print_docs.dart`; steel weight math in `Ebt.Core/Services/TubeWeight.cs`).
 - Engineering, Estoque (balances, lots, closing, documents), Suprimentos (requisitions, quotations, orders, receipts), PCP (shop floor) modules.
+- **Configurações** (avatar menu): theme, density, text size, stay signed in, change own password (`POST /api/auth/password`, min 10 characters, revokes other sessions), clear local cache, and for admins the data reset.
+- **Data reset** (`/api/admin/data-reset`, admin only, `Maintenance/DataReset.cs`): deletes movement data by group (Sales, Purchasing, Production, Stock) in foreign-key order after a preview and the typed word `LIMPAR`; master data is never touched, real (non-simulated) fiscal documents block it, each run is audited. Only Sales is ticked by default because Purchasing and Production hold imported legacy data.
 
 ## Fiscal / NF
 
@@ -130,6 +147,8 @@ scripts/             start.ps1, stop.ps1
 - PCP/navigation tests depend on sidebar height (see commit "Fix PCP nav tests for taller sidebar"); adding nav items can break `app_test.dart`.
 - SEFAZ timeout means unknown outcome; check access key in portal before re-emitting.
 - README.md has the user-facing quick start; this file is the engineering context.
+- Many Flutter and docs files are CRLF in the working copy; `dart format -l 160` on a whole old file produces noisy diffs. Format only what you wrote.
+- A stale app window shows old code: stop it and run `flutter run` again from `clients/flutter` on `main`. Release Android builds block cleartext HTTP; use HTTPS (debug builds allow it).
 
 ## graphify
 
