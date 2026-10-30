@@ -304,6 +304,34 @@ public class SalesTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Delivery_date_written_on_the_customers_purchase_order_wins_over_the_lead_time()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var quote = await (await admin.Post("/api/sales/quotes", new QuoteInput(s.Customer.Id, [new SalesLineInput(s.Tube.Id, 100m, 100m, LeadTimeDays: 20), new SalesLineInput(s.Other.Id, 50m, 20m, LeadTimeDays: 10)],
+            s.Address.Id, s.Term.Id, FreightTerms.Cif, null, "Edilto", "compras@cliente.com"))).Read<QuoteOut>();
+        (await Act(admin, quote.Id, "send")).EnsureSuccessStatusCode();
+        (await Act(admin, quote.Id, "accept")).EnsureSuccessStatusCode();
+        (await admin.Put($"/api/sales/quotes/{quote.Id}/request", new QuoteRequestIn("Pedido 78: item 1 para 15/12"))).EnsureSuccessStatusCode();
+
+        var tooLate = quote.Lines[0];
+        var past = await Act(admin, quote.Id, "purchase-order", new QuoteActionIn(CustomerPo: "PO-78", DeliveryDates: [new QuoteLineDate(tooLate.Id, Today.AddDays(-1))]));
+        Assert.Equal(HttpStatusCode.BadRequest, past.StatusCode);
+        var foreign = await Act(admin, quote.Id, "purchase-order", new QuoteActionIn(DeliveryDates: [new QuoteLineDate(int.MaxValue, Today.AddDays(5))]));
+        Assert.Equal(HttpStatusCode.BadRequest, foreign.StatusCode);
+
+        var customerDate = Today.AddDays(60); // well beyond the 20 working days
+        quote = await (await Act(admin, quote.Id, "purchase-order", new QuoteActionIn(CustomerPo: "PO-78", DeliveryDates: [new QuoteLineDate(tooLate.Id, customerDate)]))).Read<QuoteOut>();
+        Assert.Equal(customerDate, quote.Lines[0].DeliveryDate);
+        Assert.Null(quote.Lines[1].DeliveryDate);
+        Assert.Contains(quote.History, h => h.Action == "delivery-dates" && h.Note!.Contains($"{customerDate:dd/MM/yyyy}"));
+
+        var order = await (await admin.Post($"/api/sales/quotes/{quote.Id}/convert", new ConvertInput())).Read<SalesOrderOut>();
+        Assert.Equal(customerDate, order.Lines[0].DueDate);
+        Assert.Equal(Ebt.Core.Services.WorkDays.Add(Today, 10), order.Lines[1].DueDate); // no date from the customer: ours, counted from the approval
+    }
+
+    [Fact]
     public async Task Issued_certificate_teaches_the_next_one_of_the_same_customer_and_product()
     {
         var admin = await api.AdminAsync();

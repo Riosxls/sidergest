@@ -24,6 +24,8 @@ public sealed record QuoteInput(int CustomerId, IReadOnlyList<SalesLineInput> Li
 public sealed record SalesOrderInput(int CustomerId, int AddressId, IReadOnlyList<SalesLineInput> Lines, string? CustomerPo = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, string? Notes = null, string? Company = null, string? CustomPaymentTerm = null,
     BillTo BillTo = BillTo.Ebt, OrderOrigin Origin = OrderOrigin.System, string? Salesperson = null);
 
+public sealed record QuoteLineDate(int LineId, DateOnly? DeliveryDate);
+
 public sealed record ConvertInput(int? AddressId = null, string? CustomerPo = null, bool OverrideCredit = false);
 
 public sealed record DeliveryLineInput(int OrderLineId, decimal Quantity);

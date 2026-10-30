@@ -124,10 +124,21 @@ public sealed partial class SalesService
     });
 
     /// <summary>After the customer approves: registers the purchase order, which needs its text or file attached to the quote.</summary>
-    public Task<Quote> ReceivePurchaseOrderAsync(int id, string? customerPo, string? note, string? user, CancellationToken ct = default) => QuoteStep(id, "po-received", note, user, ct, q =>
+    /// <summary>The customer's purchase order is in. When it carries delivery dates of its own, <paramref name="deliveryDates"/> replace the lead time of those items (the date the customer wrote wins, even when it is later than the lead time would give).</summary>
+    public Task<Quote> ReceivePurchaseOrderAsync(int id, string? customerPo, string? note, string? user, CancellationToken ct = default, IReadOnlyList<QuoteLineDate>? deliveryDates = null) => QuoteStep(id, "po-received", note, user, ct, q =>
     {
         if (q.Status != QuoteStatus.Accepted) throw SalesException.Conflict($"Quote is {q.Status}; the customer must approve it first");
         if (Clean(q.RequestText) is null && q.RequestFileName is null) throw SalesException.Conflict("Attach the customer's purchase order (file or text) first");
+        var changes = new List<string>();
+        foreach (var (d, n) in (deliveryDates ?? []).Select((d, n) => (d, n)))
+        {
+            var line = q.Lines.FirstOrDefault(l => l.Id == d.LineId) ?? throw SalesException.Invalid($"deliveryDates[{n}].lineId", "Not a line of this quote");
+            if (d.DeliveryDate is { } day && day < Today()) throw SalesException.Invalid($"deliveryDates[{n}].deliveryDate", "Cannot be in the past");
+            if (line.DeliveryDate == d.DeliveryDate) continue;
+            line.DeliveryDate = d.DeliveryDate;
+            changes.Add(d.DeliveryDate is { } to ? $"item {line.Sequence}: {to:dd/MM/yyyy}" : $"item {line.Sequence}: volta ao prazo em dias úteis");
+        }
+        if (changes.Count > 0) Log(SalesRecordKind.Quote, q.Id, "delivery-dates", q.Status, q.Status, "Data de entrega do pedido de compra do cliente · " + string.Join("; ", changes), user);
         q.Status = QuoteStatus.PurchaseOrder;
         q.CustomerPo = Clean(customerPo) ?? q.CustomerPo;
         return Task.FromResult<string?>(null);

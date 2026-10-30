@@ -154,6 +154,7 @@ const salesActions = {
   'gave-up': 'Venda perdida: cliente desistiu',
   'reopened': 'Voltou para rascunho',
   'validity-extended': 'Validade prorrogada',
+  'delivery-dates': 'Data de entrega do cliente',
   'revised': 'Nova revisão criada',
   'duplicated': 'Copiado de outro orçamento',
   'approval-lapsed': 'Aprovação de desconto vencida',

@@ -10,6 +10,7 @@ import '../entities.dart';
 import '../labels.dart';
 import '../reports/print_docs.dart';
 import '../session.dart';
+import '../workdays.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
@@ -958,15 +959,39 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Anexe o arquivo ou o texto do pedido de compra antes de registrá-lo')));
       return;
     }
+    final lines = (q['lines'] as List).cast<Map<String, dynamic>>();
+    final approved = DateTime.tryParse('${q['decidedAt'] ?? ''}')?.toLocal() ?? DateTime.now();
+    // Our delivery date: the lead time in working days counted from the day the customer approved the quote.
+    String ours(Map<String, dynamic> l) => l['leadTimeDays'] is! int ? '' : isoDate(addWorkDays(DateTime(approved.year, approved.month, approved.day), l['leadTimeDays'] as int));
+    // A date counts as the customer's when it differs from what the item has now (its saved date, else ours).
+    bool changed(Map<String, dynamic> l, Object? chosen) => '$chosen'.isNotEmpty && chosen != null && chosen != (l['deliveryDate'] ?? ours(l));
     final r = await submitForm(
       context,
       api: api,
       title: 'Pedido de compra de ${q['reference']}',
       fields: [
         FieldSpec('customerPo', 'Nº do pedido de compra do cliente', defaultValue: q['customerPo']),
+        for (final l in lines)
+          FieldSpec(
+            'line-${l['id']}',
+            'Item ${l['sequence']} · data de entrega',
+            type: FieldType.date,
+            defaultValue: l['deliveryDate'] ?? (ours(l).isEmpty ? null : ours(l)),
+            hint: ours(l).isEmpty
+                ? 'Sem prazo em dias úteis: informe a data'
+                : 'Nossa data: ${fmtDay(ours(l))} (${l['leadTimeDays']} dias úteis após a aprovação). Se o pedido do cliente traz outra data, use a dele.',
+          ),
         const FieldSpec('note', 'Observação'),
       ],
-      submit: (b) => api.post('$base/purchase-order', b),
+      submit: (b) => api.post('$base/purchase-order', {
+        'customerPo': b['customerPo'],
+        'note': b['note'],
+        // Only dates that differ from ours are sent: the customer's date wins, ours stays as working days.
+        'deliveryDates': [
+          for (final l in lines)
+            if (changed(l, b['line-${l['id']}'])) {'lineId': l['id'], 'deliveryDate': b['line-${l['id']}'] == ours(l) ? null : b['line-${l['id']}']},
+        ],
+      }),
     );
     if (r != null && r['reference'] != null) setState(() => _q = r);
   }

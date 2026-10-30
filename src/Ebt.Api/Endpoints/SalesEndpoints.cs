@@ -18,7 +18,7 @@ public record PriceListOut(int Id, int ProductId, string ProductCode, string Pro
 public record PriceOut(int ProductId, int? CustomerId, decimal? UnitPrice, decimal? IpiPercent, decimal? IcmsPercent, bool CustomerSpecific, string ProductCode, string Description, string Unit, string? CustomerPartNumber);
 
 public record SalesEventOut(long Id, string Action, string? FromStatus, string? ToStatus, string? Note, string? User, DateTimeOffset At);
-public record QuoteActionIn(string? Note = null, string? SentTo = null, string? CustomerPo = null, LostReason? LostReason = null, DateOnly? ValidUntil = null);
+public record QuoteActionIn(string? Note = null, string? SentTo = null, string? CustomerPo = null, LostReason? LostReason = null, DateOnly? ValidUntil = null, List<QuoteLineDate>? DeliveryDates = null);
 public record LostReasonOut(LostReason? Reason, int Quotes, decimal Value);
 public record SalesReasonIn(string? Reason);
 public record OrderCancelIn(string? Reason, bool CancelProduction = false);
@@ -300,7 +300,7 @@ public static class SalesEndpoints
         QuoteAction(g, "send", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.SendAsync(id, i.SentTo, i.Note, u, ct));
         QuoteAction(g, "approve", SalesPolicies.Approve, (svc, id, i, u, ct) => svc.ApproveAsync(id, i.Note, u, ct));
         QuoteAction(g, "reject-approval", SalesPolicies.Approve, (svc, id, i, u, ct) => svc.RejectApprovalAsync(id, i.Note, u, ct));
-        QuoteAction(g, "purchase-order", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.ReceivePurchaseOrderAsync(id, i.CustomerPo, i.Note, u, ct));
+        QuoteAction(g, "purchase-order", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.ReceivePurchaseOrderAsync(id, i.CustomerPo, i.Note, u, ct, i.DeliveryDates));
         QuoteAction(g, "accept", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.AcceptAsync(id, i.CustomerPo, i.Note, u, ct));
         QuoteAction(g, "decline", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.DeclineAsync(id, i.Note, i.LostReason, u, ct));
         // Cancels the quote (note = reason) and returns the NEW revision draft, linked by the shared quote number (PROP 4685-A → -B).

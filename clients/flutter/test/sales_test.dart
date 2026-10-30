@@ -418,6 +418,36 @@ void main() {
     expect(fake.log.where((r) => r.url.path.endsWith('/purchase-order')), isEmpty);
   });
 
+  testWidgets('purchase order step keeps our lead time unless the customer wrote a date', (tester) async {
+    final fake = SalesFake()
+      ..quoteStatus = 'Accepted'
+      ..requestFileName = 'pedido-4521.pdf';
+    await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+    await tester.tap(find.byKey(const ValueKey('quote-po')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Nossa data:'), findsOneWidget);
+    expect(find.textContaining('20 dias úteis após a aprovação'), findsOneWidget);
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    expect(fake.body(fake.last('POST', '/api/sales/quotes/5/purchase-order'))['deliveryDates'], isEmpty);
+  });
+
+  testWidgets("the customer's own delivery date on the purchase order is sent for that item", (tester) async {
+    final fake = SalesFake()
+      ..quoteStatus = 'Accepted'
+      ..requestFileName = 'pedido-4521.pdf';
+    await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+    await tester.tap(find.byKey(const ValueKey('quote-po')));
+    await tester.pumpAndSettle();
+    final field = find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('field-line-'));
+    await tester.enterText(field, '15/12/2030');
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    final dates = fake.body(fake.last('POST', '/api/sales/quotes/5/purchase-order'))['deliveryDates'] as List;
+    expect(dates.single['deliveryDate'], '2030-12-15');
+    expect(dates.single['lineId'], isNotNull);
+  });
+
   testWidgets('registered purchase order unlocks the sales order', (tester) async {
     final withFile = SalesFake()
       ..quoteStatus = 'Accepted'
