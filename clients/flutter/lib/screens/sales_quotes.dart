@@ -960,7 +960,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       context,
       api: api,
       title: 'Cliente aprovou ${_q!['reference']}',
-      fields: const [FieldSpec('customerPo', 'Nº do pedido de compra do cliente'), FieldSpec('note', 'Observação')],
+      fields: const [FieldSpec('note', 'Observação', hint: 'Opcional. O nº do pedido de compra do cliente é registrado na próxima etapa.')],
       submit: (b) => api.post('$base/accept', b),
     );
     if (r != null && r['reference'] != null) setState(() => _q = r);

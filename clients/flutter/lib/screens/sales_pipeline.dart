@@ -118,9 +118,16 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
         success = approval ? 'Enviada para aprovação' : 'Orçamento enviado ao cliente';
       case 'sent':
         if (!s.canSell) return;
-        final po = await promptText(context, title: 'Cliente aprovou $ref', label: 'Nº do pedido de compra do cliente', confirmLabel: 'Registrar aprovação');
-        if (po == null) return;
-        call = api.post('/api/sales/quotes/$id/accept', {'customerPo': po.isEmpty ? null : po});
+        if (!await confirmStep(
+          context,
+          title: 'Cliente aprovou $ref?',
+          message: 'Registra a aprovação do cliente. O nº do pedido de compra dele é informado na próxima etapa.',
+          confirmLabel: 'Registrar aprovação',
+          icon: Icons.thumb_up_alt_outlined,
+        )) {
+          return;
+        }
+        call = api.post('/api/sales/quotes/$id/accept', {});
         success = 'Aprovação do cliente registrada';
       case 'accepted':
         if (!s.canSell) return;
