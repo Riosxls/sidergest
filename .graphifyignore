@@ -1,0 +1,11 @@
+# Generated or boilerplate code: adds nodes, no architecture signal
+src/Ebt.Core/Data/Migrations/
+**/*.Designer.cs
+clients/flutter/windows/
+clients/flutter/android/
+clients/flutter/ios/
+clients/flutter/macos/
+clients/flutter/linux/
+clients/flutter/web/
+clients/flutter-screenshots/
+.claude/
