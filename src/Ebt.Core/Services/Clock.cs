@@ -12,6 +12,9 @@ public static class Clock
 
     public static DateOnly Today() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, zone).DateTime);
 
+    /// <summary>The calendar day of an instant in the business zone.</summary>
+    public static DateOnly DateOf(DateTimeOffset at) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, zone).DateTime);
+
     private static TimeZoneInfo Resolve(string id)
     {
         try { return TimeZoneInfo.FindSystemTimeZoneById(id); }

@@ -287,6 +287,23 @@ public class SalesTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Lead_time_counts_working_days_from_the_day_the_customer_approved()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var quote = await (await admin.Post("/api/sales/quotes", new QuoteInput(s.Customer.Id, [new SalesLineInput(s.Tube.Id, 100m, 100m, LeadTimeDays: 20)], s.Address.Id, s.Term.Id, FreightTerms.Cif, null, "Edilto", "compras@cliente.com"))).Read<QuoteOut>();
+        (await Act(admin, quote.Id, "send")).EnsureSuccessStatusCode();
+        (await Act(admin, quote.Id, "accept")).EnsureSuccessStatusCode();
+        var approvedOn = Today.AddDays(-12); // the customer approved twelve days ago and the PO only arrived now
+        await using (var db = api.NewDb())
+            await db.Quotes.Where(x => x.Id == quote.Id).ExecuteUpdateAsync(u => u.SetProperty(x => x.DecidedAt, new DateTimeOffset(approvedOn.ToDateTime(new TimeOnly(18, 0)), TimeSpan.Zero)));
+        (await admin.Put($"/api/sales/quotes/{quote.Id}/request", new QuoteRequestIn("Pedido 77 por e-mail"))).EnsureSuccessStatusCode();
+        (await Act(admin, quote.Id, "purchase-order", new QuoteActionIn(CustomerPo: "PO-77"))).EnsureSuccessStatusCode();
+        var order = await (await admin.Post($"/api/sales/quotes/{quote.Id}/convert", new ConvertInput())).Read<SalesOrderOut>();
+        Assert.Equal(Ebt.Core.Services.WorkDays.Add(approvedOn, 20), order.Lines[0].DueDate);
+    }
+
+    [Fact]
     public async Task Issued_certificate_teaches_the_next_one_of_the_same_customer_and_product()
     {
         var admin = await api.AdminAsync();

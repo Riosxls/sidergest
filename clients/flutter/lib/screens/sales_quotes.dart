@@ -34,6 +34,21 @@ Future<({String name, Uint8List bytes})?> pickRequestFile() async {
   return (name: f.name, bytes: await f.readAsBytes());
 }
 
+/// Item of a quote: the price is always typed, and the lead time is a number of working days counted from the day the customer approves the quote (there is no fixed date yet).
+const quoteLineFields = [
+  FieldSpec('productId', 'Produto', type: FieldType.lookup, required: true, lookup: LookupSpec('/api/products')),
+  FieldSpec('quantity', 'Quantidade', type: FieldType.decimal, required: true),
+  FieldSpec('unitPrice', 'Preço unitário (R\$)', type: FieldType.decimal, required: true, hint: 'Obrigatório. Confira a tabela de preços do cliente antes de digitar'),
+  FieldSpec(
+    'leadTimeDays',
+    'Prazo de entrega (dias úteis)',
+    type: FieldType.integer,
+    required: true,
+    hint: 'Dias úteis contados a partir da data em que o cliente aprovar o orçamento',
+  ),
+  FieldSpec('description', 'Descrição', hint: 'Vazio = descrição do cliente ou do produto'),
+];
+
 const salesLineFields = [
   FieldSpec('productId', 'Produto', type: FieldType.lookup, required: true, lookup: LookupSpec('/api/products')),
   FieldSpec('quantity', 'Quantidade', type: FieldType.decimal, required: true),
@@ -685,7 +700,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
             LinesEditor(
               api: api,
               title: 'Itens',
-              fields: widget.asOrder ? orderLineFields : salesLineFields,
+              fields: widget.asOrder ? orderLineFields : quoteLineFields,
               newTitle: widget.asOrder ? 'Nova linha' : 'Novo item',
               addLabel: widget.asOrder ? 'Adicionar linha' : 'Adicionar item',
               addEnabled: widget.asOrder || (_customerId != null && (_termId != null || _customTerm != null)),
@@ -1136,6 +1151,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ..writeln('IPI: ${fmtMoney(t['ipi'])}')
       ..writeln('Total do orçamento: ${fmtMoney(t['total'])}')
       ..writeln()
+      ..writeln('Prazo de entrega: dias úteis a partir da aprovação do orçamento pelo cliente.')
       ..writeln('Validade: ${q['validityDays']} dias${q['validUntil'] == null ? '' : ' (até ${fmtDay(q['validUntil'])})'}');
     if (q['conditions'] != null) b.writeln('Condições gerais: ${q['conditions']}');
     return b.toString().replaceAll(RegExp(r'\n{3,}'), '\n\n');
@@ -1550,6 +1566,15 @@ class _QuoteScreenState extends State<QuoteScreen> {
                 rows: lines,
                 rowColor: (e) => _maxDiscount != null && _n(e['discountPercent']) > _maxDiscount! ? toneColors(context, Tone.warning).$1 : null,
               ),
+              if (lines.any((l) => l['leadTimeDays'] != null && l['deliveryDate'] == null))
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    'Prazo de entrega em dias úteis, contado a partir da data em que o cliente aprovar o orçamento.',
+                    key: const ValueKey('quote-lead-note'),
+                    style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ),
               const SizedBox(height: 14),
               // The printed total is products + IPI, so that row is the emphasised one; the ICMS estimate sits below it.
               TotalsBlock(

@@ -21,9 +21,11 @@ public sealed partial class SalesService
             var addressId = i.AddressId ?? q.AddressId ?? await db.CustomerAddresses.Where(a => a.CustomerId == q.CustomerId).OrderBy(a => a.Id).Select(a => (int?)a.Id).FirstOrDefaultAsync(ct)
                 ?? throw SalesException.Invalid("addressId", "Customer has no address; register the plant/delivery address first");
             var today = Today();
+            // Lead times are working days counted from the day the customer approved the quote, not from the day the order is typed.
+            var basis = q.DecidedAt is { } approved ? Clock.DateOf(approved) : today;
             var studies = await ViabilityRules.UsableForQuoteAsync(db, q.Id, ct);
             var lines = q.Lines.OrderBy(l => l.Sequence).Select(l => new SalesLineInput(l.ProductId, l.Quantity, l.UnitPrice, l.IpiPercent, l.IcmsPercent, l.LeadTimeDays,
-                l.DeliveryDate ?? (l.LeadTimeDays is { } d ? WorkDays.Add(today, d) : null), l.Description, null, studies.TryGetValue(l.ProductId, out var fid) ? fid : null)).ToList();
+                l.DeliveryDate ?? (l.LeadTimeDays is { } d ? WorkDays.Add(basis, d) : null), l.Description, null, studies.TryGetValue(l.ProductId, out var fid) ? fid : null)).ToList();
             var order = await CreateOrderCoreAsync(new SalesOrderInput(q.CustomerId, addressId, lines, Clean(i.CustomerPo) ?? q.CustomerPo, q.PaymentTermId, q.Freight, q.Notes, null, q.CustomPaymentTerm), q, i.OverrideCredit && mayOverrideCredit, user, ct);
             var from = q.Status;
             q.Status = QuoteStatus.Converted;

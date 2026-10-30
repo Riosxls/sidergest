@@ -18,7 +18,7 @@ const _companyAddress = 'Endereço: a definir';
 
 const _generalConditions =
     'Preços sujeitos a confirmação na data do pedido. Impostos conforme legislação vigente. '
-    'Prazo de entrega em dias úteis, contado a partir da confirmação do pedido e da aprovação de desenhos, quando aplicável.';
+    'Prazo de entrega em dias úteis, contado a partir da aprovação do orçamento pelo cliente e da aprovação de desenhos, quando aplicável.';
 
 /// Theme with the embedded fonts, for documents built outside this file.
 Future<pw.ThemeData> printTheme() => _theme();
@@ -160,11 +160,12 @@ List<List<String>> _itemRows(List<Map<String, dynamic>> lines) => [
       fmt(l['ipiPercent']),
       fmt(l['icmsPercent']),
       fmtNum(l['total']),
+      l['deliveryDate'] != null ? fmtDay(l['deliveryDate']) : (l['leadTimeDays'] != null ? '${l['leadTimeDays']} dias úteis' : ''),
     ],
 ];
 
-const _itemHeaders = ['Item', 'Produto', 'Descrição', 'Qtd.', 'Un.', 'Preço unit.', 'IPI %', 'ICMS %', 'Valor estimado'];
-const List<num> _itemFlex = [0.6, 1.8, 3.4, 1, 0.7, 1.4, 0.8, 0.9, 1.6];
+const _itemHeaders = ['Item', 'Produto', 'Descrição', 'Qtd.', 'Un.', 'Preço unit.', 'IPI %', 'ICMS %', 'Valor estimado', 'Entrega*'];
+const List<num> _itemFlex = [0.5, 1.6, 2.9, 0.9, 0.6, 1.3, 0.7, 0.8, 1.5, 1.3];
 const _itemRight = {3, 5, 6, 7, 8};
 
 /// Orçamento (PROP N).
@@ -193,6 +194,8 @@ Future<Uint8List> buildQuotePdf(ApiClient api, Map<String, dynamic> q) async {
     _table(_itemHeaders, _itemRows(lines), flex: _itemFlex, right: _itemRight),
     pw.SizedBox(height: 8),
     _totals([('Total dos produtos', fmtMoney(t['products'])), ('IPI', fmtMoney(t['ipi'])), ('Total do orçamento', fmtMoney(t['total']))]),
+    if (lines.any((l) => l['leadTimeDays'] != null && l['deliveryDate'] == null))
+      pw.Padding(padding: const pw.EdgeInsets.only(top: 6), child: pw.Text('* Prazo de entrega em dias úteis, contado a partir da data em que o cliente aprovar este orçamento.', style: const pw.TextStyle(fontSize: 8.5))),
     if (_s(q['notes']).isNotEmpty) _text('Observações', _s(q['notes'])),
     _text('Condições gerais', _s(q['conditions']).isNotEmpty ? _s(q['conditions']) : _generalConditions),
   ], header: (_) => _header('Orçamento', _s(q['reference'])));

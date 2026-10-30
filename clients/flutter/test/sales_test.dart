@@ -889,6 +889,24 @@ void main() {
     expect(find.textContaining('ICMS'), findsWidgets);
   });
 
+  testWidgets('quote item asks for a price and working days after approval, with no fixed date', (tester) async {
+    final fake = SalesFake();
+    await pumpScreen(tester, fake, (s) => QuoteEditorScreen(session: s, quote: fake.quote()));
+    await tester.ensureVisible(find.text('Adicionar item'));
+    await tester.tap(find.text('Adicionar item'));
+    await tester.pumpAndSettle();
+    expect(find.text('Preço unitário (R\$) *'), findsOneWidget);
+    expect(find.text('Prazo de entrega (dias úteis) *'), findsOneWidget);
+    expect(find.textContaining('a partir da data em que o cliente aprovar o orçamento'), findsOneWidget);
+    expect(find.byKey(const ValueKey('field-deliveryDate')), findsNothing);
+  });
+
+  testWidgets('the quote screen says the lead time starts when the customer approves', (tester) async {
+    await pumpScreen(tester, SalesFake(), (s) => QuoteScreen(session: s, id: 5));
+    expect(find.text('20 dias úteis'), findsOneWidget);
+    expect(find.byKey(const ValueKey('quote-lead-note')), findsOneWidget);
+  });
+
   testWidgets('editor shows no warning when the price matches the list', (tester) async {
     final fake = SalesFake();
     await pumpScreen(tester, fake, (s) => QuoteEditorScreen(session: s, quote: fake.quote()));
