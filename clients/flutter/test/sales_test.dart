@@ -408,10 +408,13 @@ void main() {
   testWidgets('purchase order is attached on its own step after approval', (tester) async {
     final fake = SalesFake()..quoteStatus = 'Accepted';
     await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+    expect(find.text('Aprovada pelo cliente · falta o pedido de compra'), findsOneWidget);
+    expect(find.textContaining('Passo 1 de 2'), findsOneWidget);
+    expect(find.byKey(const ValueKey('quote-po-start')), findsOneWidget);
     expect(find.byKey(const ValueKey('quote-po-attach')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('quote-po')));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Anexe o arquivo ou o texto'), findsOneWidget);
+    expect(find.byKey(const ValueKey('quote-po')), findsNothing); // nothing to register until the order is attached
+    // the attachment area sits right under the step card, above the items
+    expect(tester.getTopLeft(find.text('Pedido de compra').first).dy, lessThan(tester.getTopLeft(find.textContaining('Itens (')).dy));
     expect(fake.log.where((r) => r.url.path.endsWith('/purchase-order')), isEmpty);
   });
 
@@ -421,6 +424,7 @@ void main() {
       ..requestFileName = 'pedido-4521.pdf';
     await pumpScreen(tester, withFile, (s) => QuoteScreen(session: s, id: 5));
     expect(find.textContaining('pedido-4521.pdf'), findsOneWidget);
+    expect(find.textContaining('Passo 2 de 2'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('quote-po')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Salvar'));

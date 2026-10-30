@@ -1224,6 +1224,33 @@ class _QuoteScreenState extends State<QuoteScreen> {
     return StatusBadge(label, tone: tone, icon: Icons.schedule);
   }
 
+  /// Approved by the customer: first attach what the customer sent, then register it. The attach step is the primary button until something is attached.
+  Widget _acceptedStep(
+    Map<String, dynamic> q,
+    FilledButton Function(String, String, IconData, VoidCallback) primary,
+    Widget Function(String, String, IconData, VoidCallback, {String? tip}) secondary,
+    Widget Function(String, String, IconData, VoidCallback) negative,
+  ) {
+    final sell = s.canSell;
+    final attached = q['requestFileName'] != null || '${q['requestText'] ?? ''}'.trim().isNotEmpty;
+    return NextStepCard(
+      title: attached ? 'Pedido de compra anexado · registre-o' : 'Aprovada pelo cliente · falta o pedido de compra',
+      message: attached
+          ? 'Passo 2 de 2: confira o anexo abaixo e registre o pedido de compra para poder gerar o pedido de venda.'
+          : 'Passo 1 de 2: anexe o pedido de compra que o cliente enviou (PDF, imagem ou texto). Depois, registre-o para gerar o pedido de venda.',
+      tone: attached ? Tone.success : Tone.warning,
+      actions: [
+        if (sell && !attached) primary('quote-po-start', 'Anexar pedido de compra', Icons.attach_file, _attachRequest),
+        if (sell && !attached) secondary('quote-po-start-text', 'Escrever texto do pedido', Icons.edit_note, _setRequestText),
+        if (sell && attached) primary('quote-po', 'Registrar pedido de compra', Icons.assignment_turned_in_outlined, _receivePo),
+        if (sell) secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
+        if (sell) negative('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, () => _gaveUp()),
+      ],
+    );
+  }
+
+  void _gaveUp() => _decline(gaveUp: true);
+
   Widget _nextStep(Map<String, dynamic> q) {
     final st = q['status'];
     final sell = s.canSell;
@@ -1295,16 +1322,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
           if (sell) TextButton.icon(key: const ValueKey('quote-extend'), onPressed: _extend, icon: const Icon(Icons.event_repeat), label: const Text('Prorrogar validade')),
         ],
       ),
-      'Accepted' => NextStepCard(
-        title: 'Aprovada pelo cliente',
-        message: 'Anexe o pedido de compra do cliente (arquivo ou texto) e registre-o para gerar o pedido de venda.',
-        tone: Tone.success,
-        actions: [
-          if (sell) primary('quote-po', 'Registrar pedido de compra', Icons.assignment_turned_in_outlined, _receivePo),
-          if (sell) secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
-          if (sell) negative('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, () => _decline(gaveUp: true)),
-        ],
-      ),
+      'Accepted' => _acceptedStep(q, primary, secondary, negative),
       'PurchaseOrder' => NextStepCard(
         title: 'Pedido de compra recebido',
         message: 'Gere o pedido de venda${q['customerPo'] == null ? '' : ' (pedido do cliente ${q['customerPo']})'} para liberar a produção.',
@@ -1483,6 +1501,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         gap,
         _creditBanner(),
         _nextStep(q),
+        if (const ['Accepted', 'PurchaseOrder'].contains(q['status'])) ...[gap, _requestSection(q)],
         gap,
         Section(
           title: 'Itens (${lines.length})',
@@ -1524,9 +1543,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
           ),
         ),
         gap,
-        if (const ['Accepted', 'PurchaseOrder', 'Converted'].contains(q['status']) ||
-            q['requestFileName'] != null ||
-            '${q['requestText'] ?? ''}'.isNotEmpty) ...[
+        if (!const ['Accepted', 'PurchaseOrder'].contains(q['status']) &&
+            (q['status'] == 'Converted' || q['requestFileName'] != null || '${q['requestText'] ?? ''}'.isNotEmpty)) ...[
           _requestSection(q),
           gap,
         ],
