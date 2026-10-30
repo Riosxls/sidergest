@@ -113,7 +113,7 @@ const quoteStatuses = {
   'Sent': 'Enviada ao cliente',
   'Accepted': 'Aceita pelo cliente',
   'PurchaseOrder': 'Pedido de compra recebido',
-  'Rejected': 'Recusada',
+  'Rejected': 'Perdida',
   'Expired': 'Expirada',
   'Cancelled': 'Cancelada',
   'Converted': 'Convertida em pedido',
@@ -183,6 +183,7 @@ const lostReasons = {
   'NoLongerNeeded': 'Não precisa mais',
   'Specification': 'Especificação / norma',
   'Other': 'Outro motivo',
+  'CustomerGaveUp': 'Cliente desistiu do pedido',
 };
 
 const billToLabels = {'Ebt': 'EBT', 'Bts': 'BTS'};
@@ -203,4 +204,13 @@ const feasibilityActions = {
   'rejected-production': 'Produção reprovou',
   'rejected-commercial': 'Comercial reprovou',
   'reopened': 'Reaberta',
+};
+
+/// What the customer asked for when a quote gets a new revision (written into the revision note).
+const revisionReasons = {
+  'Price': 'Preço',
+  'LeadTime': 'Prazo de entrega',
+  'Quantity': 'Quantidade ou itens',
+  'Specification': 'Especificação / norma',
+  'Other': 'Outro',
 };

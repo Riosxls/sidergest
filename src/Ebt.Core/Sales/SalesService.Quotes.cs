@@ -145,16 +145,43 @@ public sealed partial class SalesService
         return Task.FromResult<string?>(null);
     });
 
+    /// <summary>
+    /// The sale is lost. While the quote is out with the customer (Sent) this is "cliente recusou"; once the customer had approved it or sent a purchase order
+    /// (Accepted, PurchaseOrder) it is "cliente desistiu". Both end as Rejected with a lost reason; the history tells them apart.
+    /// </summary>
     public Task<Quote> DeclineAsync(int id, string? reason, LostReason? lostReason, string? user, CancellationToken ct = default) => QuoteStep(id, "declined", reason, user, ct, q =>
     {
-        if (q.Status != QuoteStatus.Sent) throw SalesException.Conflict($"Quote is {q.Status}");
+        if (q.Status is not (QuoteStatus.Sent or QuoteStatus.Accepted or QuoteStatus.PurchaseOrder)) throw SalesException.Conflict($"Quote is {q.Status}");
         if (Clean(reason) is null) throw SalesException.Invalid("reason", "Required");
         if (lostReason is { } lr && !Enum.IsDefined(lr)) throw SalesException.Invalid("lostReason", "Unknown reason");
-        q.LostReason = lostReason;
+        var gaveUp = q.Status is QuoteStatus.Accepted or QuoteStatus.PurchaseOrder;
+        q.LostReason = lostReason ?? (gaveUp ? LostReason.CustomerGaveUp : null);
         q.Status = QuoteStatus.Rejected;
         q.DecidedAt = DateTimeOffset.UtcNow;
         q.DecisionBy = user;
         q.DecisionNote = Clean(reason);
+        return Task.FromResult<string?>(gaveUp ? "gave-up" : null);
+    });
+
+    /// <summary>Takes a quote that is waiting for (or has) the manager's approval back to draft so it can be edited; it must be approved again if the discount still needs it.</summary>
+    public Task<Quote> ReopenAsync(int id, string? note, string? user, CancellationToken ct = default) => QuoteStep(id, "reopened", note, user, ct, q =>
+    {
+        if (q.Status is not (QuoteStatus.PendingApproval or QuoteStatus.Approved)) throw SalesException.Conflict($"Quote is {q.Status}; only a quote waiting for or holding an approval goes back to draft");
+        q.Status = QuoteStatus.Draft;
+        q.ApprovedBy = null;
+        q.ApprovedAt = null;
+        return Task.FromResult<string?>(null);
+    });
+
+    /// <summary>Moves the validity date of a quote that is still with the customer; an expired one is sent again (back to Sent) with the new date.</summary>
+    public Task<Quote> ExtendValidityAsync(int id, DateOnly? validUntil, string? note, string? user, CancellationToken ct = default) => QuoteStep(id, "validity-extended", note, user, ct, q =>
+    {
+        if (q.Status is not (QuoteStatus.Sent or QuoteStatus.Expired)) throw SalesException.Conflict($"Quote is {q.Status}; only a sent or expired quote can have its validity extended");
+        var today = Today();
+        if (validUntil is not { } v || v < today) throw SalesException.Invalid("validUntil", "Give a date from today on");
+        if (v > today.AddDays(365)) throw SalesException.Invalid("validUntil", "At most one year from today");
+        q.ValidUntil = v;
+        q.Status = QuoteStatus.Sent;
         return Task.FromResult<string?>(null);
     });
 

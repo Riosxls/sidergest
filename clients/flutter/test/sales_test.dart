@@ -34,6 +34,8 @@ class SalesFake {
   Map<String, dynamic>? credit;
   num listPrice = 100;
   String? rejectionNote;
+  String? lostReason;
+  String? supersededBy;
 
   List<Map<String, dynamic>> history(String action) => [
     if (rejectionNote != null) {'id': 3, 'action': 'approval-rejected', 'fromStatus': 'PendingApproval', 'toStatus': 'Draft', 'note': rejectionNote, 'user': 'gerente', 'at': '2026-10-27T12:00:00Z'},
@@ -77,6 +79,9 @@ class SalesFake {
     'salesOrderReference': quoteStatus == 'Converted' ? 'PV 9' : null,
     'createdBy': 'ana',
     'createdAt': '2026-10-25T12:00:00Z',
+    'lostReason': lostReason,
+    'supersededById': supersededBy == null ? null : 8,
+    'supersededBy': supersededBy,
     'totals': {'products': 10900, 'ipi': 500, 'total': 11400, 'maxDiscountPercent': needsApproval ? 10 : 0},
     'lines': [
       {
@@ -269,6 +274,14 @@ class SalesFake {
       quoteStatus = 'Rejected';
       return json(quote());
     }
+    if (p == '/api/sales/quotes/5/reopen') {
+      quoteStatus = 'Draft';
+      return json(quote());
+    }
+    if (p == '/api/sales/quotes/5/extend') {
+      quoteStatus = 'Sent';
+      return json(quote());
+    }
     if (p == '/api/sales/quotes/5/duplicate') return json({...quote(), 'id': 6, 'reference': 'PROP 32', 'status': 'Draft'}, 201);
     if (p == '/api/sales/quotes/6' && m == 'GET') return json({...quote(), 'id': 6, 'reference': 'PROP 32', 'status': 'Draft'});
     if (p == '/api/sales/quotes/5/send') {
@@ -340,7 +353,9 @@ void main() {
     expect(quotePath('Sent'), (1, null));
     expect(quotePath('Accepted'), (2, null));
     expect(quotePath('PurchaseOrder'), (3, null));
-    expect(quotePath('Rejected'), (2, 'Recusada'));
+    expect(quotePath('Rejected'), (2, 'Perdida'));
+    expect(quotePath('Cancelled'), (0, 'Cancelada'));
+    expect(quotePath('Cancelled', superseded: true), (0, 'Substituída'));
     expect(orderPath('Released'), (5, null));
     expect(orderPath('Released', ready: true), (6, null));
     expect(orderPath('Released', ready: true, certified: true), (7, null));
@@ -514,9 +529,124 @@ void main() {
     await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
     await tester.tap(find.byKey(const ValueKey('quote-decline')));
     await tester.pumpAndSettle();
-    expect(find.text('Cliente recusou PROP 31'), findsOneWidget);
+    expect(find.text('Venda perdida: cliente recusou PROP 31'), findsOneWidget);
     expect(find.textContaining('Motivo principal'), findsOneWidget);
     expect(fake.log.where((r) => r.url.path == '/api/sales/quotes/5/decline'), isEmpty);
+  });
+
+  group('quote outcomes are named after what the customer did', () {
+    Future<SalesFake> open(WidgetTester tester, String status, {void Function(SalesFake)? tweak}) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final fake = SalesFake()..quoteStatus = status;
+      tweak?.call(fake);
+      await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+      return fake;
+    }
+
+    testWidgets('sent: approved, wants changes, refused, more time; no top-bar Revisar and no Cancelar in the menu', (tester) async {
+      await open(tester, 'Sent');
+      for (final k in ['quote-accept', 'quote-change', 'quote-decline', 'quote-extend']) {
+        expect(find.byKey(ValueKey(k)), findsOneWidget, reason: k);
+      }
+      expect(find.text('Cliente pediu alteração'), findsOneWidget);
+      expect(find.text('Cliente recusou (venda perdida)'), findsOneWidget);
+      expect(find.byKey(const ValueKey('quote-revise-top')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('quote-menu')));
+      await tester.pumpAndSettle();
+      expect(find.text('Nova revisão'), findsOneWidget);
+      expect(find.text('Duplicar'), findsOneWidget);
+      expect(find.text('Pedir análise de viabilidade'), findsOneWidget);
+      expect(find.textContaining('Cancelar'), findsNothing, reason: 'a sent quote ends as lost, revised or extended, never "cancelled"');
+    });
+
+    testWidgets('"Cliente pediu alteração" opens the revision dialog and says what happens to this version', (tester) async {
+      final fake = await open(tester, 'Sent');
+      await tester.tap(find.byKey(const ValueKey('quote-change')));
+      await tester.pumpAndSettle();
+      expect(find.text('Nova revisão de PROP 31'), findsOneWidget);
+      expect(find.textContaining('O que o cliente pediu?'), findsOneWidget);
+      expect(find.textContaining('passa a Substituída'), findsOneWidget);
+      expect(fake.log.where((r) => r.url.path.endsWith('/revise')), isEmpty);
+    });
+
+    for (final status in ['Accepted', 'PurchaseOrder']) {
+      testWidgets('$status: the customer can still give up, and the reason defaults to that', (tester) async {
+        final fake = await open(tester, status);
+        expect(find.byKey(const ValueKey('quote-change')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('quote-gave-up')));
+        await tester.pumpAndSettle();
+        expect(find.text('Cliente desistiu de PROP 31'), findsOneWidget, reason: status);
+        expect(find.text('Cliente desistiu do pedido'), findsWidgets);
+        expect(fake.log.where((r) => r.url.path.endsWith('/decline')), isEmpty);
+      });
+    }
+
+    testWidgets('a refusal does not offer "desistiu" as a reason; it is for after approval', (tester) async {
+      await open(tester, 'Sent');
+      await tester.tap(find.byKey(const ValueKey('quote-decline')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String?>).first);
+      await tester.pumpAndSettle();
+      expect(find.text('Preço'), findsWidgets);
+      expect(find.text('Cliente desistiu do pedido'), findsNothing);
+    });
+
+    for (final status in ['PendingApproval', 'Approved']) {
+      testWidgets('$status: go back to draft instead of revising', (tester) async {
+        final fake = await open(tester, status);
+        expect(find.byKey(const ValueKey('quote-reopen')), findsOneWidget, reason: status);
+        await tester.tap(find.byKey(const ValueKey('quote-menu')));
+        await tester.pumpAndSettle();
+        expect(find.text('Nova revisão'), findsNothing, reason: 'not sent yet: nothing to revise');
+        expect(find.text('Cancelar orçamento'), findsOneWidget);
+        await tester.tapAt(const Offset(5, 5)); // close the menu
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('quote-reopen')));
+        await tester.pumpAndSettle();
+        expect(find.text('Voltar para rascunho?'), findsOneWidget);
+        await tester.tap(find.text('Voltar para rascunho'));
+        await tester.pumpAndSettle();
+        expect(fake.last('POST', '/api/sales/quotes/5/reopen'), isNotNull);
+      });
+    }
+
+    testWidgets('expired: extend the validity first, revise second', (tester) async {
+      final fake = await open(tester, 'Expired');
+      expect(find.text('Prorrogar validade'), findsOneWidget);
+      expect(find.byKey(const ValueKey('quote-revise')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('quote-extend')));
+      await tester.pumpAndSettle();
+      expect(find.text('Prorrogar validade de PROP 31'), findsOneWidget);
+      expect(find.textContaining('Nova validade'), findsOneWidget);
+      await tester.tap(find.text('Salvar'));
+      await tester.pumpAndSettle();
+      final body = fake.body(fake.last('POST', '/api/sales/quotes/5/extend'));
+      expect(body['validUntil'], isNotNull);
+    });
+
+    testWidgets('lost quote shows the reason in the card and in the badge', (tester) async {
+      await open(tester, 'Rejected', tweak: (f) => f.lostReason = 'Price');
+      expect(find.text('Venda perdida'), findsOneWidget);
+      expect(find.text('Perdida · Preço'), findsOneWidget);
+      expect(find.text('Retomar com nova revisão'), findsOneWidget);
+    });
+
+    testWidgets('a replaced version is "Substituída", not "Cancelada", and links to the live revision', (tester) async {
+      await open(tester, 'Cancelled', tweak: (f) => f.supersededBy = 'PROP 31-B');
+      expect(find.text('Substituída pela revisão PROP 31-B'), findsWidgets);
+      expect(find.text('Cancelada'), findsNothing);
+      expect(find.byKey(const ValueKey('quote-open-latest')), findsOneWidget);
+    });
+
+    testWidgets('a draft can still be cancelled from the menu', (tester) async {
+      await open(tester, 'Draft');
+      await tester.tap(find.byKey(const ValueKey('quote-menu')));
+      await tester.pumpAndSettle();
+      expect(find.text('Cancelar orçamento'), findsOneWidget);
+      expect(find.text('Editar itens e condições'), findsOneWidget);
+    });
   });
 
   testWidgets('duplicate from the menu posts the copy and opens it', (tester) async {

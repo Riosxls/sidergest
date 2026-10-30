@@ -47,16 +47,29 @@ Tone productionTone(Object? s) => switch (s) {
   _ => Tone.success,
 };
 
-(int, String?) quotePath(Object? s) => switch (s) {
+(int, String?) quotePath(Object? s, {bool superseded = false}) => switch (s) {
   'Draft' || 'PendingApproval' || 'Approved' => (0, null),
   'Sent' => (1, null),
   'Accepted' => (2, null),
   'PurchaseOrder' => (3, null),
   'Converted' => (4, null),
-  'Rejected' => (2, 'Recusada'),
+  'Rejected' => (2, 'Perdida'),
   'Expired' => (1, 'Expirada'),
-  _ => (0, 'Cancelada'),
+  _ => (0, superseded ? 'Substituída' : 'Cancelada'),
 };
+
+/// A quote that a newer revision replaced is history, not a failure: neutral tone and its own name.
+bool isSuperseded(Map<String, dynamic> q) => q['supersededById'] != null;
+
+/// What the status column and badge say: "Perdida · Preço", "Substituída por PROP 8A", or the plain status.
+String quoteSituation(Map<String, dynamic> q, {bool short = false}) {
+  final status = q['status'];
+  if (isSuperseded(q)) return short ? 'Substituída' : 'Substituída pela revisão ${q['supersededBy']}';
+  if (status == 'Rejected' && q['lostReason'] != null) return 'Perdida · ${lostReasons['${q['lostReason']}'] ?? q['lostReason']}';
+  return quoteStatuses[status] ?? '$status';
+}
+
+Tone quoteToneOf(Map<String, dynamic> q) => isSuperseded(q) ? Tone.neutral : quoteTone(q['status']);
 
 (int, String?) orderPath(Object? s, {bool ready = false, bool certified = false}) => switch (s) {
   'Created' => (4, null),

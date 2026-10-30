@@ -268,6 +268,116 @@ public class SalesTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Waiting_for_approval_goes_back_to_draft_to_be_edited_without_a_revision()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var quote = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 17m))).Read<QuoteOut>();
+        Assert.Equal(HttpStatusCode.Conflict, (await Act(admin, quote.Id, "reopen")).StatusCode); // a plain draft has nothing to reopen
+        quote = await (await Act(admin, quote.Id, "send")).Read<QuoteOut>();
+        Assert.Equal(QuoteStatus.PendingApproval, quote.Status);
+        quote = await (await Act(admin, quote.Id, "reopen", new QuoteActionIn("Preço errado"))).Read<QuoteOut>();
+        Assert.Equal(QuoteStatus.Draft, quote.Status);
+        Assert.EndsWith($"{quote.Number}", quote.Reference); // same quote, no revision letter
+
+        quote = await (await Act(admin, quote.Id, "send")).Read<QuoteOut>();
+        quote = await (await Act(admin, quote.Id, "approve")).Read<QuoteOut>();
+        Assert.Equal(QuoteStatus.Approved, quote.Status);
+        Assert.NotNull(quote.ApprovedBy);
+        quote = await (await Act(admin, quote.Id, "reopen")).Read<QuoteOut>();
+        Assert.Equal(QuoteStatus.Draft, quote.Status);
+        Assert.Null(quote.ApprovedBy);
+        Assert.Contains(quote.History, h => h.Action == "reopened");
+
+        quote = await (await Act(admin, quote.Id, "send")).Read<QuoteOut>();
+        quote = await (await Act(admin, quote.Id, "approve")).Read<QuoteOut>();
+        quote = await (await Act(admin, quote.Id, "send", new QuoteActionIn(SentTo: "x@cliente.com"))).Read<QuoteOut>();
+        Assert.Equal(HttpStatusCode.Conflict, (await Act(admin, quote.Id, "reopen")).StatusCode); // once it is out with the customer, change it through a revision
+    }
+
+    [Fact]
+    public async Task Customer_giving_up_after_approving_or_ordering_is_recorded_as_a_lost_sale()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var draft = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        Assert.Equal(HttpStatusCode.Conflict, (await Act(admin, draft.Id, "decline", new QuoteActionIn("x"))).StatusCode);
+
+        var accepted = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        await Act(admin, accepted.Id, "send");
+        await Act(admin, accepted.Id, "accept");
+        var lost = await (await Act(admin, accepted.Id, "decline", new QuoteActionIn("Projeto adiado pelo cliente"))).Read<QuoteOut>();
+        Assert.Equal(QuoteStatus.Rejected, lost.Status);
+        Assert.Equal(LostReason.CustomerGaveUp, lost.LostReason);
+        Assert.Contains(lost.History, h => h.Action == "gave-up");
+
+        var ordered = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        await Act(admin, ordered.Id, "send");
+        await Act(admin, ordered.Id, "accept");
+        await admin.Put($"/api/sales/quotes/{ordered.Id}/request", new QuoteRequestIn("PO"));
+        await Act(admin, ordered.Id, "purchase-order");
+        lost = await (await Act(admin, ordered.Id, "decline", new QuoteActionIn("Cliente cancelou", LostReason: LostReason.Price))).Read<QuoteOut>();
+        Assert.Equal(QuoteStatus.Rejected, lost.Status);
+        Assert.Equal(LostReason.Price, lost.LostReason); // a chosen reason is kept
+
+        var report = await (await admin.GetAsync("/api/sales/quotes/lost-reasons")).Read<List<LostReasonOut>>();
+        Assert.Contains(report, r => r.Reason == LostReason.CustomerGaveUp && r.Quotes >= 1);
+    }
+
+    [Fact]
+    public async Task Validity_can_be_extended_and_an_expired_quote_goes_back_to_sent()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var quote = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        Assert.Equal(HttpStatusCode.Conflict, (await Act(admin, quote.Id, "extend", new QuoteActionIn(ValidUntil: Today.AddDays(10)))).StatusCode); // not sent yet
+        quote = await (await Act(admin, quote.Id, "send")).Read<QuoteOut>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await Act(admin, quote.Id, "extend", new QuoteActionIn(ValidUntil: Today.AddDays(-1)))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Act(admin, quote.Id, "extend", new QuoteActionIn(ValidUntil: Today.AddDays(400)))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Act(admin, quote.Id, "extend")).StatusCode);
+        quote = await (await Act(admin, quote.Id, "extend", new QuoteActionIn("Cliente pediu mais prazo", ValidUntil: Today.AddDays(45)))).Read<QuoteOut>();
+        Assert.Equal(Today.AddDays(45), quote.ValidUntil);
+        Assert.Equal(QuoteStatus.Sent, quote.Status);
+
+        await using (var db = api.NewDb())
+            await db.Quotes.Where(x => x.Id == quote.Id).ExecuteUpdateAsync(u => u.SetProperty(x => x.ValidUntil, Today.AddDays(-2)));
+        using (var scope = api.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<SalesService>().ExpireOverdueAsync();
+        Assert.Equal(QuoteStatus.Expired, (await (await admin.GetAsync($"/api/sales/quotes/{quote.Id}")).Read<QuoteOut>()).Status);
+        quote = await (await Act(admin, quote.Id, "extend", new QuoteActionIn(ValidUntil: Today.AddDays(15)))).Read<QuoteOut>();
+        Assert.Equal(QuoteStatus.Sent, quote.Status);
+        Assert.Equal(Today.AddDays(15), quote.ValidUntil);
+        Assert.Contains(quote.History, h => h.Action == "validity-extended");
+    }
+
+    [Fact]
+    public async Task A_replaced_revision_says_which_revision_replaced_it()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var quote = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        await Act(admin, quote.Id, "send");
+        var revB = await (await Act(admin, quote.Id, "revise", new QuoteActionIn("Cliente pediu outro preço"))).Read<QuoteOut>();
+        await Act(admin, revB.Id, "send");
+        var revC = await (await Act(admin, revB.Id, "revise", new QuoteActionIn("De novo"))).Read<QuoteOut>();
+
+        var first = await (await admin.GetAsync($"/api/sales/quotes/{quote.Id}")).Read<QuoteOut>();
+        Assert.Equal(QuoteStatus.Cancelled, first.Status);
+        Assert.Equal(revC.Id, first.SupersededById); // points at the live one, not the middle revision
+        Assert.Equal(revC.Reference, first.SupersededBy);
+        Assert.Null((await (await admin.GetAsync($"/api/sales/quotes/{revC.Id}")).Read<QuoteOut>()).SupersededById);
+
+        var list = await (await admin.GetAsync($"/api/sales/quotes?q={revC.Number}&take=50")).Read<Page<QuoteSummaryOut>>();
+        Assert.Equal(revC.Id, list.Items.Single(x => x.Id == quote.Id).SupersededById);
+        Assert.Null(list.Items.Single(x => x.Id == revC.Id).SupersededBy);
+
+        var plain = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        plain = await (await Act(admin, plain.Id, "cancel", new QuoteActionIn("Emitido por engano"))).Read<QuoteOut>();
+        Assert.Null(plain.SupersededById); // cancelled on its own, not replaced
+    }
+
+    [Fact]
     public async Task Price_lookup_prefers_customer_price()
     {
         var admin = await api.AdminAsync();

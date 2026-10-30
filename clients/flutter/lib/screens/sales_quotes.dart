@@ -167,7 +167,8 @@ class _QuotesScreenState extends State<QuotesScreen> {
   bool _followUp = false;
   bool _expiring = false;
 
-  static const _cancellable = ['Draft', 'PendingApproval', 'Approved', 'Sent', 'Accepted', 'PurchaseOrder', 'Rejected', 'Expired'];
+  // Only a quote that never reached the customer is "cancelled"; once sent, the outcome is a lost sale, a revision or a new validity.
+  static const _cancellable = ['Draft', 'PendingApproval', 'Approved'];
 
   Future<void> _duplicate(Map<String, dynamic> e) async {
     final r = await runAction(
@@ -183,7 +184,7 @@ class _QuotesScreenState extends State<QuotesScreen> {
 
   /// Quick cancel from the list: asks for the reason, no need to open the quote.
   Future<void> _cancel(Map<String, dynamic> e) async {
-    final reason = await promptText(context, title: 'Cancelar ${e['reference']}', label: 'Motivo', required: true);
+    final reason = await promptText(context, title: 'Cancelar ${e['reference']}', label: 'Motivo (ex.: emitido por engano)', required: true);
     if (reason == null || !mounted) return;
     await runAction(context, () => widget.session.api.post('/api/sales/quotes/${e['id']}/cancel', {'note': reason}), success: '${e['reference']} cancelado');
   }
@@ -243,7 +244,7 @@ class _QuotesScreenState extends State<QuotesScreen> {
     columns: [
       col('Orçamento', 'reference'),
       col('Cliente', 'customerName'),
-      labelCol('Situação', 'status', quoteStatuses),
+      ColumnSpec('Situação', (e) => quoteSituation(e, short: true)),
       moneyCol('Total', 'total'),
       dateCol('Validade', 'validUntil'),
       dateCol('Criada', 'createdAt'),
@@ -855,21 +856,64 @@ class _QuoteScreenState extends State<QuoteScreen> {
     }
   }
 
-  /// Customer turned the quote down: the category feeds the lost-reasons report, the note stays in the history.
-  Future<void> _decline() async {
+  /// The sale is lost. [gaveUp]: the customer had already approved or ordered and dropped it afterwards.
+  /// The category feeds the lost-reasons report, the note stays in the history.
+  Future<void> _decline({bool gaveUp = false}) async {
     final r = await submitForm(
       context,
       api: api,
-      title: 'Cliente recusou ${_q!['reference']}',
-      fields: const [
-        FieldSpec('lostReason', 'Motivo principal', type: FieldType.choice, required: true, choices: lostReasons),
-        FieldSpec('note', 'Detalhes', required: true, hint: 'O que o cliente disse'),
+      title: gaveUp ? 'Cliente desistiu de ${_q!['reference']}' : 'Venda perdida: cliente recusou ${_q!['reference']}',
+      fields: [
+        FieldSpec(
+          'lostReason',
+          'Motivo principal',
+          type: FieldType.choice,
+          required: true,
+          choices: gaveUp ? lostReasons : {for (final e in lostReasons.entries) if (e.key != 'CustomerGaveUp') e.key: e.value},
+          defaultValue: gaveUp ? 'CustomerGaveUp' : null,
+        ),
+        const FieldSpec('note', 'Detalhes', required: true, hint: 'O que o cliente disse. O orçamento fica como Perdida e o motivo entra no relatório de vendas perdidas'),
       ],
       submit: (b) => api.post('$base/decline', b),
     );
     if (r != null && r['reference'] != null) {
       setState(() => _q = r);
       _loadCredit(r);
+    }
+  }
+
+  /// Back to draft so a quote that is waiting for (or holds) the manager's approval can be edited; no new revision is created.
+  Future<void> _reopen() async {
+    final ok = await confirmStep(
+      context,
+      title: 'Voltar para rascunho?',
+      message:
+          'A aprovação do gerente é descartada e você pode editar os itens e preços. Depois envie de novo; se o desconto continuar acima do limite, o gerente aprova outra vez.',
+      confirmLabel: 'Voltar para rascunho',
+      icon: Icons.edit_outlined,
+    );
+    if (ok && mounted) await _act('reopen', success: 'Orçamento voltou para rascunho');
+  }
+
+  /// Gives a quote that is still with the customer more time; an expired one becomes "Enviada" again with the new date.
+  Future<void> _extend() async {
+    final q = _q!;
+    final current = DateTime.tryParse('${q['validUntil'] ?? ''}');
+    final today = DateTime.now();
+    final base0 = current != null && current.isAfter(today) ? current : today;
+    final r = await submitForm(
+      context,
+      api: api,
+      title: 'Prorrogar validade de ${q['reference']}',
+      fields: [
+        FieldSpec('validUntil', 'Nova validade', type: FieldType.date, required: true, defaultValue: isoDate(DateTime(base0.year, base0.month, base0.day + 15))),
+        const FieldSpec('note', 'Motivo', hint: 'Ex.: cliente pediu mais prazo para decidir'),
+      ],
+      submit: (b) => api.post('$base/extend', b),
+    );
+    if (r != null && r['reference'] != null) {
+      setState(() => _q = r);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Validade até ${fmtDay(r['validUntil'])}')));
     }
   }
 
@@ -963,21 +1007,27 @@ class _QuoteScreenState extends State<QuoteScreen> {
     await _act(action, body: {'note': reason}, success: success);
   }
 
-  /// Cancels this quote (reason required) and opens the new revision as a draft with the same client, items and prazo.
+  /// New revision: this version stays for reference as "Substituída" and a draft with the same client, items and prazo opens to be changed.
   Future<void> _revise() async {
     final q = _q!;
     final r = await submitForm(
       context,
       api: api,
-      title: 'Revisar ${q['reference']}',
+      title: 'Nova revisão de ${q['reference']}',
       fields: [
-        const FieldSpec('note', 'Motivo do cancelamento', required: true, hint: 'O orçamento atual fica cancelado, só para consulta'),
+        const FieldSpec('change', 'O que o cliente pediu?', type: FieldType.choice, required: true, choices: revisionReasons),
+        const FieldSpec(
+          'note',
+          'Detalhes',
+          required: true,
+          hint: 'Esta versão passa a Substituída (só consulta). A nova revisão abre em rascunho com os mesmos itens para você alterar',
+        ),
         FieldSpec('customerPo', 'Pedido de compra do cliente', defaultValue: q['customerPo'], hint: 'Mantenha o mesmo ou informe outro'),
       ],
-      submit: (b) => api.post('$base/revise', b),
+      submit: (b) => api.post('$base/revise', {'note': '${revisionReasons[b['change']] ?? b['change']}: ${b['note']}', 'customerPo': b['customerPo']}),
     );
     if (r == null || r['id'] == null || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${q['reference']} cancelado · nova revisão ${r['reference']} em rascunho')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${q['reference']} substituída · nova revisão ${r['reference']} em rascunho')));
     await _load();
     if (mounted) await openQuote(context, s, r['id'] as int);
     if (mounted) _load();
@@ -1165,43 +1215,57 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ),
       'PendingApproval' => NextStepCard(
         title: 'Aguardando aprovação do gerente',
-        message: 'Desconto de ${fmt(q['totals']['maxDiscountPercent'])}% sobre a tabela de preços.',
+        message: 'Desconto de ${fmt(q['totals']['maxDiscountPercent'])}% sobre a tabela de preços. Para mudar algo antes disso, volte para rascunho.',
         tone: Tone.warning,
         actions: [
           if (s.canApproveSales) primary('quote-approve', 'Aprovar desconto', Icons.thumb_up_alt_outlined, () => _act('approve', success: 'Desconto aprovado')),
           if (s.canApproveSales)
             secondary(
               'quote-reject-approval',
-              'Recusar',
+              'Recusar desconto',
               Icons.thumb_down_alt_outlined,
               () => _reason('reject-approval', 'Recusar desconto', success: 'Orçamento voltou para rascunho'),
             ),
+          if (sell) secondary('quote-reopen', 'Voltar para rascunho para editar', Icons.edit_outlined, _reopen),
         ],
       ),
       'Approved' => NextStepCard(
         title: 'Desconto aprovado',
-        message: 'Aprovado por ${q['approvedBy'] ?? ''} em ${fmtDate(q['approvedAt'])}. Agora envie ao cliente.',
-        actions: [if (sell) primary('quote-send', 'Enviar ao cliente', Icons.send, _send)],
+        message: 'Aprovado por ${q['approvedBy'] ?? ''} em ${fmtDate(q['approvedAt'])}. Agora envie ao cliente. Para mudar algo antes, volte para rascunho.',
+        actions: [
+          if (sell) primary('quote-send', 'Enviar ao cliente', Icons.send, _send),
+          if (sell) secondary('quote-reopen', 'Voltar para rascunho para editar', Icons.edit_outlined, _reopen),
+        ],
       ),
       'Sent' => NextStepCard(
         title: 'Aguardando resposta do cliente',
-        message: 'Enviada para ${q['sentTo'] ?? ''} em ${fmtDate(q['sentAt'])}. Válida até ${fmtDay(q['validUntil'])}.',
+        message: 'Enviada para ${q['sentTo'] ?? ''} em ${fmtDate(q['sentAt'])}. Válida até ${fmtDay(q['validUntil'])}. Registre o que o cliente respondeu.',
         actions: [
           if (sell) primary('quote-accept', 'Cliente aprovou', Icons.thumb_up_alt_outlined, _accept),
-          if (sell) secondary('quote-decline', 'Cliente recusou', Icons.thumb_down_alt_outlined, _decline),
+          if (sell) secondary('quote-change', 'Cliente pediu alteração', Icons.edit_note, _revise),
+          if (sell) secondary('quote-decline', 'Cliente recusou (venda perdida)', Icons.thumb_down_alt_outlined, _decline),
+          if (sell) TextButton.icon(key: const ValueKey('quote-extend'), onPressed: _extend, icon: const Icon(Icons.event_repeat), label: const Text('Prorrogar validade')),
         ],
       ),
       'Accepted' => NextStepCard(
         title: 'Aprovada pelo cliente',
         message: 'Anexe o pedido de compra do cliente (arquivo ou texto) e registre-o para gerar o pedido de venda.',
         tone: Tone.success,
-        actions: [if (sell) primary('quote-po', 'Registrar pedido de compra', Icons.assignment_turned_in_outlined, _receivePo)],
+        actions: [
+          if (sell) primary('quote-po', 'Registrar pedido de compra', Icons.assignment_turned_in_outlined, _receivePo),
+          if (sell) secondary('quote-change', 'Cliente pediu alteração', Icons.edit_note, _revise),
+          if (sell) secondary('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, () => _decline(gaveUp: true)),
+        ],
       ),
       'PurchaseOrder' => NextStepCard(
         title: 'Pedido de compra recebido',
         message: 'Gere o pedido de venda${q['customerPo'] == null ? '' : ' (pedido do cliente ${q['customerPo']})'} para liberar a produção.',
         tone: Tone.success,
-        actions: [if (sell) primary('quote-convert', 'Gerar pedido de venda', Icons.receipt_long, _convert)],
+        actions: [
+          if (sell) primary('quote-convert', 'Gerar pedido de venda', Icons.receipt_long, _convert),
+          if (sell) secondary('quote-change', 'Cliente pediu alteração', Icons.edit_note, _revise),
+          if (sell) secondary('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, () => _decline(gaveUp: true)),
+        ],
       ),
       'Converted' => NextStepCard(
         title: 'Convertida em pedido',
@@ -1212,11 +1276,27 @@ class _QuoteScreenState extends State<QuoteScreen> {
             primary('quote-open-order', 'Abrir pedido', Icons.open_in_new, () => openSalesOrder(context, s, q['salesOrderId'] as int).then((_) => _load())),
         ],
       ),
-      'Rejected' || 'Expired' => NextStepCard(
-        title: st == 'Rejected' ? 'Recusada pelo cliente' : 'Validade expirada',
-        message: q['decisionNote'] == null ? 'Revise preços e prazos e envie de novo.' : 'Motivo: ${q['decisionNote']}. Revise e envie de novo.',
+      'Rejected' => NextStepCard(
+        title: 'Venda perdida',
+        message:
+            '${q['lostReason'] == null ? '' : '${lostReasons['${q['lostReason']}'] ?? q['lostReason']}. '}${q['decisionNote'] ?? ''}\nSe o cliente voltar a negociar, abra uma nova revisão a partir desta.',
         tone: Tone.danger,
-        actions: [if (sell) primary('quote-revise', 'Revisar orçamento', Icons.edit, _revise)],
+        actions: [if (sell) primary('quote-revise', 'Retomar com nova revisão', Icons.restart_alt, _revise)],
+      ),
+      'Expired' => NextStepCard(
+        title: 'Validade expirada',
+        message: 'A validade passou sem resposta. Prorrogue se o cliente ainda pode responder; crie uma nova revisão para mudar preço ou prazo.',
+        tone: Tone.danger,
+        actions: [
+          if (sell) primary('quote-extend', 'Prorrogar validade', Icons.event_repeat, _extend),
+          if (sell) secondary('quote-revise', 'Nova revisão', Icons.restart_alt, _revise),
+        ],
+      ),
+      _ when isSuperseded(q) => NextStepCard(
+        title: 'Substituída pela revisão ${q['supersededBy']}',
+        message: 'Esta versão ficou só para consulta. A que está em andamento é a ${q['supersededBy']}.',
+        tone: Tone.info,
+        actions: [primary('quote-open-latest', 'Abrir ${q['supersededBy']}', Icons.open_in_new, () => openQuote(context, s, q['supersededById'] as int).then((_) => _load()))],
       ),
       _ => NextStepCard(title: 'Cancelada', message: '${q['decisionNote'] ?? ''}', tone: Tone.danger),
     };
@@ -1232,7 +1312,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
     return null;
   }
 
-  static const _revisable = ['PendingApproval', 'Approved', 'Sent', 'Accepted', 'PurchaseOrder', 'Rejected', 'Expired'];
+  // A quote that is still internal (waiting for approval, approved) goes back to draft instead; revisions start once the customer has seen it.
+  static const _revisable = ['Sent', 'Accepted', 'PurchaseOrder', 'Rejected', 'Expired'];
   Future<void> _newFeasibility() async {
     final q = _q!;
     final r = await newFeasibility(
@@ -1250,40 +1331,56 @@ class _QuoteScreenState extends State<QuoteScreen> {
   List<Widget> _menuActions() {
     final q = _q;
     if (q == null) return [];
-    final menu = <PopupMenuEntry<VoidCallback>>[
+    // Grouped by what the user is trying to do: edit, handle the document, create something new from this quote, change its situation.
+    // Outcomes of the customer's answer (approved, wants changes, refused, gave up) are the buttons on the status card, not menu items.
+    final edit = <PopupMenuEntry<VoidCallback>>[
+      if (s.canSell && status == 'Draft')
+        PopupMenuItem(
+          value: _edit,
+          child: const ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar itens e condições')),
+        ),
+    ];
+    final document = <PopupMenuEntry<VoidCallback>>[
       PopupMenuItem(
         value: _preview,
         child: const ListTile(leading: Icon(Icons.description_outlined), title: Text('Ver texto do orçamento')),
       ),
-      if (s.canSell && !['Cancelled', 'Converted'].contains(status))
-        PopupMenuItem(
-          value: _newFeasibility,
-          child: const ListTile(leading: Icon(Icons.fact_check_outlined), title: Text('Nova análise de viabilidade')),
-        ),
-      if (s.canSell && status == 'Draft')
-        PopupMenuItem(
-          value: _edit,
-          child: const ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar')),
-        ),
-      if (s.canSell)
-        PopupMenuItem(
-          value: _duplicate,
-          child: const ListTile(leading: Icon(Icons.copy), title: Text('Duplicar')),
-        ),
       if (['Sent', 'Accepted', 'PurchaseOrder'].contains(status))
         PopupMenuItem(
           value: _mail,
           child: const ListTile(leading: Icon(Icons.mail_outline), title: Text('Abrir e-mail para o cliente')),
         ),
+    ];
+    final create = <PopupMenuEntry<VoidCallback>>[
+      if (s.canSell)
+        PopupMenuItem(
+          value: _duplicate,
+          child: const ListTile(leading: Icon(Icons.copy), title: Text('Duplicar'), subtitle: Text('Cópia independente, com número novo')),
+        ),
+      if (s.canSell && !['Cancelled', 'Converted'].contains(status))
+        PopupMenuItem(
+          value: _newFeasibility,
+          child: const ListTile(
+            leading: Icon(Icons.fact_check_outlined),
+            title: Text('Pedir análise de viabilidade'),
+            subtitle: Text('Avaliação técnica, de qualidade e comercial'),
+          ),
+        ),
+    ];
+    final situation = <PopupMenuEntry<VoidCallback>>[
       if (s.canSell && _revisable.contains(status))
         PopupMenuItem(
           value: _revise,
-          child: const ListTile(leading: Icon(Icons.history_edu), title: Text('Revisar orçamento')),
+          child: ListTile(
+            leading: const Icon(Icons.history_edu),
+            title: const Text('Nova revisão'),
+            subtitle: Text('Altera itens ou preço; esta versão fica como Substituída (${q['reference']})'),
+          ),
         ),
-      if (s.canSell && ['Draft', 'PendingApproval', 'Approved', 'Sent', 'PurchaseOrder', 'Accepted', 'Rejected', 'Expired'].contains(status))
+      if (s.canSell && ['Draft', 'PendingApproval', 'Approved'].contains(status))
         PopupMenuItem(
-          value: () => _reason('cancel', 'Cancelar ${q['reference']}', success: 'Orçamento cancelado'),
-          child: const ListTile(leading: Icon(Icons.block), title: Text('Cancelar')),
+          value: () => _reason('cancel', 'Cancelar ${q['reference']}', label: 'Motivo (ex.: emitido por engano)', success: 'Orçamento cancelado'),
+          child: const ListTile(leading: Icon(Icons.block), title: Text('Cancelar orçamento'), subtitle: Text('Só para o que nunca foi enviado ao cliente')),
         ),
       if (s.canSell && canDeleteQuote(s, status, q['revision'] as int? ?? 0))
         PopupMenuItem(
@@ -1291,9 +1388,13 @@ class _QuoteScreenState extends State<QuoteScreen> {
           child: const ListTile(leading: Icon(Icons.delete_outline), title: Text('Excluir')),
         ),
     ];
+    final menu = <PopupMenuEntry<VoidCallback>>[];
+    for (final group in [edit, document, create, situation]) {
+      if (group.isEmpty) continue;
+      if (menu.isNotEmpty) menu.add(const PopupMenuDivider());
+      menu.addAll(group);
+    }
     return [
-      if (s.canSell && _revisable.contains(status))
-        TextButton.icon(key: const ValueKey('quote-revise-top'), onPressed: _revise, icon: const Icon(Icons.history_edu), label: const Text('Revisar')),
       PrintButton(name: 'Orçamento ${q['reference']}', builder: () => buildQuotePdf(api, q)),
       if (s.canSell && status == 'Draft') IconButton(tooltip: 'Editar', onPressed: _edit, icon: const Icon(Icons.edit_outlined)),
       PopupMenuButton<VoidCallback>(key: const ValueKey('quote-menu'), onSelected: (f) => f(), itemBuilder: (_) => menu),
@@ -1318,7 +1419,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
 
   Widget _body(Map<String, dynamic> q) {
     final t = q['totals'] as Map<String, dynamic>;
-    final (step, failed) = quotePath(q['status']);
+    final (step, failed) = quotePath(q['status'], superseded: isSuperseded(q));
     final lines = (q['lines'] as List).cast<Map<String, dynamic>>();
     return SideBySide(
       main: [
@@ -1326,7 +1427,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
           icon: Icons.request_quote_outlined,
           kind: 'Orçamento comercial${q['revision'] == 0 ? '' : ' · revisão ${String.fromCharCode(65 + (q['revision'] as int))}'}',
           title: '${q['reference']}',
-          badge: StatusBadge(quoteStatuses[q['status']] ?? '${q['status']}', tone: quoteTone(q['status'])),
+          badge: StatusBadge(quoteSituation(q), tone: quoteToneOf(q)),
           amount: fmtMoney(t['total']),
           fields: [
             ('Cliente', '${q['customerName']}'),

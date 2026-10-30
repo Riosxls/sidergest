@@ -106,7 +106,8 @@ scripts/             start.ps1, stop.ps1
 - Quote requires customer and Prazo before lines can be added. Quote can carry a **custom prazo** (stored on quote, copied to the sales order). Customer has a default prazo.
 - Quote estimate includes ICMS on top of IPI. IPI and ICMS are not typed on the item card; they come from the price table. Lines have lead-time **working days** (Mon-Fri, national holidays) synced with the delivery date; the server uses the same math when a quote becomes an order.
 - Admins can delete draft, cancelled, rejected and expired quotes; a quote that already has a sales order is never deleted.
-- Quote **revisions** use letter suffixes (A, B, C...).
+- Quote **revisions** use letter suffixes (A, B, C...). A revision replaces the earlier version, which is shown as **Substituída** (not "Cancelada"); the API exposes `supersededById`/`supersededBy` for it.
+- **Quote outcomes** are named after what the customer did, not after system actions. While Sent: *Cliente aprovou* (accept), *Cliente pediu alteração* (revise: new revision, old one superseded), *Cliente recusou* (decline: status Rejected, shown **Perdida**, with a lost reason), *Prorrogar validade* (`/extend`; an Expired quote goes back to Sent). After approval or a purchase order: *Cliente desistiu* (decline with `CustomerGaveUp`, history action `gave-up`). Before sending: *Voltar para rascunho* (`/reopen`, from PendingApproval/Approved) and *Cancelar* (only for a quote that never left the company). Do not add menu items that duplicate these outcomes.
 - Sales order carries company (EBT/BST), customer PO ("pedido de compra") step, and custom prazo.
 - Production order (OF, "Ordem de Produção") is generated from the sales order; shop-floor operations in `ProductionService.ShopFloor.cs`. Operations can be done outside ("remessa para industrialização").
 - Delivery ("Entrega") ships from stock; with fiscal enabled, shipping emits the NF.

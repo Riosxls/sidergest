@@ -18,7 +18,7 @@ public record PriceListOut(int Id, int ProductId, string ProductCode, string Pro
 public record PriceOut(int ProductId, int? CustomerId, decimal? UnitPrice, decimal? IpiPercent, decimal? IcmsPercent, bool CustomerSpecific, string ProductCode, string Description, string Unit, string? CustomerPartNumber);
 
 public record SalesEventOut(long Id, string Action, string? FromStatus, string? ToStatus, string? Note, string? User, DateTimeOffset At);
-public record QuoteActionIn(string? Note = null, string? SentTo = null, string? CustomerPo = null, LostReason? LostReason = null);
+public record QuoteActionIn(string? Note = null, string? SentTo = null, string? CustomerPo = null, LostReason? LostReason = null, DateOnly? ValidUntil = null);
 public record LostReasonOut(LostReason? Reason, int Quotes, decimal Value);
 public record SalesReasonIn(string? Reason);
 public record SalesOrderIn(int CustomerId, int AddressId, List<SalesLineInput> Lines, string? CustomerPo = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, string? Notes = null, bool OverrideCredit = false, string? Company = null, string? CustomPaymentTerm = null,
@@ -29,11 +29,13 @@ public record ConfirmDeliveryIn(DateOnly? Date = null, string? ReceivedBy = null
 public record QuoteLineOut(int Id, int Sequence, int ProductId, string ProductCode, string? CustomerPartNumber, string Description, decimal Quantity, string Unit, decimal UnitPrice, decimal? ListPrice, decimal? DiscountPercent,
     decimal IpiPercent, decimal IcmsPercent, int? LeadTimeDays, DateOnly? DeliveryDate, decimal Total);
 public record QuoteSummaryOut(int Id, int Number, int Revision, string Reference, int CustomerId, string CustomerName, QuoteStatus Status, bool NeedsApproval, decimal Total, DateOnly? ValidUntil,
-    DateTimeOffset? SentAt, DateTimeOffset CreatedAt, string? CreatedBy, int? SalesOrderId, bool FollowUp = false, bool Expiring = false, LostReason? LostReason = null);
+    DateTimeOffset? SentAt, DateTimeOffset CreatedAt, string? CreatedBy, int? SalesOrderId, bool FollowUp = false, bool Expiring = false, LostReason? LostReason = null,
+    int? SupersededById = null, string? SupersededBy = null);
 public record QuoteOut(int Id, int Number, int Revision, string Reference, int CustomerId, string CustomerName, int? AddressId, string? AddressText, string? ContactName, string? ContactEmail, string? CustomerReference,
     int? PaymentTermId, string? PaymentTermName, string? CustomPaymentTerm, FreightTerms Freight, int ValidityDays, DateOnly? ValidUntil, string? Conditions, string? Notes, QuoteStatus Status, bool NeedsApproval, string? ApprovedBy, DateTimeOffset? ApprovedAt,
     DateTimeOffset? SentAt, string? SentTo, DateTimeOffset? DecidedAt, string? DecisionBy, string? DecisionNote, string? CustomerPo, int? SalesOrderId, string? SalesOrderReference, string? CreatedBy, DateTimeOffset CreatedAt,
-    QuoteTotals Totals, IReadOnlyList<QuoteLineOut> Lines, IReadOnlyList<SalesEventOut> History, string? RequestText = null, string? RequestFileName = null, string? RequestFileType = null, long? RequestFileSize = null, LostReason? LostReason = null);
+    QuoteTotals Totals, IReadOnlyList<QuoteLineOut> Lines, IReadOnlyList<SalesEventOut> History, string? RequestText = null, string? RequestFileName = null, string? RequestFileType = null, long? RequestFileSize = null, LostReason? LostReason = null,
+    int? SupersededById = null, string? SupersededBy = null);
 public record QuoteRequestIn(string? Text);
 
 public record SalesOrderLineOut(int Id, int Sequence, int ProductId, string ProductCode, string? CustomerPartNumber, string Description, decimal Quantity, string Unit, decimal UnitPrice, decimal IpiPercent, decimal IcmsPercent,
@@ -192,7 +194,7 @@ public static class SalesEndpoints
             if (Has(q)) x = x.Where(o => EF.Functions.ILike(o.Reference, Like(q!)) || EF.Functions.ILike(o.Customer!.Name, Like(q)) || EF.Functions.ILike(o.CustomerReference!, Like(q)));
             var total = await x.CountAsync(ct);
             var (s, n) = Paging(skip, take);
-            var items = await QuoteSummaries(x.OrderByDescending(o => o.CreatedAt).Skip(s).Take(n), settings.FollowUpDays, ct);
+            var items = await QuoteSummaries(db, x.OrderByDescending(o => o.CreatedAt).Skip(s).Take(n), settings.FollowUpDays, ct);
             return Results.Ok(new Page<QuoteSummaryOut>(items, total, s, n));
         });
 
@@ -307,6 +309,8 @@ public static class SalesEndpoints
             return Results.Created($"/api/sales/quotes/{q.Id}", await LoadQuote(db, q.Id, ct));
         }).RequireAuthorization(SalesPolicies.Sell);
         QuoteAction(g, "cancel", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.CancelQuoteAsync(id, i.Note, u, ct));
+        QuoteAction(g, "reopen", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.ReopenAsync(id, i.Note, u, ct));
+        QuoteAction(g, "extend", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.ExtendValidityAsync(id, i.ValidUntil, i.Note, u, ct));
 
         g.MapPost("/{id:int}/convert", async (int id, ConvertInput i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
@@ -447,7 +451,7 @@ public static class SalesEndpoints
                 quotes = quotes.Where(q => q.CustomerId == c);
                 orders = orders.Where(o => o.CustomerId == c);
             }
-            var quoteRows = await QuoteSummaries(quotes.OrderBy(q => q.ValidUntil ?? DateOnly.MaxValue).ThenByDescending(q => q.CreatedAt), (await svc.SettingsAsync(ct)).FollowUpDays, ct);
+            var quoteRows = await QuoteSummaries(db, quotes.OrderBy(q => q.ValidUntil ?? DateOnly.MaxValue).ThenByDescending(q => q.CreatedAt), (await svc.SettingsAsync(ct)).FollowUpDays, ct);
             var orderRows = await OrderSummaries(db, svc, orders.OrderBy(o => o.CreatedAt), ct);
 
             PipelineCard QuoteCard(QuoteSummaryOut q)
@@ -506,7 +510,17 @@ public static class SalesEndpoints
         }).WithTags("Sales").RequireAuthorization(Policies.Read);
     }
 
-    private static async Task<List<QuoteSummaryOut>> QuoteSummaries(IQueryable<Quote> q, int followUpDays, CancellationToken ct)
+    /// <summary>The newest revision with the same number, when this one has been replaced by it.</summary>
+    private static async Task<Dictionary<int, (int Id, string Reference)>> LatestRevisions(EbtDbContext db, IEnumerable<(int Number, int Revision)> cancelled, CancellationToken ct)
+    {
+        var numbers = cancelled.Select(c => c.Number).Distinct().ToList();
+        if (numbers.Count == 0) return [];
+        var all = await db.Quotes.AsNoTracking().Where(x => numbers.Contains(x.Number)).Select(x => new { x.Number, x.Revision, x.Id, x.Reference }).ToListAsync();
+        return cancelled.Select(c => (c, newest: all.Where(x => x.Number == c.Number && x.Revision > c.Revision).OrderByDescending(x => x.Revision).FirstOrDefault()))
+            .Where(p => p.newest is not null).ToDictionary(p => p.c.Number * 100 + p.c.Revision, p => (p.newest!.Id, p.newest.Reference));
+    }
+
+    private static async Task<List<QuoteSummaryOut>> QuoteSummaries(EbtDbContext db, IQueryable<Quote> q, int followUpDays, CancellationToken ct)
     {
         var rows = await q.Select(x => new
         {
@@ -515,9 +529,11 @@ public static class SalesEndpoints
         }).ToListAsync(ct);
         var today = SalesService.Today();
         var followUpBefore = DateTimeOffset.UtcNow.AddDays(-followUpDays);
+        var replaced = await LatestRevisions(db, rows.Where(r => r.Status == QuoteStatus.Cancelled).Select(r => (r.Number, r.Revision)), ct);
         return rows.Select(x => new QuoteSummaryOut(x.Id, x.Number, x.Revision, x.Reference, x.CustomerId, x.Customer, x.Status, x.NeedsApproval,
             SalesService.Totals(x.Lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, l.ListPrice))).Total, x.ValidUntil, x.SentAt, x.CreatedAt, x.CreatedBy, x.SalesOrderId,
-            FollowUp: x.Status == QuoteStatus.Sent && x.SentAt <= followUpBefore, Expiring: x.Status == QuoteStatus.Sent && x.ValidUntil is { } v && v <= today.AddDays(ExpiringDays), LostReason: x.LostReason)).ToList();
+            FollowUp: x.Status == QuoteStatus.Sent && x.SentAt <= followUpBefore, Expiring: x.Status == QuoteStatus.Sent && x.ValidUntil is { } v && v <= today.AddDays(ExpiringDays), LostReason: x.LostReason,
+            SupersededById: replaced.TryGetValue(x.Number * 100 + x.Revision, out var r) ? r.Id : null, SupersededBy: replaced.TryGetValue(x.Number * 100 + x.Revision, out var r2) ? r2.Reference : null)).ToList();
     }
 
     private static async Task<List<SalesOrderSummaryOut>> OrderSummaries(EbtDbContext db, SalesService svc, IQueryable<SalesOrder> q, CancellationToken ct)
@@ -551,11 +567,14 @@ public static class SalesEndpoints
     {
         var q = await db.Quotes.AsNoTracking().Include(x => x.Customer).Include(x => x.Address).Include(x => x.PaymentTerm).Include(x => x.Lines).ThenInclude(l => l.Product).FirstAsync(x => x.Id == id, ct);
         var order = q.SalesOrderId is { } oid ? await db.SalesOrders.Where(o => o.Id == oid).Select(o => o.Reference).FirstOrDefaultAsync(ct) : null;
+        var replaced = q.Status == QuoteStatus.Cancelled ? await LatestRevisions(db, [(q.Number, q.Revision)], ct) : [];
+        var newer = replaced.TryGetValue(q.Number * 100 + q.Revision, out var n) ? n : default((int Id, string Reference)?);
         var lines = q.Lines.OrderBy(l => l.Sequence).Select(l => new QuoteLineOut(l.Id, l.Sequence, l.ProductId, l.Product!.Code, l.CustomerPartNumber, l.Description, l.Quantity, l.Unit, l.UnitPrice, l.ListPrice,
             l.ListPrice is > 0 ? Math.Round((1 - l.UnitPrice / l.ListPrice.Value) * 100m, 2) : null, l.IpiPercent, l.IcmsPercent, l.LeadTimeDays, l.DeliveryDate, Math.Round(l.Quantity * l.UnitPrice, 2))).ToList();
         return new QuoteOut(q.Id, q.Number, q.Revision, q.Reference, q.CustomerId, q.Customer!.Name, q.AddressId, q.Address is null ? null : AddressText(q.Address), q.ContactName, q.ContactEmail, q.CustomerReference,
             q.PaymentTermId, q.PaymentTerm?.Name, q.CustomPaymentTerm, q.Freight, q.ValidityDays, q.ValidUntil, q.Conditions, q.Notes, q.Status, q.NeedsApproval, q.ApprovedBy, q.ApprovedAt, q.SentAt, q.SentTo, q.DecidedAt, q.DecisionBy, q.DecisionNote,
-            q.CustomerPo, q.SalesOrderId, order, q.CreatedBy, q.CreatedAt, SalesService.Totals(q), lines, await History(db, SalesRecordKind.Quote, id, ct), q.RequestText, q.RequestFileName, q.RequestFileType, q.RequestFileSize, q.LostReason);
+            q.CustomerPo, q.SalesOrderId, order, q.CreatedBy, q.CreatedAt, SalesService.Totals(q), lines, await History(db, SalesRecordKind.Quote, id, ct), q.RequestText, q.RequestFileName, q.RequestFileType, q.RequestFileSize, q.LostReason,
+            newer?.Id, newer?.Reference);
     }
 
     private static async Task<SalesOrderOut> LoadOrder(EbtDbContext db, SalesService svc, int id, CancellationToken ct)

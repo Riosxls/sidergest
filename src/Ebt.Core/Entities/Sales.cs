@@ -8,7 +8,7 @@ public enum SalesRecordKind { Quote = 0, Order = 1, Delivery = 2, Feasibility = 
 public enum BillTo { Ebt = 0, Bts = 1 }
 public enum OrderOrigin { Email = 0, Fax = 1, Verbal = 2, System = 3 }
 public enum DeliveryCondition { Bk = 0, Nbk = 1, Gbk = 2 }
-public enum LostReason { Price = 0, LeadTime = 1, Competitor = 2, NoLongerNeeded = 3, Specification = 4, Other = 5 }
+public enum LostReason { Price = 0, LeadTime = 1, Competitor = 2, NoLongerNeeded = 3, Specification = 4, Other = 5, CustomerGaveUp = 6 }
 
 public class SalesSettings
 {

@@ -396,7 +396,7 @@ class _CustomerQuotes extends StatelessWidget {
     searchHint: 'Orçamento ou referência do cliente',
     columns: [
       col('Orçamento', 'reference'),
-      labelCol('Situação', 'status', quoteStatuses),
+      ColumnSpec('Situação', (e) => quoteSituation(e, short: true)),
       moneyCol('Total', 'total'),
       dateCol('Validade', 'validUntil'),
       dateCol('Criada', 'createdAt'),
