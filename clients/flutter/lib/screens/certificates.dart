@@ -151,6 +151,20 @@ class _CertificateScreenState extends State<CertificateScreen> {
   }
 
   Future<void> _issue() async {
+    final measures = (_c!['measures'] as List).cast<Map<String, dynamic>>();
+    if (measures.every((m) => m['found'] == null || '${m['found']}'.trim().isEmpty)) {
+      await showDialog<void>(
+        context: context,
+        builder: (d) => AlertDialog(
+          icon: const Icon(Icons.edit_note),
+          title: const Text('Faltam os valores encontrados'),
+          content: const Text('Preencha ao menos um valor em "Encontrado" (química, dimensional ou ensaios) antes de emitir.'),
+          actions: [FilledButton(onPressed: () => Navigator.pop(d), child: const Text('Preencher'))],
+        ),
+      );
+      if (mounted) await _edit();
+      return;
+    }
     final ok = await confirmStep(
       context,
       title: 'Emitir certificado ${_c!['reference']}?',

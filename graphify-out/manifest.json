@@ -18,9 +18,9 @@
     "semantic_hash": ""
   },
   "clients/flutter/lib/labels.dart": {
-    "mtime": 1793369711.7697344,
-    "seen": 1793371558.5445275,
-    "ast_hash": "5f1e995811883039b8cdf3fe06431573",
+    "mtime": 1793393492.5928516,
+    "seen": 1793396278.1160886,
+    "ast_hash": "bedd3640679cf44749e70a11a912f9b3",
     "semantic_hash": ""
   },
   "clients/flutter/lib/main.dart": {
@@ -36,9 +36,9 @@
     "semantic_hash": ""
   },
   "clients/flutter/lib/screens/deliveries.dart": {
-    "mtime": 1793350688.171991,
-    "seen": 1793365202.0126681,
-    "ast_hash": "2cb35e3749caf1b1cd9f4121936787b2",
+    "mtime": 1793392159.9453146,
+    "seen": 1793396278.1161244,
+    "ast_hash": "7c3c3332e1237683b755012189da8e84",
     "semantic_hash": ""
   },
   "clients/flutter/lib/screens/entity_list.dart": {
@@ -102,27 +102,27 @@
     "semantic_hash": ""
   },
   "clients/flutter/lib/screens/sales_common.dart": {
-    "mtime": 1793371545.8492496,
-    "seen": 1793371558.5445812,
-    "ast_hash": "d7bdf857802ad9d5ee28fee7ec64d6ff",
+    "mtime": 1793383553.5657146,
+    "seen": 1793396278.1161659,
+    "ast_hash": "a85c0265d5fb6ba89531e6519a49b96b",
     "semantic_hash": ""
   },
   "clients/flutter/lib/screens/sales_orders.dart": {
-    "mtime": 1793350688.1547103,
-    "seen": 1793365202.0126872,
-    "ast_hash": "0d5231beb27cd5f0d762969b16a3a645",
+    "mtime": 1793395215.5321672,
+    "seen": 1793396278.1161685,
+    "ast_hash": "55a16f9fa3ef58392c9ae5b3b3a70a4c",
     "semantic_hash": ""
   },
   "clients/flutter/lib/screens/sales_pipeline.dart": {
-    "mtime": 1793335293.0851207,
-    "seen": 1793365202.0126884,
-    "ast_hash": "bf3457d4aac28b9c0c671428c4328239",
+    "mtime": 1793390108.0782936,
+    "seen": 1793396278.1161711,
+    "ast_hash": "10c78149fc668423a690816f010ea29a",
     "semantic_hash": ""
   },
   "clients/flutter/lib/screens/sales_quotes.dart": {
-    "mtime": 1793373974.9117284,
-    "seen": 1793373990.741647,
-    "ast_hash": "3f52ff2c25a66e0f4dce0406cfedaec3",
+    "mtime": 1793396247.9046783,
+    "seen": 1793396278.1161735,
+    "ast_hash": "45330844b28d27df2c4fea03e75d1cec",
     "semantic_hash": ""
   },
   "clients/flutter/lib/screens/shell.dart": {
@@ -246,9 +246,9 @@
     "semantic_hash": ""
   },
   "clients/flutter/test/sales_test.dart": {
-    "mtime": 1793371545.8578758,
-    "seen": 1793371558.5446606,
-    "ast_hash": "65e1725e2a30de781acf8561ac17cbd9",
+    "mtime": 1793395215.5420468,
+    "seen": 1793396278.1163008,
+    "ast_hash": "c5a8a327ea952799b729a45b6b7deeef",
     "semantic_hash": ""
   },
   "clients/flutter/test/stock_purchasing_test.dart": {
@@ -306,9 +306,9 @@
     "semantic_hash": ""
   },
   "src/Ebt.Api/Endpoints/SalesEndpoints.cs": {
-    "mtime": 1793368586.475099,
-    "seen": 1793371558.5446954,
-    "ast_hash": "63d18ec4dba3fe4232004c49d18454fc",
+    "mtime": 1793393492.5928516,
+    "seen": 1793396278.1163535,
+    "ast_hash": "76993bd901d8efa1ebc10a7e5c4cf99a",
     "semantic_hash": ""
   },
   "src/Ebt.Api/Infrastructure/Access.cs": {
@@ -420,9 +420,9 @@
     "semantic_hash": ""
   },
   "src/Ebt.Core/Ebt.Core.csproj": {
-    "mtime": 1793365174.4535148,
-    "seen": 1793365202.0128338,
-    "ast_hash": "59cd6c5022031a96141a7e1e85fd3064",
+    "mtime": 1793395605.765221,
+    "seen": 1793396278.1164403,
+    "ast_hash": "ece468b3293a351663bd1af10d5a0748",
     "semantic_hash": ""
   },
   "src/Ebt.Core/Entities/Entities.cs": {
@@ -516,27 +516,27 @@
     "semantic_hash": ""
   },
   "src/Ebt.Core/Sales/SalesModels.cs": {
-    "mtime": 1793334918.8226712,
-    "seen": 1793365202.012865,
-    "ast_hash": "10afacfe1c52368330e731f4e10adfb0",
+    "mtime": 1793393492.6085575,
+    "seen": 1793396278.1165206,
+    "ast_hash": "2f315180eeceeb7c6dec75cb13f15a90",
     "semantic_hash": ""
   },
   "src/Ebt.Core/Sales/SalesService.Deliveries.cs": {
-    "mtime": 1793365174.4688869,
-    "seen": 1793365202.0128663,
-    "ast_hash": "db957677fe96329ffd2b2b97e06629a4",
+    "mtime": 1793383553.578243,
+    "seen": 1793396278.116523,
+    "ast_hash": "f2fc5298efd28051838955393fab1f20",
     "semantic_hash": ""
   },
   "src/Ebt.Core/Sales/SalesService.Orders.cs": {
-    "mtime": 1793357779.9399152,
-    "seen": 1793365202.0128672,
-    "ast_hash": "0210fecc285b4dce6a6742ee2eca5dd5",
+    "mtime": 1793392983.339996,
+    "seen": 1793396278.1165257,
+    "ast_hash": "3faeebeaf0cf1e342a8e052dfa934fd5",
     "semantic_hash": ""
   },
   "src/Ebt.Core/Sales/SalesService.Quotes.cs": {
-    "mtime": 1793368586.481602,
-    "seen": 1793371558.5448053,
-    "ast_hash": "5c556ad7e3c40e9bf16e8d971b8a7414",
+    "mtime": 1793393492.6085575,
+    "seen": 1793396278.1165276,
+    "ast_hash": "82586d4f415fb0eea34e3d07a9502dbc",
     "semantic_hash": ""
   },
   "src/Ebt.Core/Sales/SalesService.cs": {
@@ -552,9 +552,9 @@
     "semantic_hash": ""
   },
   "src/Ebt.Core/Services/Clock.cs": {
-    "mtime": 1793365174.473884,
-    "seen": 1793365202.0128717,
-    "ast_hash": "aabff7aae8d0fd1ce30e8a2bc469a348",
+    "mtime": 1793392983.339996,
+    "seen": 1793396278.1165361,
+    "ast_hash": "f19adda664036deff6d5a35b826ef4df",
     "semantic_hash": ""
   },
   "src/Ebt.Core/Services/Text.cs": {
@@ -696,9 +696,9 @@
     "semantic_hash": ""
   },
   "tests/Ebt.Tests/SalesTests.cs": {
-    "mtime": 1793368586.48434,
-    "seen": 1793371558.5448606,
-    "ast_hash": "89fb5fb8d064b2ff77fb97c704a0be83",
+    "mtime": 1793393492.6138263,
+    "seen": 1793396278.1166193,
+    "ast_hash": "a02064f7589995d8ce685b39b943e955",
     "semantic_hash": ""
   },
   "tests/Ebt.Tests/StockImportTests.cs": {
@@ -750,9 +750,9 @@
     "semantic_hash": ""
   },
   "clients/flutter/lib/reports/certificate_doc.dart": {
-    "mtime": 1793206221.9566412,
-    "seen": 1793365202.0126534,
-    "ast_hash": "cf93da66e0509cc784624918b21c3dd2",
+    "mtime": 1793389293.4440072,
+    "seen": 1793396278.1160965,
+    "ast_hash": "413e259301341d11d44dc8cbbff9dbcc",
     "semantic_hash": ""
   },
   "clients/flutter/lib/reports/nf_doc.dart": {
@@ -762,9 +762,9 @@
     "semantic_hash": ""
   },
   "clients/flutter/lib/reports/print_docs.dart": {
-    "mtime": 1793357767.489515,
-    "seen": 1793365202.0126595,
-    "ast_hash": "8c720e8dc3037ec11f298d9d2dcd7cbb",
+    "mtime": 1793395215.5290887,
+    "seen": 1793396278.116102,
+    "ast_hash": "4edb8b67d158e9caf1cf9e2ab84c5d2b",
     "semantic_hash": ""
   },
   "clients/flutter/lib/reports/report_doc.dart": {
@@ -780,9 +780,9 @@
     "semantic_hash": ""
   },
   "clients/flutter/lib/screens/certificates.dart": {
-    "mtime": 1793350557.5394845,
-    "seen": 1793365202.012663,
-    "ast_hash": "b4805011d1bff1a2ca449d869016f8de",
+    "mtime": 1793395605.7579384,
+    "seen": 1793396278.1161094,
+    "ast_hash": "b3648085202190efc0276067fa26436b",
     "semantic_hash": ""
   },
   "clients/flutter/lib/screens/customers.dart": {
@@ -906,9 +906,9 @@
     "semantic_hash": ""
   },
   "src/Ebt.Api/Endpoints/CertificateEndpoints.cs": {
-    "mtime": 1793365174.4046452,
-    "seen": 1793365202.0127523,
-    "ast_hash": "c2eedade0f06e2d8f8cab6a7931f1de1",
+    "mtime": 1793395605.7606683,
+    "seen": 1793396278.116328,
+    "ast_hash": "11e6fc9fbace0c6d06a654833704fc82",
     "semantic_hash": ""
   },
   "src/Ebt.Api/Endpoints/FiscalEndpoints.cs": {
@@ -942,9 +942,9 @@
     "semantic_hash": ""
   },
   "src/Ebt.Core/Certificates/CertificateService.cs": {
-    "mtime": 1793205861.218727,
-    "seen": 1793365202.012778,
-    "ast_hash": "78eef9ec645ae924181e697adebd92af",
+    "mtime": 1793389293.4512916,
+    "seen": 1793396278.1163933,
+    "ast_hash": "e44dec635125232c088ce2140e93e65f",
     "semantic_hash": ""
   },
   "src/Ebt.Core/Data/Audit.cs": {
@@ -954,9 +954,9 @@
     "semantic_hash": ""
   },
   "src/Ebt.Core/Data/EbtDbContext.Certificates.cs": {
-    "mtime": 1793205798.5907638,
-    "seen": 1793365202.0127826,
-    "ast_hash": "2aa27c283e01acf4d22d5d96c058273d",
+    "mtime": 1793389293.4512916,
+    "seen": 1793396278.1164107,
+    "ast_hash": "194518c49f2e85120bb8a8d2c7b3a2fc",
     "semantic_hash": ""
   },
   "src/Ebt.Core/Data/EbtDbContext.Fiscal.cs": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "src/Ebt.Core/Entities/Certificates.cs": {
-    "mtime": 1793205798.5562317,
-    "seen": 1793365202.0128348,
-    "ast_hash": "859fe2a2711c98bc6a42153912ebbfc4",
+    "mtime": 1793389293.462785,
+    "seen": 1793396278.1164427,
+    "ast_hash": "b0e325e3440b2e856e654241d8d5a6f1",
     "semantic_hash": ""
   },
   "src/Ebt.Core/Entities/Fiscal.cs": {
@@ -1050,15 +1050,15 @@
     "semantic_hash": ""
   },
   "tests/Ebt.Tests/FiscalTests.cs": {
-    "mtime": 1793187236.5362763,
-    "seen": 1793365202.0128922,
-    "ast_hash": "c1d7e2212cd3b85759980f137f449f6f",
+    "mtime": 1793383553.5821533,
+    "seen": 1793396278.1165903,
+    "ast_hash": "bacb7b3cf0d89cbb26a83ff23b7d75f1",
     "semantic_hash": ""
   },
   "tests/Ebt.Tests/ReportsTests.cs": {
-    "mtime": 1793156074.743431,
-    "seen": 1793365202.0129015,
-    "ast_hash": "b9c7fbf56dfd162e1e32465c0152799f",
+    "mtime": 1793383553.586181,
+    "seen": 1793396278.1166167,
+    "ast_hash": "be07677b09c41b109ff409124c964f44",
     "semantic_hash": ""
   },
   "tests/Ebt.Tests/SefazClientTests.cs": {
@@ -1068,15 +1068,15 @@
     "semantic_hash": ""
   },
   "tests/Ebt.Tests/ViabilitySteelTests.cs": {
-    "mtime": 1793365174.489653,
-    "seen": 1793365202.0129063,
-    "ast_hash": "e95df2c5a03174c41295ff06d5990f12",
+    "mtime": 1793383553.586181,
+    "seen": 1793396278.1166282,
+    "ast_hash": "48c69941b730401f0a7e5f5241f37115",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793368586.4235377,
-    "seen": 1793371558.5448728,
-    "ast_hash": "ff0224bb58498d5f73d7b953a69fa57e",
+    "mtime": 1793395215.5267365,
+    "seen": 1793396278.1166406,
+    "ast_hash": "bd492f48ec0d862192a312230d64fd19",
     "semantic_hash": ""
   },
   "clients/flutter/devtools_options.yaml": {
@@ -1173,6 +1173,42 @@
     "mtime": 1793373974.9270494,
     "seen": 1793373990.7417111,
     "ast_hash": "5e02d34c16265da63ffe2209f2fc7908",
+    "semantic_hash": ""
+  },
+  "clients/flutter/lib/widgets/print_gate.dart": {
+    "mtime": 1793395215.5321672,
+    "seen": 1793396278.1162298,
+    "ast_hash": "94cd92d23c7772293d06ee480379f584",
+    "semantic_hash": ""
+  },
+  "clients/flutter/lib/widgets/print_panel.dart": {
+    "mtime": 1793395215.539116,
+    "seen": 1793396278.1162326,
+    "ast_hash": "8fcae1ed4a6f659074849f883faa0428",
+    "semantic_hash": ""
+  },
+  "clients/flutter/test/certificate_templates_test.dart": {
+    "mtime": 1793389293.4460185,
+    "seen": 1793396278.1162615,
+    "ast_hash": "1f69622414bdefaeb0e7e9814c0606c4",
+    "semantic_hash": ""
+  },
+  "src/Ebt.Core/Certificates/LegacySpecImporter.cs": {
+    "mtime": 1793395605.7624967,
+    "seen": 1793396278.1163957,
+    "ast_hash": "c280cab127c94ede26c5f1b875381bd5",
+    "semantic_hash": ""
+  },
+  "src/Ebt.Core/Certificates/legacy-specs.json": {
+    "mtime": 1793395605.7646809,
+    "seen": 1793396278.1163988,
+    "ast_hash": "94a05b25a1898340ac7b721110ff1520",
+    "semantic_hash": ""
+  },
+  "tests/Ebt.Tests/LegacySpecTests.cs": {
+    "mtime": 1793395605.765221,
+    "seen": 1793396278.1165988,
+    "ast_hash": "8551e735d93bd35dffccc335294b4f34",
     "semantic_hash": ""
   }
 }
