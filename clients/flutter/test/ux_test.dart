@@ -4,8 +4,10 @@ import 'package:ebt_engenharia/api.dart';
 import 'package:ebt_engenharia/entities.dart';
 import 'package:ebt_engenharia/screens/login.dart';
 import 'package:ebt_engenharia/session.dart';
+import 'package:ebt_engenharia/widgets/entity_form.dart';
 import 'package:ebt_engenharia/widgets/record_list.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -226,6 +228,73 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('login-url')), findsOneWidget);
       expect(find.textContaining('Servidor indisponível'), findsOneWidget);
+    });
+  });
+
+  group('form dialogs', () {
+    Future<void> open(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(900, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final api = ApiClient(baseUrl: 'http://x', client: MockClient((_) async => http.Response('{}', 200)));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (c) => Scaffold(
+              body: TextButton(
+                onPressed: () => showEntityForm(
+                  c,
+                  api: api,
+                  title: 'Formulário de teste',
+                  fields: [
+                    const FieldSpec('note', 'Detalhes', hint: 'Um texto de ajuda bem longo que precisa quebrar em várias linhas em vez de terminar em reticências no meio da frase, porque cortar a explicação deixa o usuário sem saber o que acontece.'),
+                  ],
+                  onSubmit: (_) async => null,
+                ),
+                child: const Text('abrir'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('abrir'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('long helper text wraps instead of being cut with an ellipsis', (tester) async {
+      await open(tester);
+      final decorator = tester.widget<InputDecorator>(find.descendant(of: find.byKey(const ValueKey('field-note')), matching: find.byType(InputDecorator)));
+      expect(decorator.decoration.helperMaxLines, greaterThan(1));
+    });
+
+    testWidgets('clicking the backdrop or pressing Esc closes an untouched dialog', (tester) async {
+      await open(tester);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.text('Formulário de teste'), findsNothing);
+
+      await tester.tap(find.text('abrir'));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('Formulário de teste'), findsNothing);
+    });
+
+    testWidgets('with edits typed, backdrop and Esc ask before discarding', (tester) async {
+      await open(tester);
+      await tester.enterText(find.byKey(const ValueKey('field-note')), 'texto digitado');
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.text('Descartar alterações?'), findsOneWidget);
+      await tester.tap(find.text('Continuar editando'));
+      await tester.pumpAndSettle();
+      expect(find.text('Formulário de teste'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('Descartar alterações?'), findsOneWidget);
+      await tester.tap(find.text('Descartar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Formulário de teste'), findsNothing);
     });
   });
 }

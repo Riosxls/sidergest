@@ -1015,7 +1015,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       api: api,
       title: 'Nova revisão de ${q['reference']}',
       fields: [
-        const FieldSpec('change', 'O que o cliente pediu?', type: FieldType.choice, required: true, choices: revisionReasons),
+        const FieldSpec('change', 'Motivo da revisão', type: FieldType.choice, required: true, choices: revisionReasons),
         const FieldSpec(
           'note',
           'Detalhes',
@@ -1242,7 +1242,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         message: 'Enviada para ${q['sentTo'] ?? ''} em ${fmtDate(q['sentAt'])}. Válida até ${fmtDay(q['validUntil'])}. Registre o que o cliente respondeu.',
         actions: [
           if (sell) primary('quote-accept', 'Cliente aprovou', Icons.thumb_up_alt_outlined, _accept),
-          if (sell) secondary('quote-change', 'Cliente pediu alteração', Icons.edit_note, _revise),
+          if (sell) secondary('quote-change', 'Nova revisão (alterar itens ou preço)', Icons.edit_note, _revise),
           if (sell) secondary('quote-decline', 'Cliente recusou (venda perdida)', Icons.thumb_down_alt_outlined, _decline),
           if (sell) TextButton.icon(key: const ValueKey('quote-extend'), onPressed: _extend, icon: const Icon(Icons.event_repeat), label: const Text('Prorrogar validade')),
         ],
@@ -1253,7 +1253,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         tone: Tone.success,
         actions: [
           if (sell) primary('quote-po', 'Registrar pedido de compra', Icons.assignment_turned_in_outlined, _receivePo),
-          if (sell) secondary('quote-change', 'Cliente pediu alteração', Icons.edit_note, _revise),
+          if (sell) secondary('quote-change', 'Nova revisão (alterar itens ou preço)', Icons.edit_note, _revise),
           if (sell) secondary('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, () => _decline(gaveUp: true)),
         ],
       ),
@@ -1263,7 +1263,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         tone: Tone.success,
         actions: [
           if (sell) primary('quote-convert', 'Gerar pedido de venda', Icons.receipt_long, _convert),
-          if (sell) secondary('quote-change', 'Cliente pediu alteração', Icons.edit_note, _revise),
+          if (sell) secondary('quote-change', 'Nova revisão (alterar itens ou preço)', Icons.edit_note, _revise),
           if (sell) secondary('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, () => _decline(gaveUp: true)),
         ],
       ),
@@ -1312,8 +1312,6 @@ class _QuoteScreenState extends State<QuoteScreen> {
     return null;
   }
 
-  // A quote that is still internal (waiting for approval, approved) goes back to draft instead; revisions start once the customer has seen it.
-  static const _revisable = ['Sent', 'Accepted', 'PurchaseOrder', 'Rejected', 'Expired'];
   Future<void> _newFeasibility() async {
     final q = _q!;
     final r = await newFeasibility(
@@ -1368,15 +1366,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         ),
     ];
     final situation = <PopupMenuEntry<VoidCallback>>[
-      if (s.canSell && _revisable.contains(status))
-        PopupMenuItem(
-          value: _revise,
-          child: ListTile(
-            leading: const Icon(Icons.history_edu),
-            title: const Text('Nova revisão'),
-            subtitle: Text('Altera itens ou preço; esta versão fica como Substituída (${q['reference']})'),
-          ),
-        ),
+      // No "Nova revisão" here: every state that can be revised already has that button on the status card, so a second entry only confuses.
       if (s.canSell && ['Draft', 'PendingApproval', 'Approved'].contains(status))
         PopupMenuItem(
           value: () => _reason('cancel', 'Cancelar ${q['reference']}', label: 'Motivo (ex.: emitido por engano)', success: 'Orçamento cancelado'),

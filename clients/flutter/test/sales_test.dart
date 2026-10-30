@@ -550,23 +550,22 @@ void main() {
       for (final k in ['quote-accept', 'quote-change', 'quote-decline', 'quote-extend']) {
         expect(find.byKey(ValueKey(k)), findsOneWidget, reason: k);
       }
-      expect(find.text('Cliente pediu alteração'), findsOneWidget);
+      expect(find.text('Nova revisão (alterar itens ou preço)'), findsOneWidget);
       expect(find.text('Cliente recusou (venda perdida)'), findsOneWidget);
       expect(find.byKey(const ValueKey('quote-revise-top')), findsNothing);
       await tester.tap(find.byKey(const ValueKey('quote-menu')));
       await tester.pumpAndSettle();
-      expect(find.text('Nova revisão'), findsOneWidget);
       expect(find.text('Duplicar'), findsOneWidget);
       expect(find.text('Pedir análise de viabilidade'), findsOneWidget);
       expect(find.textContaining('Cancelar'), findsNothing, reason: 'a sent quote ends as lost, revised or extended, never "cancelled"');
     });
 
-    testWidgets('"Cliente pediu alteração" opens the revision dialog and says what happens to this version', (tester) async {
+    testWidgets('"Nova revisão" on the card opens the revision dialog and says what happens to this version', (tester) async {
       final fake = await open(tester, 'Sent');
       await tester.tap(find.byKey(const ValueKey('quote-change')));
       await tester.pumpAndSettle();
       expect(find.text('Nova revisão de PROP 31'), findsOneWidget);
-      expect(find.textContaining('O que o cliente pediu?'), findsOneWidget);
+      expect(find.textContaining('Motivo da revisão'), findsOneWidget);
       expect(find.textContaining('passa a Substituída'), findsOneWidget);
       expect(fake.log.where((r) => r.url.path.endsWith('/revise')), isEmpty);
     });
@@ -638,6 +637,16 @@ void main() {
       expect(find.text('Substituída pela revisão PROP 31-B'), findsWidgets);
       expect(find.text('Cancelada'), findsNothing);
       expect(find.byKey(const ValueKey('quote-open-latest')), findsOneWidget);
+    });
+
+    testWidgets('the revision reason covers our own corrections too', (tester) async {
+      await open(tester, 'Sent');
+      await tester.tap(find.byKey(const ValueKey('quote-change')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String?>).first);
+      await tester.pumpAndSettle();
+      expect(find.text('Correção nossa (erro ou ajuste interno)'), findsOneWidget);
+      expect(find.text('Cliente pediu: preço'), findsWidgets);
     });
 
     testWidgets('a draft can still be cancelled from the menu', (tester) async {

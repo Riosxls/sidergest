@@ -18,7 +18,7 @@ Future<Map<String, dynamic>?> showEntityForm(
   bool readOnly = false,
 }) => showDialog<Map<String, dynamic>>(
   context: context,
-  barrierDismissible: false,
+  barrierDismissible: true, // backdrop click and Esc ask before discarding edits (DiscardGuard)
   builder: (_) => EntityFormDialog(api: api, title: title, fields: fields, initial: initial, onSubmit: onSubmit, onDelete: onDelete, readOnly: readOnly),
 );
 
@@ -237,6 +237,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
           decoration: InputDecoration(
             labelText: label,
             helperText: f.hint,
+            helperMaxLines: 4,
             errorText: error,
             border: const OutlineInputBorder(),
             isDense: true,
@@ -279,7 +280,8 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
           key: ValueKey('field-${f.key}'),
           initialValue: _values[f.key] as String?,
           isExpanded: true,
-          decoration: InputDecoration(labelText: label, helperText: f.hint, errorText: error, border: const OutlineInputBorder(), isDense: true),
+          decoration: InputDecoration(labelText: label, helperText: f.hint,
+            helperMaxLines: 4, errorText: error, border: const OutlineInputBorder(), isDense: true),
           items: [
             if (!f.required) const DropdownMenuItem<String?>(value: null, child: Text('—')),
             for (final e in f.choices.entries) DropdownMenuItem<String?>(value: e.key, child: Text(e.value)),
@@ -456,6 +458,7 @@ class _LookupFieldState extends State<LookupField> {
         decoration: InputDecoration(
           labelText: widget.label,
           helperText: widget.hint,
+          helperMaxLines: 4,
           errorText: widget.error,
           border: const OutlineInputBorder(),
           isDense: true,
@@ -639,6 +642,7 @@ class _CustomPrazoDialogState extends State<_CustomPrazoDialog> {
           labelText: 'Prazo *',
           hintText: 'ex.: 45 dias, 20% entrada + 30/60',
           helperText: 'Vale só para este orçamento; não entra na lista de prazos.',
+          helperMaxLines: 3,
           errorText: _error,
           border: const OutlineInputBorder(),
           isDense: true,

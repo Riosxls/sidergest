@@ -150,8 +150,11 @@ const salesActions = {
   'sent': 'Enviado ao cliente',
   'po-received': 'Pedido de compra recebido',
   'accepted': 'Aceito pelo cliente',
-  'declined': 'Recusado pelo cliente',
-  'revised': 'Revisado',
+  'declined': 'Venda perdida: cliente recusou',
+  'gave-up': 'Venda perdida: cliente desistiu',
+  'reopened': 'Voltou para rascunho',
+  'validity-extended': 'Validade prorrogada',
+  'revised': 'Nova revisão criada',
   'duplicated': 'Copiado de outro orçamento',
   'approval-lapsed': 'Aprovação de desconto vencida',
   'po-text': 'Texto do pedido de compra',
@@ -208,9 +211,10 @@ const feasibilityActions = {
 
 /// What the customer asked for when a quote gets a new revision (written into the revision note).
 const revisionReasons = {
-  'Price': 'Preço',
-  'LeadTime': 'Prazo de entrega',
-  'Quantity': 'Quantidade ou itens',
-  'Specification': 'Especificação / norma',
-  'Other': 'Outro',
+  'Price': 'Cliente pediu: preço',
+  'LeadTime': 'Cliente pediu: prazo de entrega',
+  'Quantity': 'Cliente pediu: quantidade ou itens',
+  'Specification': 'Cliente pediu: especificação / norma',
+  'Other': 'Cliente pediu: outra alteração',
+  'OurCorrection': 'Correção nossa (erro ou ajuste interno)',
 };
