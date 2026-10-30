@@ -1507,22 +1507,24 @@ class _QuoteScreenState extends State<QuoteScreen> {
                   ColumnSpec(
                     'Entrega',
                     (e) => e['deliveryDate'] != null ? fmtDay(e['deliveryDate']) : (e['leadTimeDays'] != null ? '${e['leadTimeDays']} dias úteis' : ''),
+                    numeric: true,
                   ),
                   moneyCol('Total', 'total'),
                 ],
                 rows: lines,
                 rowColor: (e) => _maxDiscount != null && _n(e['discountPercent']) > _maxDiscount! ? toneColors(context, Tone.warning).$1 : null,
               ),
-              const Divider(),
-              Align(
-                alignment: Alignment.centerRight,
-                child: InfoGrid([
+              const SizedBox(height: 14),
+              // The printed total is products + IPI, so that row is the emphasised one; the ICMS estimate sits below it.
+              TotalsBlock(
+                [
                   ('Produtos', fmtMoney(t['products'])),
                   ('IPI', fmtMoney(t['ipi'])),
                   ('Total', fmtMoney(t['total'])),
                   if (_n(t['icms']) > 0) ('ICMS (estimativa)', fmtMoney(t['icms'])),
                   if (_n(t['icms']) > 0) ('Total com ICMS', fmtMoney(_n(t['total']) + _n(t['icms']))),
-                ]),
+                ],
+                strong: 2,
               ),
             ],
           ),

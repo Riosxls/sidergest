@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -495,28 +496,93 @@ class NameCache {
       attach(api, items, 'supplierId', '/api/suppliers', 'supplierName', (e) => '${e['name']}');
 }
 
+/// Label/value pairs laid out in equal columns so values line up across rows. A value that is long (an address, a note) gets a row of its own
+/// instead of squeezing the next pair against it.
 class InfoGrid extends StatelessWidget {
-  const InfoGrid(this.entries, {super.key});
+  const InfoGrid(this.entries, {super.key, this.minColumnWidth = 210, this.longValue = 44});
 
   final List<(String, String)> entries;
+  final double minColumnWidth;
+
+  /// Values longer than this many characters (or with line breaks) span the full width.
+  final int longValue;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Wrap(
-      spacing: 24,
-      runSpacing: 8,
+    final shown = entries.where((e) => e.$2.isNotEmpty).toList();
+    Widget pair((String, String) e) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        for (final (k, v) in entries.where((e) => e.$2.isNotEmpty))
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(k, style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-              Text(v, style: theme.textTheme.bodyLarge),
-            ],
-          ),
+        Text(e.$1, style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 4),
+        Text(e.$2, style: theme.textTheme.bodyLarge),
       ],
+    );
+    return LayoutBuilder(
+      builder: (context, box) {
+        const gap = 32.0;
+        // Inside a horizontal scroller there is no width to divide; keep the plain wrapping layout there.
+        if (!box.hasBoundedWidth) return Wrap(spacing: gap, runSpacing: 16, children: [for (final e in shown) pair(e)]);
+        final cols = ((box.maxWidth + gap) / (minColumnWidth + gap)).floor().clamp(1, 4);
+        final colWidth = (box.maxWidth - gap * (cols - 1)) / cols;
+        return Wrap(
+          spacing: gap,
+          runSpacing: 16,
+          children: [
+            for (final e in shown)
+              SizedBox(width: e.$2.length > longValue || e.$2.contains('\n') ? box.maxWidth : colWidth, child: pair(e)),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Totals as aligned rows: label on the left, value on the right, the last row (the total) emphasised. Right-aligned under a table's last column.
+class TotalsBlock extends StatelessWidget {
+  const TotalsBlock(this.rows, {super.key, this.width = 300, this.strong});
+
+  final List<(String, String)> rows;
+  final double width;
+
+  /// Index of the row drawn as the grand total; the last one when null.
+  final int? strong;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final big = strong ?? rows.length - 1;
+    return Align(
+      alignment: Alignment.centerRight,
+      child: SizedBox(
+        width: width,
+        child: Column(
+          children: [
+            for (final (i, (k, v)) in rows.indexed) ...[
+              if (i == big && i > 0) const Divider(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(k, style: i == big ? theme.textTheme.titleSmall : muted)),
+                    const SizedBox(width: 16),
+                    Text(
+                      v,
+                      style: (i == big ? theme.textTheme.titleMedium : theme.textTheme.bodyLarge)?.copyWith(
+                        fontWeight: i == big ? FontWeight.w700 : null,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -561,31 +627,96 @@ class SimpleTable extends StatelessWidget {
         ],
       );
     }
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        headingRowHeight: 40,
-        dataRowMinHeight: 36,
-        dataRowMaxHeight: 44,
-        columns: [
-          if (actions != null && actionsFirst) const DataColumn(label: Text('')),
-          for (final c in columns) DataColumn(label: Text(c.label), numeric: c.numeric),
-          if (actions != null && !actionsFirst) const DataColumn(label: Text('')),
-        ],
-        rows: [
-          for (final e in rows)
-            DataRow(
-              color: WidgetStateProperty.resolveWith((_) => rowColor?.call(e)),
-              cells: [
-                if (actions != null && actionsFirst) DataCell(Row(mainAxisSize: MainAxisSize.min, children: actions!(e))),
-                for (final c in columns) DataCell(Text(c.value(e))),
-                if (actions != null && !actionsFirst) DataCell(Row(mainAxisSize: MainAxisSize.min, children: actions!(e))),
-              ],
-            ),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, box) {
+        // Inside a horizontal scroller there is no width to share: keep the scrolling DataTable there.
+        if (!box.hasBoundedWidth) return _scrolling();
+        // At least as wide as the card (so the last column ends on its edge); wider than the card when the content needs it, then it scrolls.
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: box.maxWidth),
+            child: IntrinsicWidth(child: _aligned(context)),
+          ),
+        );
+      },
     );
   }
+
+  /// Columns take the width of their content, except the one with the longest text, which takes the rest. The first column starts and the last
+  /// ends exactly on the card's content edges, so headers line up with the title above and the totals below.
+  Widget _aligned(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final headerStyle = theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface);
+    // One entry per table column; null stands for the row-actions column.
+    final cols = <ColumnSpec?>[if (actions != null && actionsFirst) null, ...columns, if (actions != null && !actionsFirst) null];
+    var flex = 0;
+    var longest = -1;
+    for (final (i, c) in cols.indexed) {
+      if (c == null || c.numeric) continue;
+      final n = rows.fold<int>(c.label.length, (m, e) => math.max(m, c.value(e).length));
+      if (n > longest) {
+        longest = n;
+        flex = i;
+      }
+    }
+
+    Widget cell(Widget child, int i, {required bool numeric}) => Padding(
+      padding: EdgeInsets.fromLTRB(i == 0 ? 0 : 12, 10, i == cols.length - 1 ? 0 : 12, 10),
+      child: Align(alignment: numeric ? Alignment.centerRight : Alignment.centerLeft, child: child),
+    );
+
+    return Table(
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      columnWidths: {for (var i = 0; i < cols.length; i++) i: i == flex ? const FlexColumnWidth() : const IntrinsicColumnWidth()},
+      children: [
+        TableRow(
+          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: cs.outline))),
+          children: [
+            for (final (i, c) in cols.indexed) cell(c == null ? const SizedBox.shrink() : Text(c.label, style: headerStyle), i, numeric: c?.numeric ?? true),
+          ],
+        ),
+        for (final e in rows)
+          TableRow(
+            decoration: BoxDecoration(color: rowColor?.call(e), border: Border(bottom: BorderSide(color: cs.outlineVariant))),
+            children: [
+              for (final (i, c) in cols.indexed)
+                c == null
+                    ? cell(Row(mainAxisSize: MainAxisSize.min, children: actions!(e)), i, numeric: true)
+                    : cell(Text(c.value(e), style: theme.textTheme.bodyMedium, softWrap: !c.numeric), i, numeric: c.numeric),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _scrolling() => SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    child: DataTable(
+      horizontalMargin: 0,
+      columnSpacing: 28,
+      headingRowHeight: 40,
+      dataRowMinHeight: 36,
+      dataRowMaxHeight: 44,
+      columns: [
+        if (actions != null && actionsFirst) const DataColumn(label: Text('')),
+        for (final c in columns) DataColumn(label: Text(c.label), numeric: c.numeric),
+        if (actions != null && !actionsFirst) const DataColumn(label: Text('')),
+      ],
+      rows: [
+        for (final e in rows)
+          DataRow(
+            color: WidgetStateProperty.resolveWith((_) => rowColor?.call(e)),
+            cells: [
+              if (actions != null && actionsFirst) DataCell(Row(mainAxisSize: MainAxisSize.min, children: actions!(e))),
+              for (final c in columns) DataCell(Text(c.value(e))),
+              if (actions != null && !actionsFirst) DataCell(Row(mainAxisSize: MainAxisSize.min, children: actions!(e))),
+            ],
+          ),
+      ],
+    ),
+  );
 }
 
 class Section extends StatelessWidget {
