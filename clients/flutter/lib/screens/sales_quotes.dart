@@ -847,6 +847,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
               'Orçamento registrado como enviado · válido até ${fmtDay(r['validUntil'])}. Ele ainda não saiu do sistema: abra o e-mail e anexe o PDF.',
             ),
             duration: const Duration(seconds: 20),
+            persist: false, // a snackbar with an action stays until dismissed unless told otherwise
             action: SnackBarAction(label: 'Abrir e-mail', onPressed: _mail),
           ),
         );
