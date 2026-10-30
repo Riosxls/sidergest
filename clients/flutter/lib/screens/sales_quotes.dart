@@ -1195,13 +1195,63 @@ class _QuoteScreenState extends State<QuoteScreen> {
     );
   }
 
+  static const _reviseTip = 'Altera itens ou preço. Esta versão fica como Substituída (só consulta) e uma nova revisão abre em rascunho.';
+
+  /// "Enviada em 30/10/2026 10:20", plus the recipient only when it is not the quote's own contact (shown once, in the header).
+  String _sentMessage(Map<String, dynamic> q) {
+    final sentTo = '${q['sentTo'] ?? ''}'.trim();
+    final contact = '${q['contactEmail'] ?? ''}'.trim();
+    final to = sentTo.isEmpty || sentTo == contact ? '' : ' para $sentTo';
+    return 'Enviada$to em ${fmtDate(q['sentAt'])}.';
+  }
+
+  /// Detalhes: when it was sent; the address is added only when it differs from the quote's contact.
+  String _sentDetail(Map<String, dynamic> q) {
+    final sentTo = '${q['sentTo'] ?? ''}'.trim();
+    final contact = '${q['contactEmail'] ?? ''}'.trim();
+    return sentTo.isEmpty || sentTo == contact ? fmtDate(q['sentAt']) : '$sentTo · ${fmtDate(q['sentAt'])}';
+  }
+
+  /// Days left on a quote that is out with the customer: calm while there is time, amber in the last 3 days, red once it has passed.
+  Widget? _validityBadge(Map<String, dynamic> q) {
+    final until = DateTime.tryParse('${q['validUntil'] ?? ''}');
+    if (until == null) return null;
+    final now = DateTime.now();
+    final days = DateTime(until.year, until.month, until.day).difference(DateTime(now.year, now.month, now.day)).inDays;
+    final (label, tone) = days < 0
+        ? ('Vencida há ${-days} ${-days == 1 ? 'dia' : 'dias'}', Tone.danger)
+        : days == 0
+        ? ('Vence hoje', Tone.danger)
+        : days == 1
+        ? ('Vence amanhã', Tone.warning)
+        : days <= 3
+        ? ('$days dias restantes', Tone.warning)
+        : ('$days dias restantes', Tone.info);
+    return StatusBadge(label, tone: tone, icon: Icons.schedule);
+  }
+
   Widget _nextStep(Map<String, dynamic> q) {
     final st = q['status'];
     final sell = s.canSell;
     FilledButton primary(String key, String label, IconData icon, VoidCallback onPressed) =>
         FilledButton.icon(key: ValueKey(key), onPressed: onPressed, icon: Icon(icon), label: Text(label));
-    OutlinedButton secondary(String key, String label, IconData icon, VoidCallback onPressed) =>
-        OutlinedButton.icon(key: ValueKey(key), onPressed: onPressed, icon: Icon(icon), label: Text(label));
+    Widget secondary(String key, String label, IconData icon, VoidCallback onPressed, {String? tip}) {
+      final button = OutlinedButton.icon(key: ValueKey(key), onPressed: onPressed, icon: Icon(icon), label: Text(label));
+      return tip == null ? button : Tooltip(message: tip, child: button);
+    }
+
+    // Outcomes that end the sale read as such: error-coloured outline instead of the neutral one.
+    Widget negative(String key, String label, IconData icon, VoidCallback onPressed) {
+      final error = Theme.of(context).colorScheme.error;
+      return OutlinedButton.icon(
+        key: ValueKey(key),
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(foregroundColor: error, side: BorderSide(color: error.withValues(alpha: 0.7))),
+      );
+    }
+
     return switch (st) {
       'Draft' => NextStepCard(
         title: q['needsApproval'] == true ? 'Desconto acima do limite' : 'Pronta para enviar?',
@@ -1239,11 +1289,15 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ),
       'Sent' => NextStepCard(
         title: 'Aguardando resposta do cliente',
-        message: 'Enviada para ${q['sentTo'] ?? ''} em ${fmtDate(q['sentAt'])}. Válida até ${fmtDay(q['validUntil'])}. Registre o que o cliente respondeu.',
+        message: _sentMessage(q),
+        badge: _validityBadge(q),
         actions: [
           if (sell) primary('quote-accept', 'Cliente aprovou', Icons.thumb_up_alt_outlined, _accept),
-          if (sell) secondary('quote-change', 'Nova revisão (alterar itens ou preço)', Icons.edit_note, _revise),
-          if (sell) secondary('quote-decline', 'Cliente recusou (venda perdida)', Icons.thumb_down_alt_outlined, _decline),
+          if (sell) secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
+          if (sell) negative('quote-decline', 'Cliente recusou (venda perdida)', Icons.thumb_down_alt_outlined, _decline),
+        ],
+        trailing: [
+          TextButton.icon(key: const ValueKey('quote-mail'), onPressed: _mail, icon: const Icon(Icons.mail_outline), label: const Text('Abrir e-mail')),
           if (sell) TextButton.icon(key: const ValueKey('quote-extend'), onPressed: _extend, icon: const Icon(Icons.event_repeat), label: const Text('Prorrogar validade')),
         ],
       ),
@@ -1253,8 +1307,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
         tone: Tone.success,
         actions: [
           if (sell) primary('quote-po', 'Registrar pedido de compra', Icons.assignment_turned_in_outlined, _receivePo),
-          if (sell) secondary('quote-change', 'Nova revisão (alterar itens ou preço)', Icons.edit_note, _revise),
-          if (sell) secondary('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, () => _decline(gaveUp: true)),
+          if (sell) secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
+          if (sell) negative('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, () => _decline(gaveUp: true)),
         ],
       ),
       'PurchaseOrder' => NextStepCard(
@@ -1263,8 +1317,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
         tone: Tone.success,
         actions: [
           if (sell) primary('quote-convert', 'Gerar pedido de venda', Icons.receipt_long, _convert),
-          if (sell) secondary('quote-change', 'Nova revisão (alterar itens ou preço)', Icons.edit_note, _revise),
-          if (sell) secondary('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, () => _decline(gaveUp: true)),
+          if (sell) secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
+          if (sell) negative('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, () => _decline(gaveUp: true)),
         ],
       ),
       'Converted' => NextStepCard(
@@ -1289,7 +1343,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         tone: Tone.danger,
         actions: [
           if (sell) primary('quote-extend', 'Prorrogar validade', Icons.event_repeat, _extend),
-          if (sell) secondary('quote-revise', 'Nova revisão', Icons.restart_alt, _revise),
+          if (sell) secondary('quote-revise', 'Nova revisão', Icons.restart_alt, _revise, tip: _reviseTip),
         ],
       ),
       _ when isSuperseded(q) => NextStepCard(
@@ -1417,7 +1471,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
           icon: Icons.request_quote_outlined,
           kind: 'Orçamento comercial${q['revision'] == 0 ? '' : ' · revisão ${String.fromCharCode(65 + (q['revision'] as int))}'}',
           title: '${q['reference']}',
-          badge: StatusBadge(quoteSituation(q), tone: quoteToneOf(q)),
+          // The stage path already names these statuses; the badge stays for the ones it cannot say (draft, approval, lost with a reason, replaced...).
+          badge: const ['Sent', 'Accepted', 'PurchaseOrder', 'Converted'].contains(q['status']) ? null : StatusBadge(quoteSituation(q), tone: quoteToneOf(q)),
           amount: fmtMoney(t['total']),
           fields: [
             ('Cliente', '${q['customerName']}'),
@@ -1447,7 +1502,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
                   col('Descrição', 'description'),
                   ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
                   ColumnSpec('Preço Unitário', (e) => fmtMoney(e['unitPrice']), numeric: true),
-                  ColumnSpec('Desc. %', (e) => e['discountPercent'] == null || e['discountPercent'] == 0 ? '' : fmt(e['discountPercent']), numeric: true),
+                  ColumnSpec('Desc. %', (e) => e['discountPercent'] == null || e['discountPercent'] == 0 ? '—' : fmt(e['discountPercent']), numeric: true),
                   col('IPI %', 'ipiPercent', numeric: true),
                   ColumnSpec(
                     'Entrega',
@@ -1487,7 +1542,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
             ('Observações', fmt(q['notes'])),
             ('Criada', '${fmt(q['createdBy'])} · ${fmtDate(q['createdAt'])}'),
             ('Aprovação interna', q['approvedAt'] == null ? '' : '${fmt(q['approvedBy'])} · ${fmtDate(q['approvedAt'])}'),
-            ('Enviada', q['sentAt'] == null ? '' : '${fmt(q['sentTo'])} · ${fmtDate(q['sentAt'])}'),
+            ('Enviada', q['sentAt'] == null ? '' : _sentDetail(q)),
             ('Resposta do cliente', q['decidedAt'] == null ? '' : '${fmtDate(q['decidedAt'])}${q['decisionNote'] == null ? '' : ' · ${q['decisionNote']}'}'),
             ('Motivo da perda', q['lostReason'] == null ? '' : lostReasons['${q['lostReason']}'] ?? '${q['lostReason']}'),
           ]),

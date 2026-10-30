@@ -10,7 +10,7 @@ import 'sales_quotes.dart';
 const flowSteps = [
   PathStep('Orçamento', icon: Icons.edit_note),
   PathStep('Enviada ao cliente', icon: Icons.send_outlined),
-  PathStep('Aprovada', icon: Icons.thumb_up_alt_outlined),
+  PathStep('Aprovada pelo cliente', icon: Icons.thumb_up_alt_outlined),
   PathStep('Pedido de compra', icon: Icons.assignment_turned_in_outlined),
   PathStep('Pedido de venda', icon: Icons.receipt_long_outlined),
   PathStep('Ordem de Produção', icon: Icons.precision_manufacturing_outlined),

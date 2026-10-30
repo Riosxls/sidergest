@@ -36,6 +36,7 @@ class SalesFake {
   String? rejectionNote;
   String? lostReason;
   String? supersededBy;
+  int daysLeft = 11;
 
   List<Map<String, dynamic>> history(String action) => [
     if (rejectionNote != null) {'id': 3, 'action': 'approval-rejected', 'fromStatus': 'PendingApproval', 'toStatus': 'Draft', 'note': rejectionNote, 'user': 'gerente', 'at': '2026-10-27T12:00:00Z'},
@@ -59,7 +60,7 @@ class SalesFake {
     'paymentTermName': '28 DDL',
     'freight': 'Cif',
     'validityDays': 15,
-    'validUntil': quoteStatus == 'Sent' ? '2026-11-10' : null,
+    'validUntil': quoteStatus == 'Sent' ? DateTime.now().add(Duration(days: daysLeft)).toIso8601String().substring(0, 10) : null,
     'conditions': 'Faturamento mínimo R\$ 300',
     'notes': null,
     'status': quoteStatus,
@@ -550,7 +551,7 @@ void main() {
       for (final k in ['quote-accept', 'quote-change', 'quote-decline', 'quote-extend']) {
         expect(find.byKey(ValueKey(k)), findsOneWidget, reason: k);
       }
-      expect(find.text('Nova revisão (alterar itens ou preço)'), findsOneWidget);
+      expect(find.text('Nova revisão'), findsOneWidget);
       expect(find.text('Cliente recusou (venda perdida)'), findsOneWidget);
       expect(find.byKey(const ValueKey('quote-revise-top')), findsNothing);
       await tester.tap(find.byKey(const ValueKey('quote-menu')));
@@ -647,6 +648,49 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Correção nossa (erro ou ajuste interno)'), findsOneWidget);
       expect(find.text('Cliente pediu: preço'), findsWidgets);
+    });
+
+    testWidgets('sent card: outcomes on the left, quiet actions on the right, the e-mail shown once', (tester) async {
+      await open(tester, 'Sent');
+      final accept = tester.getTopLeft(find.byKey(const ValueKey('quote-accept')));
+      final extend = tester.getTopLeft(find.byKey(const ValueKey('quote-extend')));
+      final mail = tester.getTopLeft(find.byKey(const ValueKey('quote-mail')));
+      expect(extend.dx, greaterThan(accept.dx + 600), reason: 'Prorrogar validade sits at the right edge, away from the outcomes');
+      expect(mail.dx, lessThan(extend.dx));
+      expect(find.textContaining('compras@bts.com'), findsOneWidget, reason: 'only in the header contact');
+      expect(find.textContaining('Enviada em'), findsOneWidget);
+      expect(find.textContaining('Registre o que o cliente respondeu'), findsNothing);
+    });
+
+    testWidgets('the status is not repeated in a badge when the stage path already says it', (tester) async {
+      await open(tester, 'Sent');
+      expect(find.text('Enviada ao cliente'), findsOneWidget);
+    });
+
+    testWidgets('a draft keeps its badge, the path cannot tell draft from approval', (tester) async {
+      await open(tester, 'Draft');
+      expect(find.text('Rascunho'), findsOneWidget);
+    });
+
+    for (final (days, text) in [(11, '11 dias restantes'), (3, '3 dias restantes'), (1, 'Vence amanhã'), (0, 'Vence hoje'), (-2, 'Vencida há 2 dias')]) {
+      testWidgets('validity chip at  days left says ""', (tester) async {
+        await open(tester, 'Sent', tweak: (f) => f.daysLeft = days);
+        expect(find.text(text), findsOneWidget);
+      });
+    }
+
+    testWidgets('refusing and giving up are drawn as the negative outcomes, revising is neutral', (tester) async {
+      await open(tester, 'Sent');
+      final error = Theme.of(tester.element(find.byKey(const ValueKey('quote-decline')))).colorScheme.error;
+      Color? fg(String key) => tester.widget<OutlinedButton>(find.byKey(ValueKey(key))).style?.foregroundColor?.resolve({});
+      expect(fg('quote-decline'), error);
+      expect(fg('quote-change'), isNot(error));
+      expect(find.byTooltip('Altera itens ou preço. Esta versão fica como Substituída (só consulta) e uma nova revisão abre em rascunho.'), findsOneWidget);
+    });
+
+    testWidgets('a line without discount shows a dash, not an empty cell', (tester) async {
+      await open(tester, 'Sent');
+      expect(find.text('—'), findsWidgets);
     });
 
     testWidgets('a draft can still be cancelled from the menu', (tester) async {

@@ -22,7 +22,7 @@ Color toneAccent(BuildContext context, Tone tone) => switch (tone) {
   Tone.neutral => Theme.of(context).colorScheme.outline,
   Tone.info => const Color(0xFF1F6FBF),
   Tone.progress => const Color(0xFF7A4CC2),
-  Tone.success => const Color(0xFF2E8B4F),
+  Tone.success => const Color(0xFF23803F),
   Tone.warning => const Color(0xFFD08A00),
   Tone.danger => const Color(0xFFC62828),
 };
@@ -73,6 +73,8 @@ class StagePath extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final done = toneAccent(context, Tone.success);
     final failed = failedLabel != null;
+    // The active step uses the theme's primary colour, which is light in dark mode: its text must be onPrimary, not white.
+    final onActive = failed ? Colors.white : cs.onPrimary;
     return LayoutBuilder(
       builder: (context, box) {
         final compact = box.maxWidth < 640;
@@ -102,7 +104,7 @@ class StagePath extends StatelessWidget {
                           if (i < current)
                             const Icon(Icons.check, size: 16, color: Colors.white)
                           else if (s.icon != null)
-                            Icon(s.icon, size: 16, color: i == current ? Colors.white : cs.onSurfaceVariant),
+                            Icon(s.icon, size: 16, color: i == current ? onActive : cs.onSurfaceVariant),
                           if (!compact || i == current) ...[
                             const SizedBox(width: 4),
                             Flexible(
@@ -114,7 +116,7 @@ class StagePath extends StatelessWidget {
                                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
                                   fontSize: roomy ? null : 11.5,
                                   height: 1.1,
-                                  color: i <= current ? Colors.white : cs.onSurfaceVariant,
+                                  color: i < current ? Colors.white : (i == current ? onActive : cs.onSurfaceVariant),
                                   fontWeight: i == current ? FontWeight.w700 : FontWeight.w500,
                                 ),
                               ),
@@ -300,43 +302,55 @@ class TimelineView extends StatelessWidget {
   }
 }
 
+/// What to do next on a record: a title (with an optional [badge], e.g. days left), the message across the full card width,
+/// then the [actions] in one row. [trailing] holds quiet secondary actions that sit at the right edge, away from the main outcomes.
 class NextStepCard extends StatelessWidget {
-  const NextStepCard({super.key, required this.title, required this.message, this.actions = const [], this.tone = Tone.info});
+  const NextStepCard({super.key, required this.title, required this.message, this.actions = const [], this.trailing = const [], this.badge, this.tone = Tone.info});
 
   final String title;
   final String message;
   final List<Widget> actions;
+  final List<Widget> trailing;
+  final Widget? badge;
   final Tone tone;
 
   @override
   Widget build(BuildContext context) {
     final (bg, fg) = toneColors(context, tone);
+    final theme = Theme.of(context);
     return Card(
       color: bg,
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 10,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          alignment: WrapAlignment.spaceBetween,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(color: fg, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(message, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: fg)),
-                ],
-              ),
+            Row(
+              children: [
+                Flexible(child: Text(title, style: theme.textTheme.titleSmall?.copyWith(color: fg, fontWeight: FontWeight.w700))),
+                if (badge != null) ...[const SizedBox(width: 10), badge!],
+              ],
             ),
-            if (actions.isNotEmpty) Wrap(spacing: 8, runSpacing: 8, children: actions),
+            if (message.trim().isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(message, style: theme.textTheme.bodyMedium?.copyWith(color: fg)),
+            ],
+            if (actions.isNotEmpty || trailing.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, box) {
+                  // Wide: outcomes left, quiet actions right. Narrow: everything in one wrapping row.
+                  if (box.maxWidth < 760) return Wrap(spacing: 8, runSpacing: 8, children: [...actions, ...trailing]);
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: Wrap(spacing: 8, runSpacing: 8, children: actions)),
+                      if (trailing.isNotEmpty) Wrap(spacing: 4, runSpacing: 8, children: trailing),
+                    ],
+                  );
+                },
+              ),
+            ],
           ],
         ),
       ),
@@ -345,12 +359,13 @@ class NextStepCard extends StatelessWidget {
 }
 
 class RecordHeader extends StatelessWidget {
-  const RecordHeader({super.key, required this.icon, required this.kind, required this.title, required this.badge, this.fields = const [], this.amount});
+  const RecordHeader({super.key, required this.icon, required this.kind, required this.title, this.badge, this.fields = const [], this.amount});
 
   final IconData icon;
   final String kind;
   final String title;
-  final Widget badge;
+  /// Shown next to the title; leave null when the stage path already says it.
+  final Widget? badge;
   final List<(String, String)> fields;
   final String? amount;
 
@@ -385,8 +400,7 @@ class RecordHeader extends StatelessWidget {
                               style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          badge,
+                          if (badge != null) ...[const SizedBox(width: 10), badge!],
                         ],
                       ),
                     ],
@@ -406,7 +420,7 @@ class RecordHeader extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(k, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                        Text(k, style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                         Text(v, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                       ],
                     ),
