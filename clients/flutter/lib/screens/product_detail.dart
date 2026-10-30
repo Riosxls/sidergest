@@ -39,7 +39,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     }
   }
 
@@ -180,7 +180,7 @@ class _RoutingTabState extends State<RoutingTab> {
         _error = null;
       });
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     }
   }
 
@@ -340,7 +340,7 @@ class _ExplosionTabState extends State<ExplosionTab> {
       if (mounted) {
         setState(() {
           _result = null;
-          _error = '$e';
+          _error = friendlyError(e);
         });
       }
     } finally {
@@ -492,7 +492,7 @@ class _RevisionsTabState extends State<RevisionsTab> {
       body: FutureBuilder(
         future: _future,
         builder: (context, snap) {
-          if (snap.hasError) return Center(child: Text('${snap.error}'));
+          if (snap.hasError) return Center(child: Text(friendlyError(snap.error!)));
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final rows = snap.data!;
           if (rows.isEmpty) return const Center(child: Text('Sem revisões'));

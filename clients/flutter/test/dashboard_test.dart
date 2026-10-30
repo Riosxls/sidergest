@@ -8,6 +8,7 @@ import 'package:ebt_engenharia/widgets/alerts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -41,6 +42,7 @@ Future<(Session, List<http.Request>)> pumpShell(
   Size size = const Size(1600, 1400),
   Map<String, Object> prefs = const {},
 }) async {
+  FlutterSecureStorage.setMockInitialValues({});
   SharedPreferences.setMockInitialValues(prefs);
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -170,16 +172,24 @@ void main() {
     expect(find.text('Nova Ordem de Fabricação'), findsOneWidget);
     expect(find.text('Novo pedido'), findsNothing);
     expect(find.text('Novo produto'), findsNothing);
+    expect(find.text('Novo orçamento'), findsNothing);
   });
 
   testWidgets('admin quick actions open the creation forms', (tester) async {
     await pumpShell(tester, 'Admin');
-    for (final l in ['Novo produto', 'Nova Ordem de Fabricação', 'Nova requisição', 'Novo pedido']) {
+    for (final l in ['Novo orçamento', 'Novo produto', 'Nova Ordem de Fabricação', 'Nova requisição', 'Novo pedido']) {
       expect(find.text(l), findsOneWidget);
     }
     await tester.tap(find.text('Nova Ordem de Fabricação'));
     await tester.pumpAndSettle();
     expect(find.text('Nova ordem de fabricação'), findsOneWidget);
+  });
+
+  testWidgets('the Novo orçamento quick action opens the quote editor', (tester) async {
+    await pumpShell(tester, 'Admin');
+    await tester.tap(find.text('Novo orçamento'));
+    await tester.pumpAndSettle();
+    expect(find.text('Novo orçamento comercial'), findsOneWidget);
   });
 
   testWidgets('sidebar collapses to icons, remembers it, and marks the active page', (tester) async {
@@ -248,7 +258,7 @@ void main() {
     expect(find.byType(Dialog), findsNothing);
   });
 
-  testWidgets('avatar menu: profile, theme and sign out', (tester) async {
+  testWidgets('avatar menu: profile, settings (theme, stay signed in) and sign out', (tester) async {
     final (session, _) = await pumpShell(tester, 'Admin');
     await tester.tap(find.byTooltip('Conta'));
     await tester.pumpAndSettle();
@@ -259,11 +269,35 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Conta'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tema escuro'));
+    expect(find.text('Tema escuro'), findsNothing, reason: 'theme lives in Configurações now');
+    await tester.tap(find.text('Configurações'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Escuro'));
     await tester.pumpAndSettle();
     expect(session.themeMode, ThemeMode.dark);
     final p = await SharedPreferences.getInstance();
     expect(p.getString('themeMode'), 'dark');
+
+    expect(session.remember, isTrue);
+    await tester.tap(find.byKey(const ValueKey('settings-remember')));
+    await tester.pumpAndSettle();
+    expect(session.remember, isFalse);
+    expect(p.getBool('rememberLogin'), isFalse);
+    expect(find.text('A sessão termina ao fechar o aplicativo'), findsOneWidget);
+    expect(find.byKey(const ValueKey('open-data-reset')), findsOneWidget, reason: 'admins clear movement data from Configurações');
+    await tester.tap(find.byKey(const ValueKey('open-data-reset')));
+    await tester.pumpAndSettle();
+    expect(find.text('Limpar dados de movimento'), findsOneWidget);
+  });
+
+  testWidgets('only admins see the clear-data option in Configurações', (tester) async {
+    await pumpShell(tester, 'Reader');
+    await tester.tap(find.byTooltip('Conta'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Configurações'));
+    await tester.pumpAndSettle();
+    expect(find.text('Aparência'), findsOneWidget);
+    expect(find.byKey(const ValueKey('open-data-reset')), findsNothing);
   });
 
   test('cards use a higher-contrast surface and an outline', () {

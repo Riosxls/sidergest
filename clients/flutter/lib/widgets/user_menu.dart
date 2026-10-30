@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../session.dart';
+import 'user_settings.dart';
 
 class UserMenu extends StatelessWidget {
   const UserMenu({super.key, required this.session});
@@ -35,18 +36,6 @@ class UserMenu extends StatelessWidget {
     return '${two(t.day)}/${two(t.month)}/${t.year} ${two(t.hour)}:${two(t.minute)}';
   }
 
-  PopupMenuItem<String> _theme(String value, ThemeMode mode, String label, IconData icon) => PopupMenuItem<String>(
-    value: value,
-    child: Row(
-      children: [
-        Icon(icon, size: 20),
-        const SizedBox(width: 12),
-        Expanded(child: Text(label)),
-        if (session.themeMode == mode) const Icon(Icons.check, size: 18),
-      ],
-    ),
-  );
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -57,12 +46,8 @@ class UserMenu extends StatelessWidget {
         switch (v) {
           case 'profile':
             _profile(context);
-          case 'light':
-            session.setThemeMode(ThemeMode.light);
-          case 'dark':
-            session.setThemeMode(ThemeMode.dark);
-          case 'system':
-            session.setThemeMode(ThemeMode.system);
+          case 'settings':
+            showUserSettings(context, session);
           case 'logout':
             session.logout();
         }
@@ -83,10 +68,10 @@ class UserMenu extends StatelessWidget {
           value: 'profile',
           child: Row(children: [Icon(Icons.person_outline, size: 20), SizedBox(width: 12), Text('Perfil')]),
         ),
-        const PopupMenuDivider(),
-        _theme('system', ThemeMode.system, 'Tema do sistema', Icons.brightness_auto_outlined),
-        _theme('light', ThemeMode.light, 'Tema claro', Icons.light_mode_outlined),
-        _theme('dark', ThemeMode.dark, 'Tema escuro', Icons.dark_mode_outlined),
+        const PopupMenuItem<String>(
+          value: 'settings',
+          child: Row(children: [Icon(Icons.settings_outlined, size: 20), SizedBox(width: 12), Text('Configurações')]),
+        ),
         const PopupMenuDivider(),
         const PopupMenuItem<String>(
           value: 'logout',

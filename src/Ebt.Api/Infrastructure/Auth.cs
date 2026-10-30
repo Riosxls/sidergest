@@ -27,6 +27,7 @@ public class JwtOptions
     public string SigningKey { get; set; } = "";
     public int ExpiresMinutes { get; set; } = 60;
     public int RefreshDays { get; set; } = 14;
+    public int ClockSkewSeconds { get; set; } = 60;
 }
 
 public class TokenService(JwtOptions options)
@@ -82,6 +83,7 @@ public class TokenService(JwtOptions options)
 public record LoginRequest(string? Username, string? Password);
 public record LoginResponse(string Token, DateTimeOffset ExpiresAt, string Username, UserRole Role, string[] Permissions, string RefreshToken, DateTimeOffset RefreshExpiresAt);
 public record RefreshRequest(string? RefreshToken);
+public record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
 public record UserDto(int Id, string Username, UserRole Role, bool Active, bool Locked = false);
 public record CreateUserRequest(string Username, string Password, UserRole Role);
 public record UpdateUserRequest(UserRole Role, bool Active, string? Password);
@@ -181,6 +183,41 @@ public static class AuthEndpoints
             role = principal.FindFirstValue(ClaimTypes.Role),
             permissions = Enum.TryParse<UserRole>(principal.FindFirstValue(ClaimTypes.Role), out var r) ? Access.PoliciesFor(r) : [Policies.Read]
         })).RequireAuthorization(Policies.Read);
+
+        // Own password: needs the current one, signs every other session out and returns fresh tokens for this one.
+        auth.MapPost("/password", async (ChangePasswordRequest req, EbtDbContext db, TokenService tokens, IPasswordHasher<AppUser> hasher, ILoggerFactory logs, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
+            var user = await db.Users.FindAsync([id], ct);
+            if (user is null || !user.Active) return Results.Unauthorized();
+            var now = DateTimeOffset.UtcNow;
+            if (user.LockedUntil is { } until && until > now) return Results.Problem("Too many wrong attempts; try again later", statusCode: StatusCodes.Status429TooManyRequests);
+            if (!VerifyPassword(user, req.CurrentPassword ?? ""))
+            {
+                // A stolen session must not be able to guess the current password without limit.
+                if (++user.FailedLogins >= MaxFailedLogins)
+                {
+                    user.LockedUntil = now + LockoutDuration;
+                    user.FailedLogins = 0;
+                }
+                await db.SaveChangesAsync(ct);
+                return Results.ValidationProblem(Crud.Errors().Require(false, "currentPassword", "Incorrect password"));
+            }
+            var errors = Crud.Errors()
+                .Require((req.NewPassword ?? "").Length >= MinPasswordLength, "newPassword", $"At least {MinPasswordLength} characters")
+                .Require(req.NewPassword != req.CurrentPassword, "newPassword", "Must differ from the current password");
+            if (errors.Count > 0) return Results.ValidationProblem(errors);
+            user.PasswordHash = hasher.HashPassword(user, req.NewPassword!);
+            user.FailedLogins = 0;
+            user.LockedUntil = null;
+            user.TokenVersion++;
+            await db.RefreshTokens.Where(r => r.UserId == user.Id).ExecuteDeleteAsync(ct);
+            await db.SaveChangesAsync(ct);
+            logs.CreateLogger("Ebt.Auth").LogInformation("User {User} changed their own password; other sessions revoked", user.Username);
+            var (token, expires) = tokens.Issue(user);
+            var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct);
+            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires));
+        }).RequireAuthorization(Policies.Read).RequireRateLimiting(Policies.LoginLimiter);
 
         var users = app.MapGroup("/api/users").WithTags("Users").RequireAuthorization(Policies.Admin);
 

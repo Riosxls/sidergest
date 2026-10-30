@@ -119,7 +119,10 @@ class Shell extends StatefulWidget {
 }
 
 class _ShellState extends State<Shell> {
-  late final _items = [for (final i in navItems()) if (!i.admin || widget.session.isAdmin) i];
+  late final _items = [
+    for (final i in navItems())
+      if (!i.admin || widget.session.isAdmin) i,
+  ];
   String _current = 'dashboard';
   String? _filter;
   bool _collapsed = false;
@@ -221,21 +224,25 @@ class _ShellState extends State<Shell> {
     final active = d.id == _current;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: ListTile(
-        dense: true,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        leading: Icon(d.icon),
-        title: Text(
-          title ?? d.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          softWrap: false,
-          style: active ? const TextStyle(fontWeight: FontWeight.w600) : null,
+      child: Tooltip(
+        message: title ?? d.title,
+        waitDuration: const Duration(milliseconds: 600),
+        child: ListTile(
+          dense: true,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          leading: Icon(d.icon),
+          title: Text(
+            title ?? d.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+            style: active ? const TextStyle(fontWeight: FontWeight.w600) : null,
+          ),
+          selected: active,
+          selectedTileColor: cs.secondaryContainer,
+          selectedColor: cs.onSecondaryContainer,
+          onTap: tap,
         ),
-        selected: active,
-        selectedTileColor: cs.secondaryContainer,
-        selectedColor: cs.onSecondaryContainer,
-        onTap: tap,
       ),
     );
   }
@@ -289,47 +296,54 @@ class _ShellState extends State<Shell> {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final s = widget.session;
     final page = KeyedSubtree(key: ValueKey('$_current/$_filter'), child: _item.build(s, _filter, _go));
-    return Scaffold(
-      appBar: AppBar(
-        leading: wide
-            ? IconButton(
-                tooltip: _collapsed ? 'Expandir menu' : 'Recolher menu',
-                onPressed: _toggleCollapsed,
-                icon: Icon(_collapsed ? Icons.menu : Icons.menu_open),
-              )
-            : null,
-        title: Row(
-          children: [
-            if (_current != 'dashboard')
-              IconButton(
-                tooltip: 'Voltar ao Painel',
-                onPressed: () => _go('dashboard'),
-                icon: const Icon(Icons.arrow_back),
+    // Back (Android, browser) from a module screen returns to the Painel instead of leaving the app.
+    return PopScope(
+      canPop: _current == 'dashboard',
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _go('dashboard');
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: wide
+              ? IconButton(
+                  tooltip: _collapsed ? 'Expandir menu' : 'Recolher menu',
+                  onPressed: _toggleCollapsed,
+                  icon: Icon(_collapsed ? Icons.menu : Icons.menu_open),
+                )
+              : null,
+          title: Row(
+            children: [
+              if (_current != 'dashboard') IconButton(tooltip: 'Voltar ao Painel', onPressed: () => _go('dashboard'), icon: const Icon(Icons.arrow_back)),
+              Flexible(
+                child: Text(
+                  _moduleSection == null || _item.section == hiddenSection ? _item.title : '${_item.section} › ${_item.title}',
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            Flexible(child: Text(_moduleSection == null || _item.section == hiddenSection ? _item.title : '${_item.section} › ${_item.title}', overflow: TextOverflow.ellipsis)),
+            ],
+          ),
+          actions: [
+            SearchLauncher(onOpen: _openPalette, compact: !wide),
+            const SizedBox(width: 4),
+            AlertBell(center: s.alerts, onNavigate: _go),
+            UserMenu(session: s),
+            const SizedBox(width: 8),
           ],
         ),
-        actions: [
-          SearchLauncher(onOpen: _openPalette, compact: !wide),
-          const SizedBox(width: 4),
-          AlertBell(center: s.alerts, onNavigate: _go),
-          UserMenu(session: s),
-          const SizedBox(width: 8),
-        ],
+        drawer: wide ? null : Drawer(child: SafeArea(child: _menu(closeDrawer: true))),
+        body: wide
+            ? Row(
+                children: [
+                  SizedBox(
+                    width: _collapsed ? 72 : 280,
+                    child: _menu(rail: _collapsed),
+                  ),
+                  const VerticalDivider(width: 1),
+                  Expanded(child: page),
+                ],
+              )
+            : page,
       ),
-      drawer: wide ? null : Drawer(child: SafeArea(child: _menu(closeDrawer: true))),
-      body: wide
-          ? Row(
-              children: [
-                SizedBox(
-                  width: _collapsed ? 72 : 248,
-                  child: _menu(rail: _collapsed),
-                ),
-                const VerticalDivider(width: 1),
-                Expanded(child: page),
-              ],
-            )
-          : page,
     );
   }
 }

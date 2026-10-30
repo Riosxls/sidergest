@@ -152,6 +152,11 @@ const salesActions = {
   'accepted': 'Aceito pelo cliente',
   'declined': 'Recusado pelo cliente',
   'revised': 'Revisado',
+  'duplicated': 'Copiado de outro orçamento',
+  'approval-lapsed': 'Aprovação de desconto vencida',
+  'po-text': 'Texto do pedido de compra',
+  'po-file': 'Pedido de compra anexado',
+  'po-file-removed': 'Anexo do pedido de compra removido',
   'cancelled': 'Cancelado',
   'expired': 'Validade expirada',
   'converted': 'Convertido em pedido',
@@ -163,7 +168,22 @@ const salesActions = {
   'shipped': 'Expedido',
   'delivered': 'Entrega confirmada',
 };
-const salesBadges = {'discount': 'Desconto acima do limite', 'expiring': 'Vence em breve', 'late': 'Atrasado', 'ready': 'Pronto', 'partial': 'Parcial'};
+const salesBadges = {
+  'discount': 'Desconto acima do limite',
+  'expiring': 'Vence em breve',
+  'followup': 'Cobrar resposta',
+  'late': 'Atrasado',
+  'ready': 'Pronto',
+  'partial': 'Parcial',
+};
+const lostReasons = {
+  'Price': 'Preço',
+  'LeadTime': 'Prazo de entrega',
+  'Competitor': 'Fechou com concorrente',
+  'NoLongerNeeded': 'Não precisa mais',
+  'Specification': 'Especificação / norma',
+  'Other': 'Outro motivo',
+};
 
 const billToLabels = {'Ebt': 'EBT', 'Bts': 'BTS'};
 const orderOrigins = {'Email': 'E-mail', 'Fax': 'Fax', 'Verbal': 'Verbal', 'System': 'Sistema'};

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../api.dart';
 import '../entities.dart';
 import '../session.dart';
 import '../labels.dart';
@@ -235,7 +236,8 @@ class _ModuleScreenState extends State<ModuleScreen> {
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
-            child: Center(
+            child: Align(
+              alignment: Alignment.topCenter,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: _maxWidth),
                 child: Column(
@@ -263,7 +265,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
                     FutureBuilder<Object>(
                       future: _data,
                       builder: (context, snap) {
-                        if (snap.hasError) return Text('${snap.error}', style: TextStyle(color: theme.colorScheme.error));
+                        if (snap.hasError) return Text(friendlyError(snap.error!), style: TextStyle(color: theme.colorScheme.error));
                         if (!snap.hasData) return const LinearProgressIndicator();
                         return _content(snap.data!);
                       },

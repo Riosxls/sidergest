@@ -53,6 +53,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
     final cs = Theme.of(context).colorScheme;
     return RecordList(
       key: _list,
+      filtersActive: _open || _status != null,
+      onClearFilters: () => setState(() {
+        _open = false;
+        _status = null;
+      }),
       api: widget.session.api,
       path: '/api/purchase-orders',
       query: {'status': _status, 'open': _open ? true : null, 'supplierId': widget.supplierId},
@@ -111,7 +116,7 @@ class _OrderScreenState extends State<OrderScreen> {
       final o = await api.get(base) as Map<String, dynamic>;
       if (mounted) setState(() => _o = o);
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     }
   }
 
@@ -322,76 +327,77 @@ class _OrderEditorScreenState extends State<OrderEditorScreen> {
     return DiscardGuard(
       isDirty: () => _signature() != _initial,
       child: Scaffold(
-      appBar: AppBar(
-        title: const Text('Novo pedido de compra'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton.icon(onPressed: _busy ? null : _save, icon: const Icon(Icons.check), label: const Text('Emitir')),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              SizedBox(
-                width: w,
-                child: LookupField(
-                  api: widget.session.api,
-                  spec: supplierLookup,
-                  label: 'Fornecedor *',
-                  value: _supplierId,
-                  onChanged: (id, _) => setState(() => _supplierId = id),
-                ),
-              ),
-              SizedBox(
-                width: w,
-                child: TextField(
-                  controller: _terms,
-                  decoration: const InputDecoration(labelText: 'Condição de pagamento', hintText: 'ex.: 28/56', border: OutlineInputBorder(), isDense: true),
-                ),
-              ),
-              SizedBox(
-                width: wide ? 500 : w,
-                child: TextField(
-                  controller: _notes,
-                  decoration: const InputDecoration(labelText: 'Observações', border: OutlineInputBorder(), isDense: true),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          LinesEditor(
-            api: widget.session.api,
-            title: 'Itens',
-            fields: orderLineFields,
-            lines: _lines,
-            onChanged: (l) => setState(() => _lines = l),
-            columns: [
-              ColumnSpec('Material', (e) => lbl(e, 'materialId')),
-              col('Descrição', 'description'),
-              ColumnSpec('Quantidade', (e) => '${fmt(e['quantity'])} ${e['unit'] ?? ''}', numeric: true),
-              ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
-              dateCol('Entrega', 'dueDate'),
-              ColumnSpec('Total', (e) => fmtMoney(lineTotal(e)), numeric: true),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text(
-              'Total: ${fmtMoney(_lines.fold<num>(0, (a, l) => a + lineTotal(l)))}',
-              textAlign: TextAlign.right,
-              style: Theme.of(context).textTheme.titleMedium,
+        appBar: AppBar(
+          title: const Text('Novo pedido de compra'),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: FilledButton.icon(onPressed: _busy ? null : _save, icon: const Icon(Icons.check), label: const Text('Emitir')),
             ),
-          ),
-          if (_message != null) Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-        ],
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: w,
+                  child: LookupField(
+                    api: widget.session.api,
+                    spec: supplierLookup,
+                    label: 'Fornecedor *',
+                    value: _supplierId,
+                    onChanged: (id, _) => setState(() => _supplierId = id),
+                  ),
+                ),
+                SizedBox(
+                  width: w,
+                  child: TextField(
+                    controller: _terms,
+                    decoration: const InputDecoration(labelText: 'Condição de pagamento', hintText: 'ex.: 28/56', border: OutlineInputBorder(), isDense: true),
+                  ),
+                ),
+                SizedBox(
+                  width: wide ? 500 : w,
+                  child: TextField(
+                    controller: _notes,
+                    decoration: const InputDecoration(labelText: 'Observações', border: OutlineInputBorder(), isDense: true),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            LinesEditor(
+              api: widget.session.api,
+              title: 'Itens',
+              fields: orderLineFields,
+              lines: _lines,
+              onChanged: (l) => setState(() => _lines = l),
+              columns: [
+                ColumnSpec('Material', (e) => lbl(e, 'materialId')),
+                col('Descrição', 'description'),
+                ColumnSpec('Quantidade', (e) => '${fmt(e['quantity'])} ${e['unit'] ?? ''}', numeric: true),
+                ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
+                dateCol('Entrega', 'dueDate'),
+                ColumnSpec('Total', (e) => fmtMoney(lineTotal(e)), numeric: true),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(
+                'Total: ${fmtMoney(_lines.fold<num>(0, (a, l) => a + lineTotal(l)))}',
+                textAlign: TextAlign.right,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            if (_message != null) Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
+        ),
       ),
-    ));
+    );
   }
 }
 

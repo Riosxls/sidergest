@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api.dart';
 import '../labels.dart';
 import '../session.dart';
 
@@ -21,7 +22,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
   Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>>(
     future: _future,
     builder: (context, snap) {
-      if (snap.hasError) return Center(child: Text('${snap.error}'));
+      if (snap.hasError) return Center(child: Text(friendlyError(snap.error!)));
       final d = snap.data;
       if (d == null) return const Center(child: CircularProgressIndicator());
       final policies = (d['policies'] as List).cast<String>();

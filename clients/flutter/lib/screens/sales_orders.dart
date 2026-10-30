@@ -60,6 +60,14 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
   @override
   Widget build(BuildContext context) => RecordList(
     key: _list,
+    filtersActive: _open || _status != null || _late || _month != null || _billTo != null,
+    onClearFilters: () => setState(() {
+      _open = false;
+      _status = null;
+      _late = false;
+      _month = null;
+      _billTo = null;
+    }),
     api: widget.session.api,
     path: '/api/sales/orders',
     query: {'status': _status, 'open': _open && _status == null ? true : null, 'month': _month, 'late': _late ? true : null, 'billTo': _billTo},
@@ -141,7 +149,11 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
   }
 
   Future<void> _waiveCertificate(bool waived) async {
-    final r = await runAction(context, () => api.post('$base/certificate-waiver', {'waived': waived}), success: waived ? 'Certificado dispensado' : 'Certificado exigido novamente');
+    final r = await runAction(
+      context,
+      () => api.post('$base/certificate-waiver', {'waived': waived}),
+      success: waived ? 'Certificado dispensado' : 'Certificado exigido novamente',
+    );
     if (r != null) _load();
   }
 
@@ -167,7 +179,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     }
   }
 
@@ -261,7 +273,12 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         actions: [
           if (s.canCertificate) primary('order-certificate', 'Emitir certificado', Icons.verified_outlined, _newCertificate),
           if (s.canShip)
-            OutlinedButton.icon(key: const ValueKey('order-deliver'), onPressed: _planDelivery, icon: const Icon(Icons.local_shipping_outlined), label: const Text('Programar entrega')),
+            OutlinedButton.icon(
+              key: const ValueKey('order-deliver'),
+              onPressed: _planDelivery,
+              icon: const Icon(Icons.local_shipping_outlined),
+              label: const Text('Programar entrega'),
+            ),
           if (s.canCertificate)
             TextButton(key: const ValueKey('order-certificate-waive'), onPressed: () => _waiveCertificate(true), child: const Text('Dispensar certificado')),
         ],
@@ -307,10 +324,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       final e = ofs.entries.first;
       return [PrintButton(key: const ValueKey('print-of'), name: 'Ordem de produção ${e.value}', builder: () => ofPdf(e.key))];
     }
-    return [
-      for (final e in ofs.entries)
-        PrintButton(key: ValueKey('print-of-${e.key}'), name: 'Ordem de produção ${e.value}', builder: () => ofPdf(e.key)),
-    ];
+    return [for (final e in ofs.entries) PrintButton(key: ValueKey('print-of-${e.key}'), name: 'Ordem de produção ${e.value}', builder: () => ofPdf(e.key))];
   }
 
   @override
@@ -445,7 +459,12 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
               if (o['certificateWaived'] == true)
                 TextButton(onPressed: s.canCertificate ? () => _waiveCertificate(false) : null, child: const Text('Dispensado · exigir novamente'))
               else if (s.canCertificate && status != 'Cancelled')
-                FilledButton.tonalIcon(key: const ValueKey('order-new-certificate'), onPressed: _newCertificate, icon: const Icon(Icons.add), label: const Text('Emitir certificado')),
+                FilledButton.tonalIcon(
+                  key: const ValueKey('order-new-certificate'),
+                  onPressed: _newCertificate,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Emitir certificado'),
+                ),
             ],
             child: SimpleTable(
               columns: [
@@ -531,7 +550,8 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
                   PrintButton(
                     key: ValueKey('print-of-${l['productionOrderId']}'),
                     name: 'Ordem de produção ${l['productionReference']}',
-                    builder: () async => buildProductionOrderPdf(api, await api.get('/api/production/orders/${l['productionOrderId']}') as Map<String, dynamic>),
+                    builder: () async =>
+                        buildProductionOrderPdf(api, await api.get('/api/production/orders/${l['productionOrderId']}') as Map<String, dynamic>),
                   ),
                 if (l['ready'] == true && _n(l['remaining']) > 0)
                   const Padding(
@@ -594,11 +614,7 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
         if ((parseDecimal(e.value.text) ?? 0) > 0) {'orderLineId': e.key, 'quantity': parseDecimal(e.value.text)},
     ];
     if (lines.isEmpty) return setState(() => _error = 'Informe a quantidade de ao menos um item');
-    Navigator.pop(context, {
-      'plannedDate': date,
-      'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-      'lines': lines,
-    });
+    Navigator.pop(context, {'plannedDate': date, 'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(), 'lines': lines});
   }
 
   @override

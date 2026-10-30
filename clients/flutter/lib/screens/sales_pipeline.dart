@@ -408,7 +408,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
                           salesBadges[b] ?? b,
                           tone: switch (b) {
                             'late' => Tone.danger,
-                            'discount' || 'expiring' => Tone.warning,
+                            'discount' || 'expiring' || 'followup' => Tone.warning,
                             'ready' => Tone.success,
                             _ => Tone.info,
                           },

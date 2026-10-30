@@ -84,7 +84,7 @@ class _NewQuotationDialogState extends State<NewQuotationDialog> {
     super.initState();
     widget.api
         .listAll('/api/requisitions', query: {'status': 'Approved'})
-        .then((l) => mounted ? setState(() => _reqs = l) : null, onError: (e) => mounted ? setState(() => _message = '$e') : null);
+        .then((l) => mounted ? setState(() => _reqs = l) : null, onError: (e) => mounted ? setState(() => _message = friendlyError(e)) : null);
   }
 
   @override
@@ -238,7 +238,7 @@ class _QuotationScreenState extends State<QuotationScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     }
   }
 

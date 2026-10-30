@@ -3793,6 +3793,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("freight");
 
+                    b.Property<int?>("LostReason")
+                        .HasColumnType("integer")
+                        .HasColumnName("lost_reason");
+
                     b.Property<bool>("NeedsApproval")
                         .HasColumnType("boolean")
                         .HasColumnName("needs_approval");
@@ -4519,6 +4523,10 @@ namespace Ebt.Core.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("ApprovalValidityDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("approval_validity_days");
+
                     b.Property<string>("DefaultConditions")
                         .HasColumnType("text")
                         .HasColumnName("default_conditions");
@@ -4526,6 +4534,10 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<int>("DefaultValidityDays")
                         .HasColumnType("integer")
                         .HasColumnName("default_validity_days");
+
+                    b.Property<int>("FollowUpDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("follow_up_days");
 
                     b.Property<decimal>("MaxDiscountPercent")
                         .HasPrecision(7, 4)
@@ -4536,6 +4548,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("minimum_order_value");
+
+                    b.Property<bool>("OffListNeedsApproval")
+                        .HasColumnType("boolean")
+                        .HasColumnName("off_list_needs_approval");
 
                     b.Property<int?>("ShippingLocationId")
                         .HasColumnType("integer")
@@ -4549,16 +4565,19 @@ namespace Ebt.Core.Data.Migrations
 
                     b.ToTable("sales_settings", null, t =>
                         {
-                            t.HasCheckConstraint("ck_sales_settings_values", "max_discount_percent >= 0 AND max_discount_percent <= 100 AND default_validity_days > 0 AND minimum_order_value >= 0");
+                            t.HasCheckConstraint("ck_sales_settings_values", "max_discount_percent >= 0 AND max_discount_percent <= 100 AND default_validity_days > 0 AND minimum_order_value >= 0 AND follow_up_days > 0 AND approval_validity_days > 0");
                         });
 
                     b.HasData(
                         new
                         {
                             Id = 1,
+                            ApprovalValidityDays = 30,
                             DefaultValidityDays = 15,
+                            FollowUpDays = 7,
                             MaxDiscountPercent = 5m,
-                            MinimumOrderValue = 0m
+                            MinimumOrderValue = 0m,
+                            OffListNeedsApproval = false
                         });
                 });
 

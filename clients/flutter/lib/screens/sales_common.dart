@@ -88,7 +88,7 @@ List<TimelineEntry> timeline(List<dynamic> history) => [
       tone: switch (h['action']) {
         'accepted' || 'converted' || 'approved' || 'delivered' => Tone.success,
         'declined' || 'cancelled' || 'expired' || 'approval-rejected' => Tone.danger,
-        'submitted' || 'credit-override' => Tone.warning,
+        'submitted' || 'credit-override' || 'approval-lapsed' => Tone.warning,
         'released' || 'shipped' => Tone.progress,
         _ => Tone.info,
       },
@@ -97,6 +97,9 @@ List<TimelineEntry> timeline(List<dynamic> history) => [
         'sent' => Icons.send,
         'accepted' || 'approved' => Icons.thumb_up_alt,
         'po-received' => Icons.assignment_turned_in,
+        'po-text' || 'po-file' || 'po-file-removed' => Icons.attach_file,
+        'duplicated' => Icons.copy,
+        'approval-lapsed' => Icons.timer_off,
         'declined' || 'approval-rejected' => Icons.thumb_down_alt,
         'cancelled' || 'expired' => Icons.close,
         'converted' => Icons.receipt_long,

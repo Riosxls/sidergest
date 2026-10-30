@@ -46,6 +46,8 @@ class ApiClient {
   Future<bool>? _refreshing;
   final http.Client _http;
   final _versions = <String, String>{};
+  /// Auth endpoints that never trigger a silent refresh (a 401 there is a real answer); /api/auth/me and the rest may refresh.
+  static const _noRefresh = ['/api/auth/login', '/api/auth/refresh', '/api/auth/logout'];
   static final _idKey = RegExp(r'^(.*?/\d+)(?:[/?]|$)');
 
   static String? _versionKey(String path) => _idKey.firstMatch(path)?.group(1);
@@ -134,7 +136,7 @@ class ApiClient {
   Future<http.Response> _call(String path, Future<http.Response> Function() call) async {
     try {
       var r = await call();
-      if (r.statusCode == 401 && token != null && !path.startsWith('/api/auth/')) {
+      if (r.statusCode == 401 && token != null && !_noRefresh.any(path.startsWith)) {
         if (await refresh()) {
           r = await call();
         }
@@ -178,4 +180,53 @@ class ApiClient {
       return ApiException(r.statusCode, 'Erro ${r.statusCode}');
     }
   }
+}
+
+/// Portuguese captions for the API field names that reach the user in validation messages.
+const _fieldCaptions = {
+  'customerId': 'Cliente',
+  'paymentTermId': 'Prazo',
+  'productId': 'Produto',
+  'materialId': 'Material',
+  'supplierId': 'Fornecedor',
+  'quantity': 'Quantidade',
+  'unitPrice': 'Preço unitário',
+  'deliveryDate': 'Data de entrega',
+  'validUntil': 'Validade',
+  'discountPercent': 'Desconto',
+  'notes': 'Observações',
+  'customerPo': 'Pedido do cliente',
+  'name': 'Nome',
+  'code': 'Código',
+  'email': 'E-mail',
+  'ncm': 'NCM',
+  'password': 'Senha',
+  'currentPassword': 'Senha atual',
+  'newPassword': 'Nova senha',
+  'username': 'Usuário',
+};
+
+String _humanize(String key) {
+  final cap = _fieldCaptions[key];
+  if (cap != null) return cap;
+  final words = key.replaceAllMapped(RegExp(r'([a-z0-9])([A-Z])'), (m) => '${m[1]} ${m[2]}').toLowerCase();
+  return words.isEmpty ? key : '${words[0].toUpperCase()}${words.substring(1)}';
+}
+
+String fieldLabel(String key) {
+  final m = RegExp(r'^[Ll]ines\[(\d+)\]\.?(.*)$').firstMatch(key);
+  if (m != null) return 'Linha ${int.parse(m[1]!) + 1}${m[2]!.isEmpty ? '' : ' · ${_humanize(m[2]!)}'}';
+  return _humanize(key);
+}
+
+String describeError(ApiException e) {
+  if (e.fieldErrors.isEmpty) return e.message;
+  return e.fieldErrors.entries.map((x) => '${fieldLabel(x.key)}: ${x.value.join('; ')}').join('\n');
+}
+
+/// Message safe to show a user for any thrown object; raw exception text never leaks.
+String friendlyError(Object e) {
+  if (e is ApiException) return describeError(e);
+  if (e is FormatException || e is TypeError) return 'Resposta inesperada do servidor. Atualize a tela e tente de novo.';
+  return 'Não foi possível concluir. Tente novamente.';
 }

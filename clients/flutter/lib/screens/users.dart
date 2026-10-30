@@ -88,7 +88,7 @@ class _UsersScreenState extends State<UsersScreen> {
     body: FutureBuilder<List<Map<String, dynamic>>>(
       future: _future,
       builder: (context, snap) {
-        if (snap.hasError) return Center(child: Text('${snap.error}'));
+        if (snap.hasError) return Center(child: Text(friendlyError(snap.error!)));
         final users = snap.data;
         if (users == null) return const Center(child: CircularProgressIndicator());
         if (users.isEmpty) return const Center(child: Text('Nenhum usuário'));

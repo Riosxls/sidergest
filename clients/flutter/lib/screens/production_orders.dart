@@ -93,6 +93,12 @@ class _ProductionOrdersScreenState extends State<ProductionOrdersScreen> {
     final cs = Theme.of(context).colorScheme;
     return RecordList(
       key: _list,
+      filtersActive: _open || _status != null || _kind != null,
+      onClearFilters: () => setState(() {
+        _open = false;
+        _status = null;
+        _kind = null;
+      }),
       api: widget.session.api,
       path: '/api/production/orders',
       query: {'status': _status, 'kind': _kind, 'open': _open && _status == null ? true : null},
@@ -166,7 +172,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     }
   }
 

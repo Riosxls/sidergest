@@ -33,6 +33,9 @@ class RecordList extends StatefulWidget {
     this.rowActions,
     this.emptyText = 'Nenhum registro',
     this.pageSize = 50,
+    this.filtersActive = false,
+    this.onClearFilters,
+    this.emptyAction,
   });
 
   final ApiClient api;
@@ -47,10 +50,18 @@ class RecordList extends StatefulWidget {
   final Widget? fab;
   final Future<void> Function(List<Map<String, dynamic>> items)? enrich;
   final Color? Function(BuildContext context, Map<String, dynamic> e)? rowColor;
+
   /// Per-row ⋮ menu (e.g. quick cancel); an empty list hides the menu for that row.
   final List<RowAction> Function(Map<String, dynamic> e)? rowActions;
   final String emptyText;
   final int pageSize;
+
+  /// True while a screen filter narrows the list; the empty state then offers to clear it.
+  final bool filtersActive;
+  final VoidCallback? onClearFilters;
+
+  /// Shown under the empty message when nothing is filtered (e.g. a "create the first" button).
+  final Widget? emptyAction;
 
   @override
   State<RecordList> createState() => RecordListState();
@@ -64,6 +75,11 @@ class RecordListState extends State<RecordList> {
   int _skip = 0;
   int _request = 0;
   Timer? _debounce;
+  final _search = TextEditingController();
+  final _vertical = ScrollController();
+  final _horizontal = ScrollController();
+  int? _sortColumn;
+  bool _ascending = true;
 
   @override
   void initState() {
@@ -83,7 +99,41 @@ class RecordListState extends State<RecordList> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _search.dispose();
+    _vertical.dispose();
+    _horizontal.dispose();
     super.dispose();
+  }
+
+  void _clearFilters() {
+    _search.clear();
+    _q = '';
+    _skip = 0;
+    widget.onClearFilters?.call();
+    reload();
+  }
+
+  /// Orders the visible page by one column; numbers, dd/mm/yyyy dates and text each compare in their own way.
+  List<Map<String, dynamic>> _sorted(List<Map<String, dynamic>> items) {
+    final i = _sortColumn;
+    if (i == null || i >= widget.columns.length) return items;
+    final col = widget.columns[i];
+    final out = [...items]..sort((a, b) => _compareCells(col.value(a), col.value(b)));
+    return _ascending ? out : out.reversed.toList();
+  }
+
+  static int _compareCells(String a, String b) {
+    num? number(String s) => num.tryParse(s.replaceAll(RegExp(r'[^0-9,\-]'), '').replaceAll(',', '.'));
+    String date(String s) {
+      final m = RegExp(r'^(\d{2})/(\d{2})/(\d{4})').firstMatch(s);
+      return m == null ? '' : '${m[3]}${m[2]}${m[1]}';
+    }
+
+    final da = date(a), db = date(b);
+    if (da.isNotEmpty && db.isNotEmpty) return da.compareTo(db);
+    final na = number(a), nb = number(b);
+    if (na != null && nb != null && RegExp(r'\d').hasMatch(a) && RegExp(r'\d').hasMatch(b) && !RegExp(r'[A-Za-z]{2}').hasMatch('$a$b')) return na.compareTo(nb);
+    return a.toLowerCase().compareTo(b.toLowerCase());
   }
 
   Future<void> reload() async {
@@ -100,7 +150,7 @@ class RecordListState extends State<RecordList> {
         });
       }
     } catch (e) {
-      if (mounted && r == _request) setState(() => _error = '$e');
+      if (mounted && r == _request) setState(() => _error = friendlyError(e));
     } finally {
       if (mounted && r == _request) setState(() => _loading = false);
     }
@@ -147,6 +197,7 @@ class RecordListState extends State<RecordList> {
                           width: wide ? 320 : width - 96,
                           child: TextField(
                             key: const ValueKey('record-search'),
+                            controller: _search,
                             decoration: InputDecoration(
                               prefixIcon: const Icon(Icons.search),
                               hintText: widget.searchHint,
@@ -168,15 +219,28 @@ class RecordListState extends State<RecordList> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              child: Semantics(
+                liveRegion: true,
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    ),
+                    TextButton(onPressed: reload, child: const Text('Tentar novamente')),
+                  ],
+                ),
+              ),
             ),
+          if (page == null && _error == null) const Expanded(child: Center(child: CircularProgressIndicator())),
           if (page != null)
             Expanded(
               child: page.items.isEmpty
-                  ? Center(child: Text(widget.emptyText))
+                  ? _empty()
                   : wide
-                  ? _table(page.items)
-                  : _list(page.items),
+                  ? _table(_sorted(page.items))
+                  : _list(_sorted(page.items)),
             ),
           if (page != null && page.total > page.items.length) _pager(page),
         ],
@@ -184,38 +248,85 @@ class RecordListState extends State<RecordList> {
     );
   }
 
-  Widget _table(List<Map<String, dynamic>> items) => SingleChildScrollView(
-    padding: const EdgeInsets.only(bottom: 80),
+  Widget _empty() {
+    final cs = Theme.of(context).colorScheme;
+    final narrowed = _q.isNotEmpty || widget.filtersActive;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(narrowed ? Icons.filter_alt_off_outlined : Icons.inbox_outlined, size: 40, color: cs.onSurfaceVariant),
+            const SizedBox(height: 8),
+            Text(narrowed ? 'Nada encontrado com a busca e os filtros atuais' : widget.emptyText, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            if (narrowed)
+              OutlinedButton.icon(
+                key: const ValueKey('clear-filters'),
+                onPressed: _clearFilters,
+                icon: const Icon(Icons.clear_all),
+                label: const Text('Limpar filtros'),
+              )
+            else if (widget.emptyAction != null)
+              widget.emptyAction!,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _table(List<Map<String, dynamic>> items) => Scrollbar(
+    controller: _vertical,
+    thumbVisibility: true,
     child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        showCheckboxColumn: false,
-        headingRowHeight: 40,
-        dataRowMinHeight: 36,
-        dataRowMaxHeight: 44,
-        columns: [
-          for (final c in widget.columns) DataColumn(label: Text(c.label), numeric: c.numeric),
-          if (widget.rowActions != null) const DataColumn(label: SizedBox.shrink()),
-        ],
-        rows: [
-          for (final e in items)
-            DataRow(
-              color: WidgetStateProperty.resolveWith((_) => widget.rowColor?.call(context, e)),
-              onSelectChanged: widget.onTap == null ? null : (_) => _tap(e),
-              cells: [
-                for (final c in widget.columns)
-                  DataCell(
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 320),
-                      child: Text(c.value(e), overflow: TextOverflow.ellipsis),
-                    ),
-                  ),
-                if (widget.rowActions != null) DataCell(_menu(e)),
-              ],
-            ),
-        ],
+      controller: _vertical,
+      padding: const EdgeInsets.only(bottom: 80),
+      child: Scrollbar(
+        controller: _horizontal,
+        thumbVisibility: true,
+        notificationPredicate: (n) => n.depth == 0,
+        child: SingleChildScrollView(controller: _horizontal, scrollDirection: Axis.horizontal, child: _dataTable(items)),
       ),
     ),
+  );
+
+  Widget _dataTable(List<Map<String, dynamic>> items) => DataTable(
+    showCheckboxColumn: false,
+    headingRowHeight: 40,
+    dataRowMinHeight: 36,
+    dataRowMaxHeight: 44,
+    sortColumnIndex: _sortColumn,
+    sortAscending: _ascending,
+    columns: [
+      for (var i = 0; i < widget.columns.length; i++)
+        DataColumn(
+          label: Text(widget.columns[i].label),
+          numeric: widget.columns[i].numeric,
+          onSort: (col, asc) => setState(() {
+            _sortColumn = col;
+            _ascending = asc;
+          }),
+        ),
+      if (widget.rowActions != null) const DataColumn(label: SizedBox.shrink()),
+    ],
+    rows: [
+      for (final e in items)
+        DataRow(
+          color: WidgetStateProperty.resolveWith((_) => widget.rowColor?.call(context, e)),
+          onSelectChanged: widget.onTap == null ? null : (_) => _tap(e),
+          cells: [
+            for (final c in widget.columns)
+              DataCell(
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 320),
+                  child: Text(c.value(e), overflow: TextOverflow.ellipsis),
+                ),
+              ),
+            if (widget.rowActions != null) DataCell(_menu(e)),
+          ],
+        ),
+    ],
   );
 
   Widget _menu(Map<String, dynamic> e) {
@@ -228,7 +339,11 @@ class RecordListState extends State<RecordList> {
         if (mounted) reload();
       },
       itemBuilder: (_) => [
-        for (final a in actions) PopupMenuItem(value: a, child: ListTile(leading: Icon(a.icon), title: Text(a.label))),
+        for (final a in actions)
+          PopupMenuItem(
+            value: a,
+            child: ListTile(leading: Icon(a.icon), title: Text(a.label)),
+          ),
       ],
     );
   }
@@ -240,11 +355,38 @@ class RecordListState extends State<RecordList> {
     itemBuilder: (_, i) {
       final e = items[i];
       final cols = widget.columns;
-      final subtitle = cols.skip(2).map((c) => (c.label, c.value(e))).where((p) => p.$2.isNotEmpty).map((p) => '${p.$1}: ${p.$2}').join(' · ');
+      final pairs = cols.skip(2).map((c) => (c.label, c.value(e))).where((p) => p.$2.isNotEmpty).toList();
+      final muted = TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant);
       return ListTile(
         tileColor: widget.rowColor?.call(context, e),
-        title: Text('${cols[0].value(e)}  ${cols.length > 1 ? cols[1].value(e) : ''}', maxLines: 2, overflow: TextOverflow.ellipsis),
-        subtitle: subtitle.isEmpty ? null : Text(subtitle, maxLines: 3, overflow: TextOverflow.ellipsis),
+        title: Text(
+          '${cols[0].value(e)}  ${cols.length > 1 ? cols[1].value(e) : ''}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: pairs.isEmpty
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 2,
+                  children: [
+                    for (final p in pairs.take(6))
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: '${p.$1} ', style: muted),
+                            TextSpan(text: p.$2),
+                          ],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
+              ),
         trailing: widget.rowActions == null ? null : _menu(e),
         onTap: widget.onTap == null ? null : () => _tap(e),
       );
@@ -490,7 +632,7 @@ class FutureView<T> extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('${snap.error}'),
+              Text(friendlyError(snap.error!)),
               if (onRetry != null) TextButton(onPressed: onRetry, child: const Text('Tentar novamente')),
             ],
           ),

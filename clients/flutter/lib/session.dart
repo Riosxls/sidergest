@@ -30,6 +30,18 @@ class Session extends ChangeNotifier {
   ThemeMode themeMode = ThemeMode.system;
   final alerts = AlertCenter();
 
+  /// Interface density: compact (default) fits more rows; comfortable has larger touch targets.
+  bool comfortable = false;
+
+  /// Text size multiplier (1 = normal).
+  double textScale = 1;
+
+  /// When false the session lives in memory only: closing the app signs the user out.
+  bool remember = true;
+
+  /// Username offered on the login screen (kept only while "remember" is on).
+  String lastUser = '';
+
   bool get loggedIn => api.token != null && ((expiresAt?.isAfter(DateTime.now()) ?? true) || _refreshValid);
   bool get canWrite => permissions.contains('write');
   bool get isAdmin => permissions.contains('admin');
@@ -60,6 +72,10 @@ class Session extends ChangeNotifier {
       final p = await SharedPreferences.getInstance();
       api.baseUrl = p.getString('apiUrl') ?? defaultApiUrl;
       themeMode = ThemeMode.values.asNameMap()[p.getString('themeMode')] ?? ThemeMode.system;
+      remember = p.getBool('rememberLogin') ?? true;
+      lastUser = p.getString('lastUser') ?? '';
+      comfortable = p.getBool('comfortable') ?? false;
+      textScale = (p.getDouble('textScale') ?? 1).clamp(1.0, 1.5);
     } catch (_) {}
     try {
       final v = await _storage.readAll();
@@ -77,9 +93,21 @@ class Session extends ChangeNotifier {
         expiresAt = exp;
         refreshExpiresAt = rExp;
         if (!accessValid && !await api.refresh()) await logout();
+        if (api.token != null) await _syncProfile();
       }
     } catch (_) {}
     notifyListeners();
+  }
+
+  /// Re-reads role and permissions from the server so a stored session never keeps stale rights
+  /// (for example one saved by an older server version, or before an admin changed the role).
+  Future<void> _syncProfile() async {
+    try {
+      final me = await api.get('/api/auth/me') as Map<String, dynamic>;
+      role = me['role'] as String? ?? role;
+      if (me['permissions'] is List) permissions = (me['permissions'] as List).cast<String>().toSet();
+      if (remember) await _storage.write(key: 'permissions', value: jsonEncode(permissions.toList()));
+    } catch (_) {}
   }
 
   /// Applies a login/refresh response and persists it.
@@ -91,6 +119,12 @@ class Session extends ChangeNotifier {
     if (r['permissions'] is List) permissions = (r['permissions'] as List).cast<String>().toSet();
     expiresAt = DateTime.parse(r['expiresAt'] as String);
     refreshExpiresAt = DateTime.tryParse('${r['refreshExpiresAt'] ?? ''}');
+    if (!remember) return notifyListeners();
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> _persist() async {
     try {
       await _storage.write(key: 'token', value: api.token);
       await _storage.write(key: 'username', value: username);
@@ -102,18 +136,73 @@ class Session extends ChangeNotifier {
         await _storage.write(key: 'refreshExpiresAt', value: refreshExpiresAt?.toIso8601String());
       }
     } catch (_) {}
-    notifyListeners();
   }
 
-  Future<void> login(String url, String user, String password) async {
+  /// [remember] keeps the session across app restarts and offers [user] again next time; without it nothing is stored.
+  Future<void> login(String url, String user, String password, {bool remember = true}) async {
     api.baseUrl = url.trim();
     api.token = null;
     api.refreshToken = null;
     final r = await api.post('/api/auth/login', {'username': user, 'password': password}) as Map<String, dynamic>;
+    this.remember = remember;
+    lastUser = remember ? user.trim() : '';
     try {
       final p = await SharedPreferences.getInstance();
       await p.setString('apiUrl', api.baseUrl);
+      await p.setBool('rememberLogin', remember);
+      if (remember) {
+        await p.setString('lastUser', lastUser);
+      } else {
+        await p.remove('lastUser');
+      }
     } catch (_) {}
+    await _apply(r);
+  }
+
+  /// Turns "stay signed in on this device" on or off for the running session; off removes the stored tokens now.
+  Future<void> setRemember(bool value) async {
+    remember = value;
+    lastUser = value ? (username ?? '') : '';
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool('rememberLogin', value);
+      if (value) {
+        await p.setString('lastUser', lastUser);
+      } else {
+        await p.remove('lastUser');
+      }
+    } catch (_) {}
+    if (value) {
+      await _persist();
+    } else {
+      for (final k in _secureKeys) {
+        try {
+          await _storage.delete(key: k);
+        } catch (_) {}
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> setComfortable(bool value) async {
+    comfortable = value;
+    notifyListeners();
+    try {
+      await (await SharedPreferences.getInstance()).setBool('comfortable', value);
+    } catch (_) {}
+  }
+
+  Future<void> setTextScale(double value) async {
+    textScale = value;
+    notifyListeners();
+    try {
+      await (await SharedPreferences.getInstance()).setDouble('textScale', value);
+    } catch (_) {}
+  }
+
+  /// Changes the signed-in user's own password. The server signs every other session out and returns fresh tokens for this one.
+  Future<void> changePassword(String current, String next) async {
+    final r = await api.post('/api/auth/password', {'currentPassword': current, 'newPassword': next}) as Map<String, dynamic>;
     await _apply(r);
   }
 

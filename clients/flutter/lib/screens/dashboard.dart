@@ -479,7 +479,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
-            child: Center(
+            child: Align(
+              alignment: Alignment.topCenter,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: _maxWidth),
                 child: Column(
@@ -488,13 +489,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     if (actions.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final a in actions)
-                              FilledButton.tonalIcon(onPressed: () => a.run(context).then((_) => _refresh()), icon: Icon(a.icon), label: Text(a.label)),
-                          ],
+                        child: LayoutBuilder(
+                          builder: (context, c) {
+                            final buttons = [
+                              for (final a in actions)
+                                FilledButton.tonalIcon(onPressed: () => a.run(context).then((_) => _refresh()), icon: Icon(a.icon), label: Text(a.label)),
+                            ];
+                            // On a phone the buttons scroll sideways in one row so the alerts and modules stay on the first screen.
+                            if (c.maxWidth < 600) {
+                              return SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(children: [for (final b in buttons) Padding(padding: const EdgeInsets.only(right: 8), child: b)]),
+                              );
+                            }
+                            return Wrap(spacing: 8, runSpacing: 8, children: buttons);
+                          },
                         ),
                       ),
                     _onboarding(),

@@ -30,6 +30,8 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
   @override
   Widget build(BuildContext context) => RecordList(
     key: _list,
+    filtersActive: _status != null,
+    onClearFilters: () => setState(() => _status = null),
     api: widget.session.api,
     path: '/api/sales/deliveries',
     query: {'status': _status},
@@ -101,7 +103,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     }
   }
 

@@ -18,7 +18,7 @@ const _companyAddress = 'Endereço: a definir';
 
 const _generalConditions =
     'Preços sujeitos a confirmação na data do pedido. Impostos conforme legislação vigente. '
-    'Prazo de entrega contado a partir da confirmação do pedido e da aprovação de desenhos, quando aplicável.';
+    'Prazo de entrega em dias úteis, contado a partir da confirmação do pedido e da aprovação de desenhos, quando aplicável.';
 
 Future<pw.ThemeData> _theme() async => pw.ThemeData.withFont(
   base: pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-regular.ttf')),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api.dart';
 import '../entities.dart';
 import '../session.dart';
 import 'product_detail.dart';
@@ -24,7 +25,7 @@ class _WhereUsedViewState extends State<WhereUsedView> {
     return FutureBuilder(
       future: _future,
       builder: (context, snap) {
-        if (snap.hasError) return Center(child: Text('${snap.error}'));
+        if (snap.hasError) return Center(child: Text(friendlyError(snap.error!)));
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final rows = snap.data!;
         if (rows.isEmpty) return const Center(child: Text('Não é usado em nenhuma estrutura'));

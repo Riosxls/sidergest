@@ -8,6 +8,7 @@ public enum SalesRecordKind { Quote = 0, Order = 1, Delivery = 2, Feasibility = 
 public enum BillTo { Ebt = 0, Bts = 1 }
 public enum OrderOrigin { Email = 0, Fax = 1, Verbal = 2, System = 3 }
 public enum DeliveryCondition { Bk = 0, Nbk = 1, Gbk = 2 }
+public enum LostReason { Price = 0, LeadTime = 1, Competitor = 2, NoLongerNeeded = 3, Specification = 4, Other = 5 }
 
 public class SalesSettings
 {
@@ -18,6 +19,12 @@ public class SalesSettings
     public int? ShippingLocationId { get; set; }
     public StockLocation? ShippingLocation { get; set; }
     public string? DefaultConditions { get; set; }
+    /// <summary>When on, a quote with a price typed by hand for a product that has no price-list entry also needs the manager's approval (no list price means no discount can be measured).</summary>
+    public bool OffListNeedsApproval { get; set; }
+    /// <summary>A sent quote with no answer after this many days is flagged for follow-up.</summary>
+    public int FollowUpDays { get; set; } = 7;
+    /// <summary>A manager's discount approval that is still unsent after this many days lapses (the quote goes back to draft).</summary>
+    public int ApprovalValidityDays { get; set; } = 30;
 }
 
 public class PaymentTerm
@@ -75,6 +82,8 @@ public class Quote
     public DateTimeOffset? DecidedAt { get; set; }
     public string? DecisionBy { get; set; }
     public string? DecisionNote { get; set; }
+    /// <summary>Why the customer turned the quote down (set by decline).</summary>
+    public LostReason? LostReason { get; set; }
     public string? CustomerPo { get; set; }
     public int? SalesOrderId { get; set; }
     public string? CreatedBy { get; set; }

@@ -42,6 +42,7 @@ builder.Services.AddDbContext<EbtDbContext>((sp, o) => o
     .AddInterceptors(sp.GetRequiredService<AuditInterceptor>()));
 builder.Services.AddScoped<BomService>();
 builder.Services.AddScoped<StockService>();
+builder.Services.AddScoped<Ebt.Core.Maintenance.DataResetService>();
 builder.Services.AddPurchasing();
 builder.Services.AddProduction();
 builder.Services.AddFiscal(builder.Configuration);
@@ -69,7 +70,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
         NameClaimType = System.Security.Claims.ClaimTypes.Name,
         RoleClaimType = System.Security.Claims.ClaimTypes.Role,
-        ClockSkew = TimeSpan.FromMinutes(1)
+        ClockSkew = TimeSpan.FromSeconds(jwt.ClockSkewSeconds)
     };
 });
 builder.Services.AddAuthorization(Access.Register);
@@ -140,6 +141,7 @@ app.MapGet("/", (IConfiguration c, IWebHostEnvironment e) => Results.Redirect(c.
 app.MapGet("/health", async (EbtDbContext db) => await db.Database.CanConnectAsync() ? Results.Ok(new { status = "ok" }) : Results.StatusCode(503)).AllowAnonymous();
 app.MapAuth();
 app.MapAudit();
+app.MapMaintenance();
 app.MapMasterData();
 app.MapProducts();
 app.MapInventory();

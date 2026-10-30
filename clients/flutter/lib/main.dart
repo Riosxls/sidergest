@@ -24,8 +24,9 @@ class EbtApp extends StatelessWidget {
       builder: (_, _) => MaterialApp(
         title: 'SiderGest',
         debugShowCheckedModeBanner: false,
-        theme: appTheme(Brightness.light),
-        darkTheme: appTheme(Brightness.dark),
+        theme: appTheme(Brightness.light, comfortable: session.comfortable),
+        darkTheme: appTheme(Brightness.dark, comfortable: session.comfortable),
+        builder: (context, child) => MediaQuery.withClampedTextScaling(minScaleFactor: session.textScale, maxScaleFactor: session.textScale, child: child!),
         themeMode: session.themeMode,
         locale: const Locale('pt', 'BR'),
         supportedLocales: const [Locale('pt', 'BR')],
@@ -36,11 +37,11 @@ class EbtApp extends StatelessWidget {
   }
 }
 
-ThemeData appTheme(Brightness brightness) {
+ThemeData appTheme(Brightness brightness, {bool comfortable = false}) {
   final cs = ColorScheme.fromSeed(seedColor: const Color(0xFF1F5F99), brightness: brightness);
   return ThemeData(
     colorScheme: cs,
-    visualDensity: VisualDensity.compact,
+    visualDensity: comfortable ? VisualDensity.standard : VisualDensity.compact,
     cardTheme: CardThemeData(
       color: cs.surfaceContainerHigh,
       elevation: 0,

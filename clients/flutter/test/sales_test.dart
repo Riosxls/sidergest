@@ -31,8 +31,12 @@ class SalesFake {
   bool ready = false;
   String deliveryStatus = 'Planned';
   String? requestFileName;
+  Map<String, dynamic>? credit;
+  num listPrice = 100;
+  String? rejectionNote;
 
   List<Map<String, dynamic>> history(String action) => [
+    if (rejectionNote != null) {'id': 3, 'action': 'approval-rejected', 'fromStatus': 'PendingApproval', 'toStatus': 'Draft', 'note': rejectionNote, 'user': 'gerente', 'at': '2026-10-27T12:00:00Z'},
     {'id': 2, 'action': action, 'fromStatus': 'Draft', 'toStatus': 'Sent', 'note': null, 'user': 'ana', 'at': '2026-10-26T12:00:00Z'},
     {'id': 1, 'action': 'created', 'fromStatus': null, 'toStatus': 'Draft', 'note': null, 'user': 'ana', 'at': '2026-10-25T12:00:00Z'},
   ];
@@ -259,6 +263,14 @@ class SalesFake {
       return json({'maxDiscountPercent': 5, 'defaultValidityDays': 15, 'minimumOrderValue': 0, 'shippingLocationId': null, 'defaultConditions': null});
     }
     if (p == '/api/sales/quotes/5' && m == 'GET') return json(quote());
+    if (p == '/api/sales/quotes/5/credit') return json(credit ?? {'limit': null, 'open': 0, 'thisOrder': 11400, 'exceeded': false});
+    if (p == '/api/sales/price') return json({'productId': 7, 'unitPrice': listPrice});
+    if (p == '/api/sales/quotes/5/decline') {
+      quoteStatus = 'Rejected';
+      return json(quote());
+    }
+    if (p == '/api/sales/quotes/5/duplicate') return json({...quote(), 'id': 6, 'reference': 'PROP 32', 'status': 'Draft'}, 201);
+    if (p == '/api/sales/quotes/6' && m == 'GET') return json({...quote(), 'id': 6, 'reference': 'PROP 32', 'status': 'Draft'});
     if (p == '/api/sales/quotes/5/send') {
       quoteStatus = needsApproval && quoteStatus == 'Draft' ? 'PendingApproval' : 'Sent';
       return json(quote());
@@ -477,6 +489,61 @@ void main() {
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['lotNumber'], 'L-77');
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['invoicedValue'], 420.5);
     expect(find.byKey(const ValueKey('delivery-confirm')), findsOneWidget);
+  });
+
+  testWidgets('credit warning shows on an open quote when the limit is exceeded', (tester) async {
+    final fake = SalesFake()..credit = {'limit': 5000, 'open': 4000, 'thisOrder': 11400, 'exceeded': true};
+    await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+    expect(find.byKey(const ValueKey('quote-credit-banner')), findsOneWidget);
+    expect(find.textContaining('só sai com liberação do gerente'), findsOneWidget);
+  });
+
+  testWidgets('no credit warning while the limit holds', (tester) async {
+    await pumpScreen(tester, SalesFake(), (s) => QuoteScreen(session: s, id: 5));
+    expect(find.byKey(const ValueKey('quote-credit-banner')), findsNothing);
+  });
+
+  testWidgets('a draft returned by the manager shows why', (tester) async {
+    final fake = SalesFake()..rejectionNote = 'Desconto alto demais para este volume';
+    await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+    expect(find.textContaining('O gerente recusou o desconto: Desconto alto demais para este volume'), findsOneWidget);
+  });
+
+  testWidgets('customer decline asks for the main reason before posting', (tester) async {
+    final fake = SalesFake()..quoteStatus = 'Sent';
+    await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+    await tester.tap(find.byKey(const ValueKey('quote-decline')));
+    await tester.pumpAndSettle();
+    expect(find.text('Cliente recusou PROP 31'), findsOneWidget);
+    expect(find.textContaining('Motivo principal'), findsOneWidget);
+    expect(fake.log.where((r) => r.url.path == '/api/sales/quotes/5/decline'), isEmpty);
+  });
+
+  testWidgets('duplicate from the menu posts the copy and opens it', (tester) async {
+    final fake = SalesFake();
+    await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+    await tester.tap(find.byKey(const ValueKey('quote-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Duplicar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Duplicar PROP 31'), findsOneWidget);
+  });
+
+  testWidgets('editor warns about a discount above the limit before the quote is sent', (tester) async {
+    final fake = SalesFake();
+    final quote = fake.quote();
+    (quote['lines'] as List).first['unitPrice'] = 90; // 10% under the 100 list price, limit is 5%
+    await pumpScreen(tester, fake, (s) => QuoteEditorScreen(session: s, quote: quote));
+    expect(find.byKey(const ValueKey('quote-approval-banner')), findsOneWidget);
+    expect(find.textContaining('limite 5%'), findsOneWidget);
+    expect(find.text('Adicionar item'), findsOneWidget);
+    expect(find.textContaining('ICMS'), findsWidgets);
+  });
+
+  testWidgets('editor shows no warning when the price matches the list', (tester) async {
+    final fake = SalesFake();
+    await pumpScreen(tester, fake, (s) => QuoteEditorScreen(session: s, quote: fake.quote()));
+    expect(find.byKey(const ValueKey('quote-approval-banner')), findsNothing);
   });
 
   testWidgets('reader sees the pipeline without actions', (tester) async {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api.dart';
 import '../entities.dart';
 import '../reports/report_doc.dart';
 import '../session.dart';
@@ -230,7 +231,7 @@ class _MaterialConsumptionScreenState extends State<MaterialConsumptionScreen> {
         });
       }
     } catch (e) {
-      if (mounted && r == _request) setState(() => _error = '$e');
+      if (mounted && r == _request) setState(() => _error = friendlyError(e));
     } finally {
       if (mounted && r == _request) setState(() => _loading = false);
     }
@@ -385,7 +386,7 @@ class _BillingSummaryScreenState extends State<BillingSummaryScreen> {
         });
       }
     } catch (e) {
-      if (mounted && r == _request) setState(() => _error = '$e');
+      if (mounted && r == _request) setState(() => _error = friendlyError(e));
     } finally {
       if (mounted && r == _request) setState(() => _loading = false);
     }

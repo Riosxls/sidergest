@@ -32,7 +32,11 @@ public sealed record DeliveryInput(DateOnly PlannedDate, int? AddressId = null, 
 
 public sealed record ShipInput(DateOnly Date, string? InvoiceNumber = null, string? Carrier = null, string? VehiclePlate = null, decimal? GrossWeightKg = null, string? Cfop = null, decimal? Freight = null, string? LotNumber = null, decimal? InvoicedValue = null);
 
-public sealed record QuoteTotals(decimal Products, decimal Ipi, decimal Total, decimal MaxDiscountPercent);
+/// <param name="OffListLines">Lines with no list price to measure a discount against (price typed by hand for a product outside the price list).</param>
+/// <param name="Icms">ICMS estimate on top of products + IPI, as the editor shows it; <paramref name="Total"/> stays products + IPI.</param>
+public sealed record QuoteTotals(decimal Products, decimal Ipi, decimal Total, decimal MaxDiscountPercent, int OffListLines = 0, decimal Icms = 0m);
+
+public sealed record DuplicateInput(int? CustomerId = null);
 
 public sealed record CreditCheck(decimal? Limit, decimal Open, decimal ThisOrder, bool Exceeded);
 

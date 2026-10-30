@@ -277,7 +277,7 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
         _error = null;
       });
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     }
   }
 

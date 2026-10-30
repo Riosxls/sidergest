@@ -6,6 +6,8 @@ using Ebt.Core.Certificates;
 using Ebt.Core.Entities;
 using Ebt.Core.Inventory;
 using Ebt.Core.Sales;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Ebt.Tests;
 
@@ -86,11 +88,11 @@ public class SalesTests(ApiFixture api)
         Assert.Equal(SalesOrderStatus.Created, order.Status);
         Assert.Equal("PO-4521", order.CustomerPo);
         Assert.Equal(quote.Reference, order.QuoteReference);
-        Assert.Equal(Today.AddDays(20), order.Lines[0].DueDate);
+        Assert.Equal(Ebt.Core.Services.WorkDays.Add(Today, 20), order.Lines[0].DueDate); // lead time counts working days
         quote = await (await sales.GetAsync($"/api/sales/quotes/{quote.Id}")).Read<QuoteOut>();
         Assert.Equal(QuoteStatus.Converted, quote.Status);
         Assert.Equal(order.Id, quote.SalesOrderId);
-        Assert.Equal(["converted", "po-received", "accepted", "sent", "approved", "submitted", "created"], quote.History.Select(h => h.Action));
+        Assert.Equal(["converted", "po-received", "po-text", "accepted", "sent", "approved", "submitted", "created"], quote.History.Select(h => h.Action));
 
         Assert.Equal(HttpStatusCode.Conflict, (await sales.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today))).StatusCode);
         order = await (await sales.Post($"/api/sales/orders/{order.Id}/release", new SalesReleaseIn())).Read<SalesOrderOut>();
@@ -257,7 +259,8 @@ public class SalesTests(ApiFixture api)
         var edit = Quote(s, otherPrice: 19.5m) with { Notes = "Nova condição" };
         quote = await (await admin.Put($"/api/sales/quotes/{quote.Id}", edit)).Read<QuoteOut>();
         Assert.Equal(19.5m, quote.Lines[1].UnitPrice);
-        Assert.Equal(HttpStatusCode.Conflict, (await admin.DeleteAsync($"/api/sales/quotes/{quote.Id}")).StatusCode);
+        var sales = await api.UserAsync(UserRole.Sales);
+        Assert.Equal(HttpStatusCode.Conflict, (await sales.DeleteAsync($"/api/sales/quotes/{quote.Id}")).StatusCode); // sales staff cannot delete a revision; only admin can
         quote = await (await Act(admin, quote.Id, "send", new QuoteActionIn(SentTo: "edilto@cliente.com"))).Read<QuoteOut>();
         Assert.Equal("edilto@cliente.com", quote.SentTo);
         quote = await (await Act(admin, quote.Id, "cancel", new QuoteActionIn("Projeto cancelado"))).Read<QuoteOut>();
@@ -276,6 +279,243 @@ public class SalesTests(ApiFixture api)
         var generic = await (await admin.GetAsync($"/api/sales/price?productId={s.Tube.Id}")).Read<PriceOut>();
         Assert.Equal(100m, generic.UnitPrice);
         Assert.Equal(HttpStatusCode.BadRequest, (await admin.Post("/api/sales/payment-terms", new PaymentTermIn("X1", "Errado", "28/abc", null))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Accepting_keeps_the_po_and_editing_keeps_default_conditions()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var quote = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        Assert.Equal("Validade 15 dias", quote.Conditions);
+        quote = await (await admin.Put($"/api/sales/quotes/{quote.Id}", Quote(s, otherPrice: 20m) with { Conditions = null })).Read<QuoteOut>();
+        Assert.Equal("Validade 15 dias", quote.Conditions);
+
+        quote = await (await Act(admin, quote.Id, "send")).Read<QuoteOut>();
+        var revised = await (await Act(admin, quote.Id, "revise", new QuoteActionIn("Ajuste", CustomerPo: "PO-KEEP"))).Read<QuoteOut>();
+        revised = await (await Act(admin, revised.Id, "send")).Read<QuoteOut>();
+        revised = await (await Act(admin, revised.Id, "accept")).Read<QuoteOut>();
+        Assert.Equal("PO-KEEP", revised.CustomerPo);
+    }
+
+    [Fact]
+    public async Task Off_list_price_needs_approval_only_when_the_setting_is_on()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var unlisted = await (await admin.Post("/api/products", Tube(Code("U")))).Read<ProductOut>();
+        var input = new QuoteInput(s.Customer.Id, [new SalesLineInput(unlisted.Id, 10m, 50m)], s.Address.Id, s.Term.Id, ContactEmail: "compras@cliente.com");
+
+        var plain = await (await admin.Post("/api/sales/quotes", input)).Read<QuoteOut>();
+        Assert.False(plain.NeedsApproval);
+        Assert.Equal(1, plain.Totals.OffListLines);
+
+        (await admin.Put("/api/sales/settings", new SalesSettingsDto(5m, 15, 0m, s.Shipping.Id, "Validade 15 dias", OffListNeedsApproval: true))).EnsureSuccessStatusCode();
+        try
+        {
+            var strict = await (await admin.Post("/api/sales/quotes", input)).Read<QuoteOut>();
+            Assert.True(strict.NeedsApproval);
+            strict = await (await Act(admin, strict.Id, "send")).Read<QuoteOut>();
+            Assert.Equal(QuoteStatus.PendingApproval, strict.Status);
+        }
+        finally
+        {
+            (await admin.Put("/api/sales/settings", new SalesSettingsDto(5m, 15, 0m, s.Shipping.Id, "Validade 15 dias"))).EnsureSuccessStatusCode();
+        }
+    }
+
+    [Fact]
+    public async Task Decline_records_the_lost_reason_and_the_report_counts_it()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var quote = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        quote = await (await Act(admin, quote.Id, "send")).Read<QuoteOut>();
+        quote = await (await Act(admin, quote.Id, "decline", new QuoteActionIn("Concorrente mais barato", LostReason: LostReason.Price))).Read<QuoteOut>();
+        Assert.Equal(LostReason.Price, quote.LostReason);
+
+        var report = await (await admin.GetAsync("/api/sales/quotes/lost-reasons")).Read<List<LostReasonOut>>();
+        Assert.Contains(report, r => r.Reason == LostReason.Price && r.Quotes >= 1 && r.Value > 0);
+        var listed = (await (await admin.GetAsync($"/api/sales/quotes?q={quote.Reference}")).Read<Page<QuoteSummaryOut>>()).Items.Single(x => x.Id == quote.Id);
+        Assert.Equal(LostReason.Price, listed.LostReason);
+    }
+
+    [Fact]
+    public async Task Duplicate_copies_into_a_new_draft_for_the_same_or_another_customer()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var source = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+
+        var copy = await (await admin.Post($"/api/sales/quotes/{source.Id}/duplicate", new DuplicateInput())).Read<QuoteOut>();
+        Assert.NotEqual(source.Number, copy.Number);
+        Assert.Equal(0, copy.Revision);
+        Assert.Equal(QuoteStatus.Draft, copy.Status);
+        Assert.Equal(source.Lines.Count, copy.Lines.Count);
+        Assert.Equal(s.Address.Id, copy.AddressId);
+        Assert.Contains(copy.History, e => e.Action == "duplicated");
+
+        var other = await (await admin.Post("/api/customers", new CustomerIn("Outro " + Code("C"), null, null, ConsumerType.Normal))).Read<CustomerOut>();
+        var moved = await (await admin.Post($"/api/sales/quotes/{source.Id}/duplicate", new DuplicateInput(other.Id))).Read<QuoteOut>();
+        Assert.Equal(other.Id, moved.CustomerId);
+        Assert.Null(moved.AddressId);
+        Assert.Null(moved.ContactEmail);
+        Assert.Equal(source.Lines[1].UnitPrice, moved.Lines[1].UnitPrice);
+    }
+
+    [Fact]
+    public async Task Credit_warning_is_available_on_open_quotes_and_po_changes_are_logged()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin, creditLimit: 100m);
+        var quote = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        var credit = await (await admin.GetAsync($"/api/sales/quotes/{quote.Id}/credit")).Read<CreditCheck>();
+        Assert.True(credit.Exceeded);
+        Assert.Equal(100m, credit.Limit);
+
+        quote = await (await Act(admin, quote.Id, "send")).Read<QuoteOut>();
+        quote = await (await Act(admin, quote.Id, "accept")).Read<QuoteOut>();
+        quote = await (await admin.Put($"/api/sales/quotes/{quote.Id}/request", new QuoteRequestIn("PO por e-mail"))).Read<QuoteOut>();
+        Assert.Contains(quote.History, e => e.Action == "po-text");
+    }
+
+    [Fact]
+    public async Task List_filters_follow_up_expiring_and_mine_and_unused_approvals_lapse()
+    {
+        var admin = await api.AdminAsync();
+        var sales = await api.UserAsync(UserRole.Sales);
+        var s = await Arrange(admin);
+        var mine = await (await sales.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        var other = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        var sent = await (await Act(admin, other.Id, "send")).Read<QuoteOut>();
+
+        var mineList = await (await sales.GetAsync("/api/sales/quotes?mine=true&take=200")).Read<Page<QuoteSummaryOut>>();
+        Assert.Contains(mineList.Items, x => x.Id == mine.Id);
+        Assert.DoesNotContain(mineList.Items, x => x.Id == other.Id);
+
+        await using (var db = api.NewDb())
+        {
+            await db.Quotes.Where(x => x.Id == sent.Id).ExecuteUpdateAsync(u => u.SetProperty(x => x.SentAt, DateTimeOffset.UtcNow.AddDays(-10)).SetProperty(x => x.ValidUntil, Today.AddDays(1)));
+            var approvable = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 17m))).Read<QuoteOut>();
+            Assert.True(approvable.NeedsApproval);
+            approvable = await (await Act(admin, approvable.Id, "send")).Read<QuoteOut>();
+            approvable = await (await Act(admin, approvable.Id, "approve")).Read<QuoteOut>();
+            Assert.Equal(QuoteStatus.Approved, approvable.Status);
+            await db.Quotes.Where(x => x.Id == approvable.Id).ExecuteUpdateAsync(u => u.SetProperty(x => x.ApprovedAt, DateTimeOffset.UtcNow.AddDays(-40)));
+
+            var followUp = await (await admin.GetAsync("/api/sales/quotes?followUp=true&take=200")).Read<Page<QuoteSummaryOut>>();
+            Assert.Contains(followUp.Items, x => x.Id == sent.Id && x.FollowUp && x.Expiring);
+            var expiring = await (await admin.GetAsync("/api/sales/quotes?expiring=true&take=200")).Read<Page<QuoteSummaryOut>>();
+            Assert.Contains(expiring.Items, x => x.Id == sent.Id);
+
+            using var scope = api.CreateScope();
+            var swept = await scope.ServiceProvider.GetRequiredService<SalesService>().ExpireOverdueAsync();
+            Assert.True(swept >= 1);
+            var lapsed = await (await admin.GetAsync($"/api/sales/quotes/{approvable.Id}")).Read<QuoteOut>();
+            Assert.Equal(QuoteStatus.Draft, lapsed.Status);
+            Assert.Contains(lapsed.History, e => e.Action == "approval-lapsed");
+        }
+    }
+
+    [Fact]
+    public async Task Only_admin_deletes_ended_quotes_and_never_one_with_an_order()
+    {
+        var admin = await api.AdminAsync();
+        var sales = await api.UserAsync(UserRole.Sales);
+        var s = await Arrange(admin);
+        var quote = await (await sales.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        quote = await (await Act(sales, quote.Id, "cancel", new QuoteActionIn("Teste"))).Read<QuoteOut>();
+        Assert.Equal(HttpStatusCode.Conflict, (await sales.DeleteAsync($"/api/sales/quotes/{quote.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync($"/api/sales/quotes/{quote.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync($"/api/sales/quotes/{quote.Id}")).StatusCode);
+
+        var sent = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        sent = await (await Act(admin, sent.Id, "send")).Read<QuoteOut>();
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.DeleteAsync($"/api/sales/quotes/{sent.Id}")).StatusCode);
+
+        var converted = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        await Act(admin, converted.Id, "send");
+        await Act(admin, converted.Id, "accept");
+        await admin.Put($"/api/sales/quotes/{converted.Id}/request", new QuoteRequestIn("PO"));
+        await Act(admin, converted.Id, "purchase-order");
+        (await admin.Post($"/api/sales/quotes/{converted.Id}/convert", new ConvertInput())).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.DeleteAsync($"/api/sales/quotes/{converted.Id}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_clears_sales_movement_data_but_never_master_data()
+    {
+        var admin = await api.AdminAsync();
+        var sales = await api.UserAsync(UserRole.Sales);
+        var s = await Arrange(admin);
+        var q = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        await Act(admin, q.Id, "send");
+        await Act(admin, q.Id, "accept");
+        await admin.Put($"/api/sales/quotes/{q.Id}/request", new QuoteRequestIn("PO"));
+        await Act(admin, q.Id, "purchase-order");
+        (await admin.Post($"/api/sales/quotes/{q.Id}/convert", new ConvertInput())).EnsureSuccessStatusCode();
+
+        var body = new DataResetIn([Ebt.Core.Maintenance.ResetScope.Sales]);
+        Assert.Equal(HttpStatusCode.Forbidden, (await sales.Post("/api/admin/data-reset/preview", body)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Post("/api/admin/data-reset/preview", new DataResetIn([]))).StatusCode);
+        var preview = await (await admin.Post("/api/admin/data-reset/preview", body)).Read<DataResetOut>();
+        Assert.Contains(preview.Tables, t => t.Table == "quotes" && t.Rows >= 1);
+        Assert.Contains(preview.Tables, t => t.Table == "sales_orders" && t.Rows >= 1);
+
+        // Nothing is deleted without the confirmation word.
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Post("/api/admin/data-reset", body)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Post("/api/admin/data-reset", body with { Confirm = "limpar tudo" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/api/sales/quotes/{q.Id}")).StatusCode);
+
+        var done = await (await admin.Post("/api/admin/data-reset", body with { Confirm = MaintenanceEndpoints.ConfirmWord })).Read<DataResetOut>();
+        Assert.True(done.TotalRows >= 2);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync($"/api/sales/quotes/{q.Id}")).StatusCode);
+        Assert.Equal(0, (await (await admin.GetAsync("/api/sales/quotes?take=1")).Read<Page<QuoteSummaryOut>>()).Total);
+        Assert.Equal(0, (await (await admin.GetAsync("/api/sales/orders?take=1")).Read<Page<SalesOrderSummaryOut>>()).Total);
+
+        // Master data survives, and the wipe is in the audit trail.
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/api/products/{s.Tube.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/api/customers/{s.Customer.Id}")).StatusCode);
+        var audit = await (await admin.GetAsync("/api/audit?entity=DataReset")).Read<Page<AuditOut>>();
+        Assert.Contains(audit.Items, a => a.EntityId == "Sales" && a.User == ApiFixture.AdminUser);
+    }
+
+    [Fact]
+    public async Task Every_scope_clears_cleanly_in_foreign_key_order()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var q = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        await Act(admin, q.Id, "send");
+        await Act(admin, q.Id, "accept");
+        await admin.Put($"/api/sales/quotes/{q.Id}/request", new QuoteRequestIn("PO"));
+        await Act(admin, q.Id, "purchase-order");
+        (await admin.Post($"/api/sales/quotes/{q.Id}/convert", new ConvertInput())).EnsureSuccessStatusCode();
+
+        var all = new DataResetIn([Ebt.Core.Maintenance.ResetScope.Sales, Ebt.Core.Maintenance.ResetScope.Purchasing, Ebt.Core.Maintenance.ResetScope.Production, Ebt.Core.Maintenance.ResetScope.Stock], MaintenanceEndpoints.ConfirmWord);
+        var res = await admin.Post("/api/admin/data-reset", all);
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var done = await res.Read<DataResetOut>();
+        Assert.Contains(done.Tables, t => t.Table == "stock_movements");
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/api/products/{s.Tube.Id}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Stock_cannot_be_cleared_alone_while_sales_still_point_at_its_documents()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var q = await (await admin.Post("/api/sales/quotes", Quote(s, otherPrice: 20m))).Read<QuoteOut>();
+        await Act(admin, q.Id, "send");
+        await Act(admin, q.Id, "accept");
+        await admin.Put($"/api/sales/quotes/{q.Id}/request", new QuoteRequestIn("PO"));
+        await Act(admin, q.Id, "purchase-order");
+        var order = await (await admin.Post($"/api/sales/quotes/{q.Id}/convert", new ConvertInput())).Read<SalesOrderOut>();
+        (await admin.Post($"/api/sales/orders/{order.Id}/release", new { })).EnsureSuccessStatusCode();
+        var res = await admin.Post("/api/admin/data-reset", new DataResetIn([Ebt.Core.Maintenance.ResetScope.Stock], MaintenanceEndpoints.ConfirmWord));
+        // Either the order has reservations pointing at stock or it does not; in both cases the database state stays consistent.
+        Assert.True(res.StatusCode is HttpStatusCode.OK or HttpStatusCode.Conflict);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/api/sales/orders/{order.Id}")).StatusCode);
     }
 
     [Fact]

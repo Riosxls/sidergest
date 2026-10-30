@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../entities.dart';
@@ -36,9 +37,7 @@ const salesLineFields = [
   FieldSpec('productId', 'Produto', type: FieldType.lookup, required: true, lookup: LookupSpec('/api/products')),
   FieldSpec('quantity', 'Quantidade', type: FieldType.decimal, required: true),
   FieldSpec('unitPrice', 'Preço unitário (R\$)', type: FieldType.decimal, hint: 'Vazio = tabela de preços do cliente'),
-  FieldSpec('ipiPercent', 'IPI (%)', type: FieldType.decimal, hint: 'Vazio = tabela de preços'),
-  FieldSpec('icmsPercent', 'ICMS (%)', type: FieldType.decimal, hint: 'Vazio = tabela de preços'),
-  FieldSpec('leadTimeDays', 'Prazo de entrega (dias)', type: FieldType.integer, daysFor: 'deliveryDate'),
+  FieldSpec('leadTimeDays', 'Prazo de entrega (dias úteis)', type: FieldType.integer, daysFor: 'deliveryDate'),
   FieldSpec('deliveryDate', 'Data de entrega', type: FieldType.date, dateFor: 'leadTimeDays'),
   FieldSpec('description', 'Descrição', hint: 'Vazio = descrição do cliente ou do produto'),
 ];
@@ -108,7 +107,7 @@ final salesLineColumns = [
   ColumnSpec('Preço Unitário', (e) => e['unitPrice'] == null ? 'tabela' : fmtMoney(e['unitPrice']), numeric: true),
   ColumnSpec('IPI %', (e) => fmt(e['ipiPercent']), numeric: true),
   ColumnSpec('Valor estimado', (e) => e['unitPrice'] == null ? '' : fmtMoney(lineEstimate(e)), numeric: true),
-  ColumnSpec('Entrega', (e) => e['deliveryDate'] != null ? fmtDay(e['deliveryDate']) : (e['leadTimeDays'] != null ? '${e['leadTimeDays']} dias' : '')),
+  ColumnSpec('Entrega', (e) => e['deliveryDate'] != null ? fmtDay(e['deliveryDate']) : (e['leadTimeDays'] != null ? '${e['leadTimeDays']} dias úteis' : '')),
 ];
 
 num _n(Object? v) => v is num ? v : 0;
@@ -117,6 +116,30 @@ num _n(Object? v) => v is num ? v : 0;
 num lineEstimate(Map<String, dynamic> l) {
   final base = _n(l['quantity']) * _n(l['unitPrice']);
   return base + base * _n(l['ipiPercent']) / 100 + base * _n(l['icmsPercent']) / 100;
+}
+
+/// Products, IPI and ICMS of the lines that already have a price. The API total is products + IPI; the estimate adds ICMS on top.
+({num products, num ipi, num icms}) estimateParts(Iterable<Map<String, dynamic>> lines) {
+  num products = 0, ipi = 0, icms = 0;
+  for (final l in lines) {
+    final base = _n(l['quantity']) * _n(l['unitPrice']);
+    products += base;
+    ipi += base * _n(l['ipiPercent']) / 100;
+    icms += base * _n(l['icmsPercent']) / 100;
+  }
+  return (products: products, ipi: ipi, icms: icms);
+}
+
+/// Sales staff delete only a brand-new draft; an admin also clears drafts of any revision and quotes that ended without an order.
+bool canDeleteQuote(Session s, Object? status, int revision) =>
+    s.isAdmin ? const ['Draft', 'Cancelled', 'Rejected', 'Expired'].contains(status) : status == 'Draft' && revision == 0;
+
+/// Small alert text for a quote row/card: the most urgent thing the salesperson should know.
+String quoteAlert(Map<String, dynamic> e) {
+  if (e['status'] == 'PendingApproval' || e['needsApproval'] == true && e['status'] == 'Draft') return 'Acima do limite';
+  if (e['followUp'] == true) return 'Cobrar resposta';
+  if (e['expiring'] == true) return 'Vence em breve';
+  return '';
 }
 
 class QuotesScreen extends StatefulWidget {
@@ -139,9 +162,24 @@ Future<void> newQuote(BuildContext context, Session session, {VoidCallback? onSa
 class _QuotesScreenState extends State<QuotesScreen> {
   final _list = GlobalKey<RecordListState>();
   String? _status;
-  bool _open = false; // cancelled originals stay listed next to their revisions
+  bool _open = true; // cancelled originals stay listed next to their revisions; untick to see everything
+  bool _mine = false;
+  bool _followUp = false;
+  bool _expiring = false;
 
   static const _cancellable = ['Draft', 'PendingApproval', 'Approved', 'Sent', 'Accepted', 'PurchaseOrder', 'Rejected', 'Expired'];
+
+  Future<void> _duplicate(Map<String, dynamic> e) async {
+    final r = await runAction(
+      context,
+      () => widget.session.api.post('/api/sales/quotes/${e['id']}/duplicate', {}),
+      success: 'Cópia de ${e['reference']} criada',
+    );
+    if (r is! Map<String, dynamic> || !mounted) return;
+    _list.currentState?.reload();
+    await openQuote(context, widget.session, r['id'] as int);
+    _list.currentState?.reload();
+  }
 
   /// Quick cancel from the list: asks for the reason, no need to open the quote.
   Future<void> _cancel(Map<String, dynamic> e) async {
@@ -152,16 +190,52 @@ class _QuotesScreenState extends State<QuotesScreen> {
 
   Future<void> _new() => newQuote(context, widget.session, onSaved: () => _list.currentState?.reload());
 
+  Future<void> _delete(Map<String, dynamic> e) async {
+    final ok = await confirmStep(
+      context,
+      title: 'Excluir ${e['reference']}?',
+      message: 'O orçamento e o histórico dele somem de vez. Não dá para desfazer.',
+      confirmLabel: 'Excluir',
+      danger: true,
+      icon: Icons.delete_outline,
+    );
+    if (!ok || !mounted) return;
+    await runAction(context, () => widget.session.api.delete('/api/sales/quotes/${e['id']}'), success: '${e['reference']} excluído');
+    _list.currentState?.reload();
+  }
+
   @override
   Widget build(BuildContext context) => RecordList(
     key: _list,
+    filtersActive: _open || _status != null || _mine || _followUp || _expiring,
+    onClearFilters: () => setState(() {
+      _open = false;
+      _status = null;
+      _mine = false;
+      _followUp = false;
+      _expiring = false;
+    }),
     api: widget.session.api,
     path: '/api/sales/quotes',
-    query: {'status': _status, 'open': _open && _status == null ? true : null},
+    query: {
+      'status': _status,
+      'open': _open && _status == null ? true : null,
+      'mine': _mine ? true : null,
+      'followUp': _followUp ? true : null,
+      'expiring': _expiring ? true : null,
+    },
     searchHint: 'Orçamento, cliente ou referência do cliente',
     filters: [
       ChoiceFilter(label: 'Situação', value: _status, choices: quoteStatuses, onChanged: (v) => setState(() => _status = v)),
       FilterChip(label: const Text('Somente abertas'), selected: _open, onSelected: (v) => setState(() => _open = v)),
+      FilterChip(key: const ValueKey('filter-mine'), label: const Text('Meus orçamentos'), selected: _mine, onSelected: (v) => setState(() => _mine = v)),
+      FilterChip(
+        key: const ValueKey('filter-follow-up'),
+        label: const Text('Cobrar resposta'),
+        selected: _followUp,
+        onSelected: (v) => setState(() => _followUp = v),
+      ),
+      FilterChip(key: const ValueKey('filter-expiring'), label: const Text('Vencendo'), selected: _expiring, onSelected: (v) => setState(() => _expiring = v)),
     ],
     fab: widget.session.canSell
         ? FloatingActionButton.extended(heroTag: 'new-quote', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo orçamento'))
@@ -173,9 +247,16 @@ class _QuotesScreenState extends State<QuotesScreen> {
       moneyCol('Total', 'total'),
       dateCol('Validade', 'validUntil'),
       dateCol('Criada', 'createdAt'),
-      ColumnSpec('Desconto', (e) => e['needsApproval'] == true ? 'Acima do limite' : ''),
+      col('Criada por', 'createdBy'),
+      ColumnSpec('Alerta', quoteAlert),
     ],
-    rowActions: (e) => widget.session.canSell && _cancellable.contains(e['status']) ? [RowAction('Cancelar', Icons.block, () => _cancel(e))] : const [],
+    rowActions: (e) => widget.session.canSell
+        ? [
+            RowAction('Duplicar', Icons.copy, () => _duplicate(e)),
+            if (_cancellable.contains(e['status'])) RowAction('Cancelar', Icons.block, () => _cancel(e)),
+            if (canDeleteQuote(widget.session, e['status'], e['revision'] as int? ?? 0)) RowAction('Excluir', Icons.delete_outline, () => _delete(e)),
+          ]
+        : const [],
     rowColor: (ctx, e) => e['status'] == 'PendingApproval' ? toneColors(ctx, Tone.warning).$1 : null,
     onTap: (e) async {
       await openQuote(context, widget.session, e['id'] as int);
@@ -231,9 +312,17 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
   String? _message;
   bool _busy = false;
   late final String _initial;
+  num? _maxDiscount;
+  bool _offListApproval = false;
+  final Map<Object, num?> _listPrices = {}; // productId -> list price for the chosen customer (null = no list price)
 
   String _signature() => jsonEncode([
-    _customerId, _addressId, _termId, _customTerm, _freight, _lines,
+    _customerId,
+    _addressId,
+    _termId,
+    _customTerm,
+    _freight,
+    _lines,
     for (final c in [_validity, _contact, _email, _ref, _conditions, _notes, _po]) c.text,
   ]);
 
@@ -244,6 +333,70 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     super.initState();
     _initial = _signature();
     if (_customerId != null) _loadAddresses(_customerId!, keep: true);
+    if (!widget.asOrder) {
+      api.get('/api/sales/settings').then((r) {
+        if (!mounted || r is! Map<String, dynamic>) return;
+        setState(() {
+          _maxDiscount = r['maxDiscountPercent'] as num?;
+          _offListApproval = r['offListNeedsApproval'] == true;
+        });
+      }, onError: (_) {});
+      _refreshListPrices();
+    }
+  }
+
+  /// Looks up the list price of every priced line's product for the chosen customer, to warn about discounts before the quote is sent.
+  Future<void> _refreshListPrices() async {
+    final customer = _customerId;
+    if (customer == null) return;
+    for (final id in {
+      for (final l in _lines)
+        if (l['unitPrice'] is num && l['productId'] != null) l['productId']!,
+    }) {
+      if (_listPrices.containsKey(id)) continue;
+      try {
+        final r = await api.get('/api/sales/price?productId=$id&customerId=$customer');
+        if (!mounted || _customerId != customer) return;
+        final price = r is Map<String, dynamic> ? r['unitPrice'] : null;
+        setState(() => _listPrices[id] = price is num ? price : null);
+      } catch (_) {
+        // A failed lookup only hides the warning; the server still enforces the rule when the quote is sent.
+      }
+    }
+  }
+
+  /// Highest discount against the list price and how many typed prices have no list price to compare with.
+  ({num discount, int offList}) _pricing() {
+    num best = 0;
+    var off = 0;
+    for (final l in _lines) {
+      final price = l['unitPrice'];
+      final id = l['productId'];
+      if (price is! num || id == null || !_listPrices.containsKey(id)) continue;
+      final list = _listPrices[id];
+      if (list == null || list <= 0) {
+        off++;
+      } else {
+        best = best < (1 - price / list) * 100 ? (1 - price / list) * 100 : best;
+      }
+    }
+    return (discount: best, offList: off);
+  }
+
+  Widget _approvalBanner() {
+    final limit = _maxDiscount;
+    if (widget.asOrder || limit == null) return const SizedBox.shrink();
+    final p = _pricing();
+    final String? message = p.discount > limit
+        ? 'O maior desconto sobre a tabela é ${fmt(double.parse(p.discount.toStringAsFixed(2)))}% (limite ${fmt(limit)}%). O envio vai para a aprovação do gerente comercial.'
+        : _offListApproval && p.offList > 0
+        ? '${p.offList} ${p.offList == 1 ? 'item tem' : 'itens têm'} preço digitado sem preço de tabela para comparar. O envio vai para a aprovação do gerente comercial.'
+        : null;
+    if (message == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: NextStepCard(key: const ValueKey('quote-approval-banner'), title: 'Vai precisar de aprovação', message: message, tone: Tone.warning),
+    );
   }
 
   @override
@@ -338,216 +491,226 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     final wide = MediaQuery.sizeOf(context).width >= 700;
     final w = wide ? 300.0 : double.infinity;
     final estimate = _lines.fold<num>(0, (a, l) => a + lineEstimate(l));
+    final parts = estimateParts(_lines);
     return DiscardGuard(
       isDirty: () => _signature() != _initial,
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(widget.quote != null ? 'Editar ${widget.quote!['reference']}' : (widget.asOrder ? 'Novo pedido de venda' : 'Novo orçamento comercial')),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton.icon(
-              key: const ValueKey('quote-save'),
-              onPressed: _busy ? null : _save,
-              icon: const Icon(Icons.check),
-              label: const Text('Salvar'),
+        appBar: AppBar(
+          title: Text(widget.quote != null ? 'Editar ${widget.quote!['reference']}' : (widget.asOrder ? 'Novo pedido de venda' : 'Novo orçamento comercial')),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: FilledButton.icon(
+                key: const ValueKey('quote-save'),
+                onPressed: _busy ? null : _save,
+                icon: const Icon(Icons.check),
+                label: const Text('Salvar'),
+              ),
             ),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Section(
-            title: 'Cliente e condições',
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                SizedBox(
-                  width: w,
-                  child: LookupField(
-                    key: const ValueKey('quote-customer'),
-                    api: api,
-                    spec: const LookupSpec('/api/customers'),
-                    label: 'Cliente *',
-                    value: _customerId,
-                    initialDisplay: widget.quote?['customerName'] as String?,
-                    enabled: widget.quote == null || !widget.asOrder, // an order keeps its customer; a draft quote can change it
-                    onChanged: (id, _) {
-                      setState(() {
-                        _customerId = id;
-                        _addresses = [];
-                        _addressId = null;
-                      });
-                      if (id != null) {
-                        _loadAddresses(id);
-                        _applyDefaultTerm(id);
-                      }
-                    },
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Section(
+              title: 'Cliente e condições',
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: w,
+                    child: LookupField(
+                      key: const ValueKey('quote-customer'),
+                      api: api,
+                      spec: const LookupSpec('/api/customers'),
+                      label: 'Cliente *',
+                      value: _customerId,
+                      initialDisplay: widget.quote?['customerName'] as String?,
+                      enabled: widget.quote == null || !widget.asOrder, // an order keeps its customer; a draft quote can change it
+                      onChanged: (id, _) {
+                        setState(() {
+                          _customerId = id;
+                          _addresses = [];
+                          _addressId = null;
+                          _listPrices.clear();
+                        });
+                        if (id != null) {
+                          _loadAddresses(id);
+                          _applyDefaultTerm(id);
+                          if (!widget.asOrder) _refreshListPrices();
+                        }
+                      },
+                    ),
                   ),
-                ),
-                SizedBox(
-                  width: wide ? 460 : w,
-                  child: DropdownButtonFormField<int?>(
-                    initialValue: _addresses.any((a) => a['id'] == _addressId) ? _addressId : null,
-                    key: ValueKey('addr-${_addresses.length}-$_addressId'),
-                    isExpanded: true,
-                    decoration: _dec('Local de entrega', hint: _customerId == null ? 'Escolha o cliente' : 'Sem endereço cadastrado'),
-                    items: [
-                      for (final a in _addresses)
-                        DropdownMenuItem(
-                          value: a['id'] as int,
-                          child: Text(
-                            [a['street'], a['number'], a['city'], a['uf']].where((x) => x != null && '$x'.isNotEmpty).join(', '),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
-                    onChanged: (v) => setState(() => _addressId = v),
-                  ),
-                ),
-                SizedBox(
-                  width: w,
-                  child: _customTerm != null && _termId == null
-                      ? InputDecorator(
-                          key: const ValueKey('quote-custom-term'),
-                          decoration: InputDecoration(
-                            labelText: 'Prazo * (personalizado)',
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                            suffixIcon: IconButton(
-                              tooltip: 'Escolher outro prazo',
-                              icon: const Icon(Icons.clear),
-                              onPressed: () => setState(() => _customTerm = null),
+                  SizedBox(
+                    width: wide ? 460 : w,
+                    child: DropdownButtonFormField<int?>(
+                      initialValue: _addresses.any((a) => a['id'] == _addressId) ? _addressId : null,
+                      key: ValueKey('addr-${_addresses.length}-$_addressId'),
+                      isExpanded: true,
+                      decoration: _dec('Local de entrega', hint: _customerId == null ? 'Escolha o cliente' : 'Sem endereço cadastrado'),
+                      items: [
+                        for (final a in _addresses)
+                          DropdownMenuItem(
+                            value: a['id'] as int,
+                            child: Text(
+                              [a['street'], a['number'], a['city'], a['uf']].where((x) => x != null && '$x'.isNotEmpty).join(', '),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          child: Text(_customTerm!, overflow: TextOverflow.ellipsis),
-                        )
-                      : LookupField(
-                          key: ValueKey('quote-term-$_termId'),
-                          api: api,
-                          spec: const LookupSpec('/api/sales/payment-terms'),
-                          label: 'Prazo *',
-                          value: _termId,
-                          initialDisplay: _termName ?? widget.quote?['paymentTermName'] as String?,
-                          onChanged: (id, _) => setState(() {
-                            _termId = id;
-                            _termName = null;
-                            if (id != null) _customTerm = null;
-                          }),
-                          onCustom: (text) => setState(() {
-                            _termId = null;
-                            _customTerm = text;
-                          }),
-                        ),
-                ),
-                SizedBox(
-                  width: w,
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _freight,
-                    isExpanded: true,
-                    decoration: _dec('Frete'),
-                    items: [for (final e in freightTerms.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-                    onChanged: (v) => setState(() => _freight = v ?? 'Cif'),
+                      ],
+                      onChanged: (v) => setState(() => _addressId = v),
+                    ),
                   ),
-                ),
-                if (widget.asOrder) ...[
                   SizedBox(
                     width: w,
-                    child: TextField(controller: _po, decoration: _dec('Pedido de compra do cliente')),
+                    child: _customTerm != null && _termId == null
+                        ? InputDecorator(
+                            key: const ValueKey('quote-custom-term'),
+                            decoration: InputDecoration(
+                              labelText: 'Prazo * (personalizado)',
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                              suffixIcon: IconButton(
+                                tooltip: 'Escolher outro prazo',
+                                icon: const Icon(Icons.clear),
+                                onPressed: () => setState(() => _customTerm = null),
+                              ),
+                            ),
+                            child: Text(_customTerm!, overflow: TextOverflow.ellipsis),
+                          )
+                        : LookupField(
+                            key: ValueKey('quote-term-$_termId'),
+                            api: api,
+                            spec: const LookupSpec('/api/sales/payment-terms'),
+                            label: 'Prazo *',
+                            value: _termId,
+                            initialDisplay: _termName ?? widget.quote?['paymentTermName'] as String?,
+                            onChanged: (id, _) => setState(() {
+                              _termId = id;
+                              _termName = null;
+                              if (id != null) _customTerm = null;
+                            }),
+                            onCustom: (text) => setState(() {
+                              _termId = null;
+                              _customTerm = text;
+                            }),
+                          ),
                   ),
                   SizedBox(
                     width: w,
                     child: DropdownButtonFormField<String>(
-                      key: const ValueKey('order-bill-to'),
-                      initialValue: _billTo,
-                      decoration: _dec('Faturar para'),
-                      items: [for (final e in billToLabels.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-                      onChanged: (v) => setState(() => _billTo = v ?? 'Ebt'),
+                      initialValue: _freight,
+                      isExpanded: true,
+                      decoration: _dec('Frete'),
+                      items: [for (final e in freightTerms.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+                      onChanged: (v) => setState(() => _freight = v ?? 'Cif'),
                     ),
                   ),
-                  SizedBox(
-                    width: w,
-                    child: DropdownButtonFormField<String>(
-                      key: const ValueKey('order-origin'),
-                      initialValue: _origin,
-                      decoration: _dec('Origem do pedido'),
-                      items: [for (final e in orderOrigins.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-                      onChanged: (v) => setState(() => _origin = v ?? 'Email'),
+                  if (widget.asOrder) ...[
+                    SizedBox(
+                      width: w,
+                      child: TextField(controller: _po, decoration: _dec('Pedido de compra do cliente')),
                     ),
-                  ),
-                  SizedBox(
-                    width: w,
-                    child: TextField(key: const ValueKey('order-salesperson'), controller: _salesperson, decoration: _dec('Responsável de vendas')),
-                  ),
-                ],
-                if (!widget.asOrder) ...[
-                  SizedBox(
-                    width: wide ? 140 : w,
-                    child: TextField(
-                      controller: _validity,
-                      keyboardType: TextInputType.number,
-                      decoration: _dec('Validade (dias)', hint: 'padrão'),
+                    SizedBox(
+                      width: w,
+                      child: DropdownButtonFormField<String>(
+                        key: const ValueKey('order-bill-to'),
+                        initialValue: _billTo,
+                        decoration: _dec('Faturar para'),
+                        items: [for (final e in billToLabels.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+                        onChanged: (v) => setState(() => _billTo = v ?? 'Ebt'),
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: w,
-                    child: TextField(controller: _contact, decoration: _dec('Contato (A/C)')),
-                  ),
-                  SizedBox(
-                    width: w,
-                    child: TextField(key: const ValueKey('quote-email'), controller: _email, decoration: _dec('E-mail do contato')),
-                  ),
-                  SizedBox(
-                    width: w,
-                    child: TextField(
-                      controller: _ref,
-                      decoration: _dec('Referência do cliente', hint: 'nº da RFQ/cotação dele'),
+                    SizedBox(
+                      width: w,
+                      child: DropdownButtonFormField<String>(
+                        key: const ValueKey('order-origin'),
+                        initialValue: _origin,
+                        decoration: _dec('Origem do pedido'),
+                        items: [for (final e in orderOrigins.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+                        onChanged: (v) => setState(() => _origin = v ?? 'Email'),
+                      ),
                     ),
-                  ),
+                    SizedBox(
+                      width: w,
+                      child: TextField(key: const ValueKey('order-salesperson'), controller: _salesperson, decoration: _dec('Responsável de vendas')),
+                    ),
+                  ],
+                  if (!widget.asOrder) ...[
+                    SizedBox(
+                      width: wide ? 140 : w,
+                      child: TextField(
+                        controller: _validity,
+                        keyboardType: TextInputType.number,
+                        decoration: _dec('Validade (dias)', hint: 'padrão'),
+                      ),
+                    ),
+                    SizedBox(
+                      width: w,
+                      child: TextField(controller: _contact, decoration: _dec('Contato (A/C)')),
+                    ),
+                    SizedBox(
+                      width: w,
+                      child: TextField(key: const ValueKey('quote-email'), controller: _email, decoration: _dec('E-mail do contato')),
+                    ),
+                    SizedBox(
+                      width: w,
+                      child: TextField(
+                        controller: _ref,
+                        decoration: _dec('Referência do cliente', hint: 'nº da RFQ/cotação dele'),
+                      ),
+                    ),
+                    SizedBox(
+                      width: wide ? 612 : w,
+                      child: TextField(
+                        controller: _conditions,
+                        maxLines: 3,
+                        minLines: 1,
+                        decoration: _dec('Condições gerais', hint: 'Vazio = padrão dos parâmetros'),
+                      ),
+                    ),
+                  ],
                   SizedBox(
                     width: wide ? 612 : w,
-                    child: TextField(
-                      controller: _conditions,
-                      maxLines: 3,
-                      minLines: 1,
-                      decoration: _dec('Condições gerais', hint: 'Vazio = padrão dos parâmetros'),
-                    ),
+                    child: TextField(controller: _notes, maxLines: 3, minLines: 1, decoration: _dec('Observações')),
                   ),
                 ],
-                SizedBox(
-                  width: wide ? 612 : w,
-                  child: TextField(controller: _notes, maxLines: 3, minLines: 1, decoration: _dec('Observações')),
-                ),
-              ],
+              ),
             ),
-          ),
-          gap,
-          LinesEditor(
-            api: api,
-            title: 'Itens',
-            fields: widget.asOrder ? orderLineFields : salesLineFields,
-            newTitle: widget.asOrder ? 'Nova linha' : 'Criar orçamento',
-            addLabel: widget.asOrder ? 'Adicionar linha' : 'Criar orçamento',
-            addEnabled: widget.asOrder || (_customerId != null && (_termId != null || _customTerm != null)),
-            editTitle: widget.asOrder ? null : 'Editar orçamento',
-            lines: _lines,
-            onChanged: (l) => setState(() => _lines = l),
-            columns: widget.asOrder ? orderLineColumns : salesLineColumns,
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text(
-              'Estimativa (itens com preço informado, com IPI e ICMS): ${fmtMoney(estimate)}',
-              textAlign: TextAlign.right,
-              style: Theme.of(context).textTheme.titleSmall,
+            gap,
+            LinesEditor(
+              api: api,
+              title: 'Itens',
+              fields: widget.asOrder ? orderLineFields : salesLineFields,
+              newTitle: widget.asOrder ? 'Nova linha' : 'Novo item',
+              addLabel: widget.asOrder ? 'Adicionar linha' : 'Adicionar item',
+              addEnabled: widget.asOrder || (_customerId != null && (_termId != null || _customTerm != null)),
+              editTitle: widget.asOrder ? null : 'Editar item',
+              lines: _lines,
+              onChanged: (l) {
+                setState(() => _lines = l);
+                if (!widget.asOrder) _refreshListPrices();
+              },
+              columns: widget.asOrder ? orderLineColumns : salesLineColumns,
             ),
-          ),
-          if (_message != null) Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-        ],
+            _approvalBanner(),
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(
+                'Itens com preço informado: produtos ${fmtMoney(parts.products)} · IPI ${fmtMoney(parts.ipi)} · ICMS ${fmtMoney(parts.icms)} · estimativa com ICMS ${fmtMoney(estimate)}\n'
+                'O total nas listas e no PDF é produtos + IPI: ${fmtMoney(parts.products + parts.ipi)}',
+                key: const ValueKey('quote-estimate'),
+                textAlign: TextAlign.right,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            if (_message != null) Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
+        ),
       ),
-    ));
+    );
   }
 }
 
@@ -580,6 +743,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
     }, onError: (_) {});
   }
 
+  Map<String, dynamic>? _credit;
+
   Future<void> _load() async {
     try {
       final q = await api.get(base) as Map<String, dynamic>;
@@ -588,10 +753,41 @@ class _QuoteScreenState extends State<QuoteScreen> {
           _q = q;
           _error = null;
         });
+        _loadCredit(q);
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     }
+  }
+
+  /// Soft credit warning while the quote can still become an order; the hard check stays at "Gerar pedido de venda".
+  Future<void> _loadCredit(Map<String, dynamic> q) async {
+    if (!_openStatuses.contains(q['status'])) {
+      if (_credit != null) setState(() => _credit = null);
+      return;
+    }
+    try {
+      final c = await api.get('$base/credit');
+      if (mounted && c is Map<String, dynamic>) setState(() => _credit = c);
+    } catch (_) {}
+  }
+
+  static const _openStatuses = ['Draft', 'PendingApproval', 'Approved', 'Sent', 'Accepted', 'PurchaseOrder'];
+
+  Widget _creditBanner() {
+    final c = _credit;
+    if (c == null || c['exceeded'] != true) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: NextStepCard(
+        key: const ValueKey('quote-credit-banner'),
+        title: 'Limite de crédito do prazo',
+        message:
+            'Pedidos em aberto ${fmtMoney(c['open'])} + este orçamento ${fmtMoney(c['thisOrder'])} passam do limite de ${fmtMoney(c['limit'])} do prazo. '
+            'O pedido de venda só sai com liberação do gerente comercial.',
+        tone: Tone.warning,
+      ),
+    );
   }
 
   Future<void> _act(String action, {Map<String, dynamic> body = const {}, String? success}) async {
@@ -625,8 +821,74 @@ class _QuoteScreenState extends State<QuoteScreen> {
     );
     if (r != null && r['reference'] != null) {
       setState(() => _q = r);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Orçamento enviado · válida até ${fmtDay(r['validUntil'])}')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Orçamento registrado como enviado · válido até ${fmtDay(r['validUntil'])}. Ele ainda não saiu do sistema: abra o e-mail e anexe o PDF.',
+            ),
+            duration: const Duration(seconds: 20),
+            action: SnackBarAction(label: 'Abrir e-mail', onPressed: _mail),
+          ),
+        );
+      }
     }
+  }
+
+  /// Opens the user's mail program with the recipient, subject and text filled in. The PDF still has to be attached (print/share button).
+  Future<void> _mail() async {
+    final q = _q;
+    if (q == null) return;
+    final to = '${q['sentTo'] ?? q['contactEmail'] ?? ''}'.trim();
+    final subject = '${q['reference']} · EBT';
+    final body =
+        'Prezados,\n\nSegue o orçamento ${q['reference']}${q['validUntil'] == null ? '' : ', válido até ${fmtDay(q['validUntil'])}'}.\n\nAtenciosamente,';
+    final uri = Uri.parse(
+      'mailto:${to.contains('@') ? Uri.encodeComponent(to) : ''}?subject=${Uri.encodeComponent(subject)}&body=${Uri.encodeComponent(body)}',
+    );
+    var opened = false;
+    try {
+      opened = await launchUrl(uri);
+    } catch (_) {}
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum programa de e-mail configurado neste computador')));
+    }
+  }
+
+  /// Customer turned the quote down: the category feeds the lost-reasons report, the note stays in the history.
+  Future<void> _decline() async {
+    final r = await submitForm(
+      context,
+      api: api,
+      title: 'Cliente recusou ${_q!['reference']}',
+      fields: const [
+        FieldSpec('lostReason', 'Motivo principal', type: FieldType.choice, required: true, choices: lostReasons),
+        FieldSpec('note', 'Detalhes', required: true, hint: 'O que o cliente disse'),
+      ],
+      submit: (b) => api.post('$base/decline', b),
+    );
+    if (r != null && r['reference'] != null) {
+      setState(() => _q = r);
+      _loadCredit(r);
+    }
+  }
+
+  /// New draft with the same items; leave the customer empty to keep this one.
+  Future<void> _duplicate() async {
+    final q = _q!;
+    final r = await submitForm(
+      context,
+      api: api,
+      title: 'Duplicar ${q['reference']}',
+      fields: const [
+        FieldSpec('customerId', 'Outro cliente (opcional)', type: FieldType.lookup, lookup: LookupSpec('/api/customers'), hint: 'Vazio = mesmo cliente'),
+      ],
+      submit: (b) => api.post('$base/duplicate', b),
+    );
+    if (r == null || r['id'] == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${r['reference']} criado como cópia de ${q['reference']}')));
+    await openQuote(context, s, r['id'] as int);
+    if (mounted) _load();
   }
 
   /// "Pedido de compra" step: the customer's PO (file and/or text) must be attached before the quote moves on.
@@ -640,7 +902,10 @@ class _QuoteScreenState extends State<QuoteScreen> {
       context,
       api: api,
       title: 'Pedido de compra de ${q['reference']}',
-      fields: [FieldSpec('customerPo', 'Nº do pedido de compra do cliente', defaultValue: q['customerPo']), const FieldSpec('note', 'Observação')],
+      fields: [
+        FieldSpec('customerPo', 'Nº do pedido de compra do cliente', defaultValue: q['customerPo']),
+        const FieldSpec('note', 'Observação'),
+      ],
       submit: (b) => api.post('$base/purchase-order', b),
     );
     if (r != null && r['reference'] != null) setState(() => _q = r);
@@ -658,7 +923,13 @@ class _QuoteScreenState extends State<QuoteScreen> {
   }
 
   Future<void> _setRequestText() async {
-    final text = await promptText(context, title: 'Texto do pedido de compra', label: 'Texto do pedido de compra', initial: '${_q?['requestText'] ?? ''}', confirmLabel: 'Salvar');
+    final text = await promptText(
+      context,
+      title: 'Texto do pedido de compra',
+      label: 'Texto do pedido de compra',
+      initial: '${_q?['requestText'] ?? ''}',
+      confirmLabel: 'Salvar',
+    );
     if (text == null || !mounted) return;
     final r = await runAction(context, () => api.put('$base/request', {'text': text}));
     if (r is Map<String, dynamic>) setState(() => _q = r);
@@ -789,7 +1060,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ..writeln('Item  Produto  Descrição  Qtd  Un  Vl. unit.  IPI%  Vl. total  Entrega');
     for (final l in (q['lines'] as List).cast<Map<String, dynamic>>()) {
       b.writeln(
-        '${l['sequence']}  ${l['customerPartNumber'] ?? l['productCode']}  ${l['description']}  ${fmt(l['quantity'])}  ${l['unit']}  ${fmtNum(l['unitPrice'], 4)}  ${fmt(l['ipiPercent'])}  ${fmtNum(l['total'])}  ${l['deliveryDate'] != null ? fmtDay(l['deliveryDate']) : (l['leadTimeDays'] != null ? '${l['leadTimeDays']} dias' : '')}',
+        '${l['sequence']}  ${l['customerPartNumber'] ?? l['productCode']}  ${l['description']}  ${fmt(l['quantity'])}  ${l['unit']}  ${fmtNum(l['unitPrice'], 4)}  ${fmt(l['ipiPercent'])}  ${fmtNum(l['total'])}  ${l['deliveryDate'] != null ? fmtDay(l['deliveryDate']) : (l['leadTimeDays'] != null ? '${l['leadTimeDays']} dias úteis' : '')}',
       );
     }
     final t = q['totals'] as Map<String, dynamic>;
@@ -811,8 +1082,20 @@ class _QuoteScreenState extends State<QuoteScreen> {
     return Section(
       title: 'Pedido de compra',
       actions: [
-        if (canEdit) TextButton.icon(key: const ValueKey('quote-po-text'), onPressed: _setRequestText, icon: const Icon(Icons.edit_note), label: const Text('Texto do pedido')),
-        if (canEdit) TextButton.icon(key: const ValueKey('quote-po-attach'), onPressed: _attachRequest, icon: const Icon(Icons.attach_file), label: Text(fileName == null ? 'Anexar arquivo' : 'Substituir arquivo')),
+        if (canEdit)
+          TextButton.icon(
+            key: const ValueKey('quote-po-text'),
+            onPressed: _setRequestText,
+            icon: const Icon(Icons.edit_note),
+            label: const Text('Texto do pedido'),
+          ),
+        if (canEdit)
+          TextButton.icon(
+            key: const ValueKey('quote-po-attach'),
+            onPressed: _attachRequest,
+            icon: const Icon(Icons.attach_file),
+            label: Text(fileName == null ? 'Anexar arquivo' : 'Substituir arquivo'),
+          ),
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -874,8 +1157,10 @@ class _QuoteScreenState extends State<QuoteScreen> {
         title: q['needsApproval'] == true ? 'Desconto acima do limite' : 'Pronta para enviar?',
         message: q['needsApproval'] == true
             ? 'O maior desconto sobre a tabela é ${fmt(q['totals']['maxDiscountPercent'])}%${_maxDiscount == null ? '' : ' (limite ${fmt(_maxDiscount)}%)'}. O envio passa pela aprovação do gerente comercial.'
+            : _rejectionNote(q) != null
+            ? 'O gerente recusou o desconto: ${_rejectionNote(q)}. Ajuste os preços e envie de novo.'
             : 'Confira itens, preços e prazos. Ao enviar, a validade começa a contar.',
-        tone: q['needsApproval'] == true ? Tone.warning : Tone.info,
+        tone: q['needsApproval'] == true || _rejectionNote(q) != null ? Tone.warning : Tone.info,
         actions: [if (sell) primary('quote-send', q['needsApproval'] == true ? 'Enviar para aprovação' : 'Enviar ao cliente', Icons.send, _send)],
       ),
       'PendingApproval' => NextStepCard(
@@ -903,13 +1188,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         message: 'Enviada para ${q['sentTo'] ?? ''} em ${fmtDate(q['sentAt'])}. Válida até ${fmtDay(q['validUntil'])}.',
         actions: [
           if (sell) primary('quote-accept', 'Cliente aprovou', Icons.thumb_up_alt_outlined, _accept),
-          if (sell)
-            secondary(
-              'quote-decline',
-              'Cliente recusou',
-              Icons.thumb_down_alt_outlined,
-              () => _reason('decline', 'Cliente recusou ${q['reference']}', success: 'Recusa registrada'),
-            ),
+          if (sell) secondary('quote-decline', 'Cliente recusou', Icons.thumb_down_alt_outlined, _decline),
         ],
       ),
       'Accepted' => NextStepCard(
@@ -941,6 +1220,16 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ),
       _ => NextStepCard(title: 'Cancelada', message: '${q['decisionNote'] ?? ''}', tone: Tone.danger),
     };
+  }
+
+  /// The manager's reason when the discount was refused and the quote came back to draft (history is newest first).
+  String? _rejectionNote(Map<String, dynamic> q) {
+    if (q['status'] != 'Draft') return null;
+    for (final h in (q['history'] as List).cast<Map<String, dynamic>>()) {
+      if (h['action'] == 'approval-rejected') return h['note'] as String?;
+      if (h['action'] == 'sent' || h['action'] == 'submitted') return null; // sent again since: the old refusal no longer applies
+    }
+    return null;
   }
 
   static const _revisable = ['PendingApproval', 'Approved', 'Sent', 'Accepted', 'PurchaseOrder', 'Rejected', 'Expired'];
@@ -976,6 +1265,16 @@ class _QuoteScreenState extends State<QuoteScreen> {
           value: _edit,
           child: const ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar')),
         ),
+      if (s.canSell)
+        PopupMenuItem(
+          value: _duplicate,
+          child: const ListTile(leading: Icon(Icons.copy), title: Text('Duplicar')),
+        ),
+      if (['Sent', 'Accepted', 'PurchaseOrder'].contains(status))
+        PopupMenuItem(
+          value: _mail,
+          child: const ListTile(leading: Icon(Icons.mail_outline), title: Text('Abrir e-mail para o cliente')),
+        ),
       if (s.canSell && _revisable.contains(status))
         PopupMenuItem(
           value: _revise,
@@ -986,7 +1285,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
           value: () => _reason('cancel', 'Cancelar ${q['reference']}', success: 'Orçamento cancelado'),
           child: const ListTile(leading: Icon(Icons.block), title: Text('Cancelar')),
         ),
-      if (s.canSell && status == 'Draft' && q['revision'] == 0)
+      if (s.canSell && canDeleteQuote(s, status, q['revision'] as int? ?? 0))
         PopupMenuItem(
           value: _delete,
           child: const ListTile(leading: Icon(Icons.delete_outline), title: Text('Excluir')),
@@ -1042,6 +1341,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         gap,
         StagePath(steps: flowSteps, current: step, failedLabel: failed),
         gap,
+        _creditBanner(),
         _nextStep(q),
         gap,
         Section(
@@ -1060,7 +1360,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
                   col('IPI %', 'ipiPercent', numeric: true),
                   ColumnSpec(
                     'Entrega',
-                    (e) => e['deliveryDate'] != null ? fmtDay(e['deliveryDate']) : (e['leadTimeDays'] != null ? '${e['leadTimeDays']} dias' : ''),
+                    (e) => e['deliveryDate'] != null ? fmtDay(e['deliveryDate']) : (e['leadTimeDays'] != null ? '${e['leadTimeDays']} dias úteis' : ''),
                   ),
                   moneyCol('Total', 'total'),
                 ],
@@ -1070,13 +1370,21 @@ class _QuoteScreenState extends State<QuoteScreen> {
               const Divider(),
               Align(
                 alignment: Alignment.centerRight,
-                child: InfoGrid([('Produtos', fmtMoney(t['products'])), ('IPI', fmtMoney(t['ipi'])), ('Total', fmtMoney(t['total']))]),
+                child: InfoGrid([
+                  ('Produtos', fmtMoney(t['products'])),
+                  ('IPI', fmtMoney(t['ipi'])),
+                  ('Total', fmtMoney(t['total'])),
+                  if (_n(t['icms']) > 0) ('ICMS (estimativa)', fmtMoney(t['icms'])),
+                  if (_n(t['icms']) > 0) ('Total com ICMS', fmtMoney(_n(t['total']) + _n(t['icms']))),
+                ]),
               ),
             ],
           ),
         ),
         gap,
-        if (const ['Accepted', 'PurchaseOrder', 'Converted'].contains(q['status']) || q['requestFileName'] != null || '${q['requestText'] ?? ''}'.isNotEmpty) ...[
+        if (const ['Accepted', 'PurchaseOrder', 'Converted'].contains(q['status']) ||
+            q['requestFileName'] != null ||
+            '${q['requestText'] ?? ''}'.isNotEmpty) ...[
           _requestSection(q),
           gap,
         ],
@@ -1090,6 +1398,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
             ('Aprovação interna', q['approvedAt'] == null ? '' : '${fmt(q['approvedBy'])} · ${fmtDate(q['approvedAt'])}'),
             ('Enviada', q['sentAt'] == null ? '' : '${fmt(q['sentTo'])} · ${fmtDate(q['sentAt'])}'),
             ('Resposta do cliente', q['decidedAt'] == null ? '' : '${fmtDate(q['decidedAt'])}${q['decisionNote'] == null ? '' : ' · ${q['decisionNote']}'}'),
+            ('Motivo da perda', q['lostReason'] == null ? '' : lostReasons['${q['lostReason']}'] ?? '${q['lostReason']}'),
           ]),
         ),
       ],

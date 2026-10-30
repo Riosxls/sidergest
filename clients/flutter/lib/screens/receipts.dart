@@ -6,7 +6,6 @@ import '../api.dart';
 import '../entities.dart';
 import '../session.dart';
 import '../widgets/discard_guard.dart';
-import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/record_list.dart';
 import 'orders.dart';
@@ -207,7 +206,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       lines.sort((a, b) => '${a.line['dueDate']}'.compareTo('${b.line['dueDate']}'));
       if (mounted) setState(() => _lines = lines);
     } catch (e) {
-      if (mounted) setState(() => _message = '$e');
+      if (mounted) setState(() => _message = friendlyError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

@@ -5,26 +5,17 @@ import '../entities.dart';
 import 'entity_form.dart';
 import 'record_list.dart';
 
+export '../api.dart' show describeError, fieldLabel, friendlyError;
+
 Future<T?> runAction<T>(BuildContext context, Future<T> Function() action, {String? success}) async {
   try {
     final r = await action();
     if (success != null && context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success)));
     return r;
   } catch (e) {
-    if (context.mounted) showError(context, e is ApiException ? describeError(e) : e);
+    if (context.mounted) showError(context, friendlyError(e));
     return null;
   }
-}
-
-String describeError(ApiException e) {
-  if (e.fieldErrors.isEmpty) return e.message;
-  return e.fieldErrors.entries.map((x) => '${fieldLabel(x.key)}: ${x.value.join('; ')}').join('\n');
-}
-
-String fieldLabel(String key) {
-  final m = RegExp(r'^[Ll]ines\[(\d+)\]\.?(.*)$').firstMatch(key);
-  if (m != null) return 'Linha ${int.parse(m[1]!) + 1}${m[2]!.isEmpty ? '' : ' · ${m[2]}'}';
-  return key;
 }
 
 Future<String?> promptText(
@@ -149,7 +140,7 @@ class LinesEditor extends StatelessWidget {
     if (index == null) {
       next.add(r);
     } else {
-      next[index] = r;
+      next[index] = {...lines[index], ...r}; // keeps values the form does not show (taxes from the price table, line spec)
     }
     onChanged(next);
   }

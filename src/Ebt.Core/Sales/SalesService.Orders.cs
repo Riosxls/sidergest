@@ -1,5 +1,6 @@
 using static Ebt.Core.Services.Text;
 using Ebt.Core.Data;
+using Ebt.Core.Services;
 using Ebt.Core.Entities;
 using Ebt.Core.Fiscal;
 using Ebt.Core.Viability;
@@ -22,7 +23,7 @@ public sealed partial class SalesService
             var today = Today();
             var studies = await ViabilityRules.UsableForQuoteAsync(db, q.Id, ct);
             var lines = q.Lines.OrderBy(l => l.Sequence).Select(l => new SalesLineInput(l.ProductId, l.Quantity, l.UnitPrice, l.IpiPercent, l.IcmsPercent, l.LeadTimeDays,
-                l.DeliveryDate ?? (l.LeadTimeDays is { } d ? today.AddDays(d) : null), l.Description, null, studies.TryGetValue(l.ProductId, out var fid) ? fid : null)).ToList();
+                l.DeliveryDate ?? (l.LeadTimeDays is { } d ? WorkDays.Add(today, d) : null), l.Description, null, studies.TryGetValue(l.ProductId, out var fid) ? fid : null)).ToList();
             var order = await CreateOrderCoreAsync(new SalesOrderInput(q.CustomerId, addressId, lines, Clean(i.CustomerPo) ?? q.CustomerPo, q.PaymentTermId, q.Freight, q.Notes, null, q.CustomPaymentTerm), q, i.OverrideCredit && mayOverrideCredit, user, ct);
             var from = q.Status;
             q.Status = QuoteStatus.Converted;
@@ -53,7 +54,7 @@ public sealed partial class SalesService
             Lines = lines.Select((l, n) => new SalesOrderLine
             {
                 Sequence = (n + 1) * 10, ProductId = l.ProductId, CustomerPartNumber = l.CustomerPartNumber, Description = l.Description, Quantity = l.Quantity, Unit = l.Unit,
-                UnitPrice = l.UnitPrice, IpiPercent = l.IpiPercent, IcmsPercent = l.IcmsPercent, DueDate = l.DeliveryDate ?? today.AddDays(l.LeadTimeDays ?? 30),
+                UnitPrice = l.UnitPrice, IpiPercent = l.IpiPercent, IcmsPercent = l.IcmsPercent, DueDate = l.DeliveryDate ?? (l.LeadTimeDays is { } d ? WorkDays.Add(today, d) : today.AddDays(30)),
                 FeasibilityStudyId = l.FeasibilityId
             }.WithSpec(l.Spec)).ToList()
         };
@@ -91,7 +92,7 @@ public sealed partial class SalesService
             o.Lines = lines.Select((l, n) => new SalesOrderLine
             {
                 Sequence = (n + 1) * 10, ProductId = l.ProductId, CustomerPartNumber = l.CustomerPartNumber, Description = l.Description, Quantity = l.Quantity, Unit = l.Unit,
-                UnitPrice = l.UnitPrice, IpiPercent = l.IpiPercent, IcmsPercent = l.IcmsPercent, DueDate = l.DeliveryDate ?? today.AddDays(l.LeadTimeDays ?? 30),
+                UnitPrice = l.UnitPrice, IpiPercent = l.IpiPercent, IcmsPercent = l.IcmsPercent, DueDate = l.DeliveryDate ?? (l.LeadTimeDays is { } d ? WorkDays.Add(today, d) : today.AddDays(30)),
                 FeasibilityStudyId = l.FeasibilityId
             }.WithSpec(l.Spec)).ToList();
             Log(SalesRecordKind.Order, o.Id, "edited", o.Status, o.Status, null, user);

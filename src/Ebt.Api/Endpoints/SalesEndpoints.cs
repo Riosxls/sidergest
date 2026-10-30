@@ -9,7 +9,8 @@ using static Ebt.Api.Infrastructure.Crud;
 
 namespace Ebt.Api.Endpoints;
 
-public record SalesSettingsDto(decimal MaxDiscountPercent, int DefaultValidityDays, decimal MinimumOrderValue, int? ShippingLocationId, string? DefaultConditions);
+public record SalesSettingsDto(decimal MaxDiscountPercent, int DefaultValidityDays, decimal MinimumOrderValue, int? ShippingLocationId, string? DefaultConditions,
+    bool OffListNeedsApproval = false, int FollowUpDays = 7, int ApprovalValidityDays = 30);
 public record PaymentTermIn(string Code, string Name, string Days, decimal? CreditLimit, bool Active = true);
 public record PaymentTermOut(int Id, string Code, string Name, string Days, decimal? CreditLimit, bool Active);
 public record PriceListIn(int ProductId, int? CustomerId, decimal UnitPrice, decimal? IpiPercent, decimal? IcmsPercent, DateOnly ValidFrom, DateOnly? ValidTo);
@@ -17,7 +18,8 @@ public record PriceListOut(int Id, int ProductId, string ProductCode, string Pro
 public record PriceOut(int ProductId, int? CustomerId, decimal? UnitPrice, decimal? IpiPercent, decimal? IcmsPercent, bool CustomerSpecific, string ProductCode, string Description, string Unit, string? CustomerPartNumber);
 
 public record SalesEventOut(long Id, string Action, string? FromStatus, string? ToStatus, string? Note, string? User, DateTimeOffset At);
-public record QuoteActionIn(string? Note = null, string? SentTo = null, string? CustomerPo = null);
+public record QuoteActionIn(string? Note = null, string? SentTo = null, string? CustomerPo = null, LostReason? LostReason = null);
+public record LostReasonOut(LostReason? Reason, int Quotes, decimal Value);
 public record SalesReasonIn(string? Reason);
 public record SalesOrderIn(int CustomerId, int AddressId, List<SalesLineInput> Lines, string? CustomerPo = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, string? Notes = null, bool OverrideCredit = false, string? Company = null, string? CustomPaymentTerm = null,
     BillTo BillTo = BillTo.Ebt, OrderOrigin Origin = OrderOrigin.System, string? Salesperson = null);
@@ -27,11 +29,11 @@ public record ConfirmDeliveryIn(DateOnly? Date = null, string? ReceivedBy = null
 public record QuoteLineOut(int Id, int Sequence, int ProductId, string ProductCode, string? CustomerPartNumber, string Description, decimal Quantity, string Unit, decimal UnitPrice, decimal? ListPrice, decimal? DiscountPercent,
     decimal IpiPercent, decimal IcmsPercent, int? LeadTimeDays, DateOnly? DeliveryDate, decimal Total);
 public record QuoteSummaryOut(int Id, int Number, int Revision, string Reference, int CustomerId, string CustomerName, QuoteStatus Status, bool NeedsApproval, decimal Total, DateOnly? ValidUntil,
-    DateTimeOffset? SentAt, DateTimeOffset CreatedAt, string? CreatedBy, int? SalesOrderId);
+    DateTimeOffset? SentAt, DateTimeOffset CreatedAt, string? CreatedBy, int? SalesOrderId, bool FollowUp = false, bool Expiring = false, LostReason? LostReason = null);
 public record QuoteOut(int Id, int Number, int Revision, string Reference, int CustomerId, string CustomerName, int? AddressId, string? AddressText, string? ContactName, string? ContactEmail, string? CustomerReference,
     int? PaymentTermId, string? PaymentTermName, string? CustomPaymentTerm, FreightTerms Freight, int ValidityDays, DateOnly? ValidUntil, string? Conditions, string? Notes, QuoteStatus Status, bool NeedsApproval, string? ApprovedBy, DateTimeOffset? ApprovedAt,
     DateTimeOffset? SentAt, string? SentTo, DateTimeOffset? DecidedAt, string? DecisionBy, string? DecisionNote, string? CustomerPo, int? SalesOrderId, string? SalesOrderReference, string? CreatedBy, DateTimeOffset CreatedAt,
-    QuoteTotals Totals, IReadOnlyList<QuoteLineOut> Lines, IReadOnlyList<SalesEventOut> History, string? RequestText = null, string? RequestFileName = null, string? RequestFileType = null, long? RequestFileSize = null);
+    QuoteTotals Totals, IReadOnlyList<QuoteLineOut> Lines, IReadOnlyList<SalesEventOut> History, string? RequestText = null, string? RequestFileName = null, string? RequestFileType = null, long? RequestFileSize = null, LostReason? LostReason = null);
 public record QuoteRequestIn(string? Text);
 
 public record SalesOrderLineOut(int Id, int Sequence, int ProductId, string ProductCode, string? CustomerPartNumber, string Description, decimal Quantity, string Unit, decimal UnitPrice, decimal IpiPercent, decimal IcmsPercent,
@@ -82,6 +84,7 @@ public sealed class SalesExceptionHandler : IExceptionHandler
 public static class SalesEndpoints
 {
     private const int CardsPerStage = 60;
+    private const int ExpiringDays = 3;
 
     public static IServiceCollection AddSales(this IServiceCollection services)
     {
@@ -110,7 +113,9 @@ public static class SalesEndpoints
             var errors = Errors()
                 .Require(i.MaxDiscountPercent is >= 0 and <= 100, "maxDiscountPercent", "Between 0 and 100")
                 .Require(i.DefaultValidityDays > 0, "defaultValidityDays", "Must be greater than zero")
-                .Require(i.MinimumOrderValue >= 0, "minimumOrderValue", "Cannot be negative");
+                .Require(i.MinimumOrderValue >= 0, "minimumOrderValue", "Cannot be negative")
+                .Require(i.FollowUpDays > 0, "followUpDays", "Must be greater than zero")
+                .Require(i.ApprovalValidityDays > 0, "approvalValidityDays", "Must be greater than zero");
             if (i.ShippingLocationId is { } l)
                 errors.Require(await db.StockLocations.AnyAsync(x => x.Id == l && x.Active && x.Kind != StockLocationKind.ThirdParty, ct), "shippingLocationId", "Unknown, inactive or third-party location");
             if (errors.Count > 0) return Results.ValidationProblem(errors);
@@ -120,6 +125,9 @@ public static class SalesEndpoints
             s.MinimumOrderValue = i.MinimumOrderValue;
             s.ShippingLocationId = i.ShippingLocationId;
             s.DefaultConditions = Clean(i.DefaultConditions);
+            s.OffListNeedsApproval = i.OffListNeedsApproval;
+            s.FollowUpDays = i.FollowUpDays;
+            s.ApprovalValidityDays = i.ApprovalValidityDays;
             await db.SaveChangesAsync(ct);
             return Results.Ok(ToDto(s));
         }).RequireAuthorization(Policies.Admin);
@@ -169,18 +177,47 @@ public static class SalesEndpoints
     {
         var g = app.MapGroup("/api/sales/quotes").WithTags("Sales").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<Quote>());
 
-        g.MapGet("/", async (EbtDbContext db, SalesService svc, QuoteStatus? status, int? customerId, bool? open, string? q, int? skip, int? take, CancellationToken ct) =>
+        g.MapGet("/", async (EbtDbContext db, SalesService svc, ClaimsPrincipal user, QuoteStatus? status, int? customerId, bool? open, bool? mine, bool? followUp, bool? expiring, string? q, int? skip, int? take, CancellationToken ct) =>
         {
+            var settings = await svc.SettingsAsync(ct);
+            var today = SalesService.Today();
+            var followUpBefore = DateTimeOffset.UtcNow.AddDays(-settings.FollowUpDays);
             var x = db.Quotes.AsNoTracking();
             if (status is { } st) x = x.Where(o => o.Status == st);
             if (open == true) x = x.Where(o => SalesService.OpenQuote.Contains(o.Status));
             if (customerId is { } c) x = x.Where(o => o.CustomerId == c);
+            if (mine == true && Who(user) is { } me) x = x.Where(o => o.CreatedBy == me);
+            if (followUp == true) x = x.Where(o => o.Status == QuoteStatus.Sent && o.SentAt <= followUpBefore);
+            if (expiring == true) x = x.Where(o => o.Status == QuoteStatus.Sent && o.ValidUntil <= today.AddDays(ExpiringDays));
             if (Has(q)) x = x.Where(o => EF.Functions.ILike(o.Reference, Like(q!)) || EF.Functions.ILike(o.Customer!.Name, Like(q)) || EF.Functions.ILike(o.CustomerReference!, Like(q)));
             var total = await x.CountAsync(ct);
             var (s, n) = Paging(skip, take);
-            var items = await QuoteSummaries(x.OrderByDescending(o => o.CreatedAt).Skip(s).Take(n), ct);
+            var items = await QuoteSummaries(x.OrderByDescending(o => o.CreatedAt).Skip(s).Take(n), settings.FollowUpDays, ct);
             return Results.Ok(new Page<QuoteSummaryOut>(items, total, s, n));
         });
+
+        // Why quotes were lost in the last 90 days (customer declines only), for the commercial review.
+        g.MapGet("/lost-reasons", async (EbtDbContext db, int? days, CancellationToken ct) =>
+        {
+            var since = DateTimeOffset.UtcNow.AddDays(-Math.Clamp(days ?? 90, 1, 730));
+            var rows = await db.Quotes.AsNoTracking().Where(q => q.DecidedAt >= since && (q.Status == QuoteStatus.Rejected || q.LostReason != null))
+                .Select(q => new { q.LostReason, Lines = q.Lines.Select(l => new { l.Quantity, l.UnitPrice, l.IpiPercent }).ToList() }).ToListAsync(ct);
+            return Results.Ok(rows.GroupBy(r => r.LostReason).Select(gr => new LostReasonOut(gr.Key, gr.Count(), gr.Sum(r => SalesService.Totals(r.Lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, (decimal?)null))).Total)))
+                .OrderByDescending(r => r.Value).ToList());
+        });
+
+        // Soft credit warning while the quote is still open: the hard check stays at conversion to an order.
+        g.MapGet("/{id:int}/credit", async (int id, EbtDbContext db, SalesService svc, CancellationToken ct) =>
+        {
+            var q = await db.Quotes.AsNoTracking().Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id, ct);
+            return q is null ? Results.NotFound() : Results.Ok(await svc.CreditAsync(q.CustomerId, q.PaymentTermId, SalesService.Totals(q).Total, null, ct));
+        });
+
+        g.MapPost("/{id:int}/duplicate", async (int id, DuplicateInput? i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            var q = await svc.DuplicateAsync(id, i?.CustomerId, Who(user), ct);
+            return Results.Created($"/api/sales/quotes/{q.Id}", await LoadQuote(db, q.Id, ct));
+        }).RequireAuthorization(SalesPolicies.Sell);
 
         g.MapGet("/{id:int}", async (int id, EbtDbContext db, CancellationToken ct) => await db.Quotes.AnyAsync(q => q.Id == id, ct) ? Results.Ok(await LoadQuote(db, id, ct)) : Results.NotFound());
 
@@ -196,24 +233,25 @@ public static class SalesEndpoints
             return Results.Ok(await LoadQuote(db, id, ct));
         }).RequireAuthorization(SalesPolicies.Sell);
 
-        g.MapDelete("/{id:int}", async (int id, SalesService svc, CancellationToken ct) =>
+        g.MapDelete("/{id:int}", async (int id, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
-            await svc.DeleteQuoteAsync(id, ct);
+            await svc.DeleteQuoteAsync(id, user.IsInRole(nameof(UserRole.Admin)), ct);
             return Results.NoContent();
         }).RequireAuthorization(SalesPolicies.Sell);
 
         // Customer's purchase order (text and/or file): attached once the customer approved the quote, up to the conversion to a sales order.
-        g.MapPut("/{id:int}/request", async (int id, QuoteRequestIn i, EbtDbContext db, CancellationToken ct) =>
+        g.MapPut("/{id:int}/request", async (int id, QuoteRequestIn i, EbtDbContext db, ClaimsPrincipal user, CancellationToken ct) =>
         {
             var q = await db.Quotes.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (q is null) return Results.NotFound();
             if (!PoOpen(q)) return PoClosed(q);
             q.RequestText = Clean(i.Text);
+            QuoteEvent(db, q, "po-text", q.RequestText is null ? "Texto do pedido de compra removido" : "Texto do pedido de compra salvo", Who(user));
             await db.SaveChangesAsync(ct);
             return Results.Ok(await LoadQuote(db, id, ct));
         }).RequireAuthorization(SalesPolicies.Sell);
 
-        g.MapPost("/{id:int}/request-file", async (int id, IFormFile file, EbtDbContext db, CancellationToken ct) =>
+        g.MapPost("/{id:int}/request-file", async (int id, IFormFile file, EbtDbContext db, ClaimsPrincipal user, CancellationToken ct) =>
         {
             var q = await db.Quotes.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (q is null) return Results.NotFound();
@@ -229,6 +267,7 @@ public static class SalesEndpoints
             q.RequestFileName = Path.GetFileName(file.FileName);
             q.RequestFileType = type;
             q.RequestFileSize = file.Length;
+            QuoteEvent(db, q, "po-file", $"Arquivo anexado: {q.RequestFileName}", Who(user));
             await db.SaveChangesAsync(ct);
             return Results.Ok(await LoadQuote(db, id, ct));
         }).RequireAuthorization(SalesPolicies.Sell).DisableAntiforgery();
@@ -240,12 +279,13 @@ public static class SalesEndpoints
             return data is null ? Results.NotFound() : Results.File(data, q!.RequestFileType ?? "application/octet-stream", q.RequestFileName);
         });
 
-        g.MapDelete("/{id:int}/request-file", async (int id, EbtDbContext db, CancellationToken ct) =>
+        g.MapDelete("/{id:int}/request-file", async (int id, EbtDbContext db, ClaimsPrincipal user, CancellationToken ct) =>
         {
             var q = await db.Quotes.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (q is null) return Results.NotFound();
             if (!PoOpen(q)) return PoClosed(q);
             if (q.Status == QuoteStatus.PurchaseOrder && Clean(q.RequestText) is null) return Results.Conflict(new { message = "O pedido de compra precisa de arquivo ou texto" });
+            QuoteEvent(db, q, "po-file-removed", $"Arquivo removido: {q.RequestFileName}", Who(user));
             await db.QuoteRequestFiles.Where(x => x.QuoteId == id).ExecuteDeleteAsync(ct);
             q.RequestFileName = null;
             q.RequestFileType = null;
@@ -259,7 +299,7 @@ public static class SalesEndpoints
         QuoteAction(g, "reject-approval", SalesPolicies.Approve, (svc, id, i, u, ct) => svc.RejectApprovalAsync(id, i.Note, u, ct));
         QuoteAction(g, "purchase-order", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.ReceivePurchaseOrderAsync(id, i.CustomerPo, i.Note, u, ct));
         QuoteAction(g, "accept", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.AcceptAsync(id, i.CustomerPo, i.Note, u, ct));
-        QuoteAction(g, "decline", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.DeclineAsync(id, i.Note, u, ct));
+        QuoteAction(g, "decline", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.DeclineAsync(id, i.Note, i.LostReason, u, ct));
         // Cancels the quote (note = reason) and returns the NEW revision draft, linked by the shared quote number (PROP 4685-A → -B).
         g.MapPost("/{id:int}/revise", async (int id, QuoteActionIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
@@ -274,6 +314,9 @@ public static class SalesEndpoints
             return Results.Created($"/api/sales/orders/{o.Id}", await LoadOrder(db, svc, o.Id, ct));
         }).RequireAuthorization(SalesPolicies.Sell);
     }
+
+    private static void QuoteEvent(EbtDbContext db, Quote q, string action, string note, string? user) =>
+        db.SalesEvents.Add(new SalesEvent { Kind = SalesRecordKind.Quote, RecordId = q.Id, Action = action, FromStatus = q.Status.ToString(), ToStatus = q.Status.ToString(), Note = note, User = user, At = DateTimeOffset.UtcNow });
 
     private static bool PoOpen(Quote q) => q.Status is QuoteStatus.Accepted or QuoteStatus.PurchaseOrder;
 
@@ -404,14 +447,15 @@ public static class SalesEndpoints
                 quotes = quotes.Where(q => q.CustomerId == c);
                 orders = orders.Where(o => o.CustomerId == c);
             }
-            var quoteRows = await QuoteSummaries(quotes.OrderBy(q => q.ValidUntil ?? DateOnly.MaxValue).ThenByDescending(q => q.CreatedAt), ct);
+            var quoteRows = await QuoteSummaries(quotes.OrderBy(q => q.ValidUntil ?? DateOnly.MaxValue).ThenByDescending(q => q.CreatedAt), (await svc.SettingsAsync(ct)).FollowUpDays, ct);
             var orderRows = await OrderSummaries(db, svc, orders.OrderBy(o => o.CreatedAt), ct);
 
             PipelineCard QuoteCard(QuoteSummaryOut q)
             {
                 var badges = new List<string>();
                 if (q.NeedsApproval) badges.Add("discount");
-                if (q.ValidUntil is { } v && q.Status == QuoteStatus.Sent && v <= today.AddDays(3)) badges.Add("expiring");
+                if (q.Expiring) badges.Add("expiring");
+                if (q.FollowUp) badges.Add("followup");
                 return new PipelineCard(SalesRecordKind.Quote, q.Id, q.Reference, q.CustomerId, q.CustomerName, q.Total, q.Status.ToString(), q.ValidUntil ?? DateOnly.FromDateTime(q.CreatedAt.UtcDateTime), null, badges);
             }
             PipelineCard OrderCard(SalesOrderSummaryOut o)
@@ -462,15 +506,18 @@ public static class SalesEndpoints
         }).WithTags("Sales").RequireAuthorization(Policies.Read);
     }
 
-    private static async Task<List<QuoteSummaryOut>> QuoteSummaries(IQueryable<Quote> q, CancellationToken ct)
+    private static async Task<List<QuoteSummaryOut>> QuoteSummaries(IQueryable<Quote> q, int followUpDays, CancellationToken ct)
     {
         var rows = await q.Select(x => new
         {
-            x.Id, x.Number, x.Revision, x.Reference, x.CustomerId, Customer = x.Customer!.Name, x.Status, x.NeedsApproval, x.ValidUntil, x.SentAt, x.CreatedAt, x.CreatedBy, x.SalesOrderId,
+            x.Id, x.Number, x.Revision, x.Reference, x.CustomerId, Customer = x.Customer!.Name, x.Status, x.NeedsApproval, x.ValidUntil, x.SentAt, x.CreatedAt, x.CreatedBy, x.SalesOrderId, x.LostReason,
             Lines = x.Lines.Select(l => new { l.Quantity, l.UnitPrice, l.IpiPercent, l.ListPrice }).ToList()
         }).ToListAsync(ct);
+        var today = SalesService.Today();
+        var followUpBefore = DateTimeOffset.UtcNow.AddDays(-followUpDays);
         return rows.Select(x => new QuoteSummaryOut(x.Id, x.Number, x.Revision, x.Reference, x.CustomerId, x.Customer, x.Status, x.NeedsApproval,
-            SalesService.Totals(x.Lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, l.ListPrice))).Total, x.ValidUntil, x.SentAt, x.CreatedAt, x.CreatedBy, x.SalesOrderId)).ToList();
+            SalesService.Totals(x.Lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, l.ListPrice))).Total, x.ValidUntil, x.SentAt, x.CreatedAt, x.CreatedBy, x.SalesOrderId,
+            FollowUp: x.Status == QuoteStatus.Sent && x.SentAt <= followUpBefore, Expiring: x.Status == QuoteStatus.Sent && x.ValidUntil is { } v && v <= today.AddDays(ExpiringDays), LostReason: x.LostReason)).ToList();
     }
 
     private static async Task<List<SalesOrderSummaryOut>> OrderSummaries(EbtDbContext db, SalesService svc, IQueryable<SalesOrder> q, CancellationToken ct)
@@ -508,7 +555,7 @@ public static class SalesEndpoints
             l.ListPrice is > 0 ? Math.Round((1 - l.UnitPrice / l.ListPrice.Value) * 100m, 2) : null, l.IpiPercent, l.IcmsPercent, l.LeadTimeDays, l.DeliveryDate, Math.Round(l.Quantity * l.UnitPrice, 2))).ToList();
         return new QuoteOut(q.Id, q.Number, q.Revision, q.Reference, q.CustomerId, q.Customer!.Name, q.AddressId, q.Address is null ? null : AddressText(q.Address), q.ContactName, q.ContactEmail, q.CustomerReference,
             q.PaymentTermId, q.PaymentTerm?.Name, q.CustomPaymentTerm, q.Freight, q.ValidityDays, q.ValidUntil, q.Conditions, q.Notes, q.Status, q.NeedsApproval, q.ApprovedBy, q.ApprovedAt, q.SentAt, q.SentTo, q.DecidedAt, q.DecisionBy, q.DecisionNote,
-            q.CustomerPo, q.SalesOrderId, order, q.CreatedBy, q.CreatedAt, SalesService.Totals(q), lines, await History(db, SalesRecordKind.Quote, id, ct), q.RequestText, q.RequestFileName, q.RequestFileType, q.RequestFileSize);
+            q.CustomerPo, q.SalesOrderId, order, q.CreatedBy, q.CreatedAt, SalesService.Totals(q), lines, await History(db, SalesRecordKind.Quote, id, ct), q.RequestText, q.RequestFileName, q.RequestFileType, q.RequestFileSize, q.LostReason);
     }
 
     private static async Task<SalesOrderOut> LoadOrder(EbtDbContext db, SalesService svc, int id, CancellationToken ct)
@@ -551,5 +598,5 @@ public static class SalesEndpoints
     private static readonly System.Linq.Expressions.Expression<Func<Delivery, DeliverySummaryOut>> DeliverySummary = d =>
         new DeliverySummaryOut(d.Id, d.Number, d.Reference, d.OrderId, d.Order!.Reference, d.Order.CustomerId, d.Order.Customer!.Name, d.PlannedDate, d.Status, d.Packages, d.GrossWeightKg, d.InvoiceNumber, d.Carrier, d.ShippedAt, d.DeliveredAt);
 
-    private static SalesSettingsDto ToDto(SalesSettings s) => new(s.MaxDiscountPercent, s.DefaultValidityDays, s.MinimumOrderValue, s.ShippingLocationId, s.DefaultConditions);
+    private static SalesSettingsDto ToDto(SalesSettings s) => new(s.MaxDiscountPercent, s.DefaultValidityDays, s.MinimumOrderValue, s.ShippingLocationId, s.DefaultConditions, s.OffListNeedsApproval, s.FollowUpDays, s.ApprovalValidityDays);
 }

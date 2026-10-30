@@ -119,7 +119,7 @@ class _DocumentScreenState extends State<DocumentScreen> {
             actions: [if (canReverse) TextButton.icon(onPressed: _reverse, icon: const Icon(Icons.undo), label: const Text('Estornar'))],
           ),
           body: snap.hasError
-              ? Center(child: Text('${snap.error}'))
+              ? Center(child: Text(friendlyError(snap.error!)))
               : d == null
               ? const Center(child: CircularProgressIndicator())
               : ListView(
@@ -331,7 +331,7 @@ class _StockPostScreenState extends State<StockPostScreen> {
                     labelText: 'Data *',
                     border: const OutlineInputBorder(),
                     isDense: true,
-                    suffixIcon: IconButton(icon: const Icon(Icons.calendar_today, size: 18), onPressed: _pickDate),
+                    suffixIcon: IconButton(tooltip: 'Escolher data', icon: const Icon(Icons.calendar_today, size: 18), onPressed: _pickDate),
                   ),
                 ),
               ),

@@ -127,7 +127,7 @@ class _CertificateScreenState extends State<CertificateScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     }
   }
 
@@ -454,7 +454,7 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = e is ApiException ? describeError(e) : '$e';
+          _error = friendlyError(e);
         });
       }
     }

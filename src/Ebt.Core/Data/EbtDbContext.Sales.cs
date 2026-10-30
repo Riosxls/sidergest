@@ -32,7 +32,7 @@ public partial class EbtDbContext
             e.ToTable("sales_settings");
             Pct(e.Property(x => x.MaxDiscountPercent));
             e.Property(x => x.MinimumOrderValue).HasPrecision(18, 2);
-            e.ToTable(t => t.HasCheckConstraint("ck_sales_settings_values", "max_discount_percent >= 0 AND max_discount_percent <= 100 AND default_validity_days > 0 AND minimum_order_value >= 0"));
+            e.ToTable(t => t.HasCheckConstraint("ck_sales_settings_values", "max_discount_percent >= 0 AND max_discount_percent <= 100 AND default_validity_days > 0 AND minimum_order_value >= 0 AND follow_up_days > 0 AND approval_validity_days > 0"));
             e.HasOne(x => x.ShippingLocation).WithMany().OnDelete(DeleteBehavior.Restrict);
             e.HasData(new SalesSettings { Id = 1 });
         });

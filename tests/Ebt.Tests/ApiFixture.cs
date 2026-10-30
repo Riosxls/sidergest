@@ -51,7 +51,14 @@ public sealed class ApiFixture : IAsyncLifetime
 
     public EbtDbContext NewDb() => new(DesignTimeFactory.Create(ConnectionString));
 
+    /// <summary>A DI scope of the running API, for calling services (e.g. the quote expiry sweep) directly.</summary>
+    public Microsoft.Extensions.DependencyInjection.IServiceScope CreateScope() => Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.CreateScope(factory.Services);
+
     public HttpClient Anonymous() => factory.CreateClient();
+
+    /// <summary>A client against the same database but a host started with extra settings (e.g. very short token lifetimes).</summary>
+    public HttpClient Anonymous(IReadOnlyDictionary<string, string> settings) =>
+        factory.WithWebHostBuilder(b => { foreach (var (k, v) in settings) b.UseSetting(k, v); }).CreateClient();
 
     public async Task<HttpClient> AdminAsync() => await LoginAsync(AdminUser, AdminPassword);
 

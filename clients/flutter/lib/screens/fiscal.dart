@@ -94,7 +94,7 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     }
   }
 
@@ -288,7 +288,7 @@ class _FiscalSettingsScreenState extends State<FiscalSettingsScreen> {
   Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>>(
     future: _future,
     builder: (context, snap) {
-      if (snap.hasError) return Center(child: Text('${snap.error}'));
+      if (snap.hasError) return Center(child: Text(friendlyError(snap.error!)));
       final d = snap.data;
       if (d == null) return const Center(child: CircularProgressIndicator());
       return ListView(

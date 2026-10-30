@@ -48,6 +48,12 @@ class RecentStore {
     }
   }
 
+  static Future<void> clear() async {
+    try {
+      await (await SharedPreferences.getInstance()).remove(_key);
+    } catch (_) {}
+  }
+
   static Future<void> add(RecentItem item) async {
     try {
       final list = await load();
@@ -126,7 +132,7 @@ class SearchLauncher extends StatelessWidget {
                     border: Border.all(color: cs.outlineVariant),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Text('Ctrl K', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                  child: Text('Ctrl K', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                 ),
               ],
             ),

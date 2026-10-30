@@ -27,7 +27,7 @@ public sealed partial class SalesService
             };
             ApplyHeader(q, i);
             q.Lines = lines.Select((l, n) => ToQuoteLine(l, n)).ToList();
-            q.NeedsApproval = Totals(q).MaxDiscountPercent > settings.MaxDiscountPercent;
+            q.NeedsApproval = NeedsApprovalFor(Totals(q), settings);
             db.Quotes.Add(q);
             await db.SaveChangesAsync(ct);
             Log(SalesRecordKind.Quote, q.Id, "created", null, q.Status, null, user);
@@ -48,24 +48,35 @@ public sealed partial class SalesService
             if (q.Status != QuoteStatus.Draft) throw SalesException.Conflict("Only draft quotes can be edited; revise it first");
             q.CustomerId = i.CustomerId;
             q.ValidityDays = i.ValidityDays ?? q.ValidityDays;
-            q.Conditions = Clean(i.Conditions);
+            q.Conditions = Clean(i.Conditions) ?? settings.DefaultConditions;
             ApplyHeader(q, i);
+            // Replacing only the lines would leave the quote row untouched, so its row version would not move and a stale editor would not be caught.
+            db.Entry(q).Property(x => x.Notes).IsModified = true;
             db.QuoteLines.RemoveRange(q.Lines);
             await db.SaveChangesAsync(ct);
             q.Lines = lines.Select((l, n) => ToQuoteLine(l, n)).ToList();
-            q.NeedsApproval = Totals(q).MaxDiscountPercent > settings.MaxDiscountPercent;
+            q.NeedsApproval = NeedsApprovalFor(Totals(q), settings);
             Log(SalesRecordKind.Quote, q.Id, "edited", q.Status, q.Status, null, user);
             await db.SaveChangesAsync(ct);
             return q;
         }, ct);
     }
 
-    public async Task DeleteQuoteAsync(int id, CancellationToken ct = default)
+    /// <summary>
+    /// Sales staff may delete only a brand-new draft. An admin may also clear out drafts of any revision and quotes that ended without an order
+    /// (cancelled, declined, expired), e.g. test data; a quote that became an order is never deleted.
+    /// </summary>
+    public async Task DeleteQuoteAsync(int id, bool admin, CancellationToken ct = default)
     {
         await InTransaction(async () =>
         {
             var q = await LockQuoteAsync(id, ct);
-            if (q.Status != QuoteStatus.Draft || q.Revision > 0) throw SalesException.Conflict("Only new drafts can be deleted; cancel it instead");
+            var allowed = admin
+                ? q.Status is QuoteStatus.Draft or QuoteStatus.Cancelled or QuoteStatus.Rejected or QuoteStatus.Expired
+                : q.Status == QuoteStatus.Draft && q.Revision == 0;
+            if (!allowed) throw SalesException.Conflict(admin ? "Only drafts and cancelled, declined or expired quotes can be deleted" : "Only new drafts can be deleted; cancel it instead");
+            if (q.SalesOrderId is not null || await db.SalesOrders.AnyAsync(o => o.QuoteId == id, ct)) throw SalesException.Conflict("This quote has a sales order and cannot be deleted");
+            if (await db.FeasibilityStudies.AnyAsync(f => f.QuoteId == id, ct)) throw SalesException.Conflict("A feasibility study is linked to this quote; remove the link first");
             db.Quotes.Remove(q);
             db.SalesEvents.RemoveRange(db.SalesEvents.Where(e => e.Kind == SalesRecordKind.Quote && e.RecordId == id));
             await db.SaveChangesAsync(ct);
@@ -80,7 +91,7 @@ public sealed partial class SalesService
         var settings = await SettingsAsync(ct);
         var totals = Totals(q);
         if (totals.Products < settings.MinimumOrderValue) throw SalesException.Conflict($"Below the minimum order value of {settings.MinimumOrderValue:0.00}");
-        q.NeedsApproval = totals.MaxDiscountPercent > settings.MaxDiscountPercent;
+        q.NeedsApproval = NeedsApprovalFor(totals, settings);
         if (q.Status == QuoteStatus.Draft && q.NeedsApproval)
         {
             q.Status = QuoteStatus.PendingApproval;
@@ -127,17 +138,19 @@ public sealed partial class SalesService
         if (q.Status != QuoteStatus.Sent) throw SalesException.Conflict($"Quote is {q.Status}");
         if (q.ValidUntil < Today()) throw SalesException.Conflict($"Quote expired on {q.ValidUntil:dd/MM/yyyy}; revise it");
         q.Status = QuoteStatus.Accepted;
-        q.CustomerPo = Clean(customerPo);
+        q.CustomerPo = Clean(customerPo) ?? q.CustomerPo;
         q.DecidedAt = DateTimeOffset.UtcNow;
         q.DecisionBy = user;
         q.DecisionNote = Clean(note);
         return Task.FromResult<string?>(null);
     });
 
-    public Task<Quote> DeclineAsync(int id, string? reason, string? user, CancellationToken ct = default) => QuoteStep(id, "declined", reason, user, ct, q =>
+    public Task<Quote> DeclineAsync(int id, string? reason, LostReason? lostReason, string? user, CancellationToken ct = default) => QuoteStep(id, "declined", reason, user, ct, q =>
     {
         if (q.Status != QuoteStatus.Sent) throw SalesException.Conflict($"Quote is {q.Status}");
         if (Clean(reason) is null) throw SalesException.Invalid("reason", "Required");
+        if (lostReason is { } lr && !Enum.IsDefined(lr)) throw SalesException.Invalid("lostReason", "Unknown reason");
+        q.LostReason = lostReason;
         q.Status = QuoteStatus.Rejected;
         q.DecidedAt = DateTimeOffset.UtcNow;
         q.DecisionBy = user;
@@ -173,14 +186,16 @@ public sealed partial class SalesService
                     ListPrice = l.ListPrice, IpiPercent = l.IpiPercent, IcmsPercent = l.IcmsPercent, LeadTimeDays = l.LeadTimeDays, DeliveryDate = l.DeliveryDate
                 }).ToList()
             };
-            q.NeedsApproval = Totals(q).MaxDiscountPercent > settings.MaxDiscountPercent;
+            q.NeedsApproval = NeedsApprovalFor(Totals(q), settings);
             var from = old.Status;
             old.Status = QuoteStatus.Cancelled;
             old.DecisionNote = Clean(reason);
             db.Quotes.Add(q);
             await db.SaveChangesAsync(ct);
+            // The attached purchase order stays with the cancelled version: the new revision needs its own, and the history says where the old one is.
+            var attached = old.RequestFileName is not null || Clean(old.RequestText) is not null ? $" (pedido de compra anterior anexado em {old.Reference})" : "";
             Log(SalesRecordKind.Quote, old.Id, "cancelled", from, old.Status, $"Revisão {q.Reference}: {Clean(reason)}", user);
-            Log(SalesRecordKind.Quote, q.Id, "revised", null, q.Status, $"Revisão de {QuoteReference(old.Number, old.Revision, revised: true)}: {Clean(reason)}", user);
+            Log(SalesRecordKind.Quote, q.Id, "revised", null, q.Status, $"Revisão de {QuoteReference(old.Number, old.Revision, revised: true)}: {Clean(reason)}{attached}", user);
             await db.SaveChangesAsync(ct);
             return q;
         }, ct);
@@ -195,6 +210,24 @@ public sealed partial class SalesService
         return Task.FromResult<string?>(null);
     });
 
+    /// <summary>
+    /// Copies a quote into a brand-new draft (next number, no revision letter). Prices are kept as quoted; the list price is looked up again for the
+    /// (possibly new) customer, so the discount is measured against their price list. Address and contact are cleared when the customer changes.
+    /// </summary>
+    public async Task<Quote> DuplicateAsync(int id, int? customerId, string? user, CancellationToken ct = default)
+    {
+        var src = await db.Quotes.AsNoTracking().Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw SalesException.NotFound("Quote");
+        var customer = customerId ?? src.CustomerId;
+        var input = new QuoteInput(customer,
+            src.Lines.OrderBy(l => l.Sequence).Select(l => new SalesLineInput(l.ProductId, l.Quantity, l.UnitPrice, l.IpiPercent, l.IcmsPercent, l.LeadTimeDays, null, l.Description)).ToList(),
+            customer == src.CustomerId ? src.AddressId : null, src.PaymentTermId, src.Freight, src.ValidityDays,
+            customer == src.CustomerId ? src.ContactName : null, customer == src.CustomerId ? src.ContactEmail : null, null, src.Conditions, src.Notes, src.CustomPaymentTerm);
+        var q = await CreateQuoteAsync(input, user, ct);
+        Log(SalesRecordKind.Quote, q.Id, "duplicated", null, q.Status, $"Cópia de {src.Reference}", user);
+        await db.SaveChangesAsync(ct);
+        return q;
+    }
+
     public async Task<int> ExpireOverdueAsync(CancellationToken ct = default)
     {
         var today = Today();
@@ -204,7 +237,17 @@ public sealed partial class SalesService
             q.Status = QuoteStatus.Expired;
             Log(SalesRecordKind.Quote, q.Id, "expired", QuoteStatus.Sent, QuoteStatus.Expired, $"Validade {q.ValidUntil:dd/MM/yyyy}", "system");
         }
-        if (overdue.Count > 0) await db.SaveChangesAsync(ct);
-        return overdue.Count;
+        // A discount approval nobody used goes stale: prices and the price list move on, so the quote returns to draft and must be approved again.
+        var lapseBefore = DateTimeOffset.UtcNow.AddDays(-(await SettingsAsync(ct)).ApprovalValidityDays);
+        var stale = await db.Quotes.Where(q => q.Status == QuoteStatus.Approved && q.ApprovedAt < lapseBefore).ToListAsync(ct);
+        foreach (var q in stale)
+        {
+            q.Status = QuoteStatus.Draft;
+            q.ApprovedBy = null;
+            q.ApprovedAt = null;
+            Log(SalesRecordKind.Quote, q.Id, "approval-lapsed", QuoteStatus.Approved, QuoteStatus.Draft, "Aprovação de desconto vencida sem envio ao cliente", "system");
+        }
+        if (overdue.Count + stale.Count > 0) await db.SaveChangesAsync(ct);
+        return overdue.Count + stale.Count;
     }
 }

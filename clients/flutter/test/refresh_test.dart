@@ -48,6 +48,23 @@ void main() {
     expect(seen.map((e) => e.url.path), ['/api/things', '/api/auth/refresh', '/api/things']);
   });
 
+  test('/api/auth/me refreshes silently, but a 401 from login or refresh itself never loops', () async {
+    final seen = <String>[];
+    final client = MockClient((r) async {
+      seen.add(r.url.path);
+      if (r.url.path == '/api/auth/refresh') return http.Response(jsonEncode(_session('new', 'rt-2')), 200);
+      if (r.url.path == '/api/auth/login') return http.Response('', 401);
+      return r.headers['Authorization'] == 'Bearer new' ? http.Response('{"username":"ana"}', 200) : http.Response('', 401);
+    });
+    final api = ApiClient(baseUrl: 'http://x', client: client, token: 'old')..refreshToken = 'rt-1';
+    expect(await api.get('/api/auth/me'), {'username': 'ana'});
+    expect(seen, ['/api/auth/me', '/api/auth/refresh', '/api/auth/me']);
+
+    seen.clear();
+    await expectLater(api.post('/api/auth/login', {'username': 'a', 'password': 'b'}), throwsA(isA<ApiException>()));
+    expect(seen, ['/api/auth/login']);
+  });
+
   test('concurrent 401s share a single refresh', () async {
     var refreshes = 0;
     final client = MockClient((r) async {

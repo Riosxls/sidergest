@@ -65,7 +65,7 @@ class DashTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final fg = alert ? cs.onErrorContainer : null;
+    final fg = alert ? cs.error : null;
     return Semantics(
       button: onTap != null,
       label: '$value $label',
@@ -73,8 +73,13 @@ class DashTile extends StatelessWidget {
       child: Card(
         margin: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,
-        shape: dashCardShape(context),
-        color: alert ? cs.errorContainer : cs.surfaceContainerHigh,
+        shape: alert
+            ? RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: cs.error.withValues(alpha: 0.6)),
+              )
+            : dashCardShape(context),
+        color: cs.surfaceContainerHigh,
         child: InkWell(
           onTap: onTap,
           child: Padding(
@@ -84,17 +89,12 @@ class DashTile extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(alert ? Icons.error_outline : icon, size: 20, color: alert ? cs.onErrorContainer : cs.primary),
+                    Icon(alert ? Icons.error_outline : icon, size: 20, color: alert ? cs.error : cs.primary),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Tooltip(
                         message: label,
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(color: fg),
-                        ),
+                        child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium),
                       ),
                     ),
                     if (onTap != null) Icon(Icons.chevron_right, size: 18, color: fg ?? cs.onSurfaceVariant),

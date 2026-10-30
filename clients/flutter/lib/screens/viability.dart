@@ -146,7 +146,7 @@ class _FeasibilityScreenState extends State<FeasibilityScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     }
   }
 

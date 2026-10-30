@@ -82,6 +82,44 @@ public class AuthTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task User_changes_own_password_and_other_sessions_are_revoked()
+    {
+        var admin = await api.AdminAsync();
+        var name = $"selfpw{Guid.NewGuid():N}"[..18];
+        (await admin.Post("/api/users", new CreateUserRequest(name, "user-password-123", UserRole.Reader))).EnsureSuccessStatusCode();
+        var here = await api.LoginAsync(name, "user-password-123");
+        var other = await api.LoginAsync(name, "user-password-123");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await api.Anonymous().PostAsJsonAsync("/api/auth/password", new ChangePasswordRequest("user-password-123", "brand-new-pass-1"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await here.Post("/api/auth/password", new ChangePasswordRequest("wrong-password-x", "brand-new-pass-1"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await here.Post("/api/auth/password", new ChangePasswordRequest("user-password-123", "short"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await here.Post("/api/auth/password", new ChangePasswordRequest("user-password-123", "user-password-123"))).StatusCode);
+
+        var ok = await (await here.Post("/api/auth/password", new ChangePasswordRequest("user-password-123", "brand-new-pass-1"))).Read<LoginResponse>();
+        Assert.False(string.IsNullOrEmpty(ok.Token));
+        Assert.False(string.IsNullOrEmpty(ok.RefreshToken));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await other.GetAsync("/api/products")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await here.GetAsync("/api/products")).StatusCode); // old token; the app swaps in the new one
+        var fresh = api.Anonymous();
+        fresh.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", ok.Token);
+        Assert.Equal(HttpStatusCode.OK, (await fresh.GetAsync("/api/products")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await api.Anonymous().PostAsJsonAsync("/api/auth/login", new LoginRequest(name, "user-password-123"))).StatusCode);
+        await api.LoginAsync(name, "brand-new-pass-1");
+    }
+
+    [Fact]
+    public async Task Guessing_the_current_password_through_a_session_locks_the_account()
+    {
+        var admin = await api.AdminAsync();
+        var name = $"guess{Guid.NewGuid():N}"[..18];
+        (await admin.Post("/api/users", new CreateUserRequest(name, "user-password-123", UserRole.Reader))).EnsureSuccessStatusCode();
+        var here = await api.LoginAsync(name, "user-password-123");
+        for (var i = 0; i < AuthEndpoints.MaxFailedLogins; i++)
+            Assert.Equal(HttpStatusCode.BadRequest, (await here.Post("/api/auth/password", new ChangePasswordRequest("nope-nope-nope", "brand-new-pass-1"))).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await here.Post("/api/auth/password", new ChangePasswordRequest("user-password-123", "brand-new-pass-1"))).StatusCode);
+    }
+
+    [Fact]
     public async Task Repeated_failures_lock_the_account()
     {
         var admin = await api.AdminAsync();
@@ -208,5 +246,27 @@ public class AuthTests(ApiFixture api)
         var reader = await api.UserAsync(UserRole.Reader);
         Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync("/api/access/matrix")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await reader.PostAsync($"/api/users/{created.Id}/unlock", null)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Session_outlives_an_expired_access_token_via_refresh()
+    {
+        var admin = await api.AdminAsync();
+        var name = $"expr{Guid.NewGuid():N}"[..18];
+        await admin.Post("/api/users", new CreateUserRequest(name, "user-password-123", UserRole.Reader));
+
+        // a host whose access tokens are already expired when issued
+        var shortLived = api.Anonymous(new Dictionary<string, string> { ["Jwt:ExpiresMinutes"] = "0", ["Jwt:ClockSkewSeconds"] = "0" });
+        var login = await (await shortLived.PostAsJsonAsync("/api/auth/login", new LoginRequest(name, "user-password-123"))).Read<LoginResponse>();
+        shortLived.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", login.Token);
+        await Task.Delay(1100);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await shortLived.GetAsync("/api/products")).StatusCode);
+
+        // the refresh token still works (here against a normal host) and yields a usable access token
+        var normal = api.Anonymous();
+        var renewed = await (await normal.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(login.RefreshToken))).Read<LoginResponse>();
+        normal.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", renewed.Token);
+        Assert.Equal(HttpStatusCode.OK, (await normal.GetAsync("/api/products")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await normal.GetAsync("/api/auth/me")).StatusCode);
     }
 }

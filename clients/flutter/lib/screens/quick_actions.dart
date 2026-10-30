@@ -7,6 +7,7 @@ import 'orders.dart';
 import 'product_detail.dart';
 import 'production_orders.dart';
 import 'requisitions.dart';
+import 'sales_quotes.dart';
 
 class QuickAction {
   const QuickAction(this.icon, this.label, this.run);
@@ -28,6 +29,7 @@ Future<void> newProduct(BuildContext context, Session session) async {
 }
 
 List<QuickAction> quickActionsFor(Session s) => [
+  if (s.canSell) QuickAction(Icons.request_quote_outlined, 'Novo orçamento', (c) => newQuote(c, s)),
   if (s.canWrite) QuickAction(Icons.add_box_outlined, 'Novo produto', (c) => newProduct(c, s)),
   if (s.canProduce) QuickAction(Icons.add_task, 'Nova Ordem de Fabricação', (c) => newProductionOrder(c, s)),
   if (s.canRequest) QuickAction(Icons.post_add, 'Nova requisição', (c) => newRequisition(c, s)),

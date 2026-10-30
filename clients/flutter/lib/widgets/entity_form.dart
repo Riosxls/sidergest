@@ -5,6 +5,7 @@ import 'discard_guard.dart';
 
 import '../api.dart';
 import '../entities.dart';
+import '../workdays.dart';
 
 Future<Map<String, dynamic>?> showEntityForm(
   BuildContext context, {
@@ -35,7 +36,7 @@ Future<bool> confirm(BuildContext context, String message) async =>
     false;
 
 void showError(BuildContext context, Object e) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Theme.of(context).colorScheme.error));
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e is String ? e : friendlyError(e)), backgroundColor: Theme.of(context).colorScheme.error));
 }
 
 class EntityFormDialog extends StatefulWidget {
@@ -193,10 +194,10 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
     final days = f.daysFor, date = f.dateFor;
     if (days != null) {
       final n = int.tryParse(_text[f.key]!.text.trim());
-      if (n != null && _text.containsKey(days)) _text[days]!.text = fmtDay(isoDate(_today.add(Duration(days: n))));
+      if (n != null && _text.containsKey(days)) _text[days]!.text = fmtDay(isoDate(addWorkDays(_today, n)));
     } else if (date != null) {
       final d = DateTime.tryParse(parseDate(_text[f.key]!.text) ?? '');
-      if (d != null && _text.containsKey(date)) _text[date]!.text = '${DateTime(d.year, d.month, d.day).difference(_today).inDays}';
+      if (d != null && _text.containsKey(date)) _text[date]!.text = '${workDaysBetween(_today, d)}';
     }
   }
 
@@ -515,7 +516,7 @@ class _LookupPickerState extends State<LookupPicker> {
         _error = null;
       });
     } catch (e) {
-      if (r == _request && mounted) setState(() => _error = '$e');
+      if (r == _request && mounted) setState(() => _error = friendlyError(e));
     } finally {
       if (r == _request && mounted) setState(() => _loading = false);
     }

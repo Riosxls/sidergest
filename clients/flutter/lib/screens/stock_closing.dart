@@ -58,7 +58,7 @@ class _ClosingScreenState extends State<ClosingScreen> {
         await _preview();
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     }
   }
 
@@ -79,7 +79,7 @@ class _ClosingScreenState extends State<ClosingScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = friendlyError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -228,6 +228,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     FieldSpec('maxDiscountPercent', 'Desconto máximo sem aprovação (%)', type: FieldType.decimal, required: true),
     FieldSpec('defaultValidityDays', 'Validade padrão do orçamento (dias)', type: FieldType.integer, required: true),
     FieldSpec('minimumOrderValue', 'Faturamento mínimo (R\$)', type: FieldType.decimal, required: true),
+    FieldSpec('offListNeedsApproval', 'Preço digitado fora da tabela exige aprovação do gerente', type: FieldType.boolean),
+    FieldSpec('followUpDays', 'Cobrar resposta do orçamento enviado após (dias)', type: FieldType.integer, required: true),
+    FieldSpec('approvalValidityDays', 'Validade da aprovação de desconto (dias)', type: FieldType.integer, required: true, hint: 'Passado o prazo sem envio, volta a rascunho'),
     FieldSpec(
       'shippingLocationId',
       'Local de expedição',
@@ -324,6 +327,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ('Desconto sem aprovação', 'até ${fmt(sa['maxDiscountPercent'])} %'),
             ('Validade do orçamento', '${fmt(sa['defaultValidityDays'])} dias'),
             ('Faturamento mínimo', fmtMoney(sa['minimumOrderValue'])),
+            ('Preço fora da tabela', sa['offListNeedsApproval'] == true ? 'exige aprovação' : 'livre'),
+            ('Cobrar resposta', 'após ${fmt(sa['followUpDays'])} dias'),
+            ('Validade da aprovação', '${fmt(sa['approvalValidityDays'])} dias'),
             ('Local de expedição', fmt(sa['shippingLocation'] ?? 'Acabado do PCP (padrão)')),
             ('Condições gerais', fmt(sa['defaultConditions'])),
           ]),
