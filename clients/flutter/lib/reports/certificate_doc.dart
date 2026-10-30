@@ -95,7 +95,7 @@ Future<Uint8List> buildCertificatePdf(Map<String, dynamic> c) async {
                 child: pw.Row(
                   crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
-                    pw.Expanded(child: pw.Center(child: pw.Text('CERTIFICADO DE QUALIDADE', style: _b(15)))),
+                    pw.Expanded(child: pw.Center(child: pw.Text(_s(c['title']).isEmpty ? 'CERTIFICADO DE QUALIDADE' : _s(c['title']), style: _b(_s(c['title']).length > 32 ? 12 : 15), textAlign: pw.TextAlign.center))),
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [pw.Text('Nº: ${c['reference']}', style: _b(11)), pw.SizedBox(height: 3), pw.Text(fmtDay(c['issueDate']), style: _n(10))],

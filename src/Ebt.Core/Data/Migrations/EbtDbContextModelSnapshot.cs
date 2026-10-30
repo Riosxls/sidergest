@@ -336,6 +336,104 @@ namespace Ebt.Core.Data.Migrations
                     b.ToTable("certificate_measures", (string)null);
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.CertificateTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("integer")
+                        .HasColumnName("customer_id");
+
+                    b.Property<string>("Finish")
+                        .HasColumnType("text")
+                        .HasColumnName("finish");
+
+                    b.Property<string>("LearnedFrom")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("learned_from");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_certificate_templates");
+
+                    b.HasIndex("CustomerId")
+                        .HasDatabaseName("ix_certificate_templates_customer_id");
+
+                    b.HasIndex("ProductId", "CustomerId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_certificate_templates_product_id_customer_id");
+
+                    b.ToTable("certificate_templates", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.CertificateTemplateMeasure", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence");
+
+                    b.Property<string>("Specified")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("specified");
+
+                    b.Property<int>("TemplateId")
+                        .HasColumnType("integer")
+                        .HasColumnName("template_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_certificate_template_measures");
+
+                    b.HasIndex("TemplateId", "Kind", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ix_certificate_template_measures_template_id_kind_sequence");
+
+                    b.ToTable("certificate_template_measures", (string)null);
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.Cfop", b =>
                 {
                     b.Property<string>("Code")
@@ -3514,6 +3612,11 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("status");
 
+                    b.Property<string>("Title")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("title");
+
                     b.Property<string>("Unit")
                         .IsRequired()
                         .HasMaxLength(3)
@@ -5724,6 +5827,39 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Certificate");
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.CertificateTemplate", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_certificate_templates_customers_customer_id");
+
+                    b.HasOne("Ebt.Core.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_certificate_templates_products_product_id");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.CertificateTemplateMeasure", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.CertificateTemplate", "Template")
+                        .WithMany("Measures")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_certificate_template_measures_certificate_templates_templat");
+
+                    b.Navigation("Template");
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.Customer", b =>
                 {
                     b.HasOne("Ebt.Core.Entities.PaymentTerm", "DefaultPaymentTerm")
@@ -6951,6 +7087,11 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Customer");
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.CertificateTemplate", b =>
+                {
+                    b.Navigation("Measures");
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.Customer", b =>

@@ -60,7 +60,7 @@ Tests:
 
 ### Migrations
 
-All live in `src/Ebt.Core/Data/Migrations/`. As of 2026-10-30 every migration, up to `QuoteFlowImprovements`, is applied to Italo's running DB. New ones apply automatically on the next API start. Create them from `src/Ebt.Core` with `dotnet ef migrations add <Name> -s ../Ebt.Api` (design-time factory: `Data/DesignTimeFactory.cs`).
+All live in `src/Ebt.Core/Data/Migrations/`. As of 2026-10-30 every migration, up to `QuoteFlowImprovements`, was applied (`CertificateTemplates` applies on the next API start) to Italo's running DB. New ones apply automatically on the next API start. Create them from `src/Ebt.Core` with `dotnet ef migrations add <Name> -s ../Ebt.Api` (design-time factory: `Data/DesignTimeFactory.cs`).
 
 The live DB holds data imported from the old system (hundreds of OFs and purchase orders) next to test records. Treat it as real; never wipe it without a fresh backup.
 
@@ -118,7 +118,7 @@ scripts/             start.ps1, stop.ps1
 - **Pipeline** view of the 8 sales steps.
 - **Quote revisions** with letter suffixes.
 - **OF PDF** with Tolerância, Medidas and Tubo primário fields (`OrderOperationDetails` migration).
-- **Quality certificates** (`Certificates/CertificateService.cs`, `Entities/Certificates.cs`, `screens/certificates.dart`, `reports/certificate_doc.dart`): EBT and BST templates.
+- **Quality certificates** (`Certificates/CertificateService.cs`, `Entities/Certificates.cs`, `screens/certificates.dart`, `reports/certificate_doc.dart`): EBT and BST templates. Specification templates per customer+product (`CertificateTemplate`) are learned when a certificate is issued (limits, title, finish, standing observation; never the found values or the "certificado de origem" line) and prefill the next draft; list/forget them under Certificados > Modelos de especificação. `POST /api/sales/certificates/for-delivery/{id}` drafts one certificate per delivery item. Title variant "GARANTIA DA QUALIDADE DO PRODUTO", add/remove table rows and observation snippets in the editor. Facts about the Excel certificates are in the project memory (certificate-excel-findings).
 - **NF-e emission** (`Fiscal/`): `FiscalService`, `NfeXml`, `NfeSigner` (XMLDSig A1), `SefazSpClient` (real, never run against SEFAZ), `StubSefazClient` (default). See `src/Ebt.Core/Fiscal/FISCAL.md` for the full status table and SEFAZ-enable steps.
 - **Print PDFs for all steps**: quote, sales order, OF, delivery, NF (sale and outside-processing shipments), certificate.
 - **Clientes CRUD** (`screens/customers.dart`, `/api/customers` with addresses, company data, default prazo).

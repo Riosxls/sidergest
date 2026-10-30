@@ -326,6 +326,7 @@ class SalesFake {
     if (p == '/api/sales/orders/9/cancel' || p == '/api/sales/orders/9/close-balance' || p == '/api/sales/orders/9/reschedule') {
       return json(order());
     }
+    if (p == '/api/sales/certificates/for-delivery/15') return json([{'id': 70}]);
     if (p == '/api/sales/orders/9/deliveries') return json(delivery(), 201);
     if (p == '/api/sales/deliveries/15' && m == 'GET') return json(delivery());
     if (p == '/api/sales/deliveries/15/ship') {
@@ -524,6 +525,16 @@ void main() {
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['invoicedValue'], 420.5);
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship')).containsKey('withoutCertificate'), isFalse);
     expect(find.byKey(const ValueKey('delivery-confirm')), findsOneWidget);
+  });
+
+  testWidgets('delivery creates the missing certificates in one click', (tester) async {
+    final fake = SalesFake();
+    await pumpScreen(tester, fake, (s) => DeliveryScreen(session: s, id: 15));
+    expect(find.text('Gerar certificado do item'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('delivery-all-certificates')));
+    await tester.pumpAndSettle();
+    expect(fake.last('POST', '/api/sales/certificates/for-delivery/15'), isNotNull);
+    expect(find.textContaining('1 certificado(s) criado(s)'), findsOneWidget);
   });
 
   testWidgets('shipping without a certificate or waiver asks first and says so to the API', (tester) async {

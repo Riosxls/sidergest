@@ -166,6 +166,22 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
     build: (f) => buildSaleNfPdf(api, _d!, f),
   );
 
+  /// Delivery items that still have no certificate (cancelled ones do not count).
+  int _missingCertificates(Map<String, dynamic> d) {
+    final covered = _certs.where((c) => c['status'] != 'Cancelled').length;
+    return ((d['lines'] as List).length - covered).clamp(0, 999);
+  }
+
+  Future<void> _createAllCertificates() async {
+    final made = await runAction(context, () => api.post('/api/sales/certificates/for-delivery/${widget.id}', {}));
+    if (made is! List || made.isEmpty || !mounted) return;
+    await _load();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${made.length} certificado(s) criado(s) com a especificação do último emitido. Abra cada um e preencha o "Encontrado".')),
+    );
+  }
+
   Future<void> _confirm() async {
     final r = await submitForm(
       context,
@@ -318,8 +334,15 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
         Section(
           title: 'Certificados de qualidade (${_certs.length})',
           actions: [
-            if (s.canCertificate && ['Planned', 'Shipped'].contains(d['status']))
+            if (s.canCertificate && ['Planned', 'Shipped'].contains(d['status']) && _missingCertificates(d) > 0)
               FilledButton.tonalIcon(
+                key: const ValueKey('delivery-all-certificates'),
+                onPressed: _createAllCertificates,
+                icon: const Icon(Icons.playlist_add),
+                label: Text(_missingCertificates(d) == 1 ? 'Gerar certificado do item' : 'Gerar ${_missingCertificates(d)} certificados'),
+              ),
+            if (s.canCertificate && ['Planned', 'Shipped'].contains(d['status']))
+              OutlinedButton.icon(
                 key: const ValueKey('delivery-new-certificate'),
                 onPressed: () async {
                   final order = await api.get('/api/sales/orders/${d['orderId']}') as Map<String, dynamic>;

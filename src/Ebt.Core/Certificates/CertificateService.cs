@@ -10,7 +10,7 @@ public sealed record CertificateMeasureInput(CertificateMeasureKind Kind, string
 
 public sealed record CertificateInput(int OrderId, int? OrderLineId = null, int? DeliveryId = null, string? Company = null, string? CustomerPo = null, DateOnly? IssueDate = null, string? InvoiceNumber = null,
     decimal? Quantity = null, string? Unit = null, string? Description = null, string? CustomerPartNumber = null, string? CustomerPartDescription = null, string? RawMaterialLot = null, string? Hardness = null,
-    string? Finish = null, string? Notes = null, string? ApprovedBy = null, IReadOnlyList<CertificateMeasureInput>? Measures = null);
+    string? Finish = null, string? Notes = null, string? ApprovedBy = null, IReadOnlyList<CertificateMeasureInput>? Measures = null, string? Title = null);
 
 public sealed class CertificateService(EbtDbContext db)
 {
@@ -50,6 +50,7 @@ public sealed class CertificateService(EbtDbContext db)
         var product = await db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == line.ProductId, ct);
         var link = await db.ProductCustomers.AsNoTracking().FirstOrDefaultAsync(c => c.ProductId == line.ProductId && c.CustomerId == order.CustomerId, ct);
         var deliveryQty = delivery?.Lines.FirstOrDefault(l => l.OrderLineId == line.Id)?.Quantity;
+        var template = await TemplateAsync(line.ProductId, order.CustomerId, ct);
         var quantity = i.Quantity ?? deliveryQty ?? line.Quantity;
         if (quantity <= 0) throw SalesException.Invalid("quantity", "Must be greater than zero");
 
@@ -63,10 +64,10 @@ public sealed class CertificateService(EbtDbContext db)
                 Company = company, Number = number, Year = date.Year, Reference = ReferenceOf(number, date.Year), OrderId = order.Id, OrderLineId = line.Id, DeliveryId = delivery?.Id, ProductId = line.ProductId,
                 CustomerPo = Clean(i.CustomerPo) ?? order.CustomerPo, IssueDate = date, InvoiceNumber = Clean(i.InvoiceNumber), Quantity = quantity, Unit = (Clean(i.Unit) ?? line.Unit).ToUpperInvariant(),
                 ProductCode = product?.Code, Description = Clean(i.Description) ?? line.Description, CustomerPartNumber = Clean(i.CustomerPartNumber) ?? line.CustomerPartNumber ?? link?.CustomerPartNumber,
-                CustomerPartDescription = Clean(i.CustomerPartDescription) ?? link?.CustomerDescription, RawMaterialLot = Clean(i.RawMaterialLot), Hardness = Clean(i.Hardness), Finish = Clean(i.Finish) ?? DefaultFinish,
-                Notes = Clean(i.Notes), ApprovedBy = Clean(i.ApprovedBy), Status = CertificateStatus.Draft, CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow
+                CustomerPartDescription = Clean(i.CustomerPartDescription) ?? link?.CustomerDescription, RawMaterialLot = Clean(i.RawMaterialLot), Hardness = Clean(i.Hardness), Finish = Clean(i.Finish) ?? template?.Finish ?? DefaultFinish, Title = Clean(i.Title) ?? template?.Title,
+                Notes = Clean(i.Notes) ?? template?.Notes, ApprovedBy = Clean(i.ApprovedBy), Status = CertificateStatus.Draft, CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow
             };
-            SetMeasures(c, i.Measures ?? TemplateMeasures(product));
+            SetMeasures(c, i.Measures ?? template?.Measures.OrderBy(m => m.Kind).ThenBy(m => m.Sequence).Select(m => new CertificateMeasureInput(m.Kind, m.Name, m.Specified)).ToList() ?? TemplateMeasures(product));
             db.QualityCertificates.Add(c);
             try
             {
@@ -102,6 +103,7 @@ public sealed class CertificateService(EbtDbContext db)
         c.RawMaterialLot = Clean(i.RawMaterialLot);
         c.Hardness = Clean(i.Hardness);
         c.Finish = Clean(i.Finish) ?? DefaultFinish;
+        c.Title = Clean(i.Title);
         c.Notes = Clean(i.Notes);
         c.ApprovedBy = Clean(i.ApprovedBy);
         if (i.Measures is not null)
@@ -139,8 +141,63 @@ public sealed class CertificateService(EbtDbContext db)
         c.Status = CertificateStatus.Issued;
         c.IssuedBy = user;
         c.IssuedAt = DateTimeOffset.UtcNow;
+        await LearnAsync(c, user, ct);
         await db.SaveChangesAsync(ct);
         return c;
+    }
+
+    /// <summary>One draft per delivery item that has no certificate yet, each already filled from its template (the NF of the delivery covers several products, one certificate each).</summary>
+    public async Task<IReadOnlyList<QualityCertificate>> CreateForDeliveryAsync(int deliveryId, string? user, CancellationToken ct = default)
+    {
+        var d = await db.Deliveries.AsNoTracking().Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == deliveryId, ct) ?? throw SalesException.NotFound("Delivery");
+        if (d.Status == DeliveryStatus.Cancelled) throw SalesException.Conflict("Delivery is cancelled");
+        var covered = await db.QualityCertificates.AsNoTracking().Where(c => c.DeliveryId == deliveryId && c.Status != CertificateStatus.Cancelled).Select(c => c.OrderLineId).ToListAsync(ct);
+        var created = new List<QualityCertificate>();
+        foreach (var l in d.Lines.OrderBy(x => x.Id).Where(x => !covered.Contains(x.OrderLineId)))
+            created.Add(await CreateAsync(new CertificateInput(d.OrderId, l.OrderLineId, d.Id, Quantity: l.Quantity), user, ct));
+        if (created.Count == 0) throw SalesException.Conflict("Every item of this delivery already has a certificate");
+        return created;
+    }
+
+    public async Task<CertificateTemplate?> TemplateAsync(int productId, int customerId, CancellationToken ct = default) =>
+        await db.CertificateTemplates.AsNoTracking().Include(t => t.Measures).FirstOrDefaultAsync(t => t.ProductId == productId && t.CustomerId == customerId, ct);
+
+    public async Task DeleteTemplateAsync(int id, CancellationToken ct = default)
+    {
+        var t = await db.CertificateTemplates.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw SalesException.NotFound("Template");
+        db.CertificateTemplates.Remove(t);
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Remembers the specification of an issued certificate for the next one of the same product and customer. Found values and the mill-certificate line (it changes with the steel lot) are left out.</summary>
+    private async Task LearnAsync(QualityCertificate c, string? user, CancellationToken ct)
+    {
+        if (c.ProductId is not { } productId) return;
+        var customerId = await db.SalesOrders.Where(o => o.Id == c.OrderId).Select(o => o.CustomerId).FirstAsync(ct);
+        var t = await db.CertificateTemplates.Include(x => x.Measures).FirstOrDefaultAsync(x => x.ProductId == productId && x.CustomerId == customerId, ct);
+        if (t is null)
+        {
+            t = new CertificateTemplate { ProductId = productId, CustomerId = customerId };
+            db.CertificateTemplates.Add(t);
+        }
+        t.Title = Clean(c.Title);
+        t.Finish = Clean(c.Finish);
+        t.Notes = StandingNotes(c.Notes);
+        t.UpdatedBy = user;
+        t.UpdatedAt = DateTimeOffset.UtcNow;
+        t.LearnedFrom = c.Reference;
+        db.CertificateTemplateMeasures.RemoveRange(t.Measures);
+        t.Measures = new();
+        foreach (var g in c.Measures.GroupBy(m => m.Kind))
+            foreach (var (m, n) in g.OrderBy(m => m.Sequence).Select((m, n) => (m, n)))
+                t.Measures.Add(new CertificateTemplateMeasure { Kind = g.Key, Sequence = n + 1, Name = m.Name, Specified = m.Specified });
+    }
+
+    /// <summary>Observation lines worth repeating: everything except the "certificado de origem do material nº …" line, which belongs to one steel lot.</summary>
+    public static string? StandingNotes(string? notes)
+    {
+        var keep = (notes ?? "").Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0 && !l.Contains("origem do material", StringComparison.OrdinalIgnoreCase));
+        return Clean(string.Join("\n", keep));
     }
 
     public async Task<QualityCertificate> CancelAsync(int id, string? reason, CancellationToken ct = default)

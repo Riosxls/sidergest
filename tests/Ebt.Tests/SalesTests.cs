@@ -157,7 +157,7 @@ public class SalesTests(ApiFixture api)
         Assert.Equal(40m, certificate.Quantity);
         Assert.Equal(order.Lines[0].Id, certificate.OrderLineId);
         Assert.Matches(@"^\d+-\d\d$", certificate.Reference);
-        Assert.Equal(2146, certificate.Number);
+        Assert.True(certificate.Number >= 2146); // numbering continues from the last paper certificate; other tests also issue EBT certificates
         Assert.Contains(certificate.Measures, m => m.Kind == CertificateMeasureKind.Dimensional && m.Name == "Espessura" && m.Specified == "1,50");
         Assert.Equal(HttpStatusCode.BadRequest, (await admin.Post($"/api/sales/certificates/{certificate.Id}/issue", new object())).StatusCode);
         var measures = certificate.Measures.Select(m => new CertificateMeasureInput(m.Kind, m.Name, m.Specified, m.Name == "C" ? "0,081" : null)).ToList();
@@ -284,6 +284,80 @@ public class SalesTests(ApiFixture api)
 
         order = await (await admin.Post($"/api/sales/orders/{order.Id}/cancel", new OrderCancelIn("Pedido duplicado", CancelProduction: true))).Read<SalesOrderOut>();
         Assert.Equal(ProductionOrderStatus.Cancelled, (await (await admin.GetAsync($"/api/production/orders/{order.Lines[0].ProductionOrderId}")).Read<ProductionOrderOut>()).Status);
+    }
+
+    [Fact]
+    public async Task Issued_certificate_teaches_the_next_one_of_the_same_customer_and_product()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin, stock: 100m);
+        var first = await ReleasedOrder(admin, s, 10m);
+        const string title = "CERTIFICADO DE GARANTIA DA QUALIDADE DO PRODUTO";
+        var measures = new List<CertificateMeasureInput>
+        {
+            new(CertificateMeasureKind.Chemical, "C", "Máx. 0,150", "0,070"),
+            new(CertificateMeasureKind.Chemical, "Mn", "Máx. 0,700", "0,366"),
+            new(CertificateMeasureKind.Dimensional, "Diâmetro", "25,40± 0,15", "25,40 à 25,48"),
+            new(CertificateMeasureKind.Mechanical, "LR", "290 Mpa mín.", "400Mpa"),
+            new(CertificateMeasureKind.Mechanical, "Alongamento longitudinal", "28% Mínimo", "32%"),
+        };
+        var one = await (await admin.Post("/api/sales/certificates", new CertificateInput(first.Id, Title: title, Notes: "Certificado de origem do material nº 1127693\nMATERIAL RECOZIDO", Measures: measures, RawMaterialLot: "700090"))).Read<CertificateOut>();
+        Assert.Equal(title, one.Title);
+        Assert.Empty((await (await admin.GetAsync("/api/sales/certificates/templates")).Read<List<CertificateTemplateOut>>()).Where(t => t.CustomerId == s.Customer.Id));
+        (await admin.Post($"/api/sales/certificates/{one.Id}/issue", new object())).EnsureSuccessStatusCode();
+
+        var templates = (await (await admin.GetAsync($"/api/sales/certificates/templates?customerId={s.Customer.Id}")).Read<List<CertificateTemplateOut>>());
+        var template = Assert.Single(templates);
+        Assert.Equal(s.Tube.Id, template.ProductId);
+        Assert.Equal(one.Reference, template.LearnedFrom);
+        Assert.Equal("MATERIAL RECOZIDO", template.Notes);
+        Assert.All(template.Measures, m => Assert.Null(m.Found));
+
+        var second = await ReleasedOrder(admin, s, 5m);
+        var next = await (await admin.Post("/api/sales/certificates", new CertificateInput(second.Id))).Read<CertificateOut>();
+        Assert.Equal(title, next.Title);
+        Assert.Equal("MATERIAL RECOZIDO", next.Notes);
+        Assert.Null(next.RawMaterialLot);
+        Assert.Equal(["C", "Mn", "Diâmetro", "LR", "Alongamento longitudinal"], next.Measures.Select(m => m.Name));
+        Assert.Equal("Máx. 0,150", next.Measures.First(m => m.Name == "C").Specified);
+        Assert.Equal("25,40± 0,15", next.Measures.First(m => m.Name == "Diâmetro").Specified);
+        Assert.All(next.Measures, m => Assert.Null(m.Found));
+        var blank = await (await admin.GetAsync($"/api/sales/certificates/template?orderLineId={second.Lines[0].Id}")).Read<List<CertificateMeasureOut>>();
+        Assert.Equal(5, blank.Count);
+
+        // another customer ordering the same product gets the plain template
+        var other = await (await admin.Post("/api/customers", new CustomerIn("Outro " + Code("C"), null, null, ConsumerType.Normal))).Read<CustomerOut>();
+        var addr = await (await admin.Post($"/api/customers/{other.Id}/addresses", new CustomerAddressIn("26133636000103", "SP", null, "148061942112", true, "Av. Brasil", "100", null, "Centro", "Embu", null, "06800000", "5101", "Edilto", "c@cliente.com", null))).Read<CustomerAddressOut>();
+        var foreign = await (await admin.Post("/api/sales/orders", new SalesOrderIn(other.Id, addr.Id, [new SalesLineInput(s.Tube.Id, 3m)], "PO-9", s.Term.Id))).Read<SalesOrderOut>();
+        var plain = await (await admin.Post("/api/sales/certificates", new CertificateInput(foreign.Id))).Read<CertificateOut>();
+        Assert.Null(plain.Title);
+        Assert.Equal(CertificateService.DefaultFinish, plain.Finish);
+        Assert.Contains(plain.Measures, m => m.Name == "Espessura" && m.Specified == "1,50");
+
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync($"/api/sales/certificates/templates/{template.Id}")).StatusCode);
+        Assert.Empty((await (await admin.GetAsync($"/api/sales/certificates/templates?customerId={s.Customer.Id}")).Read<List<CertificateTemplateOut>>()));
+    }
+
+    [Fact]
+    public async Task One_click_creates_a_certificate_for_each_item_of_a_delivery()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin, stock: 100m);
+        var order = await (await admin.Post("/api/sales/orders", new SalesOrderIn(s.Customer.Id, s.Address.Id, [new SalesLineInput(s.Tube.Id, 10m), new SalesLineInput(s.Other.Id, 5m)], "PO-5", s.Term.Id))).Read<SalesOrderOut>();
+        order = await (await admin.Post($"/api/sales/orders/{order.Id}/release", new SalesReleaseIn())).Read<SalesOrderOut>();
+        var delivery = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
+        Assert.Equal(2, delivery.Lines.Count);
+
+        var made = await (await admin.Post($"/api/sales/certificates/for-delivery/{delivery.Id}", new object())).Read<List<CertificateOut>>();
+        Assert.Equal(2, made.Count);
+        Assert.All(made, c => Assert.Equal(delivery.Id, c.DeliveryId));
+        Assert.Equal([10m, 5m], made.Select(c => c.Quantity));
+        Assert.Equal(2, made.Select(c => c.Number).Distinct().Count());
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.Post($"/api/sales/certificates/for-delivery/{delivery.Id}", new object())).StatusCode);
+
+        (await admin.Post($"/api/sales/certificates/{made[1].Id}/cancel", new CertificateReasonIn("Erro de quantidade"))).EnsureSuccessStatusCode();
+        var again = await (await admin.Post($"/api/sales/certificates/for-delivery/{delivery.Id}", new object())).Read<List<CertificateOut>>();
+        Assert.Equal(made[1].OrderLineId, Assert.Single(again).OrderLineId);
     }
 
     [Fact]

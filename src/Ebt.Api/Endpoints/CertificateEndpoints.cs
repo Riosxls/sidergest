@@ -14,7 +14,9 @@ public record CertificateSummaryOut(int Id, string Reference, string Company, Ce
 public record CertificateOut(int Id, string Company, int Number, int Year, string Reference, int OrderId, string OrderReference, int? OrderLineId, int? DeliveryId, string? DeliveryReference, int CustomerId, string CustomerName,
     string? CustomerPo, DateOnly IssueDate, string? InvoiceNumber, string? EffectiveInvoiceNumber, decimal Quantity, string Unit, int? ProductId, string? ProductCode, string Description, string? CustomerPartNumber,
     string? CustomerPartDescription, string? RawMaterialLot, string? Hardness, string? Finish, string? Notes, string? ApprovedBy, CertificateStatus Status, string? CancelReason, string? CreatedBy, DateTimeOffset CreatedAt,
-    string? IssuedBy, DateTimeOffset? IssuedAt, IReadOnlyList<CertificateMeasureOut> Measures);
+    string? IssuedBy, DateTimeOffset? IssuedAt, IReadOnlyList<CertificateMeasureOut> Measures, string? Title = null);
+public record CertificateTemplateOut(int Id, int ProductId, string ProductCode, string ProductDescription, int CustomerId, string CustomerName, string? Title, string? Finish, string? Notes, string? LearnedFrom, DateTimeOffset UpdatedAt,
+    IReadOnlyList<CertificateMeasureOut> Measures);
 public record CertificateLinkIn(int? DeliveryId);
 public record CertificateReasonIn(string? Reason);
 public record CertificateWaiverIn(bool Waived);
@@ -97,12 +99,45 @@ public static class CertificateEndpoints
             return Results.NoContent();
         }).RequireAuthorization(CertificatePolicies.Manage);
 
-        // Blank tables of the template, pre-filled with the product dimensions of an order line, used by the editor for a new certificate.
-        g.MapGet("/template", async (EbtDbContext db, int? orderLineId, CancellationToken ct) =>
+        // Tables a new certificate starts with: the learned template of this customer and product when there is one, else blank rows with the product dimensions.
+        g.MapGet("/template", async (EbtDbContext db, CertificateService svc, int? orderLineId, CancellationToken ct) =>
         {
-            var p = orderLineId is { } lid ? await db.SalesOrderLines.AsNoTracking().Where(l => l.Id == lid).Select(l => l.Product).FirstOrDefaultAsync(ct) : null;
-            return Results.Ok(CertificateService.TemplateMeasures(p).Select((m, n) => new CertificateMeasureOut(m.Kind, n + 1, m.Name, m.Specified, m.Found)));
+            var line = orderLineId is { } lid ? await db.SalesOrderLines.AsNoTracking().Where(l => l.Id == lid).Select(l => new { l.ProductId, l.Order!.CustomerId, l.Product }).FirstOrDefaultAsync(ct) : null;
+            var t = line is null ? null : await svc.TemplateAsync(line.ProductId, line.CustomerId, ct);
+            if (t is not null) return Results.Ok(t.Measures.OrderBy(m => m.Kind).ThenBy(m => m.Sequence).Select(m => new CertificateMeasureOut(m.Kind, m.Sequence, m.Name, m.Specified, null)));
+            return Results.Ok(CertificateService.TemplateMeasures(line?.Product).Select((m, n) => new CertificateMeasureOut(m.Kind, n + 1, m.Name, m.Specified, m.Found)));
         });
+
+        // One draft per delivery item still without a certificate.
+        g.MapPost("/for-delivery/{deliveryId:int}", async (int deliveryId, EbtDbContext db, CertificateService svc, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            var created = await svc.CreateForDeliveryAsync(deliveryId, Who(user), ct);
+            var list = new List<CertificateOut>();
+            foreach (var c in created) list.Add(await Load(db, c.Id, ct));
+            return Results.Ok(list);
+        }).RequireAuthorization(CertificatePolicies.Manage);
+
+        var templates = g.MapGroup("/templates");
+        templates.MapGet("/", async (EbtDbContext db, int? productId, int? customerId, string? q, CancellationToken ct) =>
+        {
+            var x = db.CertificateTemplates.AsNoTracking().AsQueryable();
+            if (productId is { } p) x = x.Where(t => t.ProductId == p);
+            if (customerId is { } cu) x = x.Where(t => t.CustomerId == cu);
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var like = Like(q);
+                x = x.Where(t => EF.Functions.ILike(t.Product!.Code, like) || EF.Functions.ILike(t.Product.Name, like) || EF.Functions.ILike(t.Customer!.Name, like));
+            }
+            var items = await x.OrderBy(t => t.Customer!.Name).ThenBy(t => t.Product!.Code).Take(500)
+                .Select(t => new CertificateTemplateOut(t.Id, t.ProductId, t.Product!.Code, t.Product.Name, t.CustomerId, t.Customer!.Name, t.Title, t.Finish, t.Notes, t.LearnedFrom, t.UpdatedAt,
+                    t.Measures.OrderBy(m => m.Kind).ThenBy(m => m.Sequence).Select(m => new CertificateMeasureOut(m.Kind, m.Sequence, m.Name, m.Specified, null)).ToList())).ToListAsync(ct);
+            return Results.Ok(items);
+        });
+        templates.MapDelete("/{id:int}", async (int id, CertificateService svc, CancellationToken ct) =>
+        {
+            await svc.DeleteTemplateAsync(id, ct);
+            return Results.NoContent();
+        }).RequireAuthorization(CertificatePolicies.Manage);
 
         app.MapPost("/api/sales/orders/{id:int}/certificate-waiver", async (int id, CertificateWaiverIn i, CertificateService svc, CancellationToken ct) =>
         {
@@ -117,6 +152,6 @@ public static class CertificateEndpoints
         var measures = c.Measures.OrderBy(m => m.Kind).ThenBy(m => m.Sequence).Select(m => new CertificateMeasureOut(m.Kind, m.Sequence, m.Name, m.Specified, m.Found)).ToList();
         return new CertificateOut(c.Id, c.Company, c.Number, c.Year, c.Reference, c.OrderId, c.Order!.Reference, c.OrderLineId, c.DeliveryId, c.Delivery?.Reference, c.Order.CustomerId, c.Order.Customer!.Name, c.CustomerPo, c.IssueDate,
             c.InvoiceNumber, c.InvoiceNumber ?? c.Delivery?.InvoiceNumber, c.Quantity, c.Unit, c.ProductId, c.ProductCode, c.Description, c.CustomerPartNumber, c.CustomerPartDescription, c.RawMaterialLot, c.Hardness, c.Finish, c.Notes,
-            c.ApprovedBy, c.Status, c.CancelReason, c.CreatedBy, c.CreatedAt, c.IssuedBy, c.IssuedAt, measures);
+            c.ApprovedBy, c.Status, c.CancelReason, c.CreatedBy, c.CreatedAt, c.IssuedBy, c.IssuedAt, measures, c.Title);
     }
 }

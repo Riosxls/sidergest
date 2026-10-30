@@ -73,6 +73,12 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
     filters: [
       ChoiceFilter(label: 'Situação', value: _status, choices: certificateStatuses, onChanged: (v) => setState(() => _status = v)),
       ChoiceFilter(label: 'Empresa', value: _company, choices: const {'EBT': 'EBT', 'BST': 'BST'}, onChanged: (v) => setState(() => _company = v)),
+      ActionChip(
+        key: const ValueKey('certificate-templates'),
+        avatar: const Icon(Icons.fact_check_outlined, size: 18),
+        label: const Text('Modelos de especificação'),
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CertificateTemplatesScreen(session: widget.session))),
+      ),
     ],
     columns: [
       col('Certificado', 'reference'),
@@ -356,11 +362,19 @@ class CertificateEditorScreen extends StatefulWidget {
 }
 
 class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
+  static const _titles = ['', 'CERTIFICADO DE GARANTIA DA QUALIDADE DO PRODUTO'];
+  static const _noteSnippets = [
+    ('Certificado de origem', 'Certificado de origem do material nº '),
+    ('Material recozido', 'MATERIAL RECOZIDO'),
+    ('Alívio de tensão', 'TRATAMENTO ALIVIO DE TENSÃO NO FINAL DO PROCESSO'),
+    ('Eddy current', 'PROCESSO DE FECHAMENTO DO TUBO POR INDUÇÃO, DE ALTA FREQUENCIA, MONITORADO PELO EQUIPAMENTO DE "EDDY CURRENT", PARA DETECÇÃO DE FALHAS EM POTENCIAL OCASIONADAS POR CORRENTES PARASITAS.'),
+  ];
   late final Map<String, dynamic> c = widget.certificate;
   final _fields = <String, TextEditingController>{};
   final _spec = <TextEditingController>[];
   final _found = <TextEditingController>[];
-  late final List<Map<String, dynamic>> _measures = (c['measures'] as List).cast<Map<String, dynamic>>();
+  late final List<Map<String, dynamic>> _measures = [for (final m in (c['measures'] as List).cast<Map<String, dynamic>>()) {...m}];
+  late String? _title = c['title'] as String?;
   List<Map<String, dynamic>> _deliveries = const [];
   int? _deliveryId;
   String? _error;
@@ -443,6 +457,7 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
         'finish': _v('finish'),
         'notes': _v('notes'),
         'approvedBy': _v('approvedBy'),
+        'title': _title,
         'measures': [
           for (var i = 0; i < _measures.length; i++)
             {'kind': _measures[i]['kind'], 'name': _measures[i]['name'], 'specified': _spec[i].text.trim(), 'found': _found[i].text.trim()},
@@ -470,6 +485,36 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
       decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder(), isDense: true),
     ),
   );
+
+  Future<void> _addRow(String kind) async {
+    final name = await promptText(
+      context,
+      title: 'Nova linha',
+      label: kind == 'Chemical' ? 'Elemento (ex.: Ti)' : kind == 'Dimensional' ? 'Medida (ex.: Largura)' : 'Ensaio (ex.: Alongamento longitudinal, Teste destrutivo)',
+      required: true,
+      confirmLabel: 'Adicionar',
+    );
+    if (name == null || !mounted) return;
+    setState(() {
+      _measures.add({'kind': kind, 'name': name.trim()});
+      _spec.add(TextEditingController());
+      _found.add(TextEditingController());
+    });
+  }
+
+  void _removeRow(int i) => setState(() {
+    _measures.removeAt(i);
+    _spec.removeAt(i).dispose();
+    _found.removeAt(i).dispose();
+  });
+
+  void _addNote(String line) {
+    final c = _fields['notes']!;
+    final t = c.text.trimRight();
+    c.text = t.isEmpty ? line : '$t\n$line';
+    c.selection = TextSelection.collapsed(offset: c.text.length);
+    setState(() {});
+  }
 
   Widget _table(String title, String kind, List<String> headers) {
     final idx = [for (var i = 0; i < _measures.length; i++) if (_measures[i]['kind'] == kind) i];
@@ -514,9 +559,19 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
                       decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true, hintText: '-'),
                     ),
                   ),
+                  IconButton(
+                    key: ValueKey('row-del-$kind-${_measures[i]['name']}'),
+                    tooltip: 'Remover linha',
+                    icon: const Icon(Icons.remove_circle_outline, size: 20),
+                    onPressed: () => _removeRow(i),
+                  ),
                 ],
               ),
             ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(key: ValueKey('row-add-$kind'), onPressed: () => _addRow(kind), icon: const Icon(Icons.add, size: 18), label: const Text('Adicionar linha')),
+          ),
         ],
       ),
     );
@@ -584,11 +639,38 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
               _text('hardness', 'Dureza', width: 160, hint: 'ex.: 66 HRB'),
               _text('finish', 'Acabamento superficial', width: 420),
               _text('approvedBy', 'Aprovação / visto (nome)', width: 240),
+              SizedBox(
+                width: 420,
+                child: DropdownButtonFormField<String>(
+                  key: const ValueKey('cert-title'),
+                  initialValue: _title ?? '',
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Título do certificado', border: OutlineInputBorder(), isDense: true),
+                  items: [
+                    for (final t in {..._titles, ?_title}) DropdownMenuItem(value: t, child: Text(t.isEmpty ? 'Padrão · CERTIFICADO DE QUALIDADE' : t, overflow: TextOverflow.ellipsis)),
+                  ],
+                  onChanged: (v) => setState(() => _title = (v == null || v.isEmpty) ? null : v),
+                ),
+              ),
               _text('notes', 'Observações', width: 700, lines: 3),
+              SizedBox(
+                width: 700,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final (n, s) in _noteSnippets.indexed) ActionChip(key: ValueKey('note-snippet-$n'), label: Text(s.$1), onPressed: () => _addNote(s.$2)),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
         gap,
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text('As especificações vêm do último certificado emitido para este cliente e produto; ao emitir, ficam salvas como modelo. Só o "Encontrado" muda a cada remessa.'),
+        ),
         _table('Composição química (%)', 'Chemical', const ['Elemento', 'Especificado', 'Encontrado']),
         gap,
         _table('Dimensional (mm)', 'Dimensional', const ['Medida', 'Especificado', 'Encontrado']),
@@ -597,4 +679,116 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
       ],
     ),
   );
+}
+
+/// Specification templates learned from issued certificates, one per customer and product.
+class CertificateTemplatesScreen extends StatefulWidget {
+  const CertificateTemplatesScreen({super.key, required this.session});
+
+  final Session session;
+
+  @override
+  State<CertificateTemplatesScreen> createState() => _CertificateTemplatesScreenState();
+}
+
+class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen> {
+  List<Map<String, dynamic>>? _items;
+  String? _error;
+  String _q = '';
+
+  ApiClient get api => widget.session.api;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await api.get('/api/sales/certificates/templates') as List;
+      if (mounted) {
+        setState(() {
+          _items = r.cast<Map<String, dynamic>>();
+          _error = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = friendlyError(e));
+    }
+  }
+
+  Future<void> _forget(Map<String, dynamic> t) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Esquecer este modelo?'),
+        content: Text('O próximo certificado de ${t['customerName']} para ${t['productCode']} volta a começar em branco. O modelo é recriado ao emitir outro certificado.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Voltar')),
+          FilledButton(key: const ValueKey('confirm-step'), onPressed: () => Navigator.pop(c, true), child: const Text('Esquecer')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await runAction(context, () => api.delete('/api/sales/certificates/templates/${t['id']}'), success: 'Modelo removido');
+    _load();
+  }
+
+  static const _kinds = {'Chemical': 'Química', 'Dimensional': 'Dimensional', 'Mechanical': 'Mecânico'};
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _items;
+    final q = _q.trim().toLowerCase();
+    final shown = items == null
+        ? const <Map<String, dynamic>>[]
+        : items.where((t) => q.isEmpty || '${t['customerName']} ${t['productCode']} ${t['productDescription']}'.toLowerCase().contains(q)).toList();
+    return Scaffold(
+      appBar: AppBar(title: const Text('Modelos de especificação')),
+      body: _error != null
+          ? Center(child: Text(_error!))
+          : items == null
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                const Text('Cada certificado emitido ensina o próximo do mesmo cliente e produto: limites especificados, título, acabamento e observações fixas. Os valores encontrados nunca são copiados.'),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const ValueKey('templates-search'),
+                  onChanged: (v) => setState(() => _q = v),
+                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Cliente ou produto', border: OutlineInputBorder(), isDense: true),
+                ),
+                const SizedBox(height: 12),
+                if (shown.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Center(child: Text(items.isEmpty ? 'Nenhum modelo ainda. Emita um certificado e o modelo aparece aqui.' : 'Nada encontrado.')),
+                  ),
+                for (final t in shown)
+                  Card(
+                    child: ExpansionTile(
+                      key: ValueKey('template-${t['id']}'),
+                      title: Text('${t['customerName']} · ${t['productCode']}'),
+                      subtitle: Text('${t['productDescription']} · aprendido do certificado ${t['learnedFrom']}'),
+                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (t['title'] != null) Text('Título: ${t['title']}'),
+                        if (t['notes'] != null) Text('Observações: ${t['notes']}'),
+                        const SizedBox(height: 8),
+                        for (final m in (t['measures'] as List).cast<Map<String, dynamic>>()) Text('${_kinds[m['kind']] ?? m['kind']} · ${m['name']}: ${m['specified'] ?? '-'}'),
+                        if (widget.session.canCertificate)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(key: ValueKey('template-forget-${t['id']}'), onPressed: () => _forget(t), icon: const Icon(Icons.delete_outline), label: const Text('Esquecer modelo')),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
 }
