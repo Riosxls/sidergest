@@ -338,6 +338,13 @@ class SalesFake {
   });
 }
 
+/// The print gate asks about the paper of the step that is ending; most tests just move on.
+Future<void> skipGate(WidgetTester tester) async {
+  if (find.byKey(const ValueKey('gate-skip')).evaluate().isEmpty) return;
+  await tester.tap(find.byKey(const ValueKey('gate-skip')));
+  await tester.pumpAndSettle();
+}
+
 Future<Session> pumpScreen(WidgetTester tester, SalesFake fake, Widget Function(Session s) screen) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = const Size(1700, 1800);
@@ -425,6 +432,7 @@ void main() {
     await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
     await tester.tap(find.byKey(const ValueKey('quote-po')));
     await tester.pumpAndSettle();
+    await skipGate(tester);
     expect(find.textContaining('Nossa data:'), findsOneWidget);
     expect(find.textContaining('20 dias úteis após a aprovação'), findsOneWidget);
     await tester.tap(find.text('Salvar'));
@@ -439,6 +447,7 @@ void main() {
     await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
     await tester.tap(find.byKey(const ValueKey('quote-po')));
     await tester.pumpAndSettle();
+    await skipGate(tester);
     final field = find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('field-line-'));
     await tester.enterText(field, '15/12/2030');
     await tester.tap(find.text('Salvar'));
@@ -457,6 +466,7 @@ void main() {
     expect(find.textContaining('Passo 2 de 2'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('quote-po')));
     await tester.pumpAndSettle();
+    await skipGate(tester);
     await tester.tap(find.text('Salvar'));
     await tester.pumpAndSettle();
     expect(withFile.last('POST', '/api/sales/quotes/5/purchase-order'), isNotNull);
@@ -528,6 +538,7 @@ void main() {
     await pumpScreen(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
     await tester.tap(find.byKey(const ValueKey('order-release')));
     await tester.pumpAndSettle();
+    await skipGate(tester);
     await tester.tap(find.byKey(const ValueKey('use-stock')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('confirm-step')));
@@ -537,6 +548,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('order-deliver')));
     await tester.pumpAndSettle();
+    await skipGate(tester);
     expect(find.byKey(const ValueKey('dl-qty-40')), findsOneWidget);
     await tester.enterText(find.byKey(const ValueKey('dl-qty-40')), '30');
     await tester.tap(find.byKey(const ValueKey('delivery-ok')));
@@ -594,6 +606,64 @@ void main() {
     await tester.tap(find.text('Salvar'));
     await tester.pumpAndSettle();
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['withoutCertificate'], isTrue);
+  });
+
+  group('print gate before the flow moves on', () {
+    testWidgets('registering the purchase order first offers to print or download it, once', (tester) async {
+      final fake = SalesFake()
+        ..quoteStatus = 'Accepted'
+        ..requestFileName = 'pedido-4521.pdf';
+      await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+      await tester.tap(find.byKey(const ValueKey('quote-po')));
+      await tester.pumpAndSettle();
+      expect(find.text('Imprimir o pedido de compra do cliente?'), findsOneWidget);
+      expect(find.byKey(const ValueKey('gate-print')), findsOneWidget);
+      expect(find.byKey(const ValueKey('gate-download')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('gate-back')));
+      await tester.pumpAndSettle();
+      expect(find.text('Salvar'), findsNothing); // went back: the register form did not open
+      await tester.tap(find.byKey(const ValueKey('quote-po')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('gate-skip')));
+      await tester.pumpAndSettle();
+      expect(find.text('Salvar'), findsOneWidget); // ignoring goes on to the form
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('quote-po')));
+      await tester.pumpAndSettle();
+      expect(find.text('Imprimir o pedido de compra do cliente?'), findsNothing); // asked only once
+      expect(find.text('Salvar'), findsOneWidget);
+    });
+
+
+    testWidgets('releasing an order first offers the pedido interno de venda', (tester) async {
+      final fake = SalesFake();
+      await pumpScreen(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
+      await tester.tap(find.byKey(const ValueKey('order-release')));
+      await tester.pumpAndSettle();
+      expect(find.text('Imprimir o pedido interno de venda?'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('gate-back')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('use-stock')), findsNothing);
+      expect(fake.log.where((r) => r.url.path.endsWith('/release')), isEmpty);
+      await tester.tap(find.byKey(const ValueKey('order-release')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('gate-skip')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('use-stock')), findsOneWidget); // ignoring goes on to the release dialog
+    });
+
+    testWidgets('planning a delivery first offers the production orders that were not printed', (tester) async {
+      final fake = SalesFake()..orderStatus = 'Released';
+      await pumpScreen(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
+      await tester.tap(find.byKey(const ValueKey('order-deliver')));
+      await tester.pumpAndSettle();
+      expect(find.text('Imprimir a ordem de fabricação?'), findsOneWidget);
+      expect(find.textContaining('OF 500'), findsWidgets);
+      await tester.tap(find.byKey(const ValueKey('gate-skip')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('dl-qty-40')), findsOneWidget);
+    });
   });
 
   group('documents to print', () {

@@ -15,6 +15,7 @@ import '../widgets/discard_guard.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
+import '../widgets/print_gate.dart';
 import '../widgets/print_panel.dart';
 import '../widgets/record_list.dart';
 import 'sales_common.dart';
@@ -959,6 +960,15 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Anexe o arquivo ou o texto do pedido de compra antes de registrá-lo')));
       return;
     }
+    final proceed = await printGate(
+      context,
+      doneKey: 'quote:${q['id']}:po',
+      title: 'Imprimir o pedido de compra do cliente?',
+      message: 'Antes de registrar, imprima ou baixe o pedido de compra que o cliente enviou. Você também encontra todos os documentos no pedido de venda.',
+      onPrint: _printRequest,
+      onDownload: q['requestFileName'] == null ? null : _saveRequest,
+    );
+    if (!proceed || !mounted) return;
     final lines = (q['lines'] as List).cast<Map<String, dynamic>>();
     final approved = DateTime.tryParse('${q['decidedAt'] ?? ''}')?.toLocal() ?? DateTime.now();
     // Our delivery date: the lead time in working days counted from the day the customer approved the quote.
@@ -1041,7 +1051,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Este tipo de arquivo não imprime daqui. Baixe-o e imprima pelo programa que o abre.')));
         return;
       }
-      await printPdf(context, 'Pedido de compra ${q['reference']}', () async => bytes);
+      await printPdf(context, 'Pedido de compra ${q['reference']}', () async => bytes, doneKey: 'quote:${q['id']}:po');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: ${friendlyError(e)}')));
     }
@@ -1051,6 +1061,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     try {
       final bytes = await api.download('$base/request-file');
       final saved = await FilePicker.saveFile(fileName: '${_q!['requestFileName']}', bytes: bytes, dialogTitle: 'Salvar pedido de compra');
+      if (saved != null) await PrintLog.mark('quote:${_q!['id']}:po');
       if (saved != null && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Arquivo salvo')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha: $e')));

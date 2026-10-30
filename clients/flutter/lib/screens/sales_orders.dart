@@ -12,6 +12,7 @@ import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
+import '../widgets/print_gate.dart';
 import '../widgets/print_panel.dart';
 import '../widgets/record_list.dart';
 import 'certificates.dart';
@@ -195,7 +196,38 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     }
   }
 
+  String get _salesKey => 'order:${widget.id}:sales';
+  String _ofKey(Object? id) => 'order:${widget.id}:of:$id';
+
+  Future<void> _printSalesOrder() => printPdf(context, 'Pedido de venda ${_ref()}', () => buildSalesOrderPdf(api, _o!), doneKey: _salesKey);
+
+  Future<void> _printOf(int id, String ref) => printPdf(
+    context,
+    'Ordem de produção $ref',
+    () async => buildProductionOrderPdf(api, await api.get('/api/production/orders/$id') as Map<String, dynamic>),
+    doneKey: _ofKey(id),
+  );
+
+  /// The order's OFs that were not printed or downloaded yet, as id -> reference.
+  Future<Map<int, String>> _pendingOfs() async {
+    final ofs = (_o!['lines'] as List).cast<Map<String, dynamic>>().where((l) => l['productionOrderId'] != null).fold(<int, String>{}, (m, l) => m..[l['productionOrderId'] as int] = '${l['productionReference']}');
+    return {
+      for (final e in ofs.entries)
+        if (!await PrintLog.isDone(_ofKey(e.key))) e.key: e.value,
+    };
+  }
+
   Future<void> _release() async {
+    // The pedido interno de venda is the paper of the step that ends here.
+    final proceed = await printGate(
+      context,
+      doneKey: _salesKey,
+      title: 'Imprimir o pedido interno de venda?',
+      message: 'Antes de liberar ${_ref()} para a produção, imprima ou baixe o pedido interno de venda. Você também encontra todos os documentos no fim do fluxo.',
+      onPrint: _printSalesOrder,
+      onDownload: () => savePdf(context, 'Pedido de venda ${_ref()}.pdf', () => buildSalesOrderPdf(api, _o!), doneKey: _salesKey),
+    );
+    if (!proceed || !mounted) return;
     var useStock = true;
     final ok = await showDialog<bool>(
       context: context,
@@ -239,6 +271,27 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     final o = _o!;
     final lines = (o['lines'] as List).cast<Map<String, dynamic>>().where((l) => _n(l['remaining']) - _n(l['planned']) > 0).toList();
     if (lines.isEmpty) return showError(context, 'Todos os itens já estão programados ou expedidos');
+    final pending = await _pendingOfs();
+    if (pending.isNotEmpty && mounted) {
+      final proceed = await printGate(
+        context,
+        doneKey: 'order:${widget.id}:ofs:${pending.keys.join(',')}',
+        title: pending.length == 1 ? 'Imprimir a ordem de fabricação?' : 'Imprimir as ordens de fabricação?',
+        message: 'Antes de programar a entrega, imprima ou baixe ${pending.values.join(', ')} para a produção.',
+        onPrint: () async {
+          for (final e in pending.entries) {
+            await _printOf(e.key, e.value);
+          }
+        },
+        onDownload: () async {
+          for (final e in pending.entries) {
+            await savePdf(context, 'Ordem de produção ${e.value}.pdf', () async => buildProductionOrderPdf(api, await api.get('/api/production/orders/${e.key}') as Map<String, dynamic>), doneKey: _ofKey(e.key));
+          }
+        },
+      );
+      if (!proceed || !mounted) return;
+    }
+    if (!mounted) return;
     final r = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => _DeliveryDialog(order: o, lines: lines),
@@ -367,7 +420,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Este tipo de arquivo não imprime daqui. Baixe-o no orçamento e imprima pelo programa que o abre.')));
         return;
       }
-      if (mounted) await printPdf(context, 'Pedido de compra ${_ref()}', () async => bytes);
+      if (mounted) await printPdf(context, 'Pedido de compra ${_ref()}', () async => bytes, doneKey: 'quote:${q['id']}:po');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: ${friendlyError(e)}')));
     }
@@ -394,7 +447,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         waiting: q == null ? 'Pedido digitado sem orçamento: não há pedido de compra anexado' : 'Anexe o pedido de compra no orçamento ${o['quoteReference']}',
         onPrint: _printCustomerPo,
       ),
-      PrintDoc(id: 'sales-order', label: 'Pedido interno de venda', detail: _ref(), onPrint: () => printPdf(context, 'Pedido de venda ${_ref()}', () => buildSalesOrderPdf(api, o))),
+      PrintDoc(id: 'sales-order', label: 'Pedido interno de venda', detail: _ref(), onPrint: _printSalesOrder),
       if (ofs.isEmpty)
         PrintDoc(id: 'of', label: 'Ordem de fabricação', ready: false, waiting: status == 'Created' ? 'Libere o pedido para a produção' : 'Este pedido saiu do estoque, sem OF')
       else
@@ -403,7 +456,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
             id: 'of-${e.key}',
             label: 'Ordem de fabricação',
             detail: e.value,
-            onPrint: () => printPdf(context, 'Ordem de produção ${e.value}', () async => buildProductionOrderPdf(api, await api.get('/api/production/orders/${e.key}') as Map<String, dynamic>)),
+            onPrint: () => _printOf(e.key, e.value),
           ),
       if (shipped.isEmpty)
         const PrintDoc(id: 'nf', label: 'Nota fiscal', ready: false, waiting: 'Disponível depois de expedir a entrega')
@@ -443,7 +496,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         _cardPrint(
           'order-print-of-${e.key}',
           ofs.length == 1 ? 'Imprimir OF' : 'Imprimir ${e.value}',
-          () => printPdf(context, 'Ordem de produção ${e.value}', () async => buildProductionOrderPdf(api, await api.get('/api/production/orders/${e.key}') as Map<String, dynamic>)),
+          () => _printOf(e.key, e.value),
         ),
     ];
   }
@@ -456,7 +509,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       'Created' => NextStepCard(
         title: 'Liberar para produção',
         message: 'O estoque livre é reservado para o pedido e as OFs do restante vão para o PCP.',
-        actions: [if (s.canReleaseSales) primary('order-release', 'Liberar para produção', Icons.play_arrow, _release), _cardPrint('order-print-card', 'Imprimir pedido interno', () => printPdf(context, 'Pedido de venda ${_ref()}', () => buildSalesOrderPdf(api, o)))],
+        actions: [if (s.canReleaseSales) primary('order-release', 'Liberar para produção', Icons.play_arrow, _release), _cardPrint('order-print-card', 'Imprimir pedido interno', _printSalesOrder)],
       ),
       'Released' || 'PartiallyShipped' when o['ready'] == true && !_certified => NextStepCard(
         title: 'Produção pronta · falta o certificado',
@@ -515,12 +568,12 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         .where((l) => l['productionOrderId'] != null)
         .fold(<int, String>{}, (m, l) => m..[l['productionOrderId'] as int] = '${l['productionReference']}');
     final inProduction = ['Released', 'PartiallyShipped'].contains(o['status']);
-    if (!inProduction || ofs.isEmpty) return [PrintButton(name: 'Pedido de venda ${o['reference']}', builder: () => buildSalesOrderPdf(api, o))];
+    if (!inProduction || ofs.isEmpty) return [PrintButton(name: 'Pedido de venda ${o['reference']}', doneKey: _salesKey, builder: () => buildSalesOrderPdf(api, o))];
     if (ofs.length == 1) {
       final e = ofs.entries.first;
-      return [PrintButton(key: const ValueKey('print-of'), name: 'Ordem de produção ${e.value}', builder: () => ofPdf(e.key))];
+      return [PrintButton(key: const ValueKey('print-of'), name: 'Ordem de produção ${e.value}', doneKey: _ofKey(e.key), builder: () => ofPdf(e.key))];
     }
-    return [for (final e in ofs.entries) PrintButton(key: ValueKey('print-of-${e.key}'), name: 'Ordem de produção ${e.value}', builder: () => ofPdf(e.key))];
+    return [for (final e in ofs.entries) PrintButton(key: ValueKey('print-of-${e.key}'), name: 'Ordem de produção ${e.value}', doneKey: _ofKey(e.key), builder: () => ofPdf(e.key))];
   }
 
   @override

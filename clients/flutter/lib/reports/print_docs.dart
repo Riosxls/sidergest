@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../widgets/print_gate.dart';
 
 import '../api.dart';
 import '../entities.dart';
@@ -649,8 +650,10 @@ Future<Uint8List> buildProductionOrderPdf(ApiClient api, Map<String, dynamic> o)
 
 /// App bar print button shared by the three detail screens.
 class PrintButton extends StatelessWidget {
-  const PrintButton({super.key, required this.name, required this.builder, this.enabled = true, this.tooltip = 'Imprimir'});
+  const PrintButton({super.key, required this.name, required this.builder, this.enabled = true, this.tooltip = 'Imprimir', this.doneKey});
 
+  /// When set, printing marks this paper as done (see PrintLog), so the flow does not ask about it again.
+  final String? doneKey;
   final String name;
   final Future<Uint8List> Function() builder;
   final bool enabled;
@@ -665,6 +668,7 @@ class PrintButton extends StatelessWidget {
             try {
               final bytes = await builder();
               await Printing.layoutPdf(name: name, onLayout: (_) async => bytes, format: PdfPageFormat.a4);
+              await PrintLog.mark(doneKey);
             } catch (e) {
               if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: $e')));
             }

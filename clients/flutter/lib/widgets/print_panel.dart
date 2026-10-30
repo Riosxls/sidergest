@@ -6,13 +6,15 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../reports/print_docs.dart' show printTheme;
+import 'print_gate.dart';
 import 'record_list.dart';
 
 /// Sends a PDF to the print dialog, telling the user when it fails.
-Future<void> printPdf(BuildContext context, String name, Future<Uint8List> Function() build) async {
+Future<void> printPdf(BuildContext context, String name, Future<Uint8List> Function() build, {String? doneKey}) async {
   try {
     final bytes = await build();
     await Printing.layoutPdf(name: name, onLayout: (_) async => bytes, format: PdfPageFormat.a4);
+    await PrintLog.mark(doneKey);
   } catch (e) {
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: $e')));
   }
