@@ -118,7 +118,7 @@ public class SalesTests(ApiFixture api)
         Assert.StartsWith("ENT ", delivery.Reference);
 
         var stock = await api.UserAsync(UserRole.Stock);
-        delivery = await (await stock.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, "2581", null, "abc1d23"))).Read<DeliveryOut>();
+        delivery = await (await stock.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, "2581", null, "abc1d23", WithoutCertificate: true))).Read<DeliveryOut>();
         Assert.Equal(DeliveryStatus.Shipped, delivery.Status);
         Assert.Equal("ABC1D23", delivery.VehiclePlate);
         Assert.NotNull(delivery.StockDocumentId);
@@ -172,7 +172,7 @@ public class SalesTests(ApiFixture api)
         Assert.Equal(40m, delivery.Lines.Single().Quantity);
         certificate = await (await admin.Post($"/api/sales/certificates/{certificate.Id}/link-delivery", new CertificateLinkIn(delivery.Id))).Read<CertificateOut>();
         Assert.Equal(delivery.Reference, certificate.DeliveryReference);
-        (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, "2581"))).EnsureSuccessStatusCode();
+        (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, "2581", WithoutCertificate: true))).EnsureSuccessStatusCode();
         certificate = await (await admin.GetAsync($"/api/sales/certificates/{certificate.Id}")).Read<CertificateOut>();
         Assert.Equal("2581", certificate.EffectiveInvoiceNumber);
         Assert.Contains((await (await admin.GetAsync("/api/sales/certificates?q=2581")).Read<Page<CertificateSummaryOut>>()).Items, c => c.Id == certificate.Id);
@@ -185,10 +185,105 @@ public class SalesTests(ApiFixture api)
         Assert.Equal(SalesOrderStatus.Released, order.Status);
 
         delivery = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
-        (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today))).EnsureSuccessStatusCode();
+        (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, WithoutCertificate: true))).EnsureSuccessStatusCode();
         (await admin.Post($"/api/sales/deliveries/{delivery.Id}/confirm", new ConfirmDeliveryIn())).EnsureSuccessStatusCode();
         order = await (await admin.GetAsync($"/api/sales/orders/{order.Id}")).Read<SalesOrderOut>();
         Assert.Equal(SalesOrderStatus.Delivered, order.Status);
+    }
+
+    private static async Task<SalesOrderOut> ReleasedOrder(HttpClient admin, Setup s, decimal quantity)
+    {
+        var order = await (await admin.Post("/api/sales/orders", new SalesOrderIn(s.Customer.Id, s.Address.Id, [new SalesLineInput(s.Tube.Id, quantity)], "PO-1", s.Term.Id))).Read<SalesOrderOut>();
+        return await (await admin.Post($"/api/sales/orders/{order.Id}/release", new SalesReleaseIn())).Read<SalesOrderOut>();
+    }
+
+    [Fact]
+    public async Task Shipping_needs_an_issued_certificate_or_a_waiver()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin, stock: 41m);
+        var order = await ReleasedOrder(admin, s, 40m);
+        var delivery = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
+        var blocked = await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today));
+        Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+        Assert.Contains("certificate", await blocked.Content.ReadAsStringAsync());
+        (await admin.Post($"/api/sales/orders/{order.Id}/certificate-waiver", new CertificateWaiverIn(true))).EnsureSuccessStatusCode();
+        delivery = await (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today))).Read<DeliveryOut>();
+        Assert.Equal(DeliveryStatus.Shipped, delivery.Status);
+        Assert.DoesNotContain(delivery.History, h => h.Note?.Contains("sem certificado") == true);
+
+        var other = await ReleasedOrder(admin, s, 1m);
+        var d2 = await (await admin.Post($"/api/sales/orders/{other.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
+        d2 = await (await admin.Post($"/api/sales/deliveries/{d2.Id}/ship", new ShipInput(Today, WithoutCertificate: true))).Read<DeliveryOut>();
+        Assert.Contains(d2.History, h => h.Action == "shipped" && h.Note == "sem certificado");
+    }
+
+    [Fact]
+    public async Task Closing_the_balance_ends_a_partly_shipped_order()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin, stock: 40m);
+        var order = await ReleasedOrder(admin, s, 100m);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.Post($"/api/sales/orders/{order.Id}/close-balance", new SalesReasonIn("Cliente cortou"))).StatusCode);
+        var first = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today, Lines: [new DeliveryLineInput(order.Lines[0].Id, 40m)]))).Read<DeliveryOut>();
+        await admin.Post($"/api/sales/deliveries/{first.Id}/ship", new ShipInput(Today, WithoutCertificate: true));
+        var planned = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today, Lines: [new DeliveryLineInput(order.Lines[0].Id, 10m)]))).Read<DeliveryOut>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Post($"/api/sales/orders/{order.Id}/close-balance", new SalesReasonIn(" "))).StatusCode);
+        order = await (await admin.Post($"/api/sales/orders/{order.Id}/close-balance", new SalesReasonIn("Cliente cortou o saldo"))).Read<SalesOrderOut>();
+        Assert.Equal(SalesOrderStatus.Shipped, order.Status);
+        Assert.Equal(40m, order.Lines[0].Quantity);
+        Assert.Equal(0m, order.Lines[0].Remaining);
+        Assert.Contains(order.History, h => h.Action == "balance-closed" && h.Note!.Contains("100 → 40"));
+        Assert.Equal(DeliveryStatus.Cancelled, (await (await admin.GetAsync($"/api/sales/deliveries/{planned.Id}")).Read<DeliveryOut>()).Status);
+
+        (await admin.Post($"/api/sales/deliveries/{first.Id}/confirm", new ConfirmDeliveryIn())).EnsureSuccessStatusCode();
+        order = await (await admin.GetAsync($"/api/sales/orders/{order.Id}")).Read<SalesOrderOut>();
+        Assert.Equal(SalesOrderStatus.Delivered, order.Status);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.Post($"/api/sales/orders/{order.Id}/close-balance", new SalesReasonIn("de novo"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Released_order_can_be_rescheduled_and_open_OFs_follow()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin, stock: 0m);
+        var created = await (await admin.Post("/api/sales/orders", new SalesOrderIn(s.Customer.Id, s.Address.Id, [new SalesLineInput(s.Tube.Id, 20m)], "PO-1", s.Term.Id))).Read<SalesOrderOut>();
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.Post($"/api/sales/orders/{created.Id}/reschedule", new RescheduleInput("x", "PO-2"))).StatusCode);
+        var order = await (await admin.Post($"/api/sales/orders/{created.Id}/release", new SalesReleaseIn())).Read<SalesOrderOut>();
+        var line = order.Lines[0];
+        var due = line.DueDate.AddDays(14);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Post($"/api/sales/orders/{order.Id}/reschedule", new RescheduleInput(null, null, [new RescheduleLine(line.Id, due)]))).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.Post($"/api/sales/orders/{order.Id}/reschedule", new RescheduleInput("sem mudança"))).StatusCode);
+        order = await (await admin.Post($"/api/sales/orders/{order.Id}/reschedule", new RescheduleInput("Cliente adiou", "PO-2", [new RescheduleLine(line.Id, due)]))).Read<SalesOrderOut>();
+        Assert.Equal(due, order.Lines[0].DueDate);
+        Assert.Equal("PO-2", order.CustomerPo);
+        Assert.Contains(order.History, h => h.Action == "rescheduled" && h.Note!.Contains("Cliente adiou") && h.Note.Contains("PO-1 → PO-2"));
+        Assert.Equal(due, (await (await admin.GetAsync($"/api/production/orders/{line.ProductionOrderId}")).Read<ProductionOrderOut>()).DueDate);
+    }
+
+    [Fact]
+    public async Task Cancelling_an_order_shows_what_it_touches_and_can_stop_production()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin, stock: 0m);
+        var order = await ReleasedOrder(admin, s, 20m);
+        var preview = await (await admin.GetAsync($"/api/sales/orders/{order.Id}/cancel-preview")).Read<CancelOrderPreview>();
+        var of = Assert.Single(preview.ProductionOrders);
+        Assert.False(of.Started);
+        (await admin.Post($"/api/production/orders/{order.Lines[0].ProductionOrderId}/release", new ReleaseIn(true))).EnsureSuccessStatusCode();
+        preview = await (await admin.GetAsync($"/api/sales/orders/{order.Id}/cancel-preview")).Read<CancelOrderPreview>();
+        Assert.True(Assert.Single(preview.ProductionOrders).Started);
+
+        var keep = await ReleasedOrder(admin, s, 20m);
+        (await admin.Post($"/api/production/orders/{keep.Lines[0].ProductionOrderId}/release", new ReleaseIn(true))).EnsureSuccessStatusCode();
+        keep = await (await admin.Post($"/api/sales/orders/{keep.Id}/cancel", new OrderCancelIn("Pedido duplicado"))).Read<SalesOrderOut>();
+        Assert.Equal(SalesOrderStatus.Cancelled, keep.Status);
+        Assert.NotEqual(ProductionOrderStatus.Cancelled, (await (await admin.GetAsync($"/api/production/orders/{keep.Lines[0].ProductionOrderId}")).Read<ProductionOrderOut>()).Status);
+
+        order = await (await admin.Post($"/api/sales/orders/{order.Id}/cancel", new OrderCancelIn("Pedido duplicado", CancelProduction: true))).Read<SalesOrderOut>();
+        Assert.Equal(ProductionOrderStatus.Cancelled, (await (await admin.GetAsync($"/api/production/orders/{order.Lines[0].ProductionOrderId}")).Read<ProductionOrderOut>()).Status);
     }
 
     [Fact]

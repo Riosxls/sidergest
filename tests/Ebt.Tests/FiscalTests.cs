@@ -73,12 +73,12 @@ public class FiscalTests(ApiFixture api)
             var settings = await Enable(admin, true);
             var rejected = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today, Notes: StubSefazClient.RejectMarker))).Read<DeliveryOut>();
 
-            var noPrice = await admin.Post($"/api/sales/deliveries/{rejected.Id}/ship", new ShipInput(Today));
+            var noPrice = await admin.Post($"/api/sales/deliveries/{rejected.Id}/ship", new ShipInput(Today, WithoutCertificate: true));
             Assert.Equal(HttpStatusCode.UnprocessableEntity, noPrice.StatusCode);
             Assert.Contains("monthly price", await noPrice.Content.ReadAsStringAsync());
 
             (await admin.Post("/api/fiscal/monthly-prices", new MonthlyPriceIn(tube.Id, customer.Id, "5101", Today.Year, Today.Month, 110m))).EnsureSuccessStatusCode();
-            var sefaz = await admin.Post($"/api/sales/deliveries/{rejected.Id}/ship", new ShipInput(Today));
+            var sefaz = await admin.Post($"/api/sales/deliveries/{rejected.Id}/ship", new ShipInput(Today, WithoutCertificate: true));
             Assert.Equal(HttpStatusCode.UnprocessableEntity, sefaz.StatusCode);
             Assert.Contains("SEFAZ rejected", await sefaz.Content.ReadAsStringAsync());
 
@@ -90,7 +90,7 @@ public class FiscalTests(ApiFixture api)
             (await admin.Post($"/api/sales/deliveries/{rejected.Id}/cancel", new SalesReasonIn("NF rejeitada"))).EnsureSuccessStatusCode();
 
             var delivery = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today, Notes: "Entregar na portaria 2"))).Read<DeliveryOut>();
-            delivery = await (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, Freight: 50m, GrossWeightKg: 20m))).Read<DeliveryOut>();
+            delivery = await (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, Freight: 50m, GrossWeightKg: 20m, WithoutCertificate: true))).Read<DeliveryOut>();
             Assert.Equal(DeliveryStatus.Shipped, delivery.Status);
             Assert.Equal(settings.NextNumber.ToString(), delivery.InvoiceNumber);
             Assert.Equal(20m, await Balance(admin, tube.Id, shipping.Id));

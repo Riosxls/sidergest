@@ -70,6 +70,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
   Map<String, dynamic>? _nf;
   List<Map<String, dynamic>> _certs = const [];
   String? _error;
+  bool? _certified;
 
   ApiClient get api => widget.session.api;
   Session get s => widget.session;
@@ -94,8 +95,16 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       try {
         certs = (await api.list('/api/sales/certificates', query: {'deliveryId': widget.id}, take: 100)).items;
       } catch (_) {}
+      // null = unknown (lookup failed): the server still enforces the rule when shipping.
+      bool? certified;
+      try {
+        final order = await api.get('/api/sales/orders/${d['orderId']}') as Map<String, dynamic>;
+        final issued = (await api.list('/api/sales/certificates', query: {'orderId': d['orderId']}, take: 200)).items;
+        certified = order['certificateWaived'] == true || issued.any((c) => c['status'] == 'Issued');
+      } catch (_) {}
       if (mounted) {
         setState(() {
+          _certified = certified;
           _certs = certs;
           _nf = nfItems.isEmpty ? null : nfItems.first;
           _d = d;
@@ -109,6 +118,23 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
 
   Future<void> _ship() async {
     final d = _d!;
+    var withoutCertificate = false;
+    if (_certified == false) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          icon: const Icon(Icons.verified_outlined),
+          title: const Text('Expedir sem certificado?'),
+          content: Text('${d['orderReference']} não tem certificado de qualidade emitido nem dispensado. O ideal é emitir (ou dispensar) o certificado no pedido antes de expedir.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Voltar')),
+            FilledButton(key: const ValueKey('ship-without-certificate'), onPressed: () => Navigator.pop(c, true), child: const Text('Expedir sem certificado')),
+          ],
+        ),
+      );
+      if (go != true || !mounted) return;
+      withoutCertificate = true;
+    }
     final r = await submitForm(
       context,
       api: api,
@@ -122,7 +148,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
         const FieldSpec('invoicedValue', 'Valor faturado (R\$)', type: FieldType.decimal, hint: 'Total da NF, com impostos'),
         FieldSpec('grossWeightKg', 'Peso bruto (kg)', type: FieldType.decimal, defaultValue: d['grossWeightKg']),
       ],
-      submit: (b) => api.post('$base/ship', b),
+      submit: (b) => api.post('$base/ship', {...b, if (withoutCertificate) 'withoutCertificate': true}),
     );
     if (r != null && r['reference'] != null) {
       setState(() => _d = r);
@@ -171,7 +197,8 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
   Widget _nextStep(Map<String, dynamic> d) => switch (d['status']) {
     'Planned' => NextStepCard(
       title: 'Programada para ${fmtDay(d['plannedDate'])}',
-      message: 'Ao expedir, o produto acabado sai do estoque de expedição usando a reserva do pedido.',
+      message: 'Ao expedir, o produto acabado sai do estoque de expedição usando a reserva do pedido.${_certified == false ? ' Atenção: o pedido ainda não tem certificado de qualidade emitido nem dispensado.' : ''}',
+      tone: _certified == false ? Tone.warning : Tone.info,
       actions: [
         if (s.canShip)
           FilledButton.icon(key: const ValueKey('delivery-ship'), onPressed: _ship, icon: const Icon(Icons.local_shipping), label: const Text('Expedir')),

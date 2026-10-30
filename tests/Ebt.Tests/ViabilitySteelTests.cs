@@ -164,7 +164,7 @@ public class ViabilitySteelTests(ApiFixture api)
         var order = await (await admin.Post("/api/sales/orders", new SalesOrderIn(s.Customer.Id, s.Address.Id, [new SalesLineInput(s.Tube.Id, 10m, Spec: new LineSpec(SaleUnit: "PC", PieceWeightKg: 2m))]))).Read<SalesOrderOut>();
         (await admin.Post($"/api/sales/orders/{order.Id}/release", new SalesReleaseIn())).EnsureSuccessStatusCode();
         var delivery = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today, Lines: [new DeliveryLineInput(order.Lines[0].Id, 4m)]))).Read<DeliveryOut>();
-        delivery = await (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, "99", LotNumber: "L-77", InvoicedValue: 420m))).Read<DeliveryOut>();
+        delivery = await (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, "99", LotNumber: "L-77", InvoicedValue: 420m, WithoutCertificate: true))).Read<DeliveryOut>();
         Assert.Equal("L-77", delivery.LotNumber);
         Assert.Equal(420m, delivery.InvoicedValue);
         Assert.Equal(400m, delivery.ValueExIpi);

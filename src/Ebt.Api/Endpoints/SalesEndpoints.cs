@@ -21,6 +21,7 @@ public record SalesEventOut(long Id, string Action, string? FromStatus, string? 
 public record QuoteActionIn(string? Note = null, string? SentTo = null, string? CustomerPo = null, LostReason? LostReason = null, DateOnly? ValidUntil = null);
 public record LostReasonOut(LostReason? Reason, int Quotes, decimal Value);
 public record SalesReasonIn(string? Reason);
+public record OrderCancelIn(string? Reason, bool CancelProduction = false);
 public record SalesOrderIn(int CustomerId, int AddressId, List<SalesLineInput> Lines, string? CustomerPo = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, string? Notes = null, bool OverrideCredit = false, string? Company = null, string? CustomPaymentTerm = null,
     BillTo BillTo = BillTo.Ebt, OrderOrigin Origin = OrderOrigin.System, string? Salesperson = null);
 public record SalesReleaseIn(bool UseStock = true);
@@ -385,9 +386,23 @@ public static class SalesEndpoints
             return Results.Ok(await LoadOrder(db, svc, id, ct));
         }).RequireAuthorization(SalesPolicies.Release);
 
-        g.MapPost("/{id:int}/cancel", async (int id, SalesReasonIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
+        g.MapGet("/{id:int}/cancel-preview", async (int id, SalesService svc, CancellationToken ct) => Results.Ok(await svc.CancelPreviewAsync(id, ct)));
+
+        g.MapPost("/{id:int}/cancel", async (int id, OrderCancelIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
-            await svc.CancelOrderAsync(id, i.Reason, Who(user), ct);
+            await svc.CancelOrderAsync(id, i.Reason, Who(user), ct, i.CancelProduction);
+            return Results.Ok(await LoadOrder(db, svc, id, ct));
+        }).RequireAuthorization(SalesPolicies.Sell);
+
+        g.MapPost("/{id:int}/close-balance", async (int id, SalesReasonIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            await svc.CloseBalanceAsync(id, i.Reason, Who(user), ct);
+            return Results.Ok(await LoadOrder(db, svc, id, ct));
+        }).RequireAuthorization(SalesPolicies.Sell);
+
+        g.MapPost("/{id:int}/reschedule", async (int id, RescheduleInput i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            await svc.RescheduleAsync(id, i, Who(user), ct);
             return Results.Ok(await LoadOrder(db, svc, id, ct));
         }).RequireAuthorization(SalesPolicies.Sell);
 

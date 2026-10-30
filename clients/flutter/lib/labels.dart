@@ -170,6 +170,8 @@ const salesActions = {
   'delivery': 'Entrega atualizada',
   'shipped': 'Expedido',
   'delivered': 'Entrega confirmada',
+  'balance-closed': 'Saldo encerrado',
+  'rescheduled': 'Prazos ou pedido do cliente alterados',
 };
 const salesBadges = {
   'discount': 'Desconto acima do limite',

@@ -63,6 +63,9 @@ public sealed partial class SalesService
             if (d.Status != DeliveryStatus.Planned) throw SalesException.Conflict($"Delivery is {d.Status}");
             var o = await LockOrderAsync(d.OrderId, ct);
             if (o.Status is not (SalesOrderStatus.Released or SalesOrderStatus.PartiallyShipped)) throw SalesException.Conflict($"Order is {o.Status}");
+            var certified = o.CertificateWaived || await db.QualityCertificates.AnyAsync(c => c.OrderId == o.Id && c.Status == CertificateStatus.Issued, ct);
+            if (!certified && !i.WithoutCertificate)
+                throw SalesException.Conflict($"{o.Reference} has no issued quality certificate. Issue one, waive it on the order, or ship without it");
             var location = await ShippingLocationAsync(ct);
             var stockLines = new List<StockLine>();
             foreach (var dl in d.Lines)
@@ -95,7 +98,7 @@ public sealed partial class SalesService
             d.GrossWeightKg = i.GrossWeightKg ?? d.GrossWeightKg;
             d.LotNumber = Clean(i.LotNumber) ?? d.LotNumber;
             d.InvoicedValue = i.InvoicedValue ?? d.InvoicedValue;
-            Log(SalesRecordKind.Delivery, d.Id, "shipped", DeliveryStatus.Planned, d.Status, d.InvoiceNumber is null ? null : $"NF {d.InvoiceNumber}", user);
+            Log(SalesRecordKind.Delivery, d.Id, "shipped", DeliveryStatus.Planned, d.Status, string.Join(" · ", new[] { d.InvoiceNumber is null ? null : $"NF {d.InvoiceNumber}", certified ? null : "sem certificado" }.OfType<string>()) is { Length: > 0 } n ? n : null, user);
             await db.SaveChangesAsync(ct);
             await RefreshOrderStatusAsync(o, $"{d.Reference} expedida", user, ct);
             return d;

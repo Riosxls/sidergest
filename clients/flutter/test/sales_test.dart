@@ -28,6 +28,8 @@ class SalesFake {
   String quoteStatus = 'Draft';
   bool needsApproval = false;
   String orderStatus = 'Created';
+  bool waived = false;
+  bool startedOf = false;
   bool ready = false;
   String deliveryStatus = 'Planned';
   String? requestFileName;
@@ -122,6 +124,7 @@ class SalesFake {
     'status': orderStatus,
     'statusReason': null,
     'notes': null,
+    'certificateWaived': waived,
     'quoteId': 5,
     'quoteReference': 'PROP 31',
     'createdBy': 'ana',
@@ -310,6 +313,19 @@ class SalesFake {
       orderStatus = 'Released';
       return json(order());
     }
+    if (p == '/api/sales/orders/9/cancel-preview') {
+      return json({
+        'plannedDeliveries': ['ENT 15'],
+        'shippedDeliveries': [],
+        'productionOrders': [
+          {'reference': 'OF 500', 'status': startedOf ? 'InProduction' : 'Created', 'started': startedOf},
+        ],
+        'reservations': 1,
+      });
+    }
+    if (p == '/api/sales/orders/9/cancel' || p == '/api/sales/orders/9/close-balance' || p == '/api/sales/orders/9/reschedule') {
+      return json(order());
+    }
     if (p == '/api/sales/orders/9/deliveries') return json(delivery(), 201);
     if (p == '/api/sales/deliveries/15' && m == 'GET') return json(delivery());
     if (p == '/api/sales/deliveries/15/ship') {
@@ -492,7 +508,9 @@ void main() {
   });
 
   testWidgets('stock user ships a planned delivery with the invoice number', (tester) async {
-    final fake = SalesFake()..role = 'Stock';
+    final fake = SalesFake()
+      ..role = 'Stock'
+      ..waived = true;
     await pumpScreen(tester, fake, (s) => DeliveryScreen(session: s, id: 15));
     await tester.tap(find.byKey(const ValueKey('delivery-ship')));
     await tester.pumpAndSettle();
@@ -504,7 +522,102 @@ void main() {
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['invoiceNumber'], '2581');
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['lotNumber'], 'L-77');
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['invoicedValue'], 420.5);
+    expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship')).containsKey('withoutCertificate'), isFalse);
     expect(find.byKey(const ValueKey('delivery-confirm')), findsOneWidget);
+  });
+
+  testWidgets('shipping without a certificate or waiver asks first and says so to the API', (tester) async {
+    final fake = SalesFake()..role = 'Stock';
+    await pumpScreen(tester, fake, (s) => DeliveryScreen(session: s, id: 15));
+    expect(find.textContaining('ainda não tem certificado'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('delivery-ship')));
+    await tester.pumpAndSettle();
+    expect(find.text('Expedir sem certificado?'), findsOneWidget);
+    await tester.tap(find.text('Voltar'));
+    await tester.pumpAndSettle();
+    expect(fake.log.where((r) => r.url.path.endsWith('/ship')), isEmpty);
+    await tester.tap(find.byKey(const ValueKey('delivery-ship')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('ship-without-certificate')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['withoutCertificate'], isTrue);
+  });
+
+  group('order changes after release', () {
+    Future<SalesFake> open(WidgetTester tester, String status, {bool started = false}) async {
+      final fake = SalesFake()
+        ..orderStatus = status
+        ..startedOf = started;
+      await pumpScreen(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
+      return fake;
+    }
+
+    Future<void> menu(WidgetTester tester, String item) async {
+      await tester.tap(find.byKey(const ValueKey('order-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(item));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('closing the balance lists the cut and needs a reason', (tester) async {
+      final fake = await open(tester, 'PartiallyShipped');
+      await tester.tap(find.byKey(const ValueKey('order-close-balance')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Item 10 · TB-25: 100 → 0 PC'), findsOneWidget);
+      expect(tester.widget<FilledButton>(find.byKey(const ValueKey('confirm-step'))).onPressed, isNull);
+      await tester.enterText(find.byKey(const ValueKey('reason-field')), 'Cliente cortou o restante');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('confirm-step')));
+      await tester.pumpAndSettle();
+      expect(fake.body(fake.last('POST', '/api/sales/orders/9/close-balance'))['reason'], 'Cliente cortou o restante');
+    });
+
+    testWidgets('no close-balance button before anything shipped', (tester) async {
+      await open(tester, 'Released');
+      expect(find.byKey(const ValueKey('order-close-balance')), findsNothing);
+    });
+
+    testWidgets('cancel shows what it touches and can stop OFs already running', (tester) async {
+      final fake = await open(tester, 'Released', started: true);
+      await menu(tester, 'Cancelar pedido');
+      expect(find.textContaining('Entregas programadas, canceladas junto: ENT 15'), findsOneWidget);
+      expect(find.textContaining('OF 500 (Em produção)'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('reason-field')), 'Duplicado');
+      await tester.tap(find.byKey(const ValueKey('reason-option')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('confirm-step')));
+      await tester.pumpAndSettle();
+      final b = fake.body(fake.last('POST', '/api/sales/orders/9/cancel'));
+      expect(b['reason'], 'Duplicado');
+      expect(b['cancelProduction'], isTrue);
+    });
+
+    testWidgets('cancel without running OFs offers no production choice', (tester) async {
+      await open(tester, 'Released');
+      await menu(tester, 'Cancelar pedido');
+      expect(find.byKey(const ValueKey('reason-option')), findsNothing);
+      expect(find.textContaining('OFs ainda não iniciadas, canceladas junto: OF 500'), findsOneWidget);
+    });
+
+    testWidgets('reschedule sends the new customer PO and every item date', (tester) async {
+      final fake = await open(tester, 'Released');
+      await menu(tester, 'Alterar prazos ou pedido do cliente');
+      await tester.enterText(find.byKey(const ValueKey('field-customerPo')), 'PO-9');
+      await tester.tap(find.text('Salvar'));
+      await tester.pumpAndSettle();
+      final b = fake.body(fake.last('POST', '/api/sales/orders/9/reschedule'));
+      expect(b['customerPo'], 'PO-9');
+      expect((b['lines'] as List).single['lineId'], 40);
+    });
+
+    testWidgets('a created order has no reschedule entry', (tester) async {
+      await open(tester, 'Created');
+      await tester.tap(find.byKey(const ValueKey('order-menu')));
+      await tester.pumpAndSettle();
+      expect(find.text('Alterar prazos ou pedido do cliente'), findsNothing);
+    });
   });
 
   testWidgets('credit warning shows on an open quote when the limit is exceeded', (tester) async {

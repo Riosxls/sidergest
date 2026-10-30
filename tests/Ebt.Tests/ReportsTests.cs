@@ -32,7 +32,7 @@ public class ReportsTests(ApiFixture api)
         var order = await (await admin.Post("/api/sales/orders", new SalesOrderIn(customer.Id, address.Id, [new SalesLineInput(product.Id, 10m)], Company: "bst"))).Read<SalesOrderOut>();
         await admin.Post($"/api/sales/orders/{order.Id}/release", new SalesReleaseIn());
         var delivery = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
-        (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, "9001"))).EnsureSuccessStatusCode();
+        (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, "9001", WithoutCertificate: true))).EnsureSuccessStatusCode();
 
         var report = await (await admin.GetAsync($"/api/reports/billing-summary?from={Today:yyyy-MM-dd}&to={Today:yyyy-MM-dd}")).Read<JsonElement>();
         var companies = report.GetProperty("companies").EnumerateArray().ToDictionary(c => c.GetProperty("key").GetString()!);

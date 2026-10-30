@@ -30,7 +30,16 @@ public sealed record DeliveryLineInput(int OrderLineId, decimal Quantity);
 
 public sealed record DeliveryInput(DateOnly PlannedDate, int? AddressId = null, string? Carrier = null, IReadOnlyList<DeliveryLineInput>? Lines = null, string? Notes = null);
 
-public sealed record ShipInput(DateOnly Date, string? InvoiceNumber = null, string? Carrier = null, string? VehiclePlate = null, decimal? GrossWeightKg = null, string? Cfop = null, decimal? Freight = null, string? LotNumber = null, decimal? InvoicedValue = null);
+public sealed record ShipInput(DateOnly Date, string? InvoiceNumber = null, string? Carrier = null, string? VehiclePlate = null, decimal? GrossWeightKg = null, string? Cfop = null, decimal? Freight = null, string? LotNumber = null, decimal? InvoicedValue = null, bool WithoutCertificate = false);
+
+public sealed record RescheduleLine(int LineId, DateOnly DueDate);
+
+/// <param name="Reason">Required when a due date changes; goes into the order history.</param>
+public sealed record RescheduleInput(string? Reason = null, string? CustomerPo = null, IReadOnlyList<RescheduleLine>? Lines = null);
+
+public sealed record CancelOrderOf(string Reference, ProductionOrderStatus Status, bool Started);
+
+public sealed record CancelOrderPreview(IReadOnlyList<string> PlannedDeliveries, IReadOnlyList<string> ShippedDeliveries, IReadOnlyList<CancelOrderOf> ProductionOrders, int Reservations);
 
 /// <param name="OffListLines">Lines with no list price to measure a discount against (price typed by hand for a product outside the price list).</param>
 /// <param name="Icms">ICMS estimate on top of products + IPI, as the editor shows it; <paramref name="Total"/> stays products + IPI.</param>

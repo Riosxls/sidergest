@@ -241,11 +241,96 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
   }
 
   Future<void> _cancel() async {
-    final reason = await promptText(context, title: 'Cancelar ${_o!['reference']}', label: 'Motivo', required: true, confirmLabel: 'Cancelar pedido');
-    if (reason == null || !mounted) return;
-    final r = await runAction(context, () => api.post('$base/cancel', {'reason': reason}), success: 'Pedido cancelado');
-    if (r is Map<String, dynamic>) setState(() => _o = r);
+    Map<String, dynamic> preview;
+    try {
+      preview = await api.get('$base/cancel-preview') as Map<String, dynamic>;
+    } catch (e) {
+      if (mounted) showError(context, friendlyError(e));
+      return;
+    }
+    if (!mounted) return;
+    List<String> names(String key) => (preview[key] as List).map((e) => '$e').toList();
+    final shipped = names('shippedDeliveries');
+    if (shipped.isNotEmpty) {
+      return showError(context, 'Há entregas já expedidas (${shipped.join(', ')}). Cancele-as antes, ou use "Encerrar saldo" para fechar o pedido com o que já saiu.');
+    }
+    final ofs = (preview['productionOrders'] as List).cast<Map<String, dynamic>>();
+    final started = ofs.where((e) => e['started'] == true).toList();
+    final idle = ofs.where((e) => e['started'] != true).map((e) => '${e['reference']}').toList();
+    final planned = names('plannedDeliveries');
+    final reserved = preview['reservations'] as int? ?? 0;
+    final r = await showDialog<({String reason, bool option})>(
+      context: context,
+      builder: (_) => _ReasonDialog(
+        title: 'Cancelar ${_o!['reference']}?',
+        confirmLabel: 'Cancelar pedido',
+        details: [
+          if (idle.isNotEmpty) 'OFs ainda não iniciadas, canceladas junto: ${idle.join(', ')}',
+          if (planned.isNotEmpty) 'Entregas programadas, canceladas junto: ${planned.join(', ')}',
+          if (reserved > 0) 'Reservas de estoque liberadas: $reserved',
+          if (started.isNotEmpty) 'OFs em andamento: ${started.map((e) => '${e['reference']} (${productionStatuses[e['status']] ?? e['status']})').join(', ')}',
+          if (idle.isEmpty && planned.isEmpty && reserved == 0 && started.isEmpty) 'O pedido não tem OFs, entregas nem reservas.',
+        ],
+        optionLabel: started.isEmpty ? null : 'Cancelar também as OFs em andamento',
+        optionHelp: 'Desmarcado: as OFs seguem no PCP e o produto vai para o estoque. Marcado: elas são canceladas (cancelamento técnico) e o material reservado é liberado.',
+      ),
+    );
+    if (r == null || !mounted) return;
+    final o = await runAction(context, () => api.post('$base/cancel', {'reason': r.reason, 'cancelProduction': r.option}), success: 'Pedido cancelado');
+    if (o is Map<String, dynamic>) setState(() => _o = o);
   }
+
+  Future<void> _closeBalance() async {
+    final lines = (_o!['lines'] as List).cast<Map<String, dynamic>>().where((l) => _n(l['remaining']) > 0).toList();
+    final r = await showDialog<({String reason, bool option})>(
+      context: context,
+      builder: (_) => _ReasonDialog(
+        title: 'Encerrar saldo de ${_o!['reference']}?',
+        confirmLabel: 'Encerrar saldo',
+        reasonLabel: 'Motivo (ex.: cliente cancelou o restante)',
+        details: [
+          for (final l in lines) 'Item ${l['sequence']} · ${l['productCode']}: ${fmt(l['quantity'])} → ${fmt(l['shipped'])} ${l['unit']}',
+          'Entregas ainda não expedidas são canceladas. OFs abertas não são canceladas.',
+          'O pedido passa a valer só pelo que já foi expedido.',
+        ],
+      ),
+    );
+    if (r == null || !mounted) return;
+    final o = await runAction(context, () => api.post('$base/close-balance', {'reason': r.reason}), success: 'Saldo encerrado');
+    if (o is Map<String, dynamic>) setState(() => _o = o);
+  }
+
+  Future<void> _reschedule() async {
+    final o = _o!;
+    final lines = (o['lines'] as List).cast<Map<String, dynamic>>();
+    final r = await submitForm(
+      context,
+      api: api,
+      title: 'Alterar prazos · ${o['reference']}',
+      fields: [
+        FieldSpec('customerPo', 'Pedido do cliente', defaultValue: o['customerPo']),
+        for (final l in lines) FieldSpec('line-${l['id']}', 'Item ${l['sequence']} · ${l['productCode']} · entrega', type: FieldType.date, defaultValue: l['dueDate']),
+        const FieldSpec('reason', 'Motivo da mudança', hint: 'Obrigatório ao mudar uma data (ex.: cliente adiou). As OFs abertas acompanham a nova data.'),
+      ],
+      submit: (b) => api.post('$base/reschedule', {
+        'reason': b['reason'],
+        'customerPo': b['customerPo'],
+        'lines': [
+          for (final l in lines)
+            if (b['line-${l['id']}'] != null) {'lineId': l['id'], 'dueDate': b['line-${l['id']}']},
+        ],
+      }),
+    );
+    if (r != null && r['reference'] != null) {
+      setState(() => _o = r);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Prazos atualizados')));
+    }
+  }
+
+  List<Widget> _closeAction() => [
+    if (s.canSell && status == 'PartiallyShipped')
+      TextButton(key: const ValueKey('order-close-balance'), onPressed: _closeBalance, child: const Text('Encerrar saldo')),
+  ];
 
   Future<void> _edit() async {
     final r = await Navigator.of(context).push<Map<String, dynamic>>(
@@ -281,13 +366,14 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
             ),
           if (s.canCertificate)
             TextButton(key: const ValueKey('order-certificate-waive'), onPressed: () => _waiveCertificate(true), child: const Text('Dispensar certificado')),
+          ..._closeAction(),
         ],
       ),
       'Released' || 'PartiallyShipped' when o['ready'] == true => NextStepCard(
         title: 'Pronto para expedir',
         message: 'Há produto acabado para os itens em aberto. Programe a entrega.',
         tone: Tone.success,
-        actions: [if (s.canShip) primary('order-deliver', 'Programar entrega', Icons.local_shipping, _planDelivery)],
+        actions: [if (s.canShip) primary('order-deliver', 'Programar entrega', Icons.local_shipping, _planDelivery), ..._closeAction()],
       ),
       'Released' || 'PartiallyShipped' => NextStepCard(
         title: 'Em produção · $pct pronto',
@@ -303,6 +389,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
               icon: const Icon(Icons.local_shipping_outlined),
               label: const Text('Programar entrega'),
             ),
+          ..._closeAction(),
         ],
       ),
       'Shipped' => const NextStepCard(title: 'Tudo expedido', message: 'Confirme o recebimento pelo cliente em cada entrega.', tone: Tone.progress),
@@ -340,6 +427,16 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         PopupMenuItem(
           value: _planDelivery,
           child: const ListTile(leading: Icon(Icons.local_shipping_outlined), title: Text('Programar entrega')),
+        ),
+      if (s.canSell && ['Released', 'PartiallyShipped'].contains(status))
+        PopupMenuItem(
+          value: _reschedule,
+          child: const ListTile(leading: Icon(Icons.event_repeat), title: Text('Alterar prazos ou pedido do cliente')),
+        ),
+      if (s.canSell && status == 'PartiallyShipped')
+        PopupMenuItem(
+          value: _closeBalance,
+          child: const ListTile(leading: Icon(Icons.playlist_remove), title: Text('Encerrar saldo')),
         ),
       if (s.canSell && ['Created', 'Released', 'PartiallyShipped'].contains(status))
         PopupMenuItem(
@@ -684,6 +781,82 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
     actions: [
       TextButton(onPressed: () => Navigator.pop(context), child: const Text('Voltar')),
       FilledButton(key: const ValueKey('delivery-ok'), onPressed: _ok, child: const Text('Programar')),
+    ],
+  );
+}
+
+/// Confirmation with a list of consequences, a required reason and an optional extra choice.
+class _ReasonDialog extends StatefulWidget {
+  const _ReasonDialog({required this.title, required this.confirmLabel, required this.details, this.reasonLabel = 'Motivo', this.optionLabel, this.optionHelp});
+
+  final String title;
+  final String confirmLabel;
+  final String reasonLabel;
+  final List<String> details;
+  final String? optionLabel;
+  final String? optionHelp;
+
+  @override
+  State<_ReasonDialog> createState() => _ReasonDialogState();
+}
+
+class _ReasonDialogState extends State<_ReasonDialog> {
+  final _reason = TextEditingController();
+  bool _option = false;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    icon: const Icon(Icons.warning_amber_rounded),
+    title: Text(widget.title),
+    content: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 460),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final d in widget.details)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text('• $d'),
+              ),
+            if (widget.optionLabel != null)
+              CheckboxListTile(
+                key: const ValueKey('reason-option'),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _option,
+                onChanged: (v) => setState(() => _option = v ?? false),
+                title: Text(widget.optionLabel!),
+                subtitle: widget.optionHelp == null ? null : Text(widget.optionHelp!),
+              ),
+            const SizedBox(height: 8),
+            TextField(
+              key: const ValueKey('reason-field'),
+              controller: _reason,
+              autofocus: true,
+              minLines: 2,
+              maxLines: 4,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(labelText: widget.reasonLabel, border: const OutlineInputBorder()),
+            ),
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Voltar')),
+      FilledButton(
+        key: const ValueKey('confirm-step'),
+        onPressed: _reason.text.trim().isEmpty ? null : () => Navigator.pop(context, (reason: _reason.text.trim(), option: _option)),
+        child: Text(widget.confirmLabel),
+      ),
     ],
   );
 }
