@@ -392,23 +392,16 @@ void main() {
     expect(find.text('Vence em breve'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('advance-Quote-5')));
     await tester.pumpAndSettle();
-    expect(find.text('Cliente aprovou PROP 31?'), findsOneWidget);
-    expect(find.byKey(const ValueKey('prompt-text')), findsNothing);
-    await tester.tap(find.text('Registrar aprovação'));
-    await tester.pumpAndSettle();
+    expect(find.text('Cliente aprovou PROP 31?'), findsNothing); // no dialog: the approval is posted right away
     expect(fake.body(fake.last('POST', '/api/sales/quotes/5/accept')).containsKey('customerPo'), isFalse);
   });
 
-  testWidgets('customer approval on the quote asks only for a note, not the purchase order number', (tester) async {
+  testWidgets('customer approval on the quote posts right away, without a dialog', (tester) async {
     final fake = SalesFake()..quoteStatus = 'Sent';
     await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
     await tester.tap(find.byKey(const ValueKey('quote-accept')));
     await tester.pumpAndSettle();
-    expect(find.text('Cliente aprovou PROP 31'), findsOneWidget);
-    expect(find.byKey(const ValueKey('field-note')), findsOneWidget);
-    expect(find.byKey(const ValueKey('field-customerPo')), findsNothing);
-    await tester.tap(find.text('Salvar'));
-    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
     expect(fake.body(fake.last('POST', '/api/sales/quotes/5/accept')).containsKey('customerPo'), isFalse);
   });
 

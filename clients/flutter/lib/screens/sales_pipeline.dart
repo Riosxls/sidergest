@@ -118,15 +118,6 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
         success = approval ? 'Enviada para aprovação' : 'Orçamento enviado ao cliente';
       case 'sent':
         if (!s.canSell) return;
-        if (!await confirmStep(
-          context,
-          title: 'Cliente aprovou $ref?',
-          message: 'Registra a aprovação do cliente. O nº do pedido de compra dele é informado na próxima etapa.',
-          confirmLabel: 'Registrar aprovação',
-          icon: Icons.thumb_up_alt_outlined,
-        )) {
-          return;
-        }
         call = api.post('/api/sales/quotes/$id/accept', {});
         success = 'Aprovação do cliente registrada';
       case 'accepted':

@@ -956,14 +956,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
   }
 
   Future<void> _accept() async {
-    final r = await submitForm(
-      context,
-      api: api,
-      title: 'Cliente aprovou ${_q!['reference']}',
-      fields: const [FieldSpec('note', 'Observação', hint: 'Opcional. O nº do pedido de compra do cliente é registrado na próxima etapa.')],
-      submit: (b) => api.post('$base/accept', b),
-    );
-    if (r != null && r['reference'] != null) setState(() => _q = r);
+    final r = await runAction(context, () => api.post('$base/accept', {}), success: 'Aprovação do cliente registrada');
+    if (r is Map<String, dynamic> && mounted) setState(() => _q = r);
   }
 
   Future<void> _setRequestText() async {
