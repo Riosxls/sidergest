@@ -31,6 +31,7 @@ public static class CertificateEndpoints
     public static IServiceCollection AddCertificates(this IServiceCollection services)
     {
         services.AddScoped<CertificateService>();
+        services.AddScoped<LegacySpecImporter>();
         return services;
     }
 
@@ -133,6 +134,9 @@ public static class CertificateEndpoints
                     t.Measures.OrderBy(m => m.Kind).ThenBy(m => m.Sequence).Select(m => new CertificateMeasureOut(m.Kind, m.Sequence, m.Name, m.Specified, null)).ToList())).ToListAsync(ct);
             return Results.Ok(items);
         });
+        // Loads the specifications of the old Excel certificates as templates (existing templates are kept).
+        templates.MapPost("/import-legacy", async (LegacySpecImporter importer, ClaimsPrincipal user, CancellationToken ct) => Results.Ok(await importer.ImportAsync(Who(user), ct)))
+            .RequireAuthorization(CertificatePolicies.Manage);
         templates.MapDelete("/{id:int}", async (int id, CertificateService svc, CancellationToken ct) =>
         {
             await svc.DeleteTemplateAsync(id, ct);

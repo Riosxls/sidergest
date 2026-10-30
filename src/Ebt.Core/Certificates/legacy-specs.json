@@ -1,0 +1,6704 @@
+[
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 14,
+  "thickness": 1.5,
+  "length": 1012,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "20MF20-1056",
+  "customerPartDescription": "DIN EN 10305-3 E 320 + CR2  Ø14,00 x 1,50 X 1012mm (Blank Polido)",
+  "learnedFrom": "1904-25",
+  "certificates": 3,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,21"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,60"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,550"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "14,00± 0,15"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,13"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "1012 ± 0,5"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "410 Mpa mín."
+   },
+   {
+    "name": "LE",
+    "specified": "320 Mpa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "19% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 12,
+  "thickness": 1.6,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "20MF02-0116",
+  "customerPartDescription": "Tubo Trefilado R/R DIN EM 10305-2 E195+A",
+  "learnedFrom": "2139-26",
+  "certificates": 31,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,00 ± 0,05"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,60 ± 0,13"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 + 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290Mpa min."
+   },
+   {
+    "name": "LE",
+    "specified": "N/A"
+   },
+   {
+    "name": "LA",
+    "specified": "20% min."
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 12,
+  "thickness": 1.2,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "20MF02-0081",
+  "customerPartDescription": "Tubo  STKM  290G 1008  Ø12,0 X 1,2mm",
+  "learnedFrom": "2014-25",
+  "certificates": 13,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,00 ± 0,12"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,15"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 + 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290 Mpa/min"
+   },
+   {
+    "name": "LE",
+    "specified": "207 Mpa/min"
+   },
+   {
+    "name": "Longamento long",
+    "specified": "35% Minimo"
+   },
+   {
+    "name": "Longamento lateral",
+    "specified": "30% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "HSA AUTOMOTIVE SYSTEMS LTDA.",
+  "diameter": 10,
+  "thickness": 1.6,
+  "length": 5935,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "1020029",
+  "customerPartDescription": "Tubo trefilado Din En 10305 -3 E195 + N",
+  "learnedFrom": "2132-26",
+  "certificates": 14,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,120"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "10,00 ± 0,12"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,60 ± 0,16"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "5935+ 0,10"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 12.7,
+  "thickness": 1.5,
+  "length": 869,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "20MF20-1164",
+  "customerPartDescription": "TUBO DIN EN 10305 - 3 E 420 + CR2",
+  "learnedFrom": "2143-26",
+  "certificates": 37,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,16"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,70"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,50"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,70± 0,12"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,15"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "869 -1,0"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "490 Mpa mín."
+   },
+   {
+    "name": "LE",
+    "specified": "420 Mpa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "12% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 12.7,
+  "thickness": 1.5,
+  "length": 700,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "20MF20-1165",
+  "customerPartDescription": "TUBO DIN EN 10305 - 3 E 420 + CR2",
+  "learnedFrom": "2136-26",
+  "certificates": 20,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,16"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,70"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,50"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,70± 0,12"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,15"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "700 - 1,0"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "490 Mpa mín."
+   },
+   {
+    "name": "LE",
+    "specified": "420 Mpa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "12% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 13.98,
+  "thickness": 1.5,
+  "length": 1095,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "20MF20-0996",
+  "customerPartDescription": "TUBO DIN EN 10305 - 3 E 320 + CR2",
+  "learnedFrom": "1895-25",
+  "certificates": 3,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "13,98 ± 0,08"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "1095 - 1,0"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "410 Mpa mín."
+   },
+   {
+    "name": "LE",
+    "specified": "320 Mpa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "19% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 12.7,
+  "thickness": 1.5,
+  "length": 977,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "20MF20-1187",
+  "customerPartDescription": "TUBO DIN EN 10305 - 3 E 320 + CR2",
+  "learnedFrom": "2123-26",
+  "certificates": 10,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,70- 0,10+0,20"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "977 - 1,0"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "410 Mpa mín."
+   },
+   {
+    "name": "LE",
+    "specified": "320 Mpa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "19% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 12,
+  "thickness": 1,
+  "length": null,
+  "title": "CERTIFICADO DE GARANTIA DA QUALIDADE DO PRODUTO",
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": "PROCESSO DE FECHAMENTO DO TUBO POR INDUÇÃO, DE ALTA FREQUENCIA, MONITORADO PELO EQUIPAMENTO DE \"EDDY CURRENT\" , PARA DETECÇÃO DE FALHAS EM POTENCIAL OCASIONADAS POR CORRENTES PARASITAS.",
+  "customerPartNumber": "20MF02-0091",
+  "customerPartDescription": "TUBO SAE 1010",
+  "learnedFrom": "2145-26",
+  "certificates": 29,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "0,08 à 0,13"
+   },
+   {
+    "name": "Mn",
+    "specified": "0,30 à 0,60"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,030"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,050"
+   },
+   {
+    "name": "Si",
+    "specified": null
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,00± 0,12"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,00 ± 0,12"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "Rolo"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 Mpa Min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "HSA AUTOMOTIVE SYSTEMS LTDA.",
+  "diameter": 10,
+  "thickness": 1.6,
+  "length": 604,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "1020058",
+  "customerPartDescription": "Tubo trefilado Din En 10305 -3 E195 + N",
+  "learnedFrom": "2007-25",
+  "certificates": 6,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,120"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "10,00 ± 0,12"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,60 ± 0,16"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "604 ± 0,30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "HSA AUTOMOTIVE SYSTEMS LTDA.",
+  "diameter": 12.7,
+  "thickness": 2,
+  "length": 648,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": "Os dados referentes às propriedades químicas foram obtidos através do certificado de matéria prima",
+  "customerPartNumber": "1020025",
+  "customerPartDescription": "Tubo trefilado JIS G3445 STKM 11A",
+  "learnedFrom": "2038-26",
+  "certificates": 11,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,120"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,600"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,040"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,040"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,70 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "2,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "648 ± 0,50"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "295 Mpa mín."
+   },
+   {
+    "name": "LE",
+    "specified": "n/a"
+   },
+   {
+    "name": "AL",
+    "specified": "35 % mín."
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 14,
+  "thickness": 1.5,
+  "length": 614,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "20MF20-1173",
+  "customerPartDescription": "DIN EN 10305-3 E 320 + CR2  Ø14,00 x 1,50 X 614mm",
+  "learnedFrom": "2067-26",
+  "certificates": 15,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "14,00 +0,2- 0,1"
+   },
+   {
+    "name": "Espessura",
+    "specified": "150 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "614 - 1,0"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "410 Mpa mín."
+   },
+   {
+    "name": "LE",
+    "specified": "320 Mpa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "19% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 12,
+  "thickness": 1.2,
+  "length": 343,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "20MF20-1018",
+  "customerPartDescription": "Tubo  STKM  290G 1008  Ø12,0 X 1,2mm",
+  "learnedFrom": "2140-26",
+  "certificates": 15,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,00 ± 0,12"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,15"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "342,50 + 1,00"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290 Mpa/min"
+   },
+   {
+    "name": "LE",
+    "specified": "207 Mpa/min"
+   },
+   {
+    "name": "Longamento long",
+    "specified": "35% Minimo"
+   },
+   {
+    "name": "Longamento lateral",
+    "specified": "30% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 12,
+  "thickness": 1.6,
+  "length": 122,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": "Certificado de Origem  N° 9711989601",
+  "customerPartNumber": "20MF20-0968",
+  "customerPartDescription": "MATERIAL STKM 11A SAE 1008",
+  "learnedFrom": "2142-26",
+  "certificates": 20,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,120"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,600"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,400"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,410"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,00 ± 0,05"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,60 ± 0,13"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "121,50 + 0,50"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290Mpa min."
+   },
+   {
+    "name": "LE",
+    "specified": "175 Mpa/min"
+   },
+   {
+    "name": "Longamento long",
+    "specified": "35% Minimo"
+   },
+   {
+    "name": "Longamento lateral",
+    "specified": "30% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 12,
+  "thickness": 1.2,
+  "length": null,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "20MF02-0120",
+  "customerPartDescription": "Tubo  STKM  290G 1008  Ø12,0 X 1,2mm x Rolo",
+  "learnedFrom": "2109-26",
+  "certificates": 6,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,12"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,60"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,040"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,040"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,035"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,00 ± 0,12"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,15"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "Rolo"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290 Mpa/min"
+   },
+   {
+    "name": "Longamento long",
+    "specified": "35% Minimo"
+   },
+   {
+    "name": "Longamento lateral",
+    "specified": "30% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 12.7,
+  "thickness": 1.6,
+  "length": 1030,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "20MF20-1223",
+  "customerPartDescription": "TUBOHC420LA DIN EN10268",
+  "learnedFrom": "1893-25",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,10"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,60"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,50"
+   },
+   {
+    "name": "Al",
+    "specified": "Min. 0,015"
+   },
+   {
+    "name": "Ti",
+    "specified": "Máx. 0,15"
+   },
+   {
+    "name": "Nb",
+    "specified": "Máx. 0,09"
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,70 ± 0,12"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,15"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "1030 ±1,00"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "490 Mpa mín."
+   },
+   {
+    "name": "LE",
+    "specified": "420 Mpa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "17% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA SETE DE SETEMBRO LTDA",
+  "diameter": 6,
+  "thickness": 0.8,
+  "length": 5000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "1020001",
+  "customerPartDescription": "TUBO BK SAE 1008",
+  "learnedFrom": "2124-26",
+  "certificates": 5,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "06,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,80 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "5000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 12.7,
+  "thickness": 1.6,
+  "length": 930,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "20MF20-1223",
+  "customerPartDescription": "TUBOHC420LA DIN EN10268",
+  "learnedFrom": "1936-25",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,10"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,60"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,50"
+   },
+   {
+    "name": "Al",
+    "specified": "Min. 0,015"
+   },
+   {
+    "name": "Ti",
+    "specified": "Máx. 0,15"
+   },
+   {
+    "name": "Nb",
+    "specified": "Máx. 0,09"
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,70 ± 0,12"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,15"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "930 ±1,00"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "490 Mpa mín."
+   },
+   {
+    "name": "LE",
+    "specified": "420 Mpa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "17% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 16,
+  "thickness": 1.2,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "NÃO CONSTA",
+  "customerPartDescription": "DIN EN 10305-3 E 320 + CR2  Ø16,00 x 1,20 X 6000mm",
+  "learnedFrom": "2000-25",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "16,00 ± 0,12"
+   },
+   {
+    "name": "Espessura",
+    "specified": "120 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 + 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "410 Mpa mín."
+   },
+   {
+    "name": "LE",
+    "specified": "320 Mpa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "19% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA FORMIGARI LTDA.",
+  "diameter": 12,
+  "thickness": 1.5,
+  "length": null,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "20MF02-0046",
+  "customerPartDescription": "Tubo  STKM  290G 1008  Ø12,0 X 1,50mm",
+  "learnedFrom": "2064-26",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,00 ± 0,05"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,60 ± 0,13"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "Rolo"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290Mpa min."
+   },
+   {
+    "name": "LE",
+    "specified": "175 Mpa/min"
+   },
+   {
+    "name": "Longamento long",
+    "specified": "35% Minimo"
+   },
+   {
+    "name": "Longamento lateral",
+    "specified": "30% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "ENGETREF INDUSTRIA E COMERCIO LTDA.",
+  "diameter": 6.4,
+  "thickness": 1.2,
+  "length": 3100,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "11",
+  "customerPartDescription": "SAE 1005/1008 - DIN 2393",
+  "learnedFrom": "5173-26",
+  "certificates": 11,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "6,40 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3100 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "COPAM COMPONENTES DE PAPELAO E MADEIRA",
+  "diameter": 8,
+  "thickness": 0.9,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "175000318",
+  "customerPartDescription": null,
+  "learnedFrom": "5158-26",
+  "certificates": 19,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "08,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 0,10"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "340 Mpa min"
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "THAMETAL SISTEMAS E ARTEFATOS METALICOS LTDA",
+  "diameter": 5.9,
+  "thickness": 0.75,
+  "length": 2900,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": "AÇO SAE 1008/1010.",
+  "learnedFrom": "5045-26",
+  "certificates": 14,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "05,90 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,75 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "2900 ± 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "TOP DIESEL IND E COM DE AUTO PECAS LTDA.",
+  "diameter": 6,
+  "thickness": 2,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "14623",
+  "customerPartDescription": null,
+  "learnedFrom": "5151-26",
+  "certificates": 12,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "06,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "2,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "MARRERA INDUSTRIA MECANICA LTDA",
+  "diameter": 8,
+  "thickness": 0.9,
+  "length": 719,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "MP00123",
+  "customerPartDescription": null,
+  "learnedFrom": "5159-26",
+  "certificates": 19,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "08,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "719 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "194 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "NEW ACO TUBOS DE ACO E PERF LAMINADOS LTDA",
+  "diameter": 9.52,
+  "thickness": 1.5,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "31",
+  "customerPartDescription": null,
+  "learnedFrom": "5119-26",
+  "certificates": 4,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "9,52 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": null
+   },
+   {
+    "name": "LE",
+    "specified": null
+   },
+   {
+    "name": "LA",
+    "specified": null
+   }
+  ]
+ },
+ {
+  "customer": "DISTR DE AÇO E METAIS TUBOMETAL LTDA.",
+  "diameter": 8,
+  "thickness": 0.9,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "5140-26",
+  "certificates": 23,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "8,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "28%Min"
+   }
+  ]
+ },
+ {
+  "customer": "DISTR DE AÇO E METAIS TUBOMETAL LTDA.",
+  "diameter": 8,
+  "thickness": 0.9,
+  "length": 2910,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "3997-25",
+  "certificates": 4,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "08,00 ± 0,05"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "2910 ± 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "DISTR DE AÇO E METAIS TUBOMETAL LTDA.",
+  "diameter": 8,
+  "thickness": 0.9,
+  "length": 2930,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "4034-25",
+  "certificates": 4,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "08,00 ± 0,05"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "2930 ± 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "DISTR DE AÇO E METAIS TUBOMETAL LTDA.",
+  "diameter": 8,
+  "thickness": 1.2,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": "Tubo Trefilado EN 10305-1 BK",
+  "learnedFrom": "5156-26",
+  "certificates": 11,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "8,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": null
+   },
+   {
+    "name": "LE",
+    "specified": null
+   },
+   {
+    "name": "LA",
+    "specified": null
+   }
+  ]
+ },
+ {
+  "customer": "DISTR DE AÇO E METAIS TUBOMETAL LTDA.",
+  "diameter": 8,
+  "thickness": 1.5,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "5172-26",
+  "certificates": 11,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,120"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "8,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "28%Min"
+   }
+  ]
+ },
+ {
+  "customer": "NORMEN IND E COM CONEXOES E MANG EIRELI EPP",
+  "diameter": 4.75,
+  "thickness": 0.75,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": "MATERIAL RECOZIDO",
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "5148-26",
+  "certificates": 3,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "4,75 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,75 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": null
+   },
+   {
+    "name": "LE",
+    "specified": null
+   },
+   {
+    "name": "LA",
+    "specified": null
+   }
+  ]
+ },
+ {
+  "customer": "PECAS DIESEL JAVA LTDA",
+  "diameter": 6,
+  "thickness": 0.75,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": "TUBO DE AÇO SAE 1008-1010\nTRATAMENTO ALIVIO DE TENSÃO NO FINAL DO PROCESSO",
+  "customerPartNumber": "601,600,075",
+  "customerPartDescription": null,
+  "learnedFrom": "5174-26",
+  "certificates": 6,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "06,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,75 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "DISTR DE AÇO E METAIS TUBOMETAL LTDA.",
+  "diameter": 6,
+  "thickness": 1,
+  "length": 3100,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "5108-26",
+  "certificates": 7,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "6,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3100 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290 MPa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "ROAL INDUSTRIA METALURGICA LTDA .",
+  "diameter": 8,
+  "thickness": 1,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "101110058",
+  "customerPartDescription": "DIN 2393 RST37-2 GBK",
+  "learnedFrom": "5102-26",
+  "certificates": 9,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "08,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "JOY TUBOS COMERCIAL LTDA.",
+  "diameter": 9.52,
+  "thickness": 1.2,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": "Norma EN10305-03  Grau do Aço SAE 1006/08 E155 + CR1",
+  "learnedFrom": "3892-25",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,140"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "9,52 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "330 à 440 Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa"
+   },
+   {
+    "name": "LA",
+    "specified": "6% min."
+   },
+   {
+    "name": "TESTE DESTRUTIVO",
+    "specified": "ACHATAMENTO"
+   },
+   {
+    "name": "TESTE INDESTRUTIVO",
+    "specified": "EDDY CURRENT"
+   }
+  ]
+ },
+ {
+  "customer": "IND COM DE AUTO PEÇAS RONIL LTDA .",
+  "diameter": 4.75,
+  "thickness": 0.75,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": "MATERIAL RECOZIDO",
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "4189-26",
+  "certificates": 3,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "4,75 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,75 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": null
+   },
+   {
+    "name": "LE",
+    "specified": null
+   },
+   {
+    "name": "LA",
+    "specified": null
+   }
+  ]
+ },
+ {
+  "customer": "NORMEN IND E COM CONEXOES E MANG EIRELI EPP",
+  "diameter": 7,
+  "thickness": 1,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "MA1961",
+  "customerPartDescription": null,
+  "learnedFrom": "4131-25",
+  "certificates": 5,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "07,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": []
+ },
+ {
+  "customer": "DISTR DE AÇO E METAIS TUBOMETAL LTDA.",
+  "diameter": 8,
+  "thickness": 0.75,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "5141-26",
+  "certificates": 9,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "08,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,75 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "PECAS DIESEL JAVA LTDA",
+  "diameter": 4.75,
+  "thickness": 0.75,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": "MATERIAL RECOZIDO",
+  "customerPartNumber": "475.075.06",
+  "customerPartDescription": null,
+  "learnedFrom": "5087-26",
+  "certificates": 8,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "4,75 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,75 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": null
+   },
+   {
+    "name": "LE",
+    "specified": null
+   },
+   {
+    "name": "LA",
+    "specified": null
+   }
+  ]
+ },
+ {
+  "customer": "NAUT IND. E COM. DE PECAS TORN. LTDA",
+  "diameter": 6,
+  "thickness": 2,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "MP.01.06.01",
+  "customerPartDescription": null,
+  "learnedFrom": "5063-26",
+  "certificates": 5,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,320"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "6,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "2,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "MAX CHAMAS IND E COM LTDA.",
+  "diameter": 8,
+  "thickness": 1.2,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "8",
+  "customerPartDescription": "Tubo Trefilado DIN 2393 BK",
+  "learnedFrom": "5136-26",
+  "certificates": 5,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "8,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "28%Min"
+   }
+  ]
+ },
+ {
+  "customer": "DISTR DE AÇO E METAIS TUBOMETAL LTDA.",
+  "diameter": 9.52,
+  "thickness": 0.75,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "5107-26",
+  "certificates": 11,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "09,52 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,75 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "THAMETAL SISTEMAS E ARTEFATOS METALICOS LTDA",
+  "diameter": 8,
+  "thickness": 0.9,
+  "length": 2800,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "5166-26",
+  "certificates": 13,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "08,00 ± 0,05"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "2800 ± 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "ICOL INDUSTRIA E COMERCIO LTDA EPP",
+  "diameter": 6,
+  "thickness": 2,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": "TUBO DE AÇO SAE 1008-1010\nTRATAMENTO ALIVIO DE TENSÃO NO FINAL DO PROCESSO",
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "5168-26",
+  "certificates": 7,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,035"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "06,0 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "2,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "DACAN COMERCIO DE METAIS LTDA.",
+  "diameter": 9.52,
+  "thickness": 1.2,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "RBCL4100952007120120",
+  "customerPartDescription": "EN10305-2 DIN 2393 BK",
+  "learnedFrom": "5139-26",
+  "certificates": 9,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "9,52 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": null
+   },
+   {
+    "name": "LE",
+    "specified": null
+   },
+   {
+    "name": "LA",
+    "specified": null
+   }
+  ]
+ },
+ {
+  "customer": "MARRERA INDUSTRIA MECANICA LTDA",
+  "diameter": 8,
+  "thickness": 0.9,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "3934-25",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "08,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "194 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "NEWPIPE TUBOS E CONEXOES LTDA",
+  "diameter": 6,
+  "thickness": 1,
+  "length": 2000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "9795",
+  "customerPartDescription": null,
+  "learnedFrom": "5075-26",
+  "certificates": 12,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "6,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "2000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290 MPa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "I.K.S INDUSTRIA DE CABOS LTDA.",
+  "diameter": 8,
+  "thickness": 2,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": "TUBO DE AÇO SAE 1008-1010\nTRATAMENTO ALIVIO DE TENSÃO NO FINAL DO PROCESSO",
+  "customerPartNumber": "TR118",
+  "customerPartDescription": null,
+  "learnedFrom": "5126-25",
+  "certificates": 3,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "08,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "2,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "DISTR DE AÇO E METAIS TUBOMETAL LTDA.",
+  "diameter": 6.35,
+  "thickness": 1,
+  "length": 3100,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "4147-26",
+  "certificates": 2,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "6,35 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3100 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290 MPa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "OLITUBOS IND E COM DE TUBOS FEROS E AÇO",
+  "diameter": 9.52,
+  "thickness": 1.2,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "130001",
+  "customerPartDescription": null,
+  "learnedFrom": "5167-26",
+  "certificates": 7,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "9,52 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "DACAN COMERCIO DE METAIS LTDA.",
+  "diameter": 9.52,
+  "thickness": 1.2,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "RBCL4100952007120120",
+  "customerPartDescription": "DIN 2393 BK",
+  "learnedFrom": "5144-26",
+  "certificates": 7,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "9,52 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": null
+   },
+   {
+    "name": "LE",
+    "specified": null
+   },
+   {
+    "name": "LA",
+    "specified": null
+   }
+  ]
+ },
+ {
+  "customer": "TOP DIESEL IND E COM DE AUTO PECAS LTDA.",
+  "diameter": 9.52,
+  "thickness": 0.9,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "10297",
+  "customerPartDescription": null,
+  "learnedFrom": "3979-25",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "9,52 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "JOY TUBOS COMERCIAL LTDA.",
+  "diameter": 10,
+  "thickness": 1,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "Norma EN10305-03  Grau do Aço SAE 1006/08 E155 + CR1",
+  "customerPartDescription": null,
+  "learnedFrom": "3989-25",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": "Máx. 0,370"
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "10,00 ± 0,05"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   },
+   {
+    "name": "TESTE DESTRUTIVO",
+    "specified": "ACHATAMENTO"
+   },
+   {
+    "name": "TESTE INDESTRUTIVO",
+    "specified": "EDDY CURRENT"
+   }
+  ]
+ },
+ {
+  "customer": "DISTR DE AÇO E METAIS TUBOMETAL LTDA.",
+  "diameter": 6.4,
+  "thickness": 1.2,
+  "length": 3100,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "11",
+  "customerPartDescription": "SAE 1005/1008 - DIN 2393",
+  "learnedFrom": "4087-25",
+  "certificates": 2,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,320"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "6,35 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3100 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "TOP DIESEL IND E COM DE AUTO PECAS LTDA.",
+  "diameter": 6,
+  "thickness": 0.75,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "10320",
+  "customerPartDescription": null,
+  "learnedFrom": "5029-26",
+  "certificates": 2,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "06,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,75 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "NEW ACO TUBOS DE ACO E PERF LAMINADOS LTDA",
+  "diameter": 9.52,
+  "thickness": 0.9,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "31",
+  "customerPartDescription": null,
+  "learnedFrom": "4005-25",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "9,52 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": null
+   },
+   {
+    "name": "LE",
+    "specified": null
+   },
+   {
+    "name": "LA",
+    "specified": null
+   }
+  ]
+ },
+ {
+  "customer": "NEW ACO TUBOS DE ACO E PERF LAMINADOS LTDA",
+  "diameter": 9.52,
+  "thickness": 1.2,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "31",
+  "customerPartDescription": null,
+  "learnedFrom": "4102-25",
+  "certificates": 2,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "9,52 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": null
+   },
+   {
+    "name": "LE",
+    "specified": null
+   },
+   {
+    "name": "LA",
+    "specified": null
+   }
+  ]
+ },
+ {
+  "customer": "DACAN COMERCIO DE METAIS LTDA.",
+  "diameter": 6.35,
+  "thickness": 1.9,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "RBCP4100635002550190",
+  "customerPartDescription": "EN10305-2 NBK",
+  "learnedFrom": "5057-26",
+  "certificates": 3,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "06,35 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "PECAS DIESEL JAVA LTDA",
+  "diameter": 8,
+  "thickness": 1,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "601,800,100",
+  "customerPartDescription": "EN 10305-2 NBK",
+  "learnedFrom": "4031-25",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "08,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "NORMEN IND E COM CONEXOES E MANG EIRELI EPP",
+  "diameter": 7.94,
+  "thickness": 1.06,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "MP 19",
+  "customerPartDescription": null,
+  "learnedFrom": "4042-25",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,170"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,200"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "7,94 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,06 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 + 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "I.K.S INDUSTRIA DE CABOS LTDA.",
+  "diameter": 11.25,
+  "thickness": 1.9,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "TR-010",
+  "customerPartDescription": "Tubo Tref. Diam 11,25 X 1,90 X 3000 mm (NBK)",
+  "learnedFrom": "5125-26",
+  "certificates": 6,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "11,25 ± 0,01"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,90 ± 0,05"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290 MPa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "LUMAGI INDUSTRIA METALURGICA LTDA",
+  "diameter": 9.52,
+  "thickness": 1.5,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "60001001",
+  "customerPartDescription": "DIN EN10305-3 09,52 X 1,50 X 3000",
+  "learnedFrom": "5110-26",
+  "certificates": 3,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,120"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,600"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,400"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,410"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": "Mín. 0,015"
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "09,52 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290 Mpa mín."
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "OLITUBOS IND E COM DE TUBOS FEROS E AÇO",
+  "diameter": 9.52,
+  "thickness": 1.5,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "130002",
+  "customerPartDescription": null,
+  "learnedFrom": "4060-25",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "9,52 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "PRECISA IND E COM DE PEÇAS AUTOMOTIVAS LTDA .",
+  "diameter": 6,
+  "thickness": 0.75,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": "TUBO SAE 1006",
+  "learnedFrom": "4099-25",
+  "certificates": 2,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "06,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,75 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "ENGETREF INDUSTRIA E COMERCIO LTDA.",
+  "diameter": 6.35,
+  "thickness": 1,
+  "length": 3100,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "11",
+  "customerPartDescription": "SAE 1008/1010 - DIN 2393",
+  "learnedFrom": "5085-26",
+  "certificates": 4,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,600"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "6,35 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3100 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": null
+   },
+   {
+    "name": "LE",
+    "specified": null
+   },
+   {
+    "name": "LA",
+    "specified": null
+   }
+  ]
+ },
+ {
+  "customer": "NAUT IND. E COM. DE PECAS TORN. LTDA",
+  "diameter": 10,
+  "thickness": 1,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "4140-25",
+  "certificates": 2,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "10,00 ± 0,05"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "TOP DIESEL IND E COM DE AUTO PECAS LTDA.",
+  "diameter": 4.75,
+  "thickness": 0.9,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": "MATERIAL RECOZIDO",
+  "customerPartNumber": "10,312",
+  "customerPartDescription": null,
+  "learnedFrom": "4110-25",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "4,75 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "ENGETREF INDUSTRIA E COMERCIO LTDA.",
+  "diameter": 6,
+  "thickness": 1,
+  "length": 3100,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "11",
+  "customerPartDescription": null,
+  "learnedFrom": "4134-25",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "6,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3100 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290 MPa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "ACOS IDEAL LTDA.",
+  "diameter": 12,
+  "thickness": 1.5,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "4159-26",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "12,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "Teste Destrutivo",
+    "specified": "Achatamento"
+   },
+   {
+    "name": "Teste Destrutivo",
+    "specified": "Espansão"
+   }
+  ]
+ },
+ {
+  "customer": "I.K.S INDUSTRIA DE CABOS LTDA.",
+  "diameter": 6.8,
+  "thickness": 0.75,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "18",
+  "customerPartDescription": "Tubo Tref. Diam 6,80 X 0,75 X 3000 MM (GBK)",
+  "learnedFrom": "4183-26",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "06,70 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,75 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "NAUT IND. E COM. DE PECAS TORN. LTDA",
+  "diameter": 4.75,
+  "thickness": 0.9,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": "58",
+  "learnedFrom": "4192-26",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "4,75 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290 MPa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "PECAS DIESEL JAVA LTDA",
+  "diameter": 10,
+  "thickness": 1,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": null,
+  "learnedFrom": "5012-26",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "10,00 ± 0,05"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "LUMAGI INDUSTRIA METALURGICA LTDA",
+  "diameter": 8,
+  "thickness": 1,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "60001001",
+  "customerPartDescription": "DIN E.N 10305-3 08,00 X 1,00 X 3000",
+  "learnedFrom": "5062-26",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "8,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,90 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "28%Min"
+   }
+  ]
+ },
+ {
+  "customer": "NORMEN IND E COM CONEXOES E MANG EIRELI EPP",
+  "diameter": 9.52,
+  "thickness": 1.5,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": "Tubo Trefilado DIN 2393 BK",
+  "learnedFrom": "5083-26",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": "Máx.0,0370"
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "09,56 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "AL",
+    "specified": "15% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "METALURGICA CARVALHO LTDA",
+  "diameter": 9.52,
+  "thickness": 1.5,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "121",
+  "customerPartDescription": "DIN EN10305-3 09,52 X 1,50 X 6000",
+  "learnedFrom": "5093-26",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": "Máx.0,0370"
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "09,56 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,50 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290Mpa Min"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "AL",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "NEW ACO TUBOS DE ACO E PERF LAMINADOS LTDA",
+  "diameter": 6,
+  "thickness": 0.75,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "31",
+  "customerPartDescription": null,
+  "learnedFrom": "5099-26",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "06,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,75 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": null
+   },
+   {
+    "name": "LE",
+    "specified": null
+   },
+   {
+    "name": "LA",
+    "specified": null
+   }
+  ]
+ },
+ {
+  "customer": "PRECISA IND E COM DE PEÇAS AUTOMOTIVAS LTDA .",
+  "diameter": 6,
+  "thickness": 0.75,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": "TUBO SAE 1006",
+  "learnedFrom": "5103-26",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,023"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "06,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "0,75 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "NEW ACO TUBOS DE ACO E PERF LAMINADOS LTDA",
+  "diameter": 8,
+  "thickness": 1,
+  "length": 3000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "124",
+  "customerPartDescription": null,
+  "learnedFrom": "5120-26",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "8,00 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,00 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "3000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "290 MPa mín."
+   },
+   {
+    "name": "LA",
+    "specified": "28% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "THAMETAL SISTEMAS E ARTEFATOS METALICOS LTDA",
+  "diameter": 9.52,
+  "thickness": 1.2,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": "99",
+  "customerPartDescription": "Tubo Trefilado DIN 2393 BK",
+  "learnedFrom": "5122-26",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,150"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 0,700"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,350"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "9,52 ± 0,10"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 30"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195 Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "6% Minimo"
+   }
+  ]
+ },
+ {
+  "customer": "FIXAR INDUST DE TERM E MANG FLEX EIRELI EPP",
+  "diameter": 8,
+  "thickness": 1.2,
+  "length": 6000,
+  "title": null,
+  "finish": "Isento de porosidade / Manchas / Riscos e Corrosão",
+  "notes": null,
+  "customerPartNumber": null,
+  "customerPartDescription": "Tubo Trefilado DIN 2393 GBK",
+  "learnedFrom": "5171-26",
+  "certificates": 1,
+  "chemical": [
+   {
+    "name": "C",
+    "specified": "Máx. 0,20"
+   },
+   {
+    "name": "Mn",
+    "specified": "Máx. 1,40"
+   },
+   {
+    "name": "P",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "S",
+    "specified": "Máx. 0,025"
+   },
+   {
+    "name": "Si",
+    "specified": "Máx. 0,35"
+   },
+   {
+    "name": "Al",
+    "specified": null
+   },
+   {
+    "name": "Nb",
+    "specified": null
+   },
+   {
+    "name": "Cr",
+    "specified": null
+   },
+   {
+    "name": "Cu",
+    "specified": null
+   },
+   {
+    "name": "V",
+    "specified": null
+   }
+  ],
+  "dimensional": [
+   {
+    "name": "Diâmetro",
+    "specified": "08,00 ± 0,01"
+   },
+   {
+    "name": "Espessura",
+    "specified": "1,20 ± 0,10"
+   },
+   {
+    "name": "Comprimento",
+    "specified": "6000 ± 20"
+   }
+  ],
+  "mechanical": [
+   {
+    "name": "LR",
+    "specified": "300 à 440Mpa"
+   },
+   {
+    "name": "LE",
+    "specified": "195Mpa/min"
+   },
+   {
+    "name": "LA",
+    "specified": "28%Min"
+   }
+  ]
+ }
+]

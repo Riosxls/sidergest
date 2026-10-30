@@ -18,4 +18,8 @@
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Certificates/legacy-specs.json" />
+  </ItemGroup>
+
 </Project>

@@ -18,8 +18,11 @@ Tone certificateTone(Object? s) => switch (s) {
   _ => Tone.danger,
 };
 
-Future<Map<String, dynamic>?> openCertificate(BuildContext context, Session session, int id) =>
-    Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => CertificateScreen(session: session, id: id)));
+Future<Map<String, dynamic>?> openCertificate(BuildContext context, Session session, int id) => Navigator.of(context).push<Map<String, dynamic>>(
+  MaterialPageRoute(
+    builder: (_) => CertificateScreen(session: session, id: id),
+  ),
+);
 
 /// Creates a draft certificate for an order line (prefilled by the server) and opens the editor on it.
 /// Returns true when a certificate was created.
@@ -34,10 +37,7 @@ Future<bool> newCertificate(BuildContext context, Session session, Map<String, d
         title: const Text('Certificado de qual item?'),
         children: [
           for (final l in lines)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(c, l['id'] as int),
-              child: Text('${l['sequence']} · ${l['productCode']} · ${l['description']}'),
-            ),
+            SimpleDialogOption(onPressed: () => Navigator.pop(c, l['id'] as int), child: Text('${l['sequence']} · ${l['productCode']} · ${l['description']}')),
         ],
       ),
     );
@@ -45,7 +45,11 @@ Future<bool> newCertificate(BuildContext context, Session session, Map<String, d
   }
   final c = await runAction(context, () => api.post('/api/sales/certificates', {'orderId': order['id'], 'orderLineId': lineId, 'deliveryId': deliveryId}));
   if (c is! Map<String, dynamic> || !context.mounted) return false;
-  await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CertificateEditorScreen(session: session, certificate: c)));
+  await Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => CertificateEditorScreen(session: session, certificate: c),
+    ),
+  );
   return true;
 }
 
@@ -215,7 +219,12 @@ class _CertificateScreenState extends State<CertificateScreen> {
       actions: [
         if (s.canCertificate) ...[
           OutlinedButton.icon(key: const ValueKey('certificate-edit'), onPressed: _edit, icon: const Icon(Icons.edit_outlined), label: const Text('Preencher')),
-          FilledButton.icon(key: const ValueKey('certificate-issue'), onPressed: _issue, icon: const Icon(Icons.verified_outlined), label: const Text('Emitir')),
+          FilledButton.icon(
+            key: const ValueKey('certificate-issue'),
+            onPressed: _issue,
+            icon: const Icon(Icons.verified_outlined),
+            label: const Text('Emitir'),
+          ),
         ],
       ],
     ),
@@ -227,7 +236,12 @@ class _CertificateScreenState extends State<CertificateScreen> {
       tone: Tone.success,
       actions: [
         if (s.canCertificate && c['deliveryId'] == null)
-          FilledButton.icon(key: const ValueKey('certificate-link'), onPressed: _link, icon: const Icon(Icons.local_shipping_outlined), label: const Text('Vincular à entrega')),
+          FilledButton.icon(
+            key: const ValueKey('certificate-link'),
+            onPressed: _link,
+            icon: const Icon(Icons.local_shipping_outlined),
+            label: const Text('Vincular à entrega'),
+          ),
       ],
     ),
     _ => NextStepCard(title: 'Cancelado', message: '${c['cancelReason'] ?? ''}', tone: Tone.danger),
@@ -262,7 +276,8 @@ class _CertificateScreenState extends State<CertificateScreen> {
       appBar: AppBar(
         title: Text(c == null ? 'Certificado' : 'Certificado ${c['reference']} · ${c['customerName']}', overflow: TextOverflow.ellipsis),
         actions: [
-          if (c != null) PrintButton(key: const ValueKey('certificate-print'), name: 'Certificado de qualidade ${c['reference']}', builder: () => buildCertificatePdf(c)),
+          if (c != null)
+            PrintButton(key: const ValueKey('certificate-print'), name: 'Certificado de qualidade ${c['reference']}', builder: () => buildCertificatePdf(c)),
           if (menu.isNotEmpty) PopupMenuButton<VoidCallback>(onSelected: (f) => f(), itemBuilder: (_) => menu),
         ],
       ),
@@ -367,13 +382,18 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
     ('Certificado de origem', 'Certificado de origem do material nº '),
     ('Material recozido', 'MATERIAL RECOZIDO'),
     ('Alívio de tensão', 'TRATAMENTO ALIVIO DE TENSÃO NO FINAL DO PROCESSO'),
-    ('Eddy current', 'PROCESSO DE FECHAMENTO DO TUBO POR INDUÇÃO, DE ALTA FREQUENCIA, MONITORADO PELO EQUIPAMENTO DE "EDDY CURRENT", PARA DETECÇÃO DE FALHAS EM POTENCIAL OCASIONADAS POR CORRENTES PARASITAS.'),
+    (
+      'Eddy current',
+      'PROCESSO DE FECHAMENTO DO TUBO POR INDUÇÃO, DE ALTA FREQUENCIA, MONITORADO PELO EQUIPAMENTO DE "EDDY CURRENT", PARA DETECÇÃO DE FALHAS EM POTENCIAL OCASIONADAS POR CORRENTES PARASITAS.',
+    ),
   ];
   late final Map<String, dynamic> c = widget.certificate;
   final _fields = <String, TextEditingController>{};
   final _spec = <TextEditingController>[];
   final _found = <TextEditingController>[];
-  late final List<Map<String, dynamic>> _measures = [for (final m in (c['measures'] as List).cast<Map<String, dynamic>>()) {...m}];
+  late final List<Map<String, dynamic>> _measures = [
+    for (final m in (c['measures'] as List).cast<Map<String, dynamic>>()) {...m},
+  ];
   late String? _title = c['title'] as String?;
   List<Map<String, dynamic>> _deliveries = const [];
   int? _deliveryId;
@@ -490,7 +510,11 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
     final name = await promptText(
       context,
       title: 'Nova linha',
-      label: kind == 'Chemical' ? 'Elemento (ex.: Ti)' : kind == 'Dimensional' ? 'Medida (ex.: Largura)' : 'Ensaio (ex.: Alongamento longitudinal, Teste destrutivo)',
+      label: kind == 'Chemical'
+          ? 'Elemento (ex.: Ti)'
+          : kind == 'Dimensional'
+          ? 'Medida (ex.: Largura)'
+          : 'Ensaio (ex.: Alongamento longitudinal, Teste destrutivo)',
       required: true,
       confirmLabel: 'Adicionar',
     );
@@ -516,61 +540,159 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
     setState(() {});
   }
 
+  static const _kindIcons = {'Chemical': Icons.science_outlined, 'Dimensional': Icons.straighten, 'Mechanical': Icons.fitness_center};
+
+  bool _hasValue(String t) => t.trim().isNotEmpty && t.trim() != '-';
+
+  InputDecoration _cell(ColorScheme scheme, {required bool found}) {
+    final edge = found ? scheme.primary.withValues(alpha: 0.35) : Colors.transparent;
+    OutlineInputBorder border(Color color, [double width = 1]) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: color, width: width),
+    );
+    return InputDecoration(
+      isDense: true,
+      hintText: '-',
+      filled: true,
+      fillColor: found ? scheme.primaryContainer.withValues(alpha: 0.35) : scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      border: border(edge),
+      enabledBorder: border(edge),
+      focusedBorder: border(scheme.primary, 1.6),
+    );
+  }
+
   Widget _table(String title, String kind, List<String> headers) {
-    final idx = [for (var i = 0; i < _measures.length; i++) if (_measures[i]['kind'] == kind) i];
-    return Section(
-      title: title,
-      child: Column(
-        children: [
-          Row(
-            children: [
-              for (final (n, h) in headers.indexed)
-                Expanded(
-                  flex: n == 0 ? 2 : 3,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text(h, style: const TextStyle(fontWeight: FontWeight.w600)),
+    final scheme = Theme.of(context).colorScheme;
+    final label = Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600);
+    final idx = [
+      for (var i = 0; i < _measures.length; i++)
+        if (_measures[i]['kind'] == kind) i,
+    ];
+    final done = idx.where((i) => _hasValue(_found[i].text)).length;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(_kindIcons[kind], size: 20, color: scheme.primary),
+                const SizedBox(width: 8),
+                Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium)),
+                if (idx.isNotEmpty)
+                  Chip(
+                    visualDensity: VisualDensity.compact,
+                    side: BorderSide.none,
+                    backgroundColor: done == idx.length ? scheme.primaryContainer : scheme.surfaceContainerHighest,
+                    label: Text('$done de ${idx.length} encontrados', style: Theme.of(context).textTheme.labelSmall),
                   ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                SizedBox(width: 92, child: Text(headers[0], style: label)),
+                Expanded(child: Text(headers[1], style: label)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(headers[2], style: label?.copyWith(color: scheme.primary)),
                 ),
-            ],
-          ),
-          for (final i in idx)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Expanded(flex: 2, child: Text('${_measures[i]['name']}')),
-                  Expanded(
-                    flex: 3,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: TextField(
-                        key: ValueKey('spec-$kind-${_measures[i]['name']}'),
-                        controller: _spec[i],
-                        decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true, hintText: '-'),
+                const SizedBox(width: 40),
+              ],
+            ),
+            const SizedBox(height: 4),
+            if (idx.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Text('Nenhuma linha.', style: label),
+              ),
+            for (final i in idx)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 92,
+                      child: Text(
+                        '${_measures[i]['name']}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ),
-                  Expanded(
-                    flex: 3,
-                    child: TextField(
-                      key: ValueKey('found-$kind-${_measures[i]['name']}'),
-                      controller: _found[i],
-                      decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true, hintText: '-'),
+                    Expanded(
+                      child: TextField(key: ValueKey('spec-$kind-${_measures[i]['name']}'), controller: _spec[i], decoration: _cell(scheme, found: false)),
                     ),
-                  ),
-                  IconButton(
-                    key: ValueKey('row-del-$kind-${_measures[i]['name']}'),
-                    tooltip: 'Remover linha',
-                    icon: const Icon(Icons.remove_circle_outline, size: 20),
-                    onPressed: () => _removeRow(i),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        key: ValueKey('found-$kind-${_measures[i]['name']}'),
+                        controller: _found[i],
+                        onChanged: (_) => setState(() {}),
+                        decoration: _cell(scheme, found: true),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 40,
+                      child: IconButton(
+                        key: ValueKey('row-del-$kind-${_measures[i]['name']}'),
+                        tooltip: 'Remover linha',
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(Icons.close, size: 18, color: scheme.onSurfaceVariant),
+                        onPressed: () => _removeRow(i),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: ValueKey('row-add-$kind'),
+                onPressed: () => _addRow(kind),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Adicionar linha'),
               ),
             ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(key: ValueKey('row-add-$kind'), onPressed: () => _addRow(kind), icon: const Icon(Icons.add, size: 18), label: const Text('Adicionar linha')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tables(BuildContext context) {
+    final chem = _table('Composição química (%)', 'Chemical', const ['Elemento', 'Especificado', 'Encontrado']);
+    final dim = _table('Dimensional (mm)', 'Dimensional', const ['Medida', 'Especificado', 'Encontrado']);
+    final mech = _table('Ensaios mecânicos', 'Mechanical', const ['Limite', 'Especificado', 'Encontrado']);
+    return LayoutBuilder(
+      builder: (context, box) => box.maxWidth >= 1000
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: chem),
+                const SizedBox(width: 12),
+                Expanded(child: Column(children: [dim, gap, mech])),
+              ],
+            )
+          : Column(children: [chem, gap, dim, gap, mech]),
+    );
+  }
+
+  Widget _banner(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: scheme.secondaryContainer.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, size: 20, color: scheme.onSecondaryContainer),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'As especificações vêm do último certificado emitido para este cliente e produto (ou dos certificados em Excel de 2025-26); ao emitir, ficam salvas como modelo. Só o "Encontrado" muda a cada remessa.',
+            ),
           ),
         ],
       ),
@@ -584,99 +706,112 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
       actions: [
         Padding(
           padding: const EdgeInsets.only(right: 12),
-          child: FilledButton.icon(key: const ValueKey('cert-save'), onPressed: _busy ? null : _save, icon: const Icon(Icons.save_outlined), label: const Text('Salvar')),
+          child: FilledButton.icon(
+            key: const ValueKey('cert-save'),
+            onPressed: _busy ? null : _save,
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('Salvar'),
+          ),
         ),
       ],
     ),
-    body: ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          ),
-        Section(
-          title: 'Dados do certificado',
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _text('issueDate', 'Data *', width: 150, hint: 'dd/mm/aaaa'),
-              _text('customerPo', 'Nº do pedido do cliente', width: 200),
-              _text('invoiceNumber', 'NF', width: 140, hint: 'Vazio = NF da entrega'),
-              _text('quantity', 'Quantidade *', width: 140, number: true),
-              _text('unit', 'Unidade', width: 90),
-              SizedBox(
-                width: 300,
-                child: DropdownButtonFormField<int?>(
-                  key: const ValueKey('cert-delivery'),
-                  initialValue: _deliveries.any((d) => d['id'] == _deliveryId) ? _deliveryId : null,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Entrega', border: OutlineInputBorder(), isDense: true),
-                  items: [
-                    const DropdownMenuItem<int?>(value: null, child: Text('Sem entrega')),
-                    for (final d in _deliveries)
-                      DropdownMenuItem<int?>(value: d['id'] as int, child: Text('${d['reference']} · ${fmtDay(d['plannedDate'])}${d['invoiceNumber'] == null ? '' : ' · NF ${d['invoiceNumber']}'}')),
-                  ],
-                  onChanged: (v) => setState(() => _deliveryId = v),
-                ),
+    body: Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1240),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
               ),
-            ],
-          ),
-        ),
-        gap,
-        Section(
-          title: 'Produto',
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _text('description', 'Descrição *', width: 360),
-              _text('customerPartNumber', 'Código do cliente', width: 200),
-              _text('customerPartDescription', 'Descrição do cliente', width: 300),
-              _text('rawMaterialLot', 'Lote MP', width: 180),
-              _text('hardness', 'Dureza', width: 160, hint: 'ex.: 66 HRB'),
-              _text('finish', 'Acabamento superficial', width: 420),
-              _text('approvedBy', 'Aprovação / visto (nome)', width: 240),
-              SizedBox(
-                width: 420,
-                child: DropdownButtonFormField<String>(
-                  key: const ValueKey('cert-title'),
-                  initialValue: _title ?? '',
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Título do certificado', border: OutlineInputBorder(), isDense: true),
-                  items: [
-                    for (final t in {..._titles, ?_title}) DropdownMenuItem(value: t, child: Text(t.isEmpty ? 'Padrão · CERTIFICADO DE QUALIDADE' : t, overflow: TextOverflow.ellipsis)),
-                  ],
-                  onChanged: (v) => setState(() => _title = (v == null || v.isEmpty) ? null : v),
-                ),
+            Section(
+              title: 'Dados do certificado',
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _text('issueDate', 'Data *', width: 150, hint: 'dd/mm/aaaa'),
+                  _text('customerPo', 'Nº do pedido do cliente', width: 200),
+                  _text('invoiceNumber', 'NF', width: 140, hint: 'Vazio = NF da entrega'),
+                  _text('quantity', 'Quantidade *', width: 140, number: true),
+                  _text('unit', 'Unidade', width: 90),
+                  SizedBox(
+                    width: 300,
+                    child: DropdownButtonFormField<int?>(
+                      key: const ValueKey('cert-delivery'),
+                      initialValue: _deliveries.any((d) => d['id'] == _deliveryId) ? _deliveryId : null,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Entrega', border: OutlineInputBorder(), isDense: true),
+                      items: [
+                        const DropdownMenuItem<int?>(value: null, child: Text('Sem entrega')),
+                        for (final d in _deliveries)
+                          DropdownMenuItem<int?>(
+                            value: d['id'] as int,
+                            child: Text('${d['reference']} · ${fmtDay(d['plannedDate'])}${d['invoiceNumber'] == null ? '' : ' · NF ${d['invoiceNumber']}'}'),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _deliveryId = v),
+                    ),
+                  ),
+                ],
               ),
-              _text('notes', 'Observações', width: 700, lines: 3),
-              SizedBox(
-                width: 700,
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    for (final (n, s) in _noteSnippets.indexed) ActionChip(key: ValueKey('note-snippet-$n'), label: Text(s.$1), onPressed: () => _addNote(s.$2)),
-                  ],
-                ),
+            ),
+            gap,
+            Section(
+              title: 'Produto',
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _text('description', 'Descrição *', width: 360),
+                  _text('customerPartNumber', 'Código do cliente', width: 200),
+                  _text('customerPartDescription', 'Descrição do cliente', width: 300),
+                  _text('rawMaterialLot', 'Lote MP', width: 180),
+                  _text('hardness', 'Dureza', width: 160, hint: 'ex.: 66 HRB'),
+                  _text('finish', 'Acabamento superficial', width: 420),
+                  _text('approvedBy', 'Aprovação / visto (nome)', width: 240),
+                  SizedBox(
+                    width: 420,
+                    child: DropdownButtonFormField<String>(
+                      key: const ValueKey('cert-title'),
+                      initialValue: _title ?? '',
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Título do certificado', border: OutlineInputBorder(), isDense: true),
+                      items: [
+                        for (final t in {..._titles, ?_title})
+                          DropdownMenuItem(
+                            value: t,
+                            child: Text(t.isEmpty ? 'Padrão · CERTIFICADO DE QUALIDADE' : t, overflow: TextOverflow.ellipsis),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _title = (v == null || v.isEmpty) ? null : v),
+                    ),
+                  ),
+                  _text('notes', 'Observações', width: 700, lines: 3),
+                  SizedBox(
+                    width: 700,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        for (final (n, s) in _noteSnippets.indexed)
+                          ActionChip(key: ValueKey('note-snippet-$n'), label: Text(s.$1), onPressed: () => _addNote(s.$2)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            gap,
+            _banner(context),
+            gap,
+            _tables(context),
+          ],
         ),
-        gap,
-        const Padding(
-          padding: EdgeInsets.only(bottom: 8),
-          child: Text('As especificações vêm do último certificado emitido para este cliente e produto; ao emitir, ficam salvas como modelo. Só o "Encontrado" muda a cada remessa.'),
-        ),
-        _table('Composição química (%)', 'Chemical', const ['Elemento', 'Especificado', 'Encontrado']),
-        gap,
-        _table('Dimensional (mm)', 'Dimensional', const ['Medida', 'Especificado', 'Encontrado']),
-        gap,
-        _table('Ensaios mecânicos', 'Mechanical', const ['Limite', 'Especificado', 'Encontrado']),
-      ],
+      ),
     ),
   );
 }
@@ -723,7 +858,9 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Esquecer este modelo?'),
-        content: Text('O próximo certificado de ${t['customerName']} para ${t['productCode']} volta a começar em branco. O modelo é recriado ao emitir outro certificado.'),
+        content: Text(
+          'O próximo certificado de ${t['customerName']} para ${t['productCode']} volta a começar em branco. O modelo é recriado ao emitir outro certificado.',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Voltar')),
           FilledButton(key: const ValueKey('confirm-step'), onPressed: () => Navigator.pop(c, true), child: const Text('Esquecer')),
@@ -732,6 +869,18 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
     );
     if (ok != true || !mounted) return;
     await runAction(context, () => api.delete('/api/sales/certificates/templates/${t['id']}'), success: 'Modelo removido');
+    _load();
+  }
+
+  Future<void> _importLegacy() async {
+    final r = await runAction(context, () => api.post('/api/sales/certificates/templates/import-legacy', {}));
+    if (r == null || !mounted) return;
+    final m = r as Map<String, dynamic>;
+    final created = m['created'] as int;
+    final text = created == 0
+        ? 'Nada novo: os modelos dos certificados em Excel já estão carregados.'
+        : '$created modelos criados a partir dos certificados em Excel (${m['noCustomer']} sem cliente cadastrado, ${m['noProduct']} sem produto cadastrado).';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
     _load();
   }
 
@@ -745,7 +894,21 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
         ? const <Map<String, dynamic>>[]
         : items.where((t) => q.isEmpty || '${t['customerName']} ${t['productCode']} ${t['productDescription']}'.toLowerCase().contains(q)).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('Modelos de especificação')),
+      appBar: AppBar(
+        title: const Text('Modelos de especificação'),
+        actions: [
+          if (widget.session.canCertificate)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: OutlinedButton.icon(
+                key: const ValueKey('templates-import'),
+                onPressed: _importLegacy,
+                icon: const Icon(Icons.table_view_outlined),
+                label: const Text('Importar dos certificados em Excel'),
+              ),
+            ),
+        ],
+      ),
       body: _error != null
           ? Center(child: Text(_error!))
           : items == null
@@ -753,12 +916,19 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const Text('Cada certificado emitido ensina o próximo do mesmo cliente e produto: limites especificados, título, acabamento e observações fixas. Os valores encontrados nunca são copiados.'),
+                const Text(
+                  'Cada certificado emitido ensina o próximo do mesmo cliente e produto: limites especificados, título, acabamento e observações fixas. Os valores encontrados nunca são copiados.',
+                ),
                 const SizedBox(height: 12),
                 TextField(
                   key: const ValueKey('templates-search'),
                   onChanged: (v) => setState(() => _q = v),
-                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Cliente ou produto', border: OutlineInputBorder(), isDense: true),
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Cliente ou produto',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 if (shown.isEmpty)
@@ -778,11 +948,17 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
                         if (t['title'] != null) Text('Título: ${t['title']}'),
                         if (t['notes'] != null) Text('Observações: ${t['notes']}'),
                         const SizedBox(height: 8),
-                        for (final m in (t['measures'] as List).cast<Map<String, dynamic>>()) Text('${_kinds[m['kind']] ?? m['kind']} · ${m['name']}: ${m['specified'] ?? '-'}'),
+                        for (final m in (t['measures'] as List).cast<Map<String, dynamic>>())
+                          Text('${_kinds[m['kind']] ?? m['kind']} · ${m['name']}: ${m['specified'] ?? '-'}'),
                         if (widget.session.canCertificate)
                           Align(
                             alignment: Alignment.centerRight,
-                            child: TextButton.icon(key: ValueKey('template-forget-${t['id']}'), onPressed: () => _forget(t), icon: const Icon(Icons.delete_outline), label: const Text('Esquecer modelo')),
+                            child: TextButton.icon(
+                              key: ValueKey('template-forget-${t['id']}'),
+                              onPressed: () => _forget(t),
+                              icon: const Icon(Icons.delete_outline),
+                              label: const Text('Esquecer modelo'),
+                            ),
                           ),
                       ],
                     ),
