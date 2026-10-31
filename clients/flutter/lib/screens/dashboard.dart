@@ -243,6 +243,15 @@ List<DashAlert> buildAlerts(
     ],
     if (stock != null) ...[
       DashAlert('Estoque', Icons.verified_outlined, 'Lotes em quarentena', stock.quarantine, 'lots', 'Quarantine', to('lots', 'Quarantine')),
+      DashAlert(
+        'Estoque',
+        Icons.trending_down,
+        'Materiais abaixo do estoque mínimo',
+        stock.lowStock.length,
+        'low-stock',
+        null,
+        to('low-stock'),
+      ),
       DashAlert('Estoque', Icons.content_cut, 'Aço aguardando retorno do slitter', stock.steelPending, 'steel', null, to('steel')),
     ],
     if (eng != null) ...[

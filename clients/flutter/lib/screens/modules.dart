@@ -152,6 +152,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
   List<GridItem> _stock(StockDashboard d) {
     if (d.locations == 0 && d.steelLots == 0) return [];
     return [
+      _tile(Icons.trending_down, 'Abaixo do mínimo', '${d.lowStock.length}', _go('low-stock'), d.lowStock.isNotEmpty),
       _tile(Icons.verified_outlined, 'Lotes em quarentena', '${d.quarantine}', _go('lots', 'Quarantine'), true),
       _tile(Icons.bookmark_border, 'Reservas abertas', '${d.openReservations}', _go('reservations')),
       _tile(Icons.lock_outline, 'Último mês fechado', d.lastClosing == null ? 'Nenhum' : fmtPeriod(d.lastClosing!['period']), _go('closing')),
