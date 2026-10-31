@@ -4,6 +4,7 @@ import '../api.dart';
 import '../entities.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
+import '../widgets/page_column.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
 import 'sales_common.dart';
@@ -291,7 +292,16 @@ class _FiscalSettingsScreenState extends State<FiscalSettingsScreen> {
       if (snap.hasError) return Center(child: Text(friendlyError(snap.error!)));
       final d = snap.data;
       if (d == null) return const Center(child: CircularProgressIndicator());
-      return ListView(
+      String has(String k) => '${d[k] ?? ''}'.trim();
+      String or(String k) => has(k).isEmpty ? 'Não informado' : has(k);
+      final missing = [
+        if (has('companyName').isEmpty) 'razão social',
+        if (has('cnpj').isEmpty) 'CNPJ',
+        if (has('stateRegistration').isEmpty) 'inscrição estadual',
+        if (has('street').isEmpty || has('city').isEmpty || has('cityIbgeCode').isEmpty) 'endereço completo',
+      ];
+      final address = [d['street'], d['number'], d['district'], d['city'], d['uf'], d['zipCode']].where((x) => x != null && '$x'.isNotEmpty).join(', ');
+      return PageColumn(child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           NextStepCard(
@@ -299,26 +309,53 @@ class _FiscalSettingsScreenState extends State<FiscalSettingsScreen> {
             message: d['enabled'] == true
                 ? 'Expedir entrega e enviar remessa de beneficiamento sem informar a NF emitem a nota. Ambiente: ${_environments[d['environment']] ?? d['environment']}. A SEFAZ ainda é simulada.'
                 : 'Enquanto desligada, o número da NF continua sendo digitado à mão.',
-            tone: d['enabled'] == true ? Tone.success : Tone.neutral,
+            tone: d['enabled'] == true ? Tone.success : Tone.warning,
             actions: [
-              if (widget.session.isAdmin) FilledButton.icon(onPressed: () => _edit(d), icon: const Icon(Icons.edit_outlined), label: const Text('Editar')),
+              if (widget.session.isAdmin) FilledButton.tonalIcon(onPressed: () => _edit(d), icon: const Icon(Icons.edit_outlined), label: const Text('Editar parâmetros')),
             ],
           ),
+          if (missing.isNotEmpty) ...[
+            gap,
+            NextStepCard(
+              title: 'Dados do emitente incompletos',
+              message: 'Falta preencher: ${missing.join(', ')}. A NF-e não pode ser emitida sem esses dados.',
+              tone: Tone.warning,
+            ),
+          ],
           gap,
           Section(
             title: 'Emitente',
+            actions: [
+              if (widget.session.isAdmin) IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined), onPressed: () => _edit(d)),
+            ],
             child: InfoGrid([
-              ('Razão social', fmt(d['companyName'])),
-              ('CNPJ', fmt(d['cnpj'])),
-              ('Inscrição estadual', fmt(d['stateRegistration'])),
-              ('Endereço', [d['street'], d['number'], d['district'], d['city'], d['uf'], d['zipCode']].where((x) => x != null && '$x'.isNotEmpty).join(', ')),
-              ('Código IBGE', fmt(d['cityIbgeCode'])),
-              ('Série · próximo número', '${d['series']} · ${d['nextNumber']}'),
-              ('Prazo para cancelar', '${d['cancelWindowHours']} h'),
+              ('Razão social', or('companyName')),
+              ('CNPJ', or('cnpj')),
+              ('Inscrição estadual', or('stateRegistration')),
+              ('Regime tributário', switch (d['taxRegime']) {
+                1 => 'Simples Nacional',
+                2 => 'Simples Nacional (excesso)',
+                _ => 'Regime normal',
+              }),
+              ('Endereço', address.isEmpty || address == '${d['uf']}' ? 'Não informado' : address),
+              ('Código IBGE', or('cityIbgeCode')),
+            ]),
+          ),
+          gap,
+          Section(
+            title: 'Emissão',
+            actions: [
+              if (widget.session.isAdmin) IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined), onPressed: () => _edit(d)),
+            ],
+            child: InfoGrid([
+              ('Ambiente', _environments[d['environment']] ?? '${d['environment']}'),
+              ('Série', '${d['series']}'),
+              ('Próximo número', '${d['nextNumber']}'),
+              ('Prazo para cancelar', d['cancelWindowHours'] == 0 ? 'Sem limite' : '${d['cancelWindowHours']} h'),
             ]),
           ),
         ],
-      );
+      ));
     },
   );
 }

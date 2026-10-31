@@ -49,9 +49,14 @@ List<ModuleInfo> modulesFor(String? role) {
 
 final dashboardCounted = [products, materials, machines, standardOperations, workCenters, tools];
 
-class DashAlert {
-  const DashAlert(this.module, this.icon, this.label, this.count, this.navId, this.filter, this.onTap);
+/// Overdue items older than this are treated as legacy backlog: shown, but not counted as a fresh alarm.
+const legacyOverdueDays = 30;
 
+class DashAlert {
+  const DashAlert(this.module, this.icon, this.label, this.count, this.navId, this.filter, this.onTap, {this.muted = false});
+
+  /// A known backlog (imported legacy): drawn neutral, left out of the bell and the module badge.
+  final bool muted;
   final String module;
   final IconData icon;
   final String label;
@@ -118,10 +123,16 @@ List<DashAlert> buildAlerts(
         ),
       );
 
-  final late = production == null ? <Map<String, dynamic>>[] : (production.late..sort((a, b) => '${a['dueDate']}'.compareTo('${b['dueDate']}')));
-  final overdue = purchasing == null
+  final cutoff = DateTime.now().subtract(const Duration(days: legacyOverdueDays));
+  bool legacyOf(Map<String, dynamic> x) => (DateTime.tryParse('${x['dueDate']}') ?? DateTime.now()).isBefore(cutoff);
+  final allLate = production == null ? <Map<String, dynamic>>[] : (production.late..sort((a, b) => '${a['dueDate']}'.compareTo('${b['dueDate']}')));
+  final late = allLate.where((x) => !legacyOf(x)).toList();
+  final lateLegacy = allLate.where(legacyOf).toList();
+  final allOverdue = purchasing == null
       ? <Map<String, dynamic>>[]
       : ([...purchasing.overdue]..sort((a, b) => (b['daysLate'] as num).compareTo(a['daysLate'] as num)));
+  final overdue = allOverdue.where((l) => (l['daysLate'] as num) <= legacyOverdueDays).toList();
+  final overdueLegacy = allOverdue.where((l) => (l['daysLate'] as num) > legacyOverdueDays).toList();
   String productLabel(Map<String, dynamic> x) => '${x['code']}  ${x['name']}';
   void openProduct(Map<String, dynamic> p) => push(ProductDetailScreen(session: session, productId: p['id'] as int));
   return [
@@ -164,6 +175,22 @@ List<DashAlert> buildAlerts(
       ),
       DashAlert(
         'PCP',
+        Icons.history,
+        'OFs atrasadas há mais de $legacyOverdueDays dias',
+        lateLegacy.length,
+        'production-orders',
+        null,
+        showList(
+          'OFs atrasadas há mais de $legacyOverdueDays dias',
+          lateLegacy,
+          (x) => '${x['reference']} · ${x['productCode']} · ${fmt(x['quantity'])} · ${fmtDay(x['dueDate'])}',
+          (x) => openProductionOrder(context, session, x['id'] as int).then((_) => refresh()),
+          all: 'production-orders',
+        ),
+        muted: true,
+      ),
+      DashAlert(
+        'PCP',
         Icons.pause_circle_outline,
         'OFs paradas',
         production.count('Stopped'),
@@ -187,6 +214,22 @@ List<DashAlert> buildAlerts(
           (l) => push(OrderScreen(session: session, id: l['purchaseOrderId'] as int)),
           all: 'overdue',
         ),
+      ),
+      DashAlert(
+        'Suprimentos',
+        Icons.history,
+        'Entregas atrasadas há mais de $legacyOverdueDays dias',
+        overdueLegacy.length,
+        'overdue',
+        null,
+        showList(
+          'Entregas atrasadas há mais de $legacyOverdueDays dias',
+          overdueLegacy,
+          (l) => '${l['daysLate']} d · ped. ${l['purchaseOrderNumber']} · ${l['supplierName']} · ${l['description']}',
+          (l) => push(OrderScreen(session: session, id: l['purchaseOrderId'] as int)),
+          all: 'overdue',
+        ),
+        muted: true,
       ),
       DashAlert(
         'Suprimentos',
@@ -284,7 +327,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _settle() async {
     final d = await _all;
     if (!mounted) return;
-    widget.session.alerts.value = [for (final a in _alerts(d)) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter)];
+    widget.session.alerts.value = [for (final a in _alerts(d).where((a) => !a.muted)) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter)];
     setState(() => _updated = DateTime.now());
   }
 
@@ -391,7 +434,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 subtitle: 'Nenhuma OF atrasada, entrega em atraso, aprovação ou bloqueio.',
               )
             : DashGrid(
-                items: [for (final a in alerts) GridItem(DashTile(icon: a.icon, label: a.label, value: '${a.count}', alert: true, onTap: a.onTap))],
+                items: [for (final a in alerts) GridItem(DashTile(icon: a.icon, label: a.label, value: '${a.count}', alert: !a.muted, onTap: a.onTap))],
               );
       }
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [header, content, const SizedBox(height: 16)]);
@@ -454,7 +497,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         module: m,
                         lines: _summary(m.section, snap.data),
                         loading: !snap.hasData,
-                        attention: alerts.where((a) => a.module == m.section).fold<int>(0, (n, a) => n + a.count),
+                        attention: alerts.where((a) => a.module == m.section && !a.muted).fold<int>(0, (n, a) => n + a.count),
                         onTap: _go(m.id),
                       ),
                     ),
@@ -560,13 +603,13 @@ class ModuleCard extends StatelessWidget {
                     if (attention > 0)
                       Badge(label: Text('$attention'), backgroundColor: cs.error, textColor: cs.onError)
                     else if (!loading && lines != null)
-                      Icon(Icons.check_circle_outline, size: 20, color: cs.primary),
+                      Tooltip(message: 'Nada pendente', child: Icon(Icons.check_circle_outline, size: 20, color: cs.primary)),
                     const SizedBox(width: 4),
                     Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(module.blurb, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                Text(module.blurb, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
                 const SizedBox(height: 12),
                 if (loading)
                   const LinearProgressIndicator()

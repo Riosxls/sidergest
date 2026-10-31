@@ -6,6 +6,7 @@ import '../labels.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
+import '../widgets/page_column.dart';
 import '../widgets/record_list.dart';
 
 const _minPassword = 10;
@@ -83,43 +84,69 @@ class _UsersScreenState extends State<UsersScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    floatingActionButton: FloatingActionButton.extended(onPressed: _create, icon: const Icon(Icons.person_add_alt), label: const Text('Novo usuário')),
-    body: FutureBuilder<List<Map<String, dynamic>>>(
-      future: _future,
-      builder: (context, snap) {
-        if (snap.hasError) return Center(child: Text(friendlyError(snap.error!)));
-        final users = snap.data;
-        if (users == null) return const Center(child: CircularProgressIndicator());
-        if (users.isEmpty) return const Center(child: Text('Nenhum usuário'));
-        return ListView.separated(
-          padding: const EdgeInsets.only(bottom: 88),
-          itemCount: users.length,
-          separatorBuilder: (_, _) => const Divider(height: 1),
-          itemBuilder: (_, i) {
-            final u = users[i];
-            final locked = u['locked'] == true;
-            return ListTile(
-              key: ValueKey('user-${u['id']}'),
-              leading: const Icon(Icons.person_outline),
-              title: Text('${u['username']}'),
-              subtitle: Wrap(
-                spacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(userRoles[u['role']] ?? '${u['role']}'),
-                  StatusChip(u['active'] == true ? 'Ativo' : 'Inativo', ok: u['active'] == true),
-                  if (locked) const StatusChip('Bloqueado', alert: true),
-                ],
+  Widget build(BuildContext context) => FutureBuilder<List<Map<String, dynamic>>>(
+    future: _future,
+    builder: (context, snap) {
+      if (snap.hasError) return Center(child: Text(friendlyError(snap.error!)));
+      final users = snap.data;
+      if (users == null) return const Center(child: CircularProgressIndicator());
+      return PageColumn(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text('${users.length} ${users.length == 1 ? 'usuário' : 'usuários'}', style: Theme.of(context).textTheme.titleMedium)),
+                FilledButton.icon(onPressed: _create, icon: const Icon(Icons.person_add_alt), label: const Text('Novo usuário')),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (users.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: Text('Nenhum usuário')),
+              )
+            else
+              Card(
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    for (final (i, u) in users.indexed) ...[if (i > 0) const Divider(height: 1), _row(u)],
+                  ],
+                ),
               ),
-              trailing: locked
-                  ? TextButton.icon(key: ValueKey('unlock-${u['id']}'), onPressed: () => _unlock(u), icon: const Icon(Icons.lock_open), label: const Text('Desbloquear'))
-                  : null,
-              onTap: () => _edit(u),
-            );
-          },
-        );
-      },
-    ),
+          ],
+        ),
+      );
+    },
   );
+
+  Widget _row(Map<String, dynamic> u) {
+    final locked = u['locked'] == true;
+    final name = '${u['username']}';
+    return ListTile(
+      key: ValueKey('user-${u['id']}'),
+      leading: CircleAvatar(child: Text(name.isEmpty ? '?' : name.substring(0, name.length < 2 ? 1 : 2).toUpperCase())),
+      title: Text(name),
+      subtitle: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(userRoles[u['role']] ?? '${u['role']}'),
+          StatusChip(u['active'] == true ? 'Ativo' : 'Inativo', ok: u['active'] == true),
+          if (locked) const StatusChip('Bloqueado', alert: true),
+        ],
+      ),
+      trailing: locked
+          ? TextButton.icon(
+              key: ValueKey('unlock-${u['id']}'),
+              onPressed: () => _unlock(u),
+              icon: const Icon(Icons.lock_open),
+              label: const Text('Desbloquear'),
+            )
+          : const Icon(Icons.chevron_right),
+      onTap: () => _edit(u),
+    );
+  }
 }

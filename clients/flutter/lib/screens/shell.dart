@@ -313,7 +313,7 @@ class _ShellState extends State<Shell> {
               : null,
           title: Row(
             children: [
-              if (_current != 'dashboard') IconButton(tooltip: 'Voltar ao Painel', onPressed: () => _go('dashboard'), icon: const Icon(Icons.arrow_back)),
+              if (_current != 'dashboard' && !wide) IconButton(tooltip: 'Voltar ao Painel', onPressed: () => _go('dashboard'), icon: const Icon(Icons.arrow_back)),
               Flexible(
                 child: Text(
                   _moduleSection == null || _item.section == hiddenSection ? _item.title : '${_item.section} › ${_item.title}',
@@ -326,6 +326,7 @@ class _ShellState extends State<Shell> {
             SearchLauncher(onOpen: _openPalette, compact: !wide),
             const SizedBox(width: 4),
             AlertBell(center: s.alerts, onNavigate: _go),
+            const SizedBox(width: 12),
             UserMenu(session: s),
             const SizedBox(width: 8),
           ],

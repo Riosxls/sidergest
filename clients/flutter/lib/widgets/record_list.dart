@@ -201,7 +201,7 @@ class RecordListState extends State<RecordList> {
                             controller: _search,
                             decoration: InputDecoration(
                               prefixIcon: const Icon(Icons.search),
-                              hintText: widget.searchHint,
+                              labelText: widget.searchHint,
                               isDense: true,
                               border: const OutlineInputBorder(),
                             ),
@@ -525,7 +525,10 @@ class InfoGrid extends StatelessWidget {
         const gap = 32.0;
         // Inside a horizontal scroller there is no width to divide; keep the plain wrapping layout there.
         if (!box.hasBoundedWidth) return Wrap(spacing: gap, runSpacing: 16, children: [for (final e in shown) pair(e)]);
-        final cols = ((box.maxWidth + gap) / (minColumnWidth + gap)).floor().clamp(1, 4);
+        var cols = ((box.maxWidth + gap) / (minColumnWidth + gap)).floor().clamp(1, 4);
+        // Even out the rows (5 pairs as 3+2, not 4+1) so no value is left alone on the last row.
+        final short = shown.where((e) => e.$2.length <= longValue && !e.$2.contains('\n')).length;
+        if (short == shown.length && short > cols) cols = (short / (short / cols).ceil()).ceil();
         final colWidth = (box.maxWidth - gap * (cols - 1)) / cols;
         return Wrap(
           spacing: gap,
@@ -597,7 +600,20 @@ class StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Chip(visualDensity: VisualDensity.compact, label: Text(label), backgroundColor: alert ? cs.errorContainer : (ok ? cs.primaryContainer : null));
+    final color = alert ? cs.error : (ok ? cs.primary : cs.onSurfaceVariant);
+    // Tonal outline with a dot so a status never looks like a pressable button.
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(border: Border.all(color: color.withValues(alpha: 0.5)), borderRadius: BorderRadius.circular(999)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.circle, size: 8, color: color),
+          const SizedBox(width: 6),
+          Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color)),
+        ],
+      ),
+    );
   }
 }
 
@@ -735,7 +751,7 @@ class Section extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium)),
+              Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600))),
               ...actions,
             ],
           ),

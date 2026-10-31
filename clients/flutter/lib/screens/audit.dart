@@ -26,7 +26,7 @@ class _AuditScreenState extends State<AuditScreen> {
     query: {'entity': _entity},
     searchParam: 'user',
     searchHint: 'Usuário',
-    emptyText: 'Nenhum registro de auditoria',
+    emptyText: 'Nenhum registro de auditoria ainda. Alterações em cadastros, parâmetros e usuários aparecem aqui.',
     filters: [
       ChoiceFilter(label: 'Entidade', value: _entity, choices: {for (final e in auditEntities) e: e}, onChanged: (v) => setState(() => _entity = v)),
     ],

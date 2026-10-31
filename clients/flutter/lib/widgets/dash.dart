@@ -53,7 +53,7 @@ ShapeBorder dashCardShape(BuildContext context) => RoundedRectangleBorder(
 class DashTile extends StatelessWidget {
   const DashTile({super.key, required this.icon, required this.label, required this.value, this.alert = false, this.onTap});
 
-  static const height = 104.0;
+  static const height = 112.0;
 
   final IconData icon;
   final String label;
@@ -94,7 +94,7 @@ class DashTile extends StatelessWidget {
                     Expanded(
                       child: Tooltip(
                         message: label,
-                        child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium),
+                        child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium),
                       ),
                     ),
                     if (onTap != null) Icon(Icons.chevron_right, size: 18, color: fg ?? cs.onSurfaceVariant),

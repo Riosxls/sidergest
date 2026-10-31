@@ -4,6 +4,7 @@ import '../entities.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
+import '../widgets/page_column.dart';
 import '../widgets/record_list.dart';
 
 int? parsePeriod(String s) {
@@ -299,7 +300,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final pu = r[1] as Map<String, dynamic>;
       final pr = r[2] as Map<String, dynamic>;
       final sa = r[3] as Map<String, dynamic>;
-      return ListView(
+      return PageColumn(child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           _card('Estoque', '/api/stock/settings', stockFields, st, [
@@ -326,7 +327,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _card('Comercial', '/api/sales/settings', salesFields, sa, [
             ('Desconto sem aprovação', 'até ${fmt(sa['maxDiscountPercent'])} %'),
             ('Validade do orçamento', '${fmt(sa['defaultValidityDays'])} dias'),
-            ('Faturamento mínimo', fmtMoney(sa['minimumOrderValue'])),
+            ('Faturamento mínimo', (sa['minimumOrderValue'] as num? ?? 0) == 0 ? 'Sem mínimo' : fmtMoney(sa['minimumOrderValue'])),
             ('Preço fora da tabela', sa['offListNeedsApproval'] == true ? 'exige aprovação' : 'livre'),
             ('Cobrar resposta', 'após ${fmt(sa['followUpDays'])} dias'),
             ('Validade da aprovação', '${fmt(sa['approvalValidityDays'])} dias'),
@@ -334,7 +335,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ('Condições gerais', fmt(sa['defaultConditions'])),
           ]),
         ],
-      );
+      ));
     },
   );
 }
