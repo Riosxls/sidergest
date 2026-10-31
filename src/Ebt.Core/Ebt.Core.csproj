@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Certificates/legacy-specs.json" />
+    <InternalsVisibleTo Include="Ebt.Tests" />
   </ItemGroup>
 
 </Project>

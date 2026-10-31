@@ -167,7 +167,7 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz)
         };
     }
 
-    private static void AllocateFreight(FiscalDocument doc)
+    internal static void AllocateFreight(FiscalDocument doc)
     {
         var left = doc.FreightTotal;
         foreach (var (l, n) in doc.Lines.Select((l, n) => (l, n)))
@@ -181,7 +181,7 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz)
     /// Bases: ICMS and IPI on goods + freight; the IPI joins the ICMS base when the buyer is not an ICMS contributor. PIS/COFINS on goods.
     /// The exact rounding/base rules still need confirmation against real NFs (see the analysis, last section).
     /// </summary>
-    private static void CalculateTaxes(FiscalDocument doc, Cfop cfop, bool customerIcmsContributor)
+    internal static void CalculateTaxes(FiscalDocument doc, Cfop cfop, bool customerIcmsContributor)
     {
         foreach (var l in doc.Lines)
         {
