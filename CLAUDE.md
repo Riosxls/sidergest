@@ -1,6 +1,6 @@
 # CLAUDE.md — MetaGest
 
-The app was renamed from SiderGest to **MetaGest** (display name, window, manifest, docs). The folder `sidergest`, the docker compose project (`sidergest-db-1`, volumes, image `sidergest-api`), the dev password `sidergest123` and the repo name keep the old name on purpose: renaming them would orphan the database volume.
+The app was renamed from SiderGest to **MetaGest**. `compose.yaml` pins the docker project name to `metagest` (containers `metagest-db-1`, `metagest-api-1`, volume `metagest_pgdata`, image `metagest-api`), so it no longer depends on the folder name. The dev password `sidergest123` stays until production. Remaining old names: the repo folder and GitHub repo until Italo renames them.
 
 Primary context file for future sessions. Read fully before changing code.
 
@@ -48,11 +48,11 @@ The Docker API needs a real `.env` in the repo root (gitignored): `EBT_DB_PASSWO
 **Rebuilding the API container.** `docker compose up --build` has left the old image in place on this machine. Build and recreate explicitly, then check that the login response has `permissions` and `refreshToken`:
 
 ```
-docker build --target api -t sidergest-api:latest .
-docker compose -p sidergest up -d --no-deps --force-recreate --pull never api
+docker build --target api -t metagest-api:latest .
+docker compose -p metagest up -d --no-deps --force-recreate --pull never api
 ```
 
-Never recreate the `db` container or run `stop.bat -Purge` without a fresh `pg_dump` (`docker exec sidergest-db-1 pg_dump -U ebt -d ebt -Fc > ebt-backup.dump`).
+Never recreate the `db` container or run `stop.bat -Purge` without a fresh `pg_dump` (`docker exec metagest-db-1 pg_dump -U ebt -d ebt -Fc > ebt-backup.dump`).
 
 Manual Flutter run: `cd clients\flutter; flutter pub get; flutter run -d windows --dart-define=API_URL=http://localhost:8080`.
 
