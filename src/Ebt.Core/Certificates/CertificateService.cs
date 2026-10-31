@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ebt.Core.Certificates;
 
+public sealed record TemplateUpdate(string? Title, string? Finish, string? Notes, IReadOnlyList<CertificateMeasureInput> Measures, string? User = null);
 public sealed record CertificateMeasureInput(CertificateMeasureKind Kind, string Name, string? Specified = null, string? Found = null);
 
 public sealed record CertificateInput(int OrderId, int? OrderLineId = null, int? DeliveryId = null, string? Company = null, string? CustomerPo = null, DateOnly? IssueDate = null, string? InvoiceNumber = null,
@@ -161,6 +162,21 @@ public sealed class CertificateService(EbtDbContext db)
 
     public async Task<CertificateTemplate?> TemplateAsync(int productId, int customerId, CancellationToken ct = default) =>
         await db.CertificateTemplates.AsNoTracking().Include(t => t.Measures).FirstOrDefaultAsync(t => t.ProductId == productId && t.CustomerId == customerId, ct);
+
+    public async Task<CertificateTemplate> UpdateTemplateAsync(int id, TemplateUpdate u, CancellationToken ct = default)
+    {
+        var t = await db.CertificateTemplates.Include(x => x.Measures).FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw SalesException.NotFound("Template");
+        if (u.Measures.Any(m => string.IsNullOrWhiteSpace(m.Name))) throw SalesException.Invalid("measures", "Every row needs a name");
+        t.Title = Clean(u.Title);
+        t.Finish = Clean(u.Finish);
+        t.Notes = Clean(u.Notes);
+        t.UpdatedBy = u.User;
+        t.UpdatedAt = DateTimeOffset.UtcNow;
+        db.CertificateTemplateMeasures.RemoveRange(t.Measures);
+        t.Measures = u.Measures.GroupBy(m => m.Kind).SelectMany(g => g.Select((m, i) => new CertificateTemplateMeasure { Kind = g.Key, Sequence = i + 1, Name = m.Name!.Trim(), Specified = Clean(m.Specified) })).ToList();
+        await db.SaveChangesAsync(ct);
+        return t;
+    }
 
     public async Task DeleteTemplateAsync(int id, CancellationToken ct = default)
     {

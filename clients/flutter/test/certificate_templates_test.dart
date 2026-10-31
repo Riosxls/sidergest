@@ -48,6 +48,7 @@ Future<(List<http.Request>, Session)> _pump(WidgetTester tester, Widget Function
     if (p == '/api/sales/certificates/7' && r.method == 'PUT') return _json(_certificate());
     if (p == '/api/sales/certificates/templates' && r.method == 'GET') return _json(templates ?? []);
     if (p.startsWith('/api/sales/certificates/templates/') && r.method == 'DELETE') return http.Response('', 204);
+    if (p.startsWith('/api/sales/certificates/templates/') && r.method == 'PUT') return _json({'id': 4});
     return _json({'items': [], 'total': 0, 'skip': 0, 'take': 50});
   });
   final session = Session(api: ApiClient(baseUrl: 'http://api.test', client: client, token: 'tok'))
@@ -142,6 +143,46 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('confirm-step')));
     await tester.pumpAndSettle();
     expect(log.any((r) => r.method == 'DELETE' && r.url.path == '/api/sales/certificates/templates/4'), isTrue);
+  });
+
+
+  testWidgets('a template is edited in place and saved without issuing a certificate', (tester) async {
+    final templates = [
+      {
+        'id': 4,
+        'productId': 1,
+        'productCode': '060.350.60',
+        'productDescription': 'Tubo 06,35 X 0,70 X 6000',
+        'customerId': 2,
+        'customerName': 'Incodiesel',
+        'title': null,
+        'finish': null,
+        'notes': null,
+        'learnedFrom': '5175-26',
+        'measures': [
+          {'kind': 'Chemical', 'name': 'C', 'sequence': 1, 'specified': 'Máx. 0,150', 'found': null},
+        ],
+      },
+    ];
+    final (log, _) = await _pump(tester, (s) => CertificateTemplatesScreen(session: s), templates: templates);
+    await tester.tap(find.text('Incodiesel · 060.350.60'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('template-edit-4')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('template-spec-0')), 'Máx. 0,120');
+    await tester.tap(find.byKey(const ValueKey('template-add-row')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('template-name-1')), 'Espessura');
+    await tester.enterText(find.byKey(const ValueKey('template-spec-1')), '0,65 a 0,75');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('template-save')));
+    await tester.pumpAndSettle();
+    final put = log.lastWhere((r) => r.method == 'PUT' && r.url.path == '/api/sales/certificates/templates/4');
+    final body = jsonDecode(put.body) as Map<String, dynamic>;
+    final measures = (body['measures'] as List).cast<Map<String, dynamic>>();
+    expect(measures.map((m) => m['name']), ['C', 'Espessura']);
+    expect(measures.first['specified'], 'Máx. 0,120');
+    expect(measures.last['kind'], 'Dimensional');
   });
 
   testWidgets('empty template list explains how it fills', (tester) async {

@@ -379,6 +379,16 @@ public class SalesTests(ApiFixture api)
         Assert.Equal(CertificateService.DefaultFinish, plain.Finish);
         Assert.Contains(plain.Measures, m => m.Name == "Espessura" && m.Specified == "1,50");
 
+        // the specification can be edited without issuing another certificate
+        var edit = await admin.Put($"/api/sales/certificates/templates/{template.Id}", new TemplateIn("TITULO NOVO", null, "Obs fixa", [new CertificateMeasureInput(CertificateMeasureKind.Dimensional, "Espessura", "1,40 a 1,60")]));
+        Assert.Equal(HttpStatusCode.OK, edit.StatusCode);
+        var edited = (await (await admin.GetAsync($"/api/sales/certificates/templates?customerId={s.Customer.Id}")).Read<List<CertificateTemplateOut>>()).Single();
+        Assert.Equal("TITULO NOVO", edited.Title);
+        Assert.Equal("Obs fixa", edited.Notes);
+        var only = Assert.Single(edited.Measures);
+        Assert.Equal("1,40 a 1,60", only.Specified);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Put($"/api/sales/certificates/templates/{template.Id}", new TemplateIn(null, null, null, [new CertificateMeasureInput(CertificateMeasureKind.Dimensional, " ", null)]))).StatusCode);
+
         Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync($"/api/sales/certificates/templates/{template.Id}")).StatusCode);
         Assert.Empty((await (await admin.GetAsync($"/api/sales/certificates/templates?customerId={s.Customer.Id}")).Read<List<CertificateTemplateOut>>()));
     }

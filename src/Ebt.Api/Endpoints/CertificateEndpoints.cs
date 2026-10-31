@@ -20,6 +20,7 @@ public record CertificateTemplateOut(int Id, int ProductId, string ProductCode, 
 public record CertificateLinkIn(int? DeliveryId);
 public record CertificateReasonIn(string? Reason);
 public record CertificateWaiverIn(bool Waived);
+public record TemplateIn(string? Title, string? Finish, string? Notes, List<CertificateMeasureInput>? Measures);
 
 public static class CertificatePolicies
 {
@@ -137,6 +138,11 @@ public static class CertificateEndpoints
         // Loads the specifications of the old Excel certificates as templates (existing templates are kept).
         templates.MapPost("/import-legacy", async (LegacySpecImporter importer, ClaimsPrincipal user, CancellationToken ct) => Results.Ok(await importer.ImportAsync(Who(user), ct)))
             .RequireAuthorization(CertificatePolicies.Manage);
+        templates.MapPut("/{id:int}", async (int id, TemplateIn i, CertificateService svc, EbtDbContext db, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            var t = await svc.UpdateTemplateAsync(id, new TemplateUpdate(i.Title, i.Finish, i.Notes, i.Measures ?? [], Who(user)), ct);
+            return Results.Ok(new { t.Id });
+        }).RequireAuthorization(CertificatePolicies.Manage);
         templates.MapDelete("/{id:int}", async (int id, CertificateService svc, CancellationToken ct) =>
         {
             await svc.DeleteTemplateAsync(id, ct);

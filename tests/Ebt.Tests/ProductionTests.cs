@@ -82,6 +82,32 @@ public class ProductionTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Bulk_tools_cancel_stale_created_orders_after_a_preview_and_fill_empty_processes()
+    {
+        var c = await api.AdminAsync();
+        var product = await (await c.Post("/api/products", Tube(Code("B")))).Read<ProductOut>();
+        var stale = await Create(c, product.Id, 5m, Today.AddDays(-120));
+        var fresh = await Create(c, product.Id, 5m, Today.AddDays(10));
+
+        var preview = await (await c.Post("/api/production/orders/bulk/cancel-stale", new BulkStaleIn(90, null, false))).Read<BulkResult>();
+        Assert.True(preview.Matched >= 1);
+        Assert.Equal(0, preview.Done);
+        Assert.Equal(ProductionOrderStatus.Created, (await Get(c, stale.Id)).Status);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await c.Post("/api/production/orders/bulk/cancel-stale", new BulkStaleIn(90, " ", true))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await c.Post("/api/production/orders/bulk/cancel-stale", new BulkStaleIn(5, "x", false))).StatusCode);
+        var applied = await (await c.Post("/api/production/orders/bulk/cancel-stale", new BulkStaleIn(90, "Legado sem andamento", true))).Read<BulkResult>();
+        Assert.True(applied.Done >= 1);
+        Assert.Equal(ProductionOrderStatus.Cancelled, (await Get(c, stale.Id)).Status);
+        Assert.Equal(ProductionOrderStatus.Created, (await Get(c, fresh.Id)).Status);
+
+        var reader = await api.UserAsync(UserRole.Production);
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.Post("/api/production/orders/bulk/suggest-process", new BulkApplyIn(false))).StatusCode);
+        var suggest = await (await c.Post("/api/production/orders/bulk/suggest-process", new BulkApplyIn(true))).Read<BulkResult>();
+        Assert.Equal(suggest.Matched, suggest.Done);
+    }
+
+    [Fact]
     public async Task Roles_guard_production_endpoints()
     {
         var admin = await api.AdminAsync();

@@ -659,7 +659,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
                   ],
                   if (!widget.asOrder) ...[
                     SizedBox(
-                      width: wide ? 140 : w,
+                      width: wide ? 170 : w,
                       child: TextField(
                         controller: _validity,
                         keyboardType: TextInputType.number,
@@ -706,6 +706,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
               newTitle: widget.asOrder ? 'Nova linha' : 'Novo item',
               addLabel: widget.asOrder ? 'Adicionar linha' : 'Adicionar item',
               addEnabled: widget.asOrder || (_customerId != null && (_termId != null || _customTerm != null)),
+              disabledHint: 'Escolha o cliente e o prazo para adicionar itens',
               editTitle: widget.asOrder ? null : 'Editar item',
               lines: _lines,
               onChanged: (l) {

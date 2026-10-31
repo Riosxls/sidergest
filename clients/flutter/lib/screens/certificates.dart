@@ -886,6 +886,13 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
     _load();
   }
 
+  Future<void> _edit(Map<String, dynamic> t) async {
+    if (await showTemplateEditor(context, api, t) && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Modelo salvo')));
+      _load();
+    }
+  }
+
   Future<void> _importLegacy() async {
     final r = await runAction(context, () => api.post('/api/sales/certificates/templates/import-legacy', {}));
     if (r == null || !mounted) return;
@@ -967,11 +974,22 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
                         if (widget.session.canCertificate)
                           Align(
                             alignment: Alignment.centerRight,
-                            child: TextButton.icon(
-                              key: ValueKey('template-forget-${t['id']}'),
-                              onPressed: () => _forget(t),
-                              icon: const Icon(Icons.delete_outline),
-                              label: const Text('Esquecer modelo'),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextButton.icon(
+                                  key: ValueKey('template-edit-${t['id']}'),
+                                  onPressed: () => _edit(t),
+                                  icon: const Icon(Icons.edit_outlined),
+                                  label: const Text('Editar modelo'),
+                                ),
+                                TextButton.icon(
+                                  key: ValueKey('template-forget-${t['id']}'),
+                                  onPressed: () => _forget(t),
+                                  icon: const Icon(Icons.delete_outline),
+                                  label: const Text('Esquecer modelo'),
+                                ),
+                              ],
                             ),
                           ),
                       ],
@@ -979,6 +997,175 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
                   ),
               ],
             ),
+    );
+  }
+}
+
+/// Edits the specification template of a customer + product without issuing a certificate. Returns true when saved.
+Future<bool> showTemplateEditor(BuildContext context, ApiClient api, Map<String, dynamic> t) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (_) => _TemplateEditor(api: api, template: t),
+    ) ??
+    false;
+
+class _TemplateEditor extends StatefulWidget {
+  const _TemplateEditor({required this.api, required this.template});
+
+  final ApiClient api;
+  final Map<String, dynamic> template;
+
+  @override
+  State<_TemplateEditor> createState() => _TemplateEditorState();
+}
+
+class _TemplateRow {
+  _TemplateRow(this.kind, String name, String? specified) : name = TextEditingController(text: name), specified = TextEditingController(text: specified ?? '');
+
+  String kind;
+  final TextEditingController name;
+  final TextEditingController specified;
+}
+
+class _TemplateEditorState extends State<_TemplateEditor> {
+  late final TextEditingController _title = TextEditingController(text: '${widget.template['title'] ?? ''}');
+  late final TextEditingController _finish = TextEditingController(text: '${widget.template['finish'] ?? ''}');
+  late final TextEditingController _notes = TextEditingController(text: '${widget.template['notes'] ?? ''}');
+  late final List<_TemplateRow> _rows = [
+    for (final m in (widget.template['measures'] as List).cast<Map<String, dynamic>>()) _TemplateRow('${m['kind']}', '${m['name']}', m['specified'] as String?),
+  ];
+  String? _error;
+  bool _busy = false;
+
+  static const _kinds = {'Chemical': 'Química', 'Dimensional': 'Dimensional', 'Mechanical': 'Mecânico'};
+
+  @override
+  void dispose() {
+    for (final c in [_title, _finish, _notes]) {
+      c.dispose();
+    }
+    for (final r in _rows) {
+      r.name.dispose();
+      r.specified.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_rows.any((r) => r.name.text.trim().isEmpty)) {
+      setState(() => _error = 'Toda linha precisa de um nome');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.api.put('/api/sales/certificates/templates/${widget.template['id']}', {
+        'title': _title.text.trim(),
+        'finish': _finish.text.trim(),
+        'notes': _notes.text.trim(),
+        'measures': [
+          for (final r in _rows) {'kind': r.kind, 'name': r.name.text.trim(), 'specified': r.specified.text.trim()},
+        ],
+      });
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) setState(() => _error = friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const dec = InputDecoration(border: OutlineInputBorder(), isDense: true);
+    return AlertDialog(
+      title: Text('Modelo · ${widget.template['customerName']} · ${widget.template['productCode']}'),
+      content: SizedBox(
+        width: 620,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                key: const ValueKey('template-title'),
+                controller: _title,
+                decoration: dec.copyWith(labelText: 'Título (vazio = padrão)'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _finish,
+                decoration: dec.copyWith(labelText: 'Acabamento'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _notes,
+                minLines: 1,
+                maxLines: 4,
+                decoration: dec.copyWith(labelText: 'Observação fixa'),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: Text('Limites especificados', style: Theme.of(context).textTheme.titleSmall)),
+                  TextButton.icon(
+                    key: const ValueKey('template-add-row'),
+                    onPressed: () => setState(() => _rows.add(_TemplateRow('Dimensional', '', null))),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Linha'),
+                  ),
+                ],
+              ),
+              for (final (i, r) in _rows.indexed)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 140,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: r.kind,
+                          isExpanded: true,
+                          decoration: dec,
+                          items: [for (final e in _kinds.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+                          onChanged: (v) => setState(() => r.kind = v ?? r.kind),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          key: ValueKey('template-name-$i'),
+                          controller: r.name,
+                          decoration: dec.copyWith(labelText: 'Nome'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          key: ValueKey('template-spec-$i'),
+                          controller: r.specified,
+                          decoration: dec.copyWith(labelText: 'Especificado'),
+                        ),
+                      ),
+                      IconButton(tooltip: 'Remover', icon: const Icon(Icons.close), onPressed: () => setState(() => _rows.removeAt(i))),
+                    ],
+                  ),
+                ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _busy ? null : () => Navigator.pop(context, false), child: const Text('Cancelar')),
+        FilledButton(key: const ValueKey('template-save'), onPressed: _busy ? null : _save, child: const Text('Salvar modelo')),
+      ],
     );
   }
 }

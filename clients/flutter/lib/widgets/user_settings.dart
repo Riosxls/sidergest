@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../screens/data_reset.dart';
+import '../screens/legacy_cleanup.dart';
 import '../session.dart';
 import 'command_palette.dart';
 import 'record_list.dart';
@@ -112,6 +113,15 @@ class _UserSettings extends StatelessWidget {
                 SelectableText(session.baseUrl),
                 if (session.isAdmin) ...[
                   title('Administração'),
+                  const Text('Ordens de fabricação do sistema antigo: preenche o processo das que estão vazias e cancela as vencidas que nunca andaram.'),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    key: const ValueKey('open-legacy-cleanup'),
+                    onPressed: () => showLegacyCleanupDialog(context, session),
+                    icon: const Icon(Icons.auto_fix_high_outlined),
+                    label: const Text('Limpeza do legado…'),
+                  ),
+                  const SizedBox(height: 16),
                   const Text(
                     'Apaga orçamentos, pedidos, entregas, ordens de fabricação e outros registros do dia a dia para recomeçar do zero. '
                     'Produtos, materiais, clientes, fornecedores, ferramentas e preços ficam como estão.',

@@ -24,6 +24,8 @@ public record HolidayOut(int Id, DateOnly Date, string Name);
 public record ProductionOrderIn(int ProductId, decimal Quantity, DateOnly DueDate, ProductionOrderKind Kind = ProductionOrderKind.Standard, int? CustomerId = null, int? ParentOrderId = null, int? PreviousOrderId = null, int? Bales = null, string? Notes = null, string? PrimaryTube = null);
 public record OrderUpdateIn(decimal Quantity, DateOnly DueDate, int? CustomerId, int? Bales, string? Notes, string? PrimaryTube = null);
 public record OperationDetailsIn(string? Tolerance, string? MeasureStart, string? MeasureEnd);
+public record BulkApplyIn(bool Apply);
+public record BulkStaleIn(int OlderThanDays, string? Reason, bool Apply);
 public record ProcessIn(List<ProcessLine>? Operations);
 public record ProductionReasonIn(string? Reason, bool Technical = false);
 public record ReleaseIn(bool Force = false);
@@ -251,6 +253,12 @@ public static class ProductionEndpoints
             return Results.Ok(await db.StockDocuments.AsNoTracking().Where(d => d.Reference == reference).OrderBy(d => d.Id)
                 .Select(d => new StockDocumentSummary(d.Id, d.Type, d.Date, d.Reference, d.SupplierId, d.CustomerId, d.ReversalOfId, d.Reversed, d.CreatedBy, d.CreatedAt, d.Movements.Count)).ToListAsync(ct));
         });
+
+        g.MapPost("/bulk/suggest-process", async (BulkApplyIn i, ProductionService svc, CancellationToken ct) =>
+            Results.Ok(await svc.BulkSuggestProcessAsync(i.Apply, ct))).RequireAuthorization(Policies.Admin);
+
+        g.MapPost("/bulk/cancel-stale", async (BulkStaleIn i, ProductionService svc, CancellationToken ct) =>
+            Results.Ok(await svc.BulkCancelStaleAsync(i.OlderThanDays, i.Reason, i.Apply, ct))).RequireAuthorization(Policies.Admin);
 
         g.MapPut("/{id:int}/process", async (int id, ProcessIn i, EbtDbContext db, ProductionService svc, CancellationToken ct) =>
         {

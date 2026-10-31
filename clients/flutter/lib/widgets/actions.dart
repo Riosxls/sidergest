@@ -112,6 +112,7 @@ class LinesEditor extends StatelessWidget {
     this.editTitle,
     this.addLabel = 'Adicionar linha',
     this.addEnabled = true,
+    this.disabledHint,
   });
 
   final ApiClient api;
@@ -125,6 +126,7 @@ class LinesEditor extends StatelessWidget {
   final String? editTitle;
   final String addLabel;
   final bool addEnabled;
+  final String? disabledHint;
 
   Future<void> _edit(BuildContext context, [int? index]) async {
     final r = await showEntityForm(
@@ -159,6 +161,8 @@ class LinesEditor extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: Text('$title (${lines.length})', style: Theme.of(context).textTheme.titleMedium)),
+                if (enabled && !addEnabled && disabledHint != null)
+                  Flexible(child: Padding(padding: const EdgeInsets.only(right: 8), child: Text(disabledHint!, textAlign: TextAlign.end, style: Theme.of(context).textTheme.bodySmall))),
                 if (enabled)
                   FilledButton.tonalIcon(
                     key: const ValueKey('add-line'),

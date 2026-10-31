@@ -1,12 +1,17 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
 import '../session.dart';
+import '../reports/certificate_doc.dart';
 import '../reports/nf_doc.dart';
 import '../widgets/actions.dart';
 import '../widgets/pipeline.dart';
+import '../widgets/print_gate.dart';
+import '../widgets/print_panel.dart';
 import '../widgets/record_list.dart';
 import 'certificates.dart';
 import 'fiscal.dart';
@@ -135,6 +140,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       if (go != true || !mounted) return;
       withoutCertificate = true;
     }
+    if (!await _certificateGate() || !mounted) return;
     final r = await submitForm(
       context,
       api: api,
@@ -165,6 +171,31 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
     number: _d!['invoiceNumber'] == null ? '' : '${_d!['invoiceNumber']}',
     build: (f) => buildSaleNfPdf(api, _d!, f),
   );
+
+  /// The issued certificates travel with the goods: offer to print or download them before the delivery leaves, once.
+  Future<bool> _certificateGate() async {
+    final issued = _certs.where((c) => c['status'] == 'Issued').toList();
+    if (issued.isEmpty) return true;
+    final refs = issued.map((c) => '${c['reference']}').join(', ');
+    Future<Uint8List> pdf(Map<String, dynamic> c) async => buildCertificatePdf(await api.get('/api/sales/certificates/${c['id']}') as Map<String, dynamic>);
+    final key = 'delivery:${widget.id}:certificates:${issued.map((c) => c['id']).join(',')}';
+    return printGate(
+      context,
+      doneKey: key,
+      title: issued.length == 1 ? 'Imprimir o certificado?' : 'Imprimir os certificados?',
+      message: 'Antes de expedir, imprima ou baixe $refs para acompanhar a mercadoria.',
+      onPrint: () async {
+        for (final c in issued) {
+          await printPdf(context, 'Certificado de qualidade ${c['reference']}', () => pdf(c));
+        }
+      },
+      onDownload: () async {
+        for (final c in issued) {
+          await savePdf(context, 'Certificado de qualidade ${c['reference']}.pdf', () => pdf(c));
+        }
+      },
+    );
+  }
 
   /// Delivery items that still have no certificate (cancelled ones do not count).
   int _missingCertificates(Map<String, dynamic> d) {

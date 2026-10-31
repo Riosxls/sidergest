@@ -444,6 +444,51 @@ public sealed partial class ProductionService(EbtDbContext db, StockService stoc
         }, ct);
     }
 
+    /// <summary>
+    /// Writes the suggested process on every OF that is still only created and has none, so the paper is never printed empty.
+    /// With <paramref name="apply"/> false it only counts.
+    /// </summary>
+    public async Task<BulkResult> BulkSuggestProcessAsync(bool apply, CancellationToken ct = default)
+    {
+        var orders = await db.ProductionOrders.Include(o => o.Product)
+            .Where(o => o.Status == ProductionOrderStatus.Created && o.Kind == ProductionOrderKind.Standard && o.ParentOrderId == null && !o.Operations.Any())
+            .OrderBy(o => o.DueDate).ToListAsync(ct);
+        if (apply)
+        {
+            foreach (var o in orders.Where(o => o.Product != null))
+                o.Operations.AddRange(SuggestProcess(o.Product!, o.PrimaryTube));
+            await db.SaveChangesAsync(ct);
+        }
+        return new BulkResult(orders.Count, apply ? orders.Count : 0, 0, orders.Take(20).Select(o => o.Reference).ToList());
+    }
+
+    /// <summary>
+    /// Cancels OFs that were created long ago, never released and with no stock movement or shop-floor report (typically imported legacy orders).
+    /// Subassemblies go first so a parent is not blocked by its own child.
+    /// </summary>
+    public async Task<BulkResult> BulkCancelStaleAsync(int olderThanDays, string? reason, bool apply, CancellationToken ct = default)
+    {
+        if (olderThanDays < 30) throw ProductionException.Invalid("olderThanDays", "At least 30 days");
+        if (apply && Clean(reason) is null) throw ProductionException.Invalid("reason", "Required");
+        var limit = Ebt.Core.Services.Clock.Today().AddDays(-olderThanDays);
+        var candidates = await db.ProductionOrders.AsNoTracking()
+            .Where(o => o.Status == ProductionOrderStatus.Created && o.DueDate < limit)
+            .OrderByDescending(o => o.ParentOrderId != null).ThenBy(o => o.DueDate).Select(o => new { o.Id, o.Reference }).ToListAsync(ct);
+        var done = 0;
+        var skipped = 0;
+        var sample = new List<string>();
+        foreach (var c in candidates)
+        {
+            if (apply)
+            {
+                try { await CancelAsync(c.Id, reason, false, ct); done++; }
+                catch (ProductionException) { skipped++; continue; }
+            }
+            if (sample.Count < 20) sample.Add(c.Reference);
+        }
+        return new BulkResult(candidates.Count, done, skipped, sample);
+    }
+
     private async Task ReleaseReservationsAsync(ProductionOrder order, CancellationToken ct)
     {
         var ids = order.Materials.Select(m => m.ReservationId).OfType<int>().ToList();
