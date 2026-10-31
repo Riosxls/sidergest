@@ -179,3 +179,19 @@ public class FiscalInstallment
     public DateOnly DueDate { get; set; }
     public decimal Amount { get; set; }
 }
+
+/// <summary>A range of NF numbers that SEFAZ accepted as inutilizada (numbers skipped for good, e.g. Rejected documents or a crash before sending).</summary>
+public class FiscalInutilization
+{
+    public int Id { get; set; }
+    public int Series { get; set; }
+    public int FromNumber { get; set; }
+    public int ToNumber { get; set; }
+    public required string Reason { get; set; }
+    public SefazEnvironment Environment { get; set; }
+    public required string Protocol { get; set; }
+    public bool Simulated { get; set; }
+    public required string Xml { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public string? CreatedBy { get; set; }
+}

@@ -15,6 +15,9 @@ public static class NfeSigner
     /// <summary>Signs an event element (<c>evento</c>) of the document, referencing infEvento.</summary>
     public static string SignEvent(string eventXml, X509Certificate2 cert) => Sign(eventXml, "evento", "infEvento", cert);
 
+    /// <summary>Signs an inutilização request (<c>inutNFe</c>), referencing infInut.</summary>
+    public static string SignInut(string inutXml, X509Certificate2 cert) => Sign(inutXml, "inutNFe", "infInut", cert);
+
     private static string Sign(string xml, string rootName, string signedName, X509Certificate2 cert)
     {
         var doc = new XmlDocument { PreserveWhitespace = true };

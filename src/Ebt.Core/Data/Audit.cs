@@ -34,7 +34,7 @@ public sealed class AuditInterceptor(ICurrentUser user) : SaveChangesInterceptor
     [
         typeof(Customer), typeof(CustomerAddress), typeof(Supplier), typeof(SupplierAddress), typeof(Material), typeof(Product),
         typeof(AppUser), typeof(StockLocation), typeof(StockSettings), typeof(StockClosing),
-        typeof(FiscalSettings), typeof(Cfop), typeof(TaxRule), typeof(MonthlyPrice), typeof(PaymentTerm), typeof(PriceListEntry),
+        typeof(FiscalSettings), typeof(FiscalInutilization), typeof(Cfop), typeof(TaxRule), typeof(MonthlyPrice), typeof(PaymentTerm), typeof(PriceListEntry),
         typeof(SalesSettings), typeof(ProductionSettings), typeof(SteelLot), typeof(SlitterJob),
         // Engineering and shop-floor master data: a changed routing or BOM changes what gets built.
         typeof(BomItem), typeof(RoutingOperation), typeof(ProductCustomer), typeof(WorkCenter), typeof(Machine), typeof(Tool),

@@ -32,7 +32,7 @@ public static class NfeSchema
             new XElement(ds + "SignedInfo",
                 new XElement(ds + "CanonicalizationMethod", new XAttribute("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")),
                 new XElement(ds + "SignatureMethod", new XAttribute("Algorithm", "http://www.w3.org/2000/09/xmldsig#rsa-sha1")),
-                new XElement(ds + "Reference", new XAttribute("URI", "#" + (string?)root.Element(root.Name.Namespace + "infNFe")?.Attribute("Id")),
+                new XElement(ds + "Reference", new XAttribute("URI", "#" + (string?)root.Elements().FirstOrDefault(e => e.Attribute("Id") is not null)?.Attribute("Id")),
                     new XElement(ds + "Transforms",
                         new XElement(ds + "Transform", new XAttribute("Algorithm", "http://www.w3.org/2000/09/xmldsig#enveloped-signature")),
                         new XElement(ds + "Transform", new XAttribute("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"))),
@@ -43,7 +43,7 @@ public static class NfeSchema
     }
 
     /// <summary>Validates an <c>inutNFe</c> element.</summary>
-    public static void ValidateInutilizacao(string xml) => Validate(xml, Inutilizacao.Value, "inutilização");
+    public static void ValidateInutilizacao(string xml) => Validate(WithPlaceholderSignature(xml), Inutilizacao.Value, "inutilização");
 
     /// <summary>Returns the validation errors (at most five, with the element path); empty when the XML is valid.</summary>
     public static IReadOnlyList<string> Check(string xml, XmlSchemaSet schemas)

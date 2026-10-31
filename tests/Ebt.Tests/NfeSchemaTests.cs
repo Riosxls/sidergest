@@ -42,3 +42,21 @@ public class NfeSchemaTests
         Assert.Contains("det[1]", e.Message);
     }
 }
+
+public class NfeInutTests
+{
+    [Fact]
+    public void Inutilization_xml_is_valid_against_the_official_layout()
+    {
+        var xml = NfeInut.Build(NfeTaxTests.Issuer(), new DateTimeOffset(2026, 10, 31, 9, 0, 0, TimeSpan.FromHours(-3)), 1, 2581, 2583, "Numeracao pulada por falha de comunicacao", Ebt.Core.Entities.SefazEnvironment.Homologation);
+        Assert.Contains("Id=\"ID352611222333000181550010000025810000025" + "83\"", xml);
+        NfeSchema.ValidateInutilizacao(xml);
+    }
+
+    [Fact]
+    public void Short_reason_violates_the_layout()
+    {
+        var xml = NfeInut.Build(NfeTaxTests.Issuer(), DateTimeOffset.UtcNow, 1, 5, 5, "curto", Ebt.Core.Entities.SefazEnvironment.Homologation);
+        Assert.Equal(422, Assert.Throws<FiscalException>(() => NfeSchema.ValidateInutilizacao(xml)).Status);
+    }
+}

@@ -41,6 +41,14 @@ public sealed class StubSefazClient : ISefazClient
         return Task.FromResult(new SefazResult(true, "135", "Evento registrado e vinculado a NF-e (simulado)", protocol, true));
     }
 
+    public Task<SefazResult> InutilizeAsync(string xml, SefazEnvironment environment, CancellationToken ct)
+    {
+        try { XDocument.Parse(xml); }
+        catch (System.Xml.XmlException e) { return Task.FromResult(new SefazResult(false, "225", $"Falha no Schema XML: {e.Message}", null, true)); }
+        if (xml.Contains(RejectMarker, StringComparison.Ordinal)) return Task.FromResult(new SefazResult(false, "999", "Rejeição simulada pelo stub", null, true));
+        return Task.FromResult(new SefazResult(true, "102", "Inutilização de número homologado (simulado)", Protocol(), true));
+    }
+
     public Task<SefazConsultResult> ConsultAsync(string accessKey, string xml, SefazEnvironment environment, CancellationToken ct)
     {
         if (cancelled.TryGetValue(accessKey, out var cp)) return Task.FromResult(new SefazConsultResult(SefazConsultOutcome.Cancelled, "101", "Cancelamento de NF-e homologado (simulado)", cp, true));

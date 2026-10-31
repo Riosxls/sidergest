@@ -28,6 +28,8 @@ public record FiscalDocumentOut(int Id, FiscalKind Kind, FiscalStatus Status, st
     decimal IcmsTotal, decimal IpiTotal, decimal PisTotal, decimal CofinsTotal, decimal InvoiceTotal, string? AdditionalInfo, DateTimeOffset? CancelledAt, string? CancelledBy, string? CancelReason, string? CancelProtocol, string? StatusMessage,
     IReadOnlyList<FiscalLineOut> Lines, IReadOnlyList<FiscalInstallmentOut> Installments);
 public record CancelInvoiceIn(string? Reason, string? Password);
+public record InutilizeIn(int? Series, int From, int To, string? Reason, string? Password);
+public record InutilizationOut(int Id, int Series, int FromNumber, int ToNumber, string Reason, SefazEnvironment Environment, string Protocol, bool Simulated, DateTimeOffset CreatedAt, string? CreatedBy);
 
 public sealed class FiscalExceptionHandler : IExceptionHandler
 {
@@ -67,6 +69,25 @@ public static class FiscalEndpoints
         MapSettings(app);
         MapRules(app);
         MapDocuments(app);
+        MapInutilizations(app);
+    }
+
+    private static void MapInutilizations(WebApplication app)
+    {
+        var g = app.MapGroup("/api/fiscal/inutilizations").WithTags("Fiscal");
+        static InutilizationOut ToOut(FiscalInutilization i) => new(i.Id, i.Series, i.FromNumber, i.ToNumber, i.Reason, i.Environment, i.Protocol, i.Simulated, i.CreatedAt, i.CreatedBy);
+        g.MapGet("/", async (EbtDbContext db, CancellationToken ct) =>
+            await db.FiscalInutilizations.AsNoTracking().OrderByDescending(i => i.CreatedAt).Select(i => new InutilizationOut(i.Id, i.Series, i.FromNumber, i.ToNumber, i.Reason, i.Environment, i.Protocol, i.Simulated, i.CreatedAt, i.CreatedBy)).ToListAsync(ct))
+            .RequireAuthorization(Policies.Read);
+        g.MapPost("/", async (InutilizeIn i, EbtDbContext db, FiscalService fiscal, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            var errors = Errors().Require(Has(i.Reason), "reason", "Required").Require(Has(i.Password), "password", "Type your password to confirm the inutilização");
+            if (errors.Count > 0) return Results.ValidationProblem(errors);
+            var who = principal.Identity?.Name;
+            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == who && u.Active, ct);
+            if (user is null || !AuthEndpoints.VerifyPassword(user, i.Password!)) return Results.Problem("Wrong password", statusCode: StatusCodes.Status403Forbidden);
+            return Results.Ok(ToOut(await fiscal.InutilizeAsync(i.Series, i.From, i.To, i.Reason, who, ct)));
+        }).RequireAuthorization(FiscalPolicies.Cancel);
     }
 
     private static void MapSettings(WebApplication app)

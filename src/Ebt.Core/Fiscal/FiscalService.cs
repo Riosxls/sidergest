@@ -251,6 +251,49 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
     }
 
     /// <summary>
+    /// Gives up the numbers <paramref name="from"/>..<paramref name="to"/> for good (inutilização, SEFAZ rule: reason of at least 15 characters). Only numbers that were already
+    /// issued (below <c>next_number</c>) and have no live NF are accepted: Rejected documents and holes left by a crash. Pending, Authorized and Cancelled numbers are refused.
+    /// </summary>
+    public async Task<FiscalInutilization> InutilizeAsync(int? series, int from, int to, string? reason, string? user, CancellationToken ct = default)
+    {
+        var why = Clean(reason);
+        if (why is null || why.Length < 15) throw FiscalException.Invalid("reason", "Give the reason (at least 15 characters, SEFAZ rule)");
+        if (why.Length > 255) throw FiscalException.Invalid("reason", "At most 255 characters");
+        if (from < 1) throw FiscalException.Invalid("from", "Must be 1 or more");
+        if (to < from) throw FiscalException.Invalid("to", "Must not be smaller than the first number");
+        if (to - from >= 1000) throw FiscalException.Invalid("to", "At most 1000 numbers per request");
+        var settings = await ReadSettingsAsync(ct);
+        RequireIssuer(settings);
+        var serie = series ?? settings.Series;
+        if (serie is < 1 or > 999) throw FiscalException.Invalid("series", "Between 1 and 999");
+        if (serie == settings.Series && to >= settings.NextNumber)
+            throw FiscalException.Conflict($"Number {to} was not issued yet (next number is {settings.NextNumber}); only numbers already skipped can be inutilized");
+
+        var used = await db.FiscalDocuments.AsNoTracking().Where(d => d.Series == serie && d.Number >= from && d.Number <= to && d.Status != FiscalStatus.Rejected)
+            .OrderBy(d => d.Number).Select(d => new { d.Number, d.Status }).FirstOrDefaultAsync(ct);
+        if (used is not null) throw FiscalException.Conflict($"NF {used.Number} is {used.Status}; only Rejected or missing numbers can be inutilized");
+        if (await db.FiscalInutilizations.AnyAsync(i => i.Series == serie && i.FromNumber <= to && i.ToNumber >= from, ct))
+            throw FiscalException.Conflict("Part of this range was already inutilized");
+
+        var now = DateTimeOffset.UtcNow;
+        var xml = NfeInut.Build(settings, now, serie, from, to, why, settings.Environment);
+        NfeSchema.ValidateInutilizacao(xml);
+        var verdict = await sefaz.InutilizeAsync(xml, settings.Environment, ct);
+        if (!verdict.Authorized) throw FiscalException.Rejected(verdict.Status, verdict.Message);
+
+        var record = new FiscalInutilization
+        {
+            Series = serie, FromNumber = from, ToNumber = to, Reason = why, Environment = settings.Environment, Protocol = verdict.Protocol ?? throw new InvalidOperationException("SEFAZ homologated the inutilização without a protocol"),
+            Simulated = verdict.Simulated, Xml = xml, CreatedAt = now, CreatedBy = user
+        };
+        db.FiscalInutilizations.Add(record);
+        foreach (var d in await db.FiscalDocuments.Where(d => d.Series == serie && d.Number >= from && d.Number <= to && d.Status == FiscalStatus.Rejected).ToListAsync(ct))
+            d.StatusMessage = Cut($"{d.StatusMessage} | Inutilizada (protocolo {record.Protocol})", 500);
+        await db.SaveChangesAsync(ct);
+        return record;
+    }
+
+    /// <summary>
     /// Resolves one Pending NF by asking SEFAZ about its access key (NFeConsultaProtocolo4). Documents younger than <paramref name="minAgeMinutes"/> are left alone
     /// (the original request may still be waiting for SEFAZ). Authorized: becomes Authorized; unknown to SEFAZ: the number is released or the row kept Rejected.
     /// </summary>

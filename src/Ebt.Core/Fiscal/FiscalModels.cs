@@ -40,6 +40,9 @@ public interface ISefazClient
     /// <summary>Signs and sends the NF-e (NFeAutorizacao4, SEFAZ-SP) and waits for the verdict. Returns the verdict, never throws for a rejection.</summary>
     Task<SefazResult> AuthorizeAsync(string accessKey, string xml, SefazEnvironment environment, CancellationToken ct);
 
+    /// <summary>Sends an unsigned <c>inutNFe</c> request (NFeInutilizacao4) and returns the verdict (status 102 = homologated).</summary>
+    Task<SefazResult> InutilizeAsync(string xml, SefazEnvironment environment, CancellationToken ct);
+
     /// <summary>Registers the cancellation event (110111) of an authorized NF-e.</summary>
     Task<SefazResult> CancelAsync(string accessKey, string authorizationProtocol, string reason, SefazEnvironment environment, CancellationToken ct);
 }

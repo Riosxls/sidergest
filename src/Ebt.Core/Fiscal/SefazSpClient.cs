@@ -117,6 +117,18 @@ public sealed class SefazSpClient : ISefazClient, IDisposable
             : new SefazResult(false, status, message, null, false);
     }
 
+    public async Task<SefazResult> InutilizeAsync(string xml, SefazEnvironment environment, CancellationToken ct)
+    {
+        var signed = NfeSigner.SignInut(xml, certificate);
+        var ret = await CallAsync(environment, "nfeinutilizacao4", "NFeInutilizacao4", "nfeInutilizacaoNF", StripDeclaration(signed), "inutilização", ct);
+        var info = ret.Element(N + "infInut");
+        var status = (string?)info?.Element(N + "cStat") ?? Text(ret, "cStat") ?? "?";
+        var message = (string?)info?.Element(N + "xMotivo") ?? Text(ret, "xMotivo") ?? "";
+        return status == "102"
+            ? new SefazResult(true, status, message, (string?)info?.Element(N + "nProt") ?? throw new FiscalException(502, "SEFAZ homologated the inutilização without nProt"), false)
+            : new SefazResult(false, status, message, null, false);
+    }
+
     public async Task<SefazConsultResult> ConsultAsync(string accessKey, string xml, SefazEnvironment environment, CancellationToken ct)
     {
         var body = $"<consSitNFe xmlns=\"{Nfe}\" versao=\"4.00\"><tpAmb>{(int)environment}</tpAmb><xServ>CONSULTAR</xServ><chNFe>{accessKey}</chNFe></consSitNFe>";
@@ -173,7 +185,7 @@ public sealed class SefazSpClient : ISefazClient, IDisposable
         try
         {
             var doc = XDocument.Parse(text);
-            return doc.Descendants().FirstOrDefault(e => e.Name.LocalName is "retEnviNFe" or "retConsReciNFe" or "retEnvEvento" or "retConsSitNFe") ?? throw new FormatException("no result element");
+            return doc.Descendants().FirstOrDefault(e => e.Name.LocalName is "retEnviNFe" or "retConsReciNFe" or "retEnvEvento" or "retConsSitNFe" or "retInutNFe") ?? throw new FormatException("no result element");
         }
         catch (Exception e) when (e is System.Xml.XmlException or FormatException)
         {

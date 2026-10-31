@@ -299,4 +299,47 @@ public class FiscalTests(ApiFixture api)
             await Enable(admin, false);
         }
     }
+
+    [Fact]
+    public async Task Inutilization_gives_up_a_skipped_number_after_checks_and_is_recorded()
+    {
+        var admin = await api.AdminAsync();
+        var s = await ReleasedSaleAsync(admin);
+        try
+        {
+            var settings = await Enable(admin, true);
+            var n = settings.NextNumber;
+
+            // Number n is lost (Pending, SEFAZ never saw it); the next sale takes n + 1, so n cannot go back to the sequence and stays as a Rejected gap.
+            var lost = await (await admin.Post($"/api/sales/orders/{s.Order.Id}/deliveries", new DeliveryInput(Today, Notes: StubSefazClient.TimeoutMarker))).Read<DeliveryOut>();
+            Assert.Equal(HttpStatusCode.BadGateway, (await admin.Post($"/api/sales/deliveries/{lost.Id}/ship", new ShipInput(Today, WithoutCertificate: true))).StatusCode);
+            (await admin.Post($"/api/sales/deliveries/{lost.Id}/cancel", new SalesReasonIn("teste"))).EnsureSuccessStatusCode();
+            var ok = await (await admin.Post($"/api/sales/orders/{s.Order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
+            ok = await (await admin.Post($"/api/sales/deliveries/{ok.Id}/ship", new ShipInput(Today, WithoutCertificate: true))).Read<DeliveryOut>();
+            Assert.Equal((n + 1).ToString(), ok.InvoiceNumber);
+            var stuck = Assert.Single((await (await admin.GetAsync($"/api/fiscal/documents?status={FiscalStatus.Pending}&q={n}")).Read<Page<FiscalDocumentSummary>>()).Items);
+            var gap = await (await admin.Post($"/api/fiscal/documents/{stuck.Id}/reconcile?minAgeMinutes=0", new { })).Read<ReconcileResult>();
+            Assert.Equal("rejected", gap.Outcome);
+            Assert.Equal(FiscalStatus.Rejected, gap.Status);
+
+            Task<HttpResponseMessage> Inut(int from, int to, string reason = "Numeracao pulada por falha de comunicacao", string? pw = null) =>
+                admin.Post("/api/fiscal/inutilizations", new InutilizeIn(null, from, to, reason, pw ?? ApiFixture.AdminPassword));
+            Assert.Equal(HttpStatusCode.BadRequest, (await Inut(n, n, "curto")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await Inut(n, n, pw: "senha-errada")).StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, (await Inut(n, n + 1)).StatusCode);        // n + 1 is authorized
+            Assert.Equal(HttpStatusCode.Conflict, (await Inut(n + 2, n + 2)).StatusCode);    // not issued yet
+
+            var done = await (await Inut(n, n)).Read<InutilizationOut>();
+            Assert.Equal((n, n), (done.FromNumber, done.ToNumber));
+            Assert.NotEmpty(done.Protocol);
+            Assert.Equal(HttpStatusCode.Conflict, (await Inut(n, n)).StatusCode);            // already inutilized
+            Assert.Contains(await (await admin.GetAsync("/api/fiscal/inutilizations")).Read<List<InutilizationOut>>(), i => i.Id == done.Id);
+            var nf = await (await admin.GetAsync($"/api/fiscal/documents/{stuck.Id}")).Read<FiscalDocumentOut>();
+            Assert.Contains("Inutilizada", nf.StatusMessage);
+        }
+        finally
+        {
+            await Enable(admin, false);
+        }
+    }
 }

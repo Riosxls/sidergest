@@ -145,4 +145,18 @@ public class SefazClientTests
         Assert.Equal(expected, r.Outcome);
         Assert.Null(r.AuthorizedXml);
     }
+
+    [Fact]
+    public async Task Inutilization_sends_a_signed_request_and_reads_the_protocol()
+    {
+        var handler = new Fake((_, _) => Soap($"<retInutNFe xmlns=\"{NfeSigner.Ns}\" versao=\"4.00\"><infInut><tpAmb>2</tpAmb><cStat>102</cStat><xMotivo>Inutilizacao de numero homologado</xMotivo><nProt>135268888888888</nProt></infInut></retInutNFe>"));
+        var xml = NfeInut.Build(new FiscalSettings { Cnpj = "11222333000181", Uf = "SP" }, DateTimeOffset.UtcNow, 1, 10, 12, "Numeracao pulada por falha de comunicacao", SefazEnvironment.Homologation);
+        var r = await new SefazSpClient(new SefazOptions(), Certificate(), handler).InutilizeAsync(xml, SefazEnvironment.Homologation, default);
+        Assert.True(r.Authorized);
+        Assert.Equal("135268888888888", r.Protocol);
+        var call = Assert.Single(handler.Calls);
+        Assert.EndsWith("nfeinutilizacao4.asmx", call.Url);
+        Assert.Contains("<Signature", call.Body);
+        Assert.Contains("<xServ>INUTILIZAR</xServ>", call.Body);
+    }
 }
