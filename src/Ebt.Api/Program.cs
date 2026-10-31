@@ -153,6 +153,7 @@ app.MapFiscal();
 app.MapReports();
 app.MapViability();
 app.MapSteel();
+app.MapSearch();
 
 app.Run();
 

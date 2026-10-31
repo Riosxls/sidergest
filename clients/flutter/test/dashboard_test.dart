@@ -52,12 +52,40 @@ Future<(Session, List<http.Request>)> pumpShell(
     log.add(r);
     final p = r.url.path;
     if (lists.contains(p)) return json([]);
-    if (p == '/api/products' && r.url.queryParameters['q'] == 'T-1') {
-      return json(
-        page([
-          {'id': 1, 'code': 'T-100', 'name': 'Tubo 25x1,5'},
-        ]),
-      );
+    if (p == '/api/search' && r.url.queryParameters['q'] == 'T-1') {
+      return json({
+        'query': 'T-1',
+        'groups': [
+          {
+            'key': 'products',
+            'hits': [
+              {'id': 1, 'title': 'T-100  Tubo 25x1,5', 'subtitle': null},
+            ],
+          },
+          {
+            'key': 'customers',
+            'hits': [
+              {'id': 3, 'title': 'Metalúrgica T-1', 'subtitle': '12.345.678/0001-90'},
+            ],
+          },
+        ],
+      });
+    }
+    if (p == '/api/production/orders/9') {
+      return json({...stopped, 'id': 9, 'reference': 'OF-9', 'warnings': [], 'children': [], 'operations': [], 'materials': []});
+    }
+    if (p == '/api/production/orders/dashboard') {
+      return json({
+        'openTotal': 1,
+        'byStatus': {'Stopped': 1},
+        'lateFresh': {'total': 0, 'items': []},
+        'lateLegacy': {
+          'total': 120,
+          'items': [
+            {...stopped, 'id': 9, 'reference': 'OF-9', 'dueDate': '2020-01-01'},
+          ],
+        },
+      });
     }
     if (p == '/api/production/orders') return json(page(r.url.queryParameters['status'] == 'Created' ? [] : [stopped]));
     return json(page([]));
@@ -89,6 +117,7 @@ Future<void> openPalette(WidgetTester tester) async {
 }
 
 void main() {
+  legacyListTest();
   testWidgets('onboarding card replaces empty sections, alert tile opens filtered orders, F5 refreshes', (tester) async {
     final (_, log) = await pumpShell(tester, 'Production');
     expect(find.text('Primeiros passos'), findsOneWidget);
@@ -252,7 +281,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
     expect(find.text('T-100  Tubo 25x1,5'), findsOneWidget);
-    expect(log.any((r) => r.url.path == '/api/products' && r.url.queryParameters['q'] == 'T-1'), isTrue);
+    expect(find.text('Metalúrgica T-1'), findsOneWidget);
+    expect(find.text('Produtos'), findsOneWidget);
+    expect(find.text('Clientes'), findsOneWidget);
+    final searches = log.where((r) => r.url.path == '/api/search' && r.url.queryParameters['q'] == 'T-1').toList();
+    expect(searches, hasLength(1), reason: 'one debounced round trip for all groups');
+    expect(searches.single.url.queryParameters['q'], 'T-1');
+    expect(searches.single.url.queryParameters['take'], '4');
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.byType(Dialog), findsNothing);
@@ -306,5 +341,21 @@ void main() {
       expect(t.cardTheme.color, t.colorScheme.surfaceContainerHigh);
       expect((t.cardTheme.shape as RoundedRectangleBorder).side.color, t.colorScheme.outlineVariant);
     }
+  });
+}
+
+void legacyListTest() {
+  testWidgets('legacy OF alert shows the server total, notes the cap and opens the listed OF', (tester) async {
+    final (_, log) = await pumpShell(tester, 'Production');
+    expect(log.any((r) => r.url.path == '/api/production/orders/dashboard' && r.url.queryParameters['legacyDays'] == '30'), isTrue);
+    expect(log.any((r) => r.url.path == '/api/production/orders' && r.url.queryParameters['skip'] != null && r.url.queryParameters['open'] == 'true'), isFalse, reason: 'no full OF list');
+    await tester.tap(find.text('OFs atrasadas há mais de 30 dias'));
+    await tester.pumpAndSettle();
+    expect(find.text('OFs atrasadas há mais de 30 dias (120)'), findsOneWidget);
+    expect(find.text('Mostrando as 1 primeiras de 120.'), findsOneWidget);
+    await tester.tap(find.textContaining('OF-9'));
+    await tester.pumpAndSettle();
+    expect(log.any((r) => r.url.path == '/api/production/orders/9'), isTrue);
+    expect(find.textContaining('OF-9'), findsWidgets);
   });
 }

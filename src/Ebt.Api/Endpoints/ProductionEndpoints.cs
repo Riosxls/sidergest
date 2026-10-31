@@ -21,6 +21,9 @@ public record OccurrenceOut(int Id, string Code, string Description, OccurrenceK
 public record HolidayIn(DateOnly Date, string Name);
 public record HolidayOut(int Id, DateOnly Date, string Name);
 
+public record LateOrders(int Total, IReadOnlyList<ProductionOrderSummaryOut> Items);
+public record ProductionDashboardOut(int OpenTotal, IReadOnlyDictionary<string, int> ByStatus, LateOrders LateFresh, LateOrders LateLegacy);
+
 public record ProductionOrderIn(int ProductId, decimal Quantity, DateOnly DueDate, ProductionOrderKind Kind = ProductionOrderKind.Standard, int? CustomerId = null, int? ParentOrderId = null, int? PreviousOrderId = null, int? Bales = null, string? Notes = null, string? PrimaryTube = null);
 public record OrderUpdateIn(decimal Quantity, DateOnly DueDate, int? CustomerId, int? Bales, string? Notes, string? PrimaryTube = null);
 public record OperationDetailsIn(string? Tolerance, string? MeasureStart, string? MeasureEnd);
@@ -174,6 +177,22 @@ public static class ProductionEndpoints
             var (s, n) = Paging(skip, take);
             var items = await o.OrderBy(x => x.DueDate).ThenBy(x => x.Number).Skip(s).Take(n).Select(Summary).ToListAsync(ct);
             return Results.Ok(new Page<ProductionOrderSummaryOut>(items, total, s, n));
+        });
+
+        // Aggregates for the PCP dashboard: open OFs by status and the late ones split into recent and legacy backlog.
+        g.MapGet("/dashboard", async (EbtDbContext db, int? legacyDays, int? top, CancellationToken ct) =>
+        {
+            var n = Math.Clamp(top ?? 50, 1, 200);
+            var today = Ebt.Core.Services.Clock.Today();
+            var cutoff = today.AddDays(-Math.Max(legacyDays ?? 30, 1));
+            var open = db.ProductionOrders.AsNoTracking().Where(o => ProductionService.Open.Contains(o.Status));
+            var counts = (await open.GroupBy(o => o.Status).Select(x => new { x.Key, N = x.Count() }).ToListAsync(ct)).ToDictionary(x => x.Key.ToString(), x => x.N);
+            var late = open.Where(o => o.DueDate < today || (o.AdjustedEnd ?? o.PlannedEnd) > o.DueDate);
+            var legacy = late.Where(o => o.DueDate < cutoff);
+            var fresh = late.Where(o => o.DueDate >= cutoff);
+            return Results.Ok(new ProductionDashboardOut(counts.Values.Sum(), counts,
+                new LateOrders(await fresh.CountAsync(ct), await fresh.OrderBy(o => o.DueDate).ThenBy(o => o.Number).Take(n).Select(Summary).ToListAsync(ct)),
+                new LateOrders(await legacy.CountAsync(ct), await legacy.OrderBy(o => o.DueDate).ThenBy(o => o.Number).Take(n).Select(Summary).ToListAsync(ct))));
         });
 
         g.MapGet("/{id:int}", async (int id, EbtDbContext db, ProductionService svc, CancellationToken ct) =>

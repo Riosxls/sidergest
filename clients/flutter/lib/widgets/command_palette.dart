@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../entities.dart';
 import '../session.dart';
 
 class SearchTarget {
@@ -74,6 +73,17 @@ String fold(String s) => s
     .replaceAll(RegExp('[úùûü]'), 'u')
     .replaceAll('ç', 'c');
 
+/// Groups returned by `GET /api/search`: key -> (heading, icon).
+const searchGroups = {
+  'products': ('Produtos', Icons.inventory_2_outlined),
+  'production-orders': ('Ordens de fabricação', Icons.assignment_outlined),
+  'sales-orders': ('Pedidos de venda', Icons.receipt_long_outlined),
+  'quotes': ('Orçamentos', Icons.request_quote_outlined),
+  'customers': ('Clientes', Icons.people_outline),
+  'fiscal-documents': ('Notas fiscais', Icons.description_outlined),
+  'certificates': ('Certificados', Icons.verified_outlined),
+};
+
 class PaletteAction {
   const PaletteAction(this.icon, this.label, this.run);
 
@@ -119,7 +129,7 @@ class SearchLauncher extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Buscar telas, ações e produtos',
+                    'Buscar telas, ações, pedidos, OFs, clientes e NFs',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: cs.onSurfaceVariant),
@@ -149,13 +159,13 @@ Future<void> showCommandPalette(
   required List<SearchTarget> targets,
   required List<PaletteAction> actions,
   required void Function(String id) onNavigate,
-  required void Function(int productId) onOpenProduct,
+  required void Function(String group, int id) onOpenHit,
 }) async {
   final recents = await RecentStore.load();
   if (!context.mounted) return;
   await showDialog<void>(
     context: context,
-    builder: (_) => _Palette(session: session, targets: targets, actions: actions, recents: recents, onNavigate: onNavigate, onOpenProduct: onOpenProduct),
+    builder: (_) => _Palette(session: session, targets: targets, actions: actions, recents: recents, onNavigate: onNavigate, onOpenHit: onOpenHit),
   );
 }
 
@@ -166,7 +176,7 @@ class _Palette extends StatefulWidget {
     required this.actions,
     required this.recents,
     required this.onNavigate,
-    required this.onOpenProduct,
+    required this.onOpenHit,
   });
 
   final Session session;
@@ -174,7 +184,7 @@ class _Palette extends StatefulWidget {
   final List<PaletteAction> actions;
   final List<RecentItem> recents;
   final void Function(String id) onNavigate;
-  final void Function(int productId) onOpenProduct;
+  final void Function(String group, int id) onOpenHit;
 
   @override
   State<_Palette> createState() => _PaletteState();
@@ -188,7 +198,7 @@ class _PaletteState extends State<_Palette> {
   String _q = '';
   int _index = 0;
   int _request = 0;
-  List<Map<String, dynamic>> _products = [];
+  List<Map<String, dynamic>> _groups = [];
 
   @override
   void dispose() {
@@ -210,17 +220,18 @@ class _PaletteState extends State<_Palette> {
     });
     _debounce?.cancel();
     final q = _q;
+    // Every keystroke invalidates the answers still on the way, short terms included.
+    final req = ++_request;
     if (q.length < 2) {
-      setState(() => _products = []);
+      setState(() => _groups = []);
       return;
     }
-    final req = ++_request;
     _debounce = Timer(const Duration(milliseconds: 250), () async {
       try {
-        final page = await widget.session.api.list(products.path, q: q, take: 6);
-        if (mounted && req == _request) setState(() => _products = page.items);
+        final r = await widget.session.api.get('/api/search', {'q': q, 'take': 4}) as Map<String, dynamic>;
+        if (mounted && req == _request) setState(() => _groups = ((r['groups'] as List?) ?? const []).cast<Map<String, dynamic>>());
       } catch (_) {
-        if (mounted && req == _request) setState(() => _products = []);
+        if (mounted && req == _request) setState(() => _groups = []);
       }
     });
   }
@@ -238,24 +249,29 @@ class _PaletteState extends State<_Palette> {
         if (r.type == 'screen') {
           final t = titleOf[r.id];
           if (t != null) out.add(_Entry('Recentes', t.icon, t.title, t.section.isEmpty ? null : t.section, () => _close(() => widget.onNavigate(t.id))));
-        } else if (r.type == 'product') {
+        } else {
+          final group = r.type == 'product' ? 'products' : r.type;
+          final meta = searchGroups[group];
           final id = int.tryParse(r.id);
-          if (id != null) out.add(_Entry('Recentes', Icons.inventory_2_outlined, r.title, 'Produto', () => _close(() => widget.onOpenProduct(id))));
+          if (meta != null && id != null) out.add(_Entry('Recentes', meta.$2, r.title, meta.$1, () => _close(() => widget.onOpenHit(group, id))));
         }
       }
     } else {
       for (final t in widget.targets.where((t) => hit(t.title) || hit(t.section)).take(8)) {
         out.add(_Entry('Telas', t.icon, t.title, t.section.isEmpty ? null : t.section, () => _close(() => widget.onNavigate(t.id))));
       }
-      for (final p in _products) {
-        final id = p['id'] as int;
-        final title = '${p['code']}  ${p['name']}';
-        out.add(
-          _Entry('Produtos', Icons.inventory_2_outlined, title, 'Produto', () {
-            RecentStore.add(RecentItem('product', '$id', title));
-            _close(() => widget.onOpenProduct(id));
-          }),
-        );
+      for (final g in _groups) {
+        final meta = searchGroups[g['key']];
+        if (meta == null) continue;
+        for (final h in (g['hits'] as List).cast<Map<String, dynamic>>()) {
+          final id = h['id'] as int, title = '${h['title']}';
+          out.add(
+            _Entry(meta.$1, meta.$2, title, h['subtitle'] as String?, () {
+              RecentStore.add(RecentItem('${g['key']}', '$id', title));
+              _close(() => widget.onOpenHit('${g['key']}', id));
+            }),
+          );
+        }
       }
     }
     if (key.isEmpty && out.every((e) => e.group == 'Ações')) {
@@ -316,7 +332,7 @@ class _PaletteState extends State<_Palette> {
                   controller: _text,
                   autofocus: true,
                   onChanged: _onChanged,
-                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Digite uma tela, ação ou produto', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Digite uma tela, ação, produto, pedido, OF, cliente ou NF', border: OutlineInputBorder()),
                 ),
               ),
               const Divider(height: 1),

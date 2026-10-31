@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../api.dart' show friendlyError;
 import '../entities.dart';
 import '../session.dart';
 import '../widgets/alerts.dart';
@@ -25,6 +26,7 @@ import 'quotations.dart';
 import 'receipts.dart';
 import 'reports.dart' show BillingSummaryScreen, MaterialConsumptionScreen;
 import 'requisitions.dart';
+import 'sales_common.dart' show openQuote, openSalesOrder;
 import 'sales_orders.dart';
 import 'sales_pipeline.dart';
 import 'sales_quotes.dart';
@@ -181,6 +183,32 @@ class _ShellState extends State<Shell> {
     ),
   );
 
+  Future<void> _openHit(String group, int id) async {
+    final s = widget.session;
+    Future<void> push(Widget screen) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    try {
+      switch (group) {
+        case 'products':
+          _openProduct(id);
+        case 'production-orders':
+          await openProductionOrder(context, s, id);
+        case 'sales-orders':
+          await openSalesOrder(context, s, id);
+        case 'quotes':
+          await openQuote(context, s, id);
+        case 'customers':
+          final customer = await s.api.get('/api/customers/$id') as Map<String, dynamic>;
+          if (mounted) await push(CustomerScreen(session: s, customer: customer));
+        case 'fiscal-documents':
+          await push(FiscalDocumentScreen(session: s, id: id));
+        case 'certificates':
+          await push(CertificateScreen(session: s, id: id));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+    }
+  }
+
   Future<void> _openPalette() async {
     _paletteOpen = true;
     try {
@@ -196,7 +224,7 @@ class _ShellState extends State<Shell> {
     targets: [for (final i in _items) SearchTarget(i.id, i.icon, i.title, i.section == hiddenSection ? 'Módulos' : i.section)],
     actions: [for (final a in quickActionsFor(widget.session)) PaletteAction(a.icon, a.label, () => a.run(context))],
     onNavigate: _go,
-    onOpenProduct: _openProduct,
+    onOpenHit: _openHit,
   );
 
   NavItem get _item => _items.firstWhere((i) => i.id == _current);
