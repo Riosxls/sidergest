@@ -201,6 +201,61 @@ public class FiscalTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Stock_ships_physically_and_leaves_the_nf_to_sales()
+    {
+        var admin = await api.AdminAsync();
+        var stock = await api.UserAsync(UserRole.Stock);
+        var sales = await api.UserAsync(UserRole.Sales);
+        var customer = await (await admin.Post("/api/customers", new CustomerIn("Cliente " + Code("C"), null, null, ConsumerType.Normal))).Read<CustomerOut>();
+        var address = await (await admin.Post($"/api/customers/{customer.Id}/addresses", new CustomerAddressIn("26133636000103", "SP", null, "148061942112", true, "Av. Brasil", "100", null, "Centro", "Embu", "3515004", "06800000", "5101", "Edilto", "compras@cliente.com", null))).Read<CustomerAddressOut>();
+        var tube = await (await admin.Post("/api/products", Tube(Code("T")))).Read<ProductOut>();
+        var shipping = await (await admin.Post("/api/stock-locations", new StockLocationIn(Code("E", 10), "Expedição", StockLocationKind.Internal))).Read<StockLocationOut>();
+        (await admin.Put("/api/sales/settings", new SalesSettingsDto(5m, 15, 0m, shipping.Id, null))).EnsureSuccessStatusCode();
+        (await admin.Post("/api/stock/documents", new StockPost(MovementType.AdjustmentIn, Today, [new StockLine(null, tube.Id, shipping.Id, 30m, UnitCost: 5m)], "INV"))).EnsureSuccessStatusCode();
+        var term = await (await admin.Post("/api/sales/payment-terms", new PaymentTermIn(Code("P", 8), "28 DDL", "28", 1_000_000m))).Read<PaymentTermOut>();
+        (await admin.Post("/api/sales/price-list", new PriceListIn(tube.Id, null, 100m, 5m, 18m, Today.AddDays(-1), null))).EnsureSuccessStatusCode();
+        var order = await (await admin.Post("/api/sales/orders", new SalesOrderIn(customer.Id, address.Id, [new SalesLineInput(tube.Id, 10m)], "PO-9", term.Id))).Read<SalesOrderOut>();
+        await admin.Post($"/api/sales/orders/{order.Id}/release", new SalesReleaseIn());
+        try
+        {
+            await Enable(admin, true);
+            (await admin.Post("/api/fiscal/monthly-prices", new MonthlyPriceIn(tube.Id, customer.Id, "5101", Today.Year, Today.Month, 110m))).EnsureSuccessStatusCode();
+            var delivery = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
+
+            delivery = await (await stock.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, WithoutCertificate: true))).Read<DeliveryOut>();
+            Assert.Equal(DeliveryStatus.Shipped, delivery.Status);
+            Assert.Null(delivery.InvoiceNumber);
+            Assert.Equal(20m, await Balance(admin, tube.Id, shipping.Id));
+            Assert.Empty((await (await admin.GetAsync($"/api/fiscal/documents?deliveryId={delivery.Id}")).Read<Page<FiscalDocumentSummary>>()).Items);
+
+            Assert.Equal(HttpStatusCode.Forbidden, (await stock.Post($"/api/sales/deliveries/{delivery.Id}/emit-invoice", new EmitInvoiceInput())).StatusCode);
+            delivery = await (await sales.Post($"/api/sales/deliveries/{delivery.Id}/emit-invoice", new EmitInvoiceInput())).Read<DeliveryOut>();
+            Assert.NotNull(delivery.InvoiceNumber);
+            Assert.Single((await (await admin.GetAsync($"/api/fiscal/documents?deliveryId={delivery.Id}")).Read<Page<FiscalDocumentSummary>>()).Items);
+            Assert.Equal(HttpStatusCode.Conflict, (await sales.Post($"/api/sales/deliveries/{delivery.Id}/emit-invoice", new EmitInvoiceInput())).StatusCode);
+        }
+        finally
+        {
+            await Enable(admin, false);
+        }
+    }
+
+    [Fact]
+    public async Task Fine_permissions_gate_certificate_issue_and_price_list()
+    {
+        var sales = await api.UserAsync(UserRole.Sales);
+        var manager = await api.UserAsync(UserRole.SalesManager);
+        var stock = await api.UserAsync(UserRole.Stock);
+        Assert.Equal(HttpStatusCode.Forbidden, (await sales.Post("/api/sales/certificates/1/issue", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await sales.Post("/api/sales/price-list", new PriceListIn(1, null, 1m, null, null, Today, null))).StatusCode);
+        Assert.NotEqual(HttpStatusCode.Forbidden, (await manager.Post("/api/sales/certificates/999999/issue", new { })).StatusCode);
+        Assert.NotEqual(HttpStatusCode.Forbidden, (await manager.Post("/api/sales/price-list", new PriceListIn(0, null, 1m, null, null, Today, null))).StatusCode);
+        var me = await (await stock.GetAsync("/api/auth/me")).Content.ReadAsStringAsync();
+        Assert.Contains("sales-ship", me);
+        Assert.DoesNotContain("fiscal-emit", me);
+    }
+
+    [Fact]
     public async Task Only_admin_edits_settings_and_managers_edit_prices()
     {
         var sales = await api.UserAsync(UserRole.Sales);

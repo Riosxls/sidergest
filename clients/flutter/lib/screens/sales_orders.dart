@@ -524,7 +524,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
               icon: const Icon(Icons.local_shipping_outlined),
               label: const Text('Programar entrega'),
             ),
-          if (s.canCertificate)
+          if (s.canIssueCertificate)
             TextButton(key: const ValueKey('order-certificate-waive'), onPressed: () => _waiveCertificate(true), child: const Text('Dispensar certificado')),
           ..._ofPrints(o),
           ..._closeAction(),
@@ -717,7 +717,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
             title: 'Certificados de qualidade (${_certs.length})',
             actions: [
               if (o['certificateWaived'] == true)
-                TextButton(onPressed: s.canCertificate ? () => _waiveCertificate(false) : null, child: const Text('Dispensado · exigir novamente'))
+                TextButton(onPressed: s.canIssueCertificate ? () => _waiveCertificate(false) : null, child: const Text('Dispensado · exigir novamente'))
               else if (s.canCertificate && status != 'Cancelled')
                 FilledButton.tonalIcon(
                   key: const ValueKey('order-new-certificate'),

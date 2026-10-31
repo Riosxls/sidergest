@@ -25,6 +25,7 @@ public record TemplateIn(string? Title, string? Finish, string? Notes, List<Cert
 public static class CertificatePolicies
 {
     public const string Manage = "certificates";
+    public const string Issue = "certificates-issue";
 }
 
 public static class CertificateEndpoints
@@ -81,7 +82,7 @@ public static class CertificateEndpoints
         {
             await svc.IssueAsync(id, Who(user), ct);
             return Results.Ok(await Load(db, id, ct));
-        }).RequireAuthorization(CertificatePolicies.Manage);
+        }).RequireAuthorization(CertificatePolicies.Issue);
 
         g.MapPost("/{id:int}/link-delivery", async (int id, CertificateLinkIn i, EbtDbContext db, CertificateService svc, CancellationToken ct) =>
         {
@@ -93,13 +94,13 @@ public static class CertificateEndpoints
         {
             await svc.CancelAsync(id, i.Reason, ct);
             return Results.Ok(await Load(db, id, ct));
-        }).RequireAuthorization(CertificatePolicies.Manage);
+        }).RequireAuthorization(CertificatePolicies.Issue);
 
         g.MapDelete("/{id:int}", async (int id, CertificateService svc, CancellationToken ct) =>
         {
             await svc.DeleteAsync(id, ct);
             return Results.NoContent();
-        }).RequireAuthorization(CertificatePolicies.Manage);
+        }).RequireAuthorization(CertificatePolicies.Issue);
 
         // Tables a new certificate starts with: the learned template of this customer and product when there is one, else blank rows with the product dimensions.
         g.MapGet("/template", async (EbtDbContext db, CertificateService svc, int? orderLineId, CancellationToken ct) =>
@@ -153,7 +154,7 @@ public static class CertificateEndpoints
         {
             await svc.SetWaivedAsync(id, i.Waived, ct);
             return Results.Ok(new { waived = i.Waived });
-        }).WithTags("Certificates").RequireAuthorization(CertificatePolicies.Manage);
+        }).WithTags("Certificates").RequireAuthorization(CertificatePolicies.Issue);
     }
 
     private static async Task<CertificateOut> Load(EbtDbContext db, int id, CancellationToken ct)

@@ -69,6 +69,7 @@ public static class SalesPolicies
     public const string Approve = "sales-approve";
     public const string Release = "sales-release";
     public const string Ship = "sales-ship";
+    public const string PriceEdit = "price-edit";
 }
 
 public sealed class SalesExceptionHandler : IExceptionHandler
@@ -163,7 +164,7 @@ public static class SalesEndpoints
                 .Require(i.ValidTo is null || i.ValidTo >= i.ValidFrom, "validTo", "Before the start date"),
             Search = (q, s) => q.Where(p => EF.Functions.ILike(p.Product!.Code, Like(s)) || EF.Functions.ILike(p.Product.Name, Like(s)) || EF.Functions.ILike(p.Customer!.Name, Like(s))),
             Order = q => q.OrderBy(p => p.Product!.Code).ThenBy(p => p.CustomerId).ThenByDescending(p => p.ValidFrom),
-            WritePolicy = SalesPolicies.Sell
+            WritePolicy = SalesPolicies.PriceEdit
         });
 
         app.MapGet("/api/sales/price", async (int productId, int? customerId, EbtDbContext db, SalesService svc, CancellationToken ct) =>
@@ -436,9 +437,15 @@ public static class SalesEndpoints
 
         g.MapPost("/{id:int}/ship", async (int id, ShipInput i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
-            await svc.ShipAsync(id, i, Who(user), ct);
+            await svc.ShipAsync(id, i, Who(user), ct, canEmitInvoice: Access.Matrix[FiscalPolicies.Emit].Any(r => user.IsInRole(r.ToString())));
             return Results.Ok(await LoadDelivery(db, id, ct));
         }).RequireAuthorization(SalesPolicies.Ship);
+
+        g.MapPost("/{id:int}/emit-invoice", async (int id, EmitInvoiceInput i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            await svc.EmitInvoiceAsync(id, i, Who(user), ct);
+            return Results.Ok(await LoadDelivery(db, id, ct));
+        }).RequireAuthorization(FiscalPolicies.Emit);
 
         g.MapPost("/{id:int}/confirm", async (int id, ConfirmDeliveryIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {

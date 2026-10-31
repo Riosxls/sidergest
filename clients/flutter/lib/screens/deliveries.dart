@@ -213,6 +213,15 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
     );
   }
 
+  /// Shipped by someone without the right to emit the NF: the shipment event says "NF pendente".
+  bool get _invoicePending =>
+      _d?['invoiceNumber'] == null && ((_d?['history'] as List?) ?? const []).any((h) => h['action'] == 'shipped' && '${h['note']}'.contains('NF pendente'));
+
+  Future<void> _emitInvoice() async {
+    final r = await runAction(context, () => api.post('$base/emit-invoice', {}), success: 'NF emitida');
+    if (r != null && r['reference'] != null) setState(() => _d = r);
+  }
+
   Future<void> _confirm() async {
     final r = await submitForm(
       context,
@@ -257,6 +266,8 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       tone: Tone.progress,
       actions: [
         TextButton.icon(key: const ValueKey('delivery-print-nf-card'), onPressed: _printNf, icon: const Icon(Icons.print_outlined), label: const Text('Imprimir NF')),
+        if (_invoicePending && s.canEmitInvoice)
+          OutlinedButton.icon(key: const ValueKey('delivery-emit-invoice'), onPressed: _emitInvoice, icon: const Icon(Icons.receipt_long_outlined), label: const Text('Emitir NF')),
         if (s.canShip)
           FilledButton.icon(
             key: const ValueKey('delivery-confirm'),

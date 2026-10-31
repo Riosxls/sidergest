@@ -233,7 +233,8 @@ class _CertificateScreenState extends State<CertificateScreen> {
       actions: [
         if (s.canCertificate) ...[
           OutlinedButton.icon(key: const ValueKey('certificate-edit'), onPressed: _edit, icon: const Icon(Icons.edit_outlined), label: const Text('Preencher')),
-          FilledButton.icon(
+          if (s.canIssueCertificate)
+            FilledButton.icon(
             key: const ValueKey('certificate-issue'),
             onPressed: _issue,
             icon: const Icon(Icons.verified_outlined),
@@ -275,12 +276,12 @@ class _CertificateScreenState extends State<CertificateScreen> {
           value: _link,
           child: const ListTile(leading: Icon(Icons.local_shipping_outlined), title: Text('Trocar entrega')),
         ),
-      if (s.canCertificate && c?['status'] == 'Draft')
+      if (s.canIssueCertificate && c?['status'] == 'Draft')
         PopupMenuItem(
           value: _delete,
           child: const ListTile(leading: Icon(Icons.delete_outline), title: Text('Excluir rascunho')),
         ),
-      if (s.canCertificate && c != null && c['status'] != 'Cancelled')
+      if (s.canIssueCertificate && c != null && c['status'] != 'Cancelled')
         PopupMenuItem(
           value: _cancel,
           child: const ListTile(leading: Icon(Icons.block), title: Text('Cancelar certificado')),

@@ -46,6 +46,7 @@ public static class FiscalPolicies
 {
     public const string Prices = "fiscal-prices";
     public const string Cancel = "fiscal-cancel";
+    public const string Emit = "fiscal-emit";
 }
 
 public static class FiscalEndpoints

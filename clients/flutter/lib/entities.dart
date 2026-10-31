@@ -528,7 +528,7 @@ final priceList = EntitySpec(
     dateCol('De', 'validFrom'),
     dateCol('Até', 'validTo'),
   ],
-  writePolicy: 'sales',
+  writePolicy: 'price-edit',
 );
 
 final salesMasters = [priceList, paymentTerms, monthlyPrices, taxRules];
