@@ -146,7 +146,7 @@ Future<PurchasingDashboard> fetchPurchasing(ApiClient api) async {
     api.list('/api/requisitions', take: 1, query: {'status': 'PendingApproval'}),
     api.list('/api/requisitions', take: 1, query: {'status': 'Approved'}),
     api.list('/api/quotations', take: 1, query: {'status': 'Open'}),
-    api.list('/api/purchase-orders', take: 200, query: {'open': true}),
+    api.list('/api/purchase-orders', take: 200, query: {'open': true, 'excludeTest': true}),
     api.get('/api/purchasing/overdue'),
   ]);
   final orders = r[3] as PageResult;
@@ -167,7 +167,7 @@ Future<PurchasingDashboard> fetchPurchasing(ApiClient api) async {
 Future<ProductionDashboard> fetchProduction(ApiClient api) async {
   final now = DateTime.now();
   final r = await Future.wait([
-    api.listAll('/api/production/orders', query: {'open': true}),
+    api.listAll('/api/production/orders', query: {'open': true, 'excludeTest': true}),
     api.get('/api/production/outside-shipments', {'open': true}),
     api.get('/api/production/load', {'from': isoDate(now), 'to': isoDate(now.add(const Duration(days: 27)))}),
   ]);

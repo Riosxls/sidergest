@@ -170,7 +170,7 @@ public sealed class Importer(EbtDbContext db, ImportOptions options)
             var code = r.Str("E10CDMATER");
             if (code is null) { Skip(table, "material without code"); continue; }
             var inserted = !existing.TryGetValue(code, out var m);
-            m ??= new Material { Code = code, Description = "", StockUnit = "", PurchaseUnit = "" };
+            m ??= new Material { Source = DataSource.Imported, Code = code, Description = "", StockUnit = "", PurchaseUnit = "" };
             m.Description = r.Str("E10DSMATER") ?? code;
             m.ClassId = r.Str("E10CDTPMAT") is { } c && classes.TryGetValue(c, out var cid) ? cid : null;
             m.GroupId = r.Str("E10CDGPMAT") is { } g && groups.TryGetValue(g, out var gid) ? gid : null;
@@ -236,7 +236,7 @@ public sealed class Importer(EbtDbContext db, ImportOptions options)
             var code = r.Str("F01CDCLIE");
             if (code is null) { Skip(table, "customer without code"); continue; }
             var inserted = !existing.TryGetValue(code, out var c);
-            c ??= new Customer { LegacyCode = code, Name = "" };
+            c ??= new Customer { Source = DataSource.Imported, LegacyCode = code, Name = "" };
             c.Name = r.Str("F01NMCLIE") ?? r.Str("F01NMFANT") ?? code;
             c.TradeName = r.Str("F01NMFANT");
             c.ConsumerType = r.Str("F01TPCONSU") == "F" ? ConsumerType.FinalConsumer : ConsumerType.Normal;
@@ -288,7 +288,7 @@ public sealed class Importer(EbtDbContext db, ImportOptions options)
             var code = r.Str("E06CDFORNE");
             if (code is null) { Skip(table, "supplier without code"); continue; }
             var inserted = !existing.TryGetValue(code, out var s);
-            s ??= new Supplier { LegacyCode = code, Name = "" };
+            s ??= new Supplier { Source = DataSource.Imported, LegacyCode = code, Name = "" };
             s.Name = r.Str("E06RSFORNE") ?? r.Str("E06NMFANTA") ?? code;
             s.TradeName = r.Str("E06NMFANTA");
             s.GroupCode = r.Str("E06CDGPFOR");
@@ -335,7 +335,7 @@ public sealed class Importer(EbtDbContext db, ImportOptions options)
             var code = r.Str("F06CDPECA");
             if (code is null) { Skip(table, "product without code"); continue; }
             var inserted = !existing.TryGetValue(code, out var p);
-            p ??= new Product { Code = code, Name = "", Ncm = "", StockUnit = "" };
+            p ??= new Product { Source = DataSource.Imported, Code = code, Name = "", Ncm = "", StockUnit = "" };
             p.Name = r.Str("F06NMPECA") ?? code;
             p.Kind = r.Str("F06TPPECA") == "C" ? ProductKind.Component : ProductKind.Part;
             p.Shape = r.Str("F06TPTUBO") switch { "C" => TubeShape.Circular, "R" => TubeShape.Rectangular, _ => null };

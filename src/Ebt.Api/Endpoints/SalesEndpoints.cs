@@ -462,12 +462,13 @@ public static class SalesEndpoints
 
     private static void MapPipeline(WebApplication app)
     {
-        app.MapGet("/api/sales/pipeline", async (EbtDbContext db, SalesService svc, int? customerId, CancellationToken ct) =>
+        app.MapGet("/api/sales/pipeline", async (EbtDbContext db, SalesService svc, int? customerId, bool? includeTest, CancellationToken ct) =>
         {
             var today = SalesService.Today();
             var quotes = db.Quotes.AsNoTracking().Where(q => SalesService.OpenQuote.Contains(q.Status));
             var orders = db.SalesOrders.AsNoTracking().Where(o => SalesService.OpenOrder.Contains(o.Status) || o.Status == SalesOrderStatus.Shipped
                 || o.Status == SalesOrderStatus.Delivered && o.CreatedAt >= DateTimeOffset.UtcNow.AddDays(-30));
+            if (includeTest != true) { quotes = quotes.Where(q => q.Source != DataSource.Test); orders = orders.Where(o => o.Source != DataSource.Test); }
             if (customerId is { } c)
             {
                 quotes = quotes.Where(q => q.CustomerId == c);

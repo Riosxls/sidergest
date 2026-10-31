@@ -297,14 +297,14 @@ public sealed partial class ProductionService
         }
     }
 
-    public async Task<IReadOnlyList<LoadRow>> LoadAsync(DateOnly from, DateOnly to, bool byWorkCenter, CancellationToken ct = default)
+    public async Task<IReadOnlyList<LoadRow>> LoadAsync(DateOnly from, DateOnly to, bool byWorkCenter, CancellationToken ct = default, bool includeTest = false)
     {
         if (to < from) throw ProductionException.Invalid("to", "Must not be before from");
         var settings = await SettingsAsync(ct);
         var holidays = (await db.Holidays.AsNoTracking().Where(h => h.Date >= from && h.Date <= to.AddDays(7)).Select(h => h.Date).ToListAsync(ct)).ToHashSet();
         var calendar = new WorkCalendar(settings.HoursPerDay, settings.WorkSaturdays, holidays);
         var rows = await db.ProductionOrderOperations.AsNoTracking()
-            .Where(o => Open.Contains(o.Order!.Status) && !o.External && o.PlannedHours > 0 && o.PlannedStart != null && o.PlannedStart >= from && o.PlannedStart <= to)
+            .Where(o => (includeTest || o.Order!.Source != DataSource.Test) && Open.Contains(o.Order!.Status) && !o.External && o.PlannedHours > 0 && o.PlannedStart != null && o.PlannedStart >= from && o.PlannedStart <= to)
             .Where(o => byWorkCenter ? (o.WorkCenterId != null || o.Machine!.WorkCenterId != null) : o.MachineId != null)
             .Select(o => new
             {

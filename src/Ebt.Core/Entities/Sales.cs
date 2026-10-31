@@ -51,9 +51,10 @@ public class PriceListEntry
     public DateOnly? ValidTo { get; set; }
 }
 
-public class Quote
+public class Quote : IHasSource
 {
     public int Id { get; set; }
+    public DataSource Source { get; set; }
     public int Number { get; set; }
     public int Revision { get; set; }
     public required string Reference { get; set; }
@@ -124,9 +125,10 @@ public class QuoteLine
     public DateOnly? DeliveryDate { get; set; }
 }
 
-public class SalesOrder
+public class SalesOrder : IHasSource
 {
     public int Id { get; set; }
+    public DataSource Source { get; set; }
     public int Number { get; set; }
     public required string Reference { get; set; }
     public int? QuoteId { get; set; }
@@ -192,9 +194,10 @@ public class SalesOrderLine
     public FeasibilityStudy? FeasibilityStudy { get; set; }
 }
 
-public class Delivery
+public class Delivery : IHasSource
 {
     public int Id { get; set; }
+    public DataSource Source { get; set; }
     public int Number { get; set; }
     public required string Reference { get; set; }
     public int OrderId { get; set; }

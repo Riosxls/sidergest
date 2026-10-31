@@ -198,6 +198,31 @@ public class SalesTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Test_records_stay_out_of_the_pipeline_until_asked()
+    {
+        var admin = await api.AdminAsync();
+        var sales = await api.UserAsync(UserRole.Sales);
+        var s = await Arrange(admin, stock: 10m);
+        var order = await (await admin.Post("/api/sales/orders", new SalesOrderIn(s.Customer.Id, s.Address.Id, [new SalesLineInput(s.Tube.Id, 10m)], "PO-T", s.Term.Id))).Read<SalesOrderOut>();
+        order = await (await admin.Post($"/api/sales/orders/{order.Id}/release", new SalesReleaseIn())).Read<SalesOrderOut>();
+        static bool Has(PipelineOut p, int id) => p.Stages.Any(st => st.Cards.Any(c => c.Kind == SalesRecordKind.Order && c.Id == id));
+        var url = $"/api/sales/pipeline?customerId={s.Customer.Id}";
+        Assert.True(Has(await (await admin.GetAsync(url)).Read<PipelineOut>(), order.Id));
+
+        var flag = new { entity = "SalesOrder", ids = new[] { order.Id }, target = "Test", apply = false };
+        Assert.Equal(HttpStatusCode.Forbidden, (await sales.Post("/api/admin/data-source", flag)).StatusCode);
+        var preview = await admin.Post("/api/admin/data-source", flag);
+        Assert.Contains("\"rows\":1", await preview.Content.ReadAsStringAsync());
+        Assert.True(Has(await (await admin.GetAsync(url)).Read<PipelineOut>(), order.Id));
+
+        (await admin.Post("/api/admin/data-source", flag with { apply = true })).EnsureSuccessStatusCode();
+        Assert.False(Has(await (await admin.GetAsync(url)).Read<PipelineOut>(), order.Id));
+        Assert.True(Has(await (await admin.GetAsync(url + "&includeTest=true")).Read<PipelineOut>(), order.Id));
+        Assert.Contains("SalesOrder", await (await admin.GetAsync("/api/admin/data-source")).Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Post("/api/admin/data-source", new { entity = "Nope", apply = true })).StatusCode);
+    }
+
+    [Fact]
     public async Task Shipping_needs_an_issued_certificate_or_a_waiver()
     {
         var admin = await api.AdminAsync();

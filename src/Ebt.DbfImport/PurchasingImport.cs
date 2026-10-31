@@ -221,7 +221,7 @@ public sealed class PurchasingImport : IImportStep
                 orders[nr] = o;
                 return o;
             }
-            o ??= db.PurchaseOrders.Add(new PurchaseOrder { Number = nr }).Entity;
+            o ??= db.PurchaseOrders.Add(new PurchaseOrder { Source = DataSource.Imported, Number = nr }).Entity;
             o.SupplierId = sid;
             o.IssuedAt = Timestamp(r.Date(fromHeader ? "G19DTCADAS" : "G12DTPEDID")) ?? (inserted ? DateTimeOffset.UtcNow : o.IssuedAt);
             if (fromHeader)
@@ -345,7 +345,7 @@ public sealed class PurchasingImport : IImportStep
             var code = r.Str("G02CDMATER");
             var m = Material(code, table, required: false);
             var inserted = !existing.TryGetValue(nr, out var req);
-            if (inserted) db.PurchaseRequisitions.Add(existing[nr] = req = new PurchaseRequisition { Number = nr, Description = "", Unit = "" });
+            if (inserted) db.PurchaseRequisitions.Add(existing[nr] = req = new PurchaseRequisition { Source = DataSource.Imported, Number = nr, Description = "", Unit = "" });
             req!.MaterialId = m?.Id;
             req.Description = Text(r.Str("G02DSMATER") ?? m?.Description ?? code ?? $"Requisição {nr}", 120);
             req.Unit = Unit(r.Str("G02UNIDADE") ?? m?.PurchaseUnit);
