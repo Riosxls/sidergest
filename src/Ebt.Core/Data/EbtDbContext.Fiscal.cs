@@ -12,6 +12,7 @@ public partial class EbtDbContext
     public DbSet<FiscalDocument> FiscalDocuments => Set<FiscalDocument>();
     public DbSet<FiscalDocumentLine> FiscalDocumentLines => Set<FiscalDocumentLine>();
     public DbSet<FiscalInstallment> FiscalInstallments => Set<FiscalInstallment>();
+    public DbSet<FiscalInutilization> FiscalInutilizations => Set<FiscalInutilization>();
 
     partial void ConfigureFiscal(ModelBuilder b)
     {
@@ -83,6 +84,7 @@ public partial class EbtDbContext
             e.Property(x => x.AccessKey).HasMaxLength(44);
             e.Property(x => x.Protocol).HasMaxLength(20);
             e.Property(x => x.CancelProtocol).HasMaxLength(20);
+            e.Property(x => x.StatusMessage).HasMaxLength(500);
             e.Property(x => x.RecipientName).HasMaxLength(120);
             e.Property(x => x.RecipientDocument).HasMaxLength(14);
             e.Property(x => x.RecipientUf).HasMaxLength(2);
@@ -108,6 +110,13 @@ public partial class EbtDbContext
             e.HasOne(x => x.Document).WithMany(x => x.Lines).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Product).WithMany().OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.ProductionOrder).WithMany().OnDelete(DeleteBehavior.Restrict);
+        });
+        b.Entity<FiscalInutilization>(e =>
+        {
+            e.ToTable("fiscal_inutilizations", t => t.HasCheckConstraint("ck_fiscal_inutilizations_range", "from_number > 0 AND to_number >= from_number"));
+            e.HasIndex(x => new { x.Series, x.FromNumber, x.ToNumber });
+            e.Property(x => x.Reason).HasMaxLength(255);
+            e.Property(x => x.Protocol).HasMaxLength(20);
         });
         b.Entity<FiscalInstallment>(e =>
         {

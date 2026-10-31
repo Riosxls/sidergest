@@ -1361,6 +1361,11 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("status");
 
+                    b.Property<string>("StatusMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("status_message");
+
                     b.Property<int?>("SupplierId")
                         .HasColumnType("integer")
                         .HasColumnName("supplier_id");
@@ -1595,6 +1600,72 @@ namespace Ebt.Core.Data.Migrations
                         .HasDatabaseName("ix_fiscal_installments_document_id_sequence");
 
                     b.ToTable("fiscal_installments", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.FiscalInutilization", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("Environment")
+                        .HasColumnType("integer")
+                        .HasColumnName("environment");
+
+                    b.Property<int>("FromNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("from_number");
+
+                    b.Property<string>("Protocol")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("protocol");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("reason");
+
+                    b.Property<int>("Series")
+                        .HasColumnType("integer")
+                        .HasColumnName("series");
+
+                    b.Property<bool>("Simulated")
+                        .HasColumnType("boolean")
+                        .HasColumnName("simulated");
+
+                    b.Property<int>("ToNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("to_number");
+
+                    b.Property<string>("Xml")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("xml");
+
+                    b.HasKey("Id")
+                        .HasName("pk_fiscal_inutilizations");
+
+                    b.HasIndex("Series", "FromNumber", "ToNumber")
+                        .HasDatabaseName("ix_fiscal_inutilizations_series_from_number_to_number");
+
+                    b.ToTable("fiscal_inutilizations", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_fiscal_inutilizations_range", "from_number > 0 AND to_number >= from_number");
+                        });
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.FiscalSettings", b =>

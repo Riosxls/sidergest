@@ -27,13 +27,30 @@ public sealed record NfeTransport(int FreightMode, string? Carrier, string? Vehi
 /// <param name="AuthorizedXml">nfeProc (signed NFe + protNFe) when SEFAZ authorized; null for the stub.</param>
 public sealed record SefazResult(bool Authorized, string Status, string Message, string? Protocol, bool Simulated, string? AuthorizedXml = null);
 
+public enum SefazConsultOutcome { Authorized, Cancelled, NotFound, Denied, Unknown }
+
+/// <summary>Situation of an access key at SEFAZ (NFeConsultaProtocolo4). <paramref name="AuthorizedXml"/> is the nfeProc when the NF-e is authorized (real client only).</summary>
+public sealed record SefazConsultResult(SefazConsultOutcome Outcome, string Status, string Message, string? Protocol, bool Simulated, string? AuthorizedXml = null);
+
 public interface ISefazClient
 {
+    /// <summary>True for the local stub: documents reserved through it are flagged Simulated from the start.</summary>
+    bool IsSimulated { get; }
+
+    /// <summary>Asks SEFAZ what happened to an access key (NFeConsultaProtocolo4). <paramref name="xml"/> is the unsigned NFe stored locally, used to rebuild the nfeProc. Throws a 502 <see cref="FiscalException"/> when SEFAZ cannot be reached.</summary>
+    Task<SefazConsultResult> ConsultAsync(string accessKey, string xml, SefazEnvironment environment, CancellationToken ct);
+
     /// <summary>Signs and sends the NF-e (NFeAutorizacao4, SEFAZ-SP) and waits for the verdict. Returns the verdict, never throws for a rejection.</summary>
     Task<SefazResult> AuthorizeAsync(string accessKey, string xml, SefazEnvironment environment, CancellationToken ct);
+
+    /// <summary>Sends an unsigned <c>inutNFe</c> request (NFeInutilizacao4) and returns the verdict (status 102 = homologated).</summary>
+    Task<SefazResult> InutilizeAsync(string xml, SefazEnvironment environment, CancellationToken ct);
 
     /// <summary>Registers the cancellation event (110111) of an authorized NF-e.</summary>
     Task<SefazResult> CancelAsync(string accessKey, string authorizationProtocol, string reason, SefazEnvironment environment, CancellationToken ct);
 }
 
 public sealed record FiscalDocumentSummary(int Id, FiscalKind Kind, FiscalStatus Status, string CfopCode, int Series, int Number, string AccessKey, string RecipientName, decimal InvoiceTotal, DateTimeOffset IssuedAt, bool Simulated);
+
+/// <summary>Result of reconciling one Pending NF. <paramref name="Outcome"/>: authorized, cancelled, released, rejected, waiting, unreachable, unknown, skipped.</summary>
+public sealed record ReconcileResult(int Id, int Series, int Number, string AccessKey, string Outcome, string Message, FiscalStatus Status, bool Unlinked);

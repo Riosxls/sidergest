@@ -270,4 +270,131 @@ public class FiscalTests(ApiFixture api)
 
     private static async Task<decimal> Balance(HttpClient c, int productId, int locationId) =>
         (await (await c.GetAsync($"/api/stock/balances?productId={productId}&locationId={locationId}")).Read<Page<StockBalanceOut>>()).Items.Sum(b => b.Quantity);
+
+    private sealed record SaleSetup(CustomerOut Customer, ProductOut Tube, StockLocationOut Shipping, SalesOrderOut Order);
+
+    private async Task<SaleSetup> ReleasedSaleAsync(HttpClient admin)
+    {
+        var customer = await (await admin.Post("/api/customers", new CustomerIn("Cliente " + Code("C"), null, null, ConsumerType.Normal))).Read<CustomerOut>();
+        var address = await (await admin.Post($"/api/customers/{customer.Id}/addresses", new CustomerAddressIn("26133636000103", "SP", null, "148061942112", true, "Av. Brasil", "100", null, "Centro", "Embu", "3515004", "06800000", "5101", "Edilto", "compras@cliente.com", null))).Read<CustomerAddressOut>();
+        var tube = await (await admin.Post("/api/products", Tube(Code("T")))).Read<ProductOut>();
+        var shipping = await (await admin.Post("/api/stock-locations", new StockLocationIn(Code("E", 10), "Expedição", StockLocationKind.Internal))).Read<StockLocationOut>();
+        (await admin.Put("/api/sales/settings", new SalesSettingsDto(5m, 15, 0m, shipping.Id, null))).EnsureSuccessStatusCode();
+        (await admin.Post("/api/stock/documents", new StockPost(MovementType.AdjustmentIn, Today, [new StockLine(null, tube.Id, shipping.Id, 30m, UnitCost: 5m)], "INV"))).EnsureSuccessStatusCode();
+        var term = await (await admin.Post("/api/sales/payment-terms", new PaymentTermIn(Code("P", 8), "28 DDL", "28", 1_000_000m))).Read<PaymentTermOut>();
+        (await admin.Post("/api/sales/price-list", new PriceListIn(tube.Id, null, 100m, 5m, 18m, Today.AddDays(-1), null))).EnsureSuccessStatusCode();
+        (await admin.Post("/api/fiscal/monthly-prices", new MonthlyPriceIn(tube.Id, customer.Id, "5101", Today.Year, Today.Month, 110m))).EnsureSuccessStatusCode();
+        var order = await (await admin.Post("/api/sales/orders", new SalesOrderIn(customer.Id, address.Id, [new SalesLineInput(tube.Id, 10m)], "PO-9", term.Id))).Read<SalesOrderOut>();
+        await admin.Post($"/api/sales/orders/{order.Id}/release", new SalesReleaseIn());
+        return new SaleSetup(customer, tube, shipping, order);
+    }
+
+    [Fact]
+    public async Task Lost_answer_leaves_a_pending_nf_that_reconciliation_resolves()
+    {
+        var admin = await api.AdminAsync();
+        var s = await ReleasedSaleAsync(admin);
+        try
+        {
+            var settings = await Enable(admin, true);
+
+            // SEFAZ never saw the NF: 502, number stays reserved (Pending), delivery and stock roll back; reconciliation gives the number back.
+            var lost = await (await admin.Post($"/api/sales/orders/{s.Order.Id}/deliveries", new DeliveryInput(Today, Notes: StubSefazClient.TimeoutMarker))).Read<DeliveryOut>();
+            var res = await admin.Post($"/api/sales/deliveries/{lost.Id}/ship", new ShipInput(Today, WithoutCertificate: true));
+            Assert.Equal(HttpStatusCode.BadGateway, res.StatusCode);
+            Assert.Equal(DeliveryStatus.Planned, (await (await admin.GetAsync($"/api/sales/deliveries/{lost.Id}")).Read<DeliveryOut>()).Status);
+            Assert.Equal(30m, await Balance(admin, s.Tube.Id, s.Shipping.Id));
+            Assert.Equal(settings.NextNumber + 1, (await (await admin.GetAsync("/api/fiscal/settings")).Read<FiscalSettingsDto>()).NextNumber);
+            var pending = Assert.Single((await (await admin.GetAsync($"/api/fiscal/documents?status={FiscalStatus.Pending}&q={settings.NextNumber}")).Read<Page<FiscalDocumentSummary>>()).Items);
+            Assert.Equal(settings.NextNumber, pending.Number);
+
+            var young = await (await admin.Post($"/api/fiscal/documents/{pending.Id}/reconcile?minAgeMinutes=60", new { })).Read<ReconcileResult>();
+            Assert.Equal("waiting", young.Outcome);
+            var released = await (await admin.Post($"/api/fiscal/documents/{pending.Id}/reconcile?minAgeMinutes=0", new { })).Read<ReconcileResult>();
+            Assert.Equal("released", released.Outcome);
+            Assert.Equal(settings.NextNumber, (await (await admin.GetAsync("/api/fiscal/settings")).Read<FiscalSettingsDto>()).NextNumber);
+            Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync($"/api/fiscal/documents/{pending.Id}")).StatusCode);
+            (await admin.Post($"/api/sales/deliveries/{lost.Id}/cancel", new SalesReasonIn("teste"))).EnsureSuccessStatusCode();
+
+            // SEFAZ authorized it but the answer was lost: reconciliation marks it Authorized and says it has no delivery attached.
+            var ghost = await (await admin.Post($"/api/sales/orders/{s.Order.Id}/deliveries", new DeliveryInput(Today, Notes: StubSefazClient.TimeoutAuthorizedMarker))).Read<DeliveryOut>();
+            Assert.Equal(HttpStatusCode.BadGateway, (await admin.Post($"/api/sales/deliveries/{ghost.Id}/ship", new ShipInput(Today, WithoutCertificate: true))).StatusCode);
+            var stuck = Assert.Single((await (await admin.GetAsync($"/api/fiscal/documents?status={FiscalStatus.Pending}&q={settings.NextNumber}")).Read<Page<FiscalDocumentSummary>>()).Items);
+            var all = await (await admin.Post("/api/fiscal/documents/reconcile?minAgeMinutes=0", new { })).Read<List<ReconcileResult>>();
+            var one = Assert.Single(all, r => r.Id == stuck.Id);
+            Assert.Equal("authorized", one.Outcome);
+            Assert.True(one.Unlinked);
+            var nf = await (await admin.GetAsync($"/api/fiscal/documents/{stuck.Id}")).Read<FiscalDocumentOut>();
+            Assert.Equal(FiscalStatus.Authorized, nf.Status);
+            Assert.NotEmpty(nf.Protocol);
+            Assert.Contains("no delivery", nf.StatusMessage);
+            Assert.Equal(HttpStatusCode.Conflict, (await admin.Post($"/api/fiscal/documents/{stuck.Id}/reconcile?minAgeMinutes=0", new { })).StatusCode);
+        }
+        finally
+        {
+            await Enable(admin, false);
+        }
+    }
+
+    [Fact]
+    public async Task Rejection_gives_the_number_back_when_nothing_later_was_issued()
+    {
+        var admin = await api.AdminAsync();
+        var s = await ReleasedSaleAsync(admin);
+        try
+        {
+            var settings = await Enable(admin, true);
+            var rejected = await (await admin.Post($"/api/sales/orders/{s.Order.Id}/deliveries", new DeliveryInput(Today, Notes: StubSefazClient.RejectMarker))).Read<DeliveryOut>();
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, (await admin.Post($"/api/sales/deliveries/{rejected.Id}/ship", new ShipInput(Today, WithoutCertificate: true))).StatusCode);
+            Assert.Equal(settings.NextNumber, (await (await admin.GetAsync("/api/fiscal/settings")).Read<FiscalSettingsDto>()).NextNumber);
+            Assert.Empty((await (await admin.GetAsync($"/api/fiscal/documents?q={settings.NextNumber}")).Read<Page<FiscalDocumentSummary>>()).Items);
+        }
+        finally
+        {
+            await Enable(admin, false);
+        }
+    }
+
+    [Fact]
+    public async Task Inutilization_gives_up_a_skipped_number_after_checks_and_is_recorded()
+    {
+        var admin = await api.AdminAsync();
+        var s = await ReleasedSaleAsync(admin);
+        try
+        {
+            var settings = await Enable(admin, true);
+            var n = settings.NextNumber;
+
+            // Number n is lost (Pending, SEFAZ never saw it); the next sale takes n + 1, so n cannot go back to the sequence and stays as a Rejected gap.
+            var lost = await (await admin.Post($"/api/sales/orders/{s.Order.Id}/deliveries", new DeliveryInput(Today, Notes: StubSefazClient.TimeoutMarker))).Read<DeliveryOut>();
+            Assert.Equal(HttpStatusCode.BadGateway, (await admin.Post($"/api/sales/deliveries/{lost.Id}/ship", new ShipInput(Today, WithoutCertificate: true))).StatusCode);
+            (await admin.Post($"/api/sales/deliveries/{lost.Id}/cancel", new SalesReasonIn("teste"))).EnsureSuccessStatusCode();
+            var ok = await (await admin.Post($"/api/sales/orders/{s.Order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
+            ok = await (await admin.Post($"/api/sales/deliveries/{ok.Id}/ship", new ShipInput(Today, WithoutCertificate: true))).Read<DeliveryOut>();
+            Assert.Equal((n + 1).ToString(), ok.InvoiceNumber);
+            var stuck = Assert.Single((await (await admin.GetAsync($"/api/fiscal/documents?status={FiscalStatus.Pending}&q={n}")).Read<Page<FiscalDocumentSummary>>()).Items);
+            var gap = await (await admin.Post($"/api/fiscal/documents/{stuck.Id}/reconcile?minAgeMinutes=0", new { })).Read<ReconcileResult>();
+            Assert.Equal("rejected", gap.Outcome);
+            Assert.Equal(FiscalStatus.Rejected, gap.Status);
+
+            Task<HttpResponseMessage> Inut(int from, int to, string reason = "Numeracao pulada por falha de comunicacao", string? pw = null) =>
+                admin.Post("/api/fiscal/inutilizations", new InutilizeIn(null, from, to, reason, pw ?? ApiFixture.AdminPassword));
+            Assert.Equal(HttpStatusCode.BadRequest, (await Inut(n, n, "curto")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await Inut(n, n, pw: "senha-errada")).StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, (await Inut(n, n + 1)).StatusCode);        // n + 1 is authorized
+            Assert.Equal(HttpStatusCode.Conflict, (await Inut(n + 2, n + 2)).StatusCode);    // not issued yet
+
+            var done = await (await Inut(n, n)).Read<InutilizationOut>();
+            Assert.Equal((n, n), (done.FromNumber, done.ToNumber));
+            Assert.NotEmpty(done.Protocol);
+            Assert.Equal(HttpStatusCode.Conflict, (await Inut(n, n)).StatusCode);            // already inutilized
+            Assert.Contains(await (await admin.GetAsync("/api/fiscal/inutilizations")).Read<List<InutilizationOut>>(), i => i.Id == done.Id);
+            var nf = await (await admin.GetAsync($"/api/fiscal/documents/{stuck.Id}")).Read<FiscalDocumentOut>();
+            Assert.Contains("Inutilizada", nf.StatusMessage);
+        }
+        finally
+        {
+            await Enable(admin, false);
+        }
+    }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
+import '../reports/danfe_doc.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/page_column.dart';
@@ -10,7 +11,7 @@ import '../widgets/record_list.dart';
 import 'sales_common.dart';
 
 const fiscalKinds = {'Sale': 'Venda', 'OutsideShipment': 'Remessa p/ industrialização'};
-const fiscalStatuses = {'Authorized': 'Autorizada', 'Cancelled': 'Cancelada'};
+const fiscalStatuses = {'Authorized': 'Autorizada', 'Cancelled': 'Cancelada', 'Pending': 'Pendente na SEFAZ', 'Rejected': 'Rejeitada'};
 
 Future<void> openFiscalDocument(BuildContext context, Session session, int id) => Navigator.of(context).push(
   MaterialPageRoute(
@@ -32,11 +33,33 @@ class _FiscalDocumentsScreenState extends State<FiscalDocumentsScreen> {
   String? _kind;
   String? _status;
 
+  Future<void> _inutilize() async {
+    final r = await submitForm(
+      context,
+      api: widget.session.api,
+      title: 'Inutilizar numeração',
+      fields: const [
+        FieldSpec('from', 'Primeiro número', type: FieldType.integer, required: true, hint: 'Só números já pulados (NF rejeitada ou perdida)'),
+        FieldSpec('to', 'Último número', type: FieldType.integer, required: true),
+        FieldSpec('reason', 'Motivo', required: true, hint: 'Mínimo de 15 caracteres (regra da SEFAZ)'),
+        FieldSpec('password', 'Sua senha', required: true, obscure: true, hint: 'Confirma que é você inutilizando'),
+      ],
+      submit: (b) => widget.session.api.post('/api/fiscal/inutilizations', b),
+    );
+    if (r != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Numeração ${r['fromNumber']} a ${r['toNumber']} inutilizada (protocolo ${r['protocol']})')));
+      _list.currentState?.reload();
+    }
+  }
+
   @override
   Widget build(BuildContext context) => RecordList(
     key: _list,
     api: widget.session.api,
     path: '/api/fiscal/documents',
+    fab: widget.session.canFiscalCancel
+        ? FloatingActionButton.extended(onPressed: _inutilize, icon: const Icon(Icons.layers_clear_outlined), label: const Text('Inutilizar numeração'))
+        : null,
     query: {'kind': _kind, 'status': _status},
     searchHint: 'Destinatário, número ou chave',
     filters: [
@@ -117,14 +140,32 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
     }
   }
 
+  Future<void> _reconcile() async {
+    try {
+      final r = await api.post('$base/reconcile?minAgeMinutes=0', {}) as Map<String, dynamic>;
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${r['message']}')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final d = _d;
     final canCancel = s.canFiscalCancel && d?['status'] == 'Authorized';
+    final canReconcile = s.canFiscalCancel && d?['status'] == 'Pending';
     return Scaffold(
       appBar: AppBar(
         title: Text(d == null ? 'Nota fiscal' : 'NF ${d['number']} · ${d['recipientName']}', overflow: TextOverflow.ellipsis),
         actions: [
+          if (d != null && d['status'] != 'Pending' && d['status'] != 'Rejected')
+            IconButton(
+              key: const ValueKey('fiscal-danfe'),
+              tooltip: 'DANFE (PDF)',
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              onPressed: () => printDanfe(context, api, d),
+            ),
           if (canCancel)
             PopupMenuButton<VoidCallback>(
               onSelected: (f) => f(),
@@ -135,6 +176,8 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
                 ),
               ],
             ),
+          if (canReconcile)
+            TextButton.icon(onPressed: _reconcile, icon: const Icon(Icons.sync), label: const Text('Conciliar com a SEFAZ')),
         ],
       ),
       body: _error != null && d == null
@@ -154,7 +197,14 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
           icon: Icons.description_outlined,
           kind: fiscalKinds['${d['kind']}'] ?? '${d['kind']}',
           title: 'NF ${d['number']} · série ${d['series']}',
-          badge: StatusBadge(fiscalStatuses[d['status']] ?? '${d['status']}', tone: cancelled ? Tone.danger : Tone.success),
+          badge: StatusBadge(
+            fiscalStatuses[d['status']] ?? '${d['status']}',
+            tone: switch (d['status']) {
+              'Authorized' => Tone.success,
+              'Pending' => Tone.warning,
+              _ => Tone.danger,
+            },
+          ),
           fields: [
             ('Destinatário', '${d['recipientName']}'),
             ('CNPJ/CPF', '${d['recipientDocument']}'),
@@ -170,6 +220,22 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
             title: 'Autorização simulada',
             message: 'Esta NF foi autorizada pelo emissor de teste (stub). Não foi enviada à SEFAZ e não tem valor fiscal.',
             tone: Tone.warning,
+          ),
+        ],
+        if (d['status'] == 'Pending' || d['status'] == 'Rejected' || d['statusMessage'] != null) ...[
+          gap,
+          NextStepCard(
+            title: switch (d['status']) {
+              'Pending' => 'Aguardando resposta da SEFAZ',
+              'Rejected' => 'NF rejeitada: número perdido',
+              _ => 'Observação',
+            },
+            message: d['status'] == 'Pending'
+                ? 'A resposta da SEFAZ não chegou. Use "Conciliar com a SEFAZ" para consultar a chave antes de emitir de novo. ${fmt(d['statusMessage'])}'
+                : d['status'] == 'Rejected'
+                ? '${fmt(d['statusMessage'])} Se o número não será reaproveitado, use "Inutilizar numeração" na lista de notas.'
+                : fmt(d['statusMessage']),
+            tone: d['status'] == 'Rejected' ? Tone.danger : Tone.warning,
           ),
         ],
         if (cancelled) ...[

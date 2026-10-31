@@ -1,7 +1,8 @@
 namespace Ebt.Core.Entities;
 
 public enum FiscalKind { Sale = 0, OutsideShipment = 1 }
-public enum FiscalStatus { Authorized = 0, Cancelled = 1 }
+/// <summary>Pending: number taken and sent (or about to be) to SEFAZ, outcome not known yet. Rejected: SEFAZ refused it and the number could not be given back (it needs inutilização).</summary>
+public enum FiscalStatus { Authorized = 0, Cancelled = 1, Pending = 2, Rejected = 3 }
 /// <summary>NF-e tpAmb values.</summary>
 public enum SefazEnvironment { Production = 1, Homologation = 2 }
 
@@ -27,7 +28,7 @@ public class FiscalSettings
     public string? ZipCode { get; set; }
     public string? Phone { get; set; }
     public int Series { get; set; } = 1;
-    /// <summary>Next NF number. Only advances when SEFAZ authorizes, so rejections never burn a number.</summary>
+    /// <summary>Next NF number. Advances when a number is reserved (Pending document, committed before SEFAZ is called); a definite rejection gives it back when no later number was taken.</summary>
     public int NextNumber { get; set; } = 2581;
     public int CancelWindowHours { get; set; } = 24;
 }
@@ -85,7 +86,7 @@ public class MonthlyPrice
     public decimal UnitPrice { get; set; }
 }
 
-/// <summary>An NF-e authorized by SEFAZ. Rows exist only after authorization; a rejected NF leaves nothing behind.</summary>
+/// <summary>An NF-e. Created Pending before SEFAZ is called, then Authorized, or removed / kept Rejected on a refusal.</summary>
 public class FiscalDocument
 {
     public int Id { get; set; }
@@ -126,6 +127,8 @@ public class FiscalDocument
     public string? CancelledBy { get; set; }
     public string? CancelReason { get; set; }
     public string? CancelProtocol { get; set; }
+    /// <summary>Why the document is Pending or Rejected (SEFAZ code and message, or the reconciliation result).</summary>
+    public string? StatusMessage { get; set; }
     public List<FiscalDocumentLine> Lines { get; set; } = new();
     public List<FiscalInstallment> Installments { get; set; } = new();
 }
@@ -175,4 +178,20 @@ public class FiscalInstallment
     public int Sequence { get; set; }
     public DateOnly DueDate { get; set; }
     public decimal Amount { get; set; }
+}
+
+/// <summary>A range of NF numbers that SEFAZ accepted as inutilizada (numbers skipped for good, e.g. Rejected documents or a crash before sending).</summary>
+public class FiscalInutilization
+{
+    public int Id { get; set; }
+    public int Series { get; set; }
+    public int FromNumber { get; set; }
+    public int ToNumber { get; set; }
+    public required string Reason { get; set; }
+    public SefazEnvironment Environment { get; set; }
+    public required string Protocol { get; set; }
+    public bool Simulated { get; set; }
+    public required string Xml { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public string? CreatedBy { get; set; }
 }

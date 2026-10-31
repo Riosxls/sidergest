@@ -25,9 +25,11 @@ public record FiscalLineOut(int Id, int Sequence, int? ProductId, int? Productio
 public record FiscalInstallmentOut(int Sequence, DateOnly DueDate, decimal Amount);
 public record FiscalDocumentOut(int Id, FiscalKind Kind, FiscalStatus Status, string CfopCode, int Series, int Number, string AccessKey, string Protocol, SefazEnvironment Environment, bool Simulated, DateTimeOffset IssuedAt, string? IssuedBy,
     int? DeliveryId, string? DeliveryReference, int? OutsideShipmentId, int? CustomerId, int? SupplierId, string RecipientName, string RecipientDocument, string RecipientUf, decimal ProductsTotal, decimal FreightTotal, decimal IcmsBase,
-    decimal IcmsTotal, decimal IpiTotal, decimal PisTotal, decimal CofinsTotal, decimal InvoiceTotal, string? AdditionalInfo, DateTimeOffset? CancelledAt, string? CancelledBy, string? CancelReason, string? CancelProtocol,
+    decimal IcmsTotal, decimal IpiTotal, decimal PisTotal, decimal CofinsTotal, decimal InvoiceTotal, string? AdditionalInfo, DateTimeOffset? CancelledAt, string? CancelledBy, string? CancelReason, string? CancelProtocol, string? StatusMessage,
     IReadOnlyList<FiscalLineOut> Lines, IReadOnlyList<FiscalInstallmentOut> Installments);
 public record CancelInvoiceIn(string? Reason, string? Password);
+public record InutilizeIn(int? Series, int From, int To, string? Reason, string? Password);
+public record InutilizationOut(int Id, int Series, int FromNumber, int ToNumber, string Reason, SefazEnvironment Environment, string Protocol, bool Simulated, DateTimeOffset CreatedAt, string? CreatedBy);
 
 public sealed class FiscalExceptionHandler : IExceptionHandler
 {
@@ -68,6 +70,25 @@ public static class FiscalEndpoints
         MapSettings(app);
         MapRules(app);
         MapDocuments(app);
+        MapInutilizations(app);
+    }
+
+    private static void MapInutilizations(WebApplication app)
+    {
+        var g = app.MapGroup("/api/fiscal/inutilizations").WithTags("Fiscal");
+        static InutilizationOut ToOut(FiscalInutilization i) => new(i.Id, i.Series, i.FromNumber, i.ToNumber, i.Reason, i.Environment, i.Protocol, i.Simulated, i.CreatedAt, i.CreatedBy);
+        g.MapGet("/", async (EbtDbContext db, CancellationToken ct) =>
+            await db.FiscalInutilizations.AsNoTracking().OrderByDescending(i => i.CreatedAt).Select(i => new InutilizationOut(i.Id, i.Series, i.FromNumber, i.ToNumber, i.Reason, i.Environment, i.Protocol, i.Simulated, i.CreatedAt, i.CreatedBy)).ToListAsync(ct))
+            .RequireAuthorization(Policies.Read);
+        g.MapPost("/", async (InutilizeIn i, EbtDbContext db, FiscalService fiscal, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            var errors = Errors().Require(Has(i.Reason), "reason", "Required").Require(Has(i.Password), "password", "Type your password to confirm the inutilização");
+            if (errors.Count > 0) return Results.ValidationProblem(errors);
+            var who = principal.Identity?.Name;
+            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == who && u.Active, ct);
+            if (user is null || !AuthEndpoints.VerifyPassword(user, i.Password!)) return Results.Problem("Wrong password", statusCode: StatusCodes.Status403Forbidden);
+            return Results.Ok(ToOut(await fiscal.InutilizeAsync(i.Series, i.From, i.To, i.Reason, who, ct)));
+        }).RequireAuthorization(FiscalPolicies.Cancel);
     }
 
     private static void MapSettings(WebApplication app)
@@ -236,7 +257,13 @@ public static class FiscalEndpoints
         g.MapGet("/{id:int}/xml", async (int id, EbtDbContext db, CancellationToken ct) =>
             await db.FiscalDocuments.AsNoTracking().Where(d => d.Id == id).Select(d => d.Xml).FirstOrDefaultAsync(ct) is { } xml ? Results.Content(xml, "application/xml") : Results.NotFound());
 
-        g.MapPost("/{id:int}/cancel", async (int id, CancelInvoiceIn i, EbtDbContext db, FiscalService fiscal, SalesService sales, ClaimsPrincipal principal, CancellationToken ct) =>
+        // Conciliação: resolves Pending NFs (answer lost, crash) by asking SEFAZ for the access key. minAgeMinutes protects requests still waiting for SEFAZ.
+        g.MapPost("/{id:int}/reconcile", async (int id, FiscalService fiscal, int? minAgeMinutes, CancellationToken ct) =>
+            Results.Ok(await fiscal.ReconcileAsync(id, Math.Max(minAgeMinutes ?? 10, 0), ct))).RequireAuthorization(FiscalPolicies.Cancel);
+        g.MapPost("/reconcile", async (FiscalService fiscal, int? minAgeMinutes, CancellationToken ct) =>
+            Results.Ok(await fiscal.ReconcilePendingAsync(Math.Max(minAgeMinutes ?? 10, 0), ct))).RequireAuthorization(FiscalPolicies.Cancel);
+
+        g.MapPost("/{id:int}/cancel",async (int id, CancelInvoiceIn i, EbtDbContext db, FiscalService fiscal, SalesService sales, ClaimsPrincipal principal, CancellationToken ct) =>
         {
             var kind = await db.FiscalDocuments.AsNoTracking().Where(d => d.Id == id).Select(d => (FiscalKind?)d.Kind).FirstOrDefaultAsync(ct);
             if (kind is null) return Results.NotFound();
@@ -257,7 +284,7 @@ public static class FiscalEndpoints
         if (d is null) return null;
         return new FiscalDocumentOut(d.Id, d.Kind, d.Status, d.CfopCode, d.Series, d.Number, d.AccessKey, d.Protocol, d.Environment, d.Simulated, d.IssuedAt, d.IssuedBy, d.DeliveryId, d.Delivery?.Reference, d.OutsideShipmentId, d.CustomerId,
             d.SupplierId, d.RecipientName, d.RecipientDocument, d.RecipientUf, d.ProductsTotal, d.FreightTotal, d.IcmsBase, d.IcmsTotal, d.IpiTotal, d.PisTotal, d.CofinsTotal, d.InvoiceTotal, d.AdditionalInfo, d.CancelledAt, d.CancelledBy,
-            d.CancelReason, d.CancelProtocol,
+            d.CancelReason, d.CancelProtocol, d.StatusMessage,
             d.Lines.OrderBy(l => l.Sequence).Select(l => new FiscalLineOut(l.Id, l.Sequence, l.ProductId, l.ProductionOrderId, l.Code, l.Description, l.Ncm, l.Unit, l.Quantity, l.UnitPrice, l.Total, l.Freight, l.IcmsCst, l.IcmsBase, l.IcmsPercent,
                 l.IcmsValue, l.IpiCst, l.IpiPercent, l.IpiValue, l.PisCst, l.PisPercent, l.PisValue, l.CofinsCst, l.CofinsPercent, l.CofinsValue)).ToList(),
             d.Installments.OrderBy(i => i.Sequence).Select(i => new FiscalInstallmentOut(i.Sequence, i.DueDate, i.Amount)).ToList());
