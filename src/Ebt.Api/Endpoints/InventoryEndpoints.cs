@@ -1,3 +1,4 @@
+using Ebt.Core.Purchasing;
 using System.Security.Claims;
 using Ebt.Api.Infrastructure;
 using Ebt.Core.Data;
@@ -24,6 +25,8 @@ public record ReservationOut(int Id, int? MaterialId, int? ProductId, int? Locat
 public record StockSettingsIn(bool AllowNegativeStock, bool DeductIcmsFromAverage, decimal CuttingServicePerKg, decimal ScrapResalePerKg, decimal ScrapPercent);
 public record ClosingOut(int Period, string ClosedBy, DateTimeOffset ClosedAt);
 public record AverageCostOut(int Period, decimal? ThicknessMm, int? MaterialId, decimal OpeningQuantity, decimal OpeningAverage, decimal PurchaseQuantity, decimal PurchaseValue, decimal ServiceQuantity, decimal ServiceValue, decimal MonthAverage, decimal Average, decimal AverageGross, bool Imported);
+public record LowStockRequisitionsIn(List<int>? MaterialIds);
+public record LowStockRequisitionsOut(IReadOnlyList<int> RequisitionIds, IReadOnlyList<string> Skipped);
 
 public static class InventoryEndpoints
 {
@@ -110,6 +113,25 @@ public static class InventoryEndpoints
                 .ToListAsync(ct);
             return Results.Ok(new Page<StockBalanceOut>(items, total, s, n));
         });
+
+        stock.MapGet("/low-stock", async (EbtDbContext db, CancellationToken ct) => Results.Ok(await LowStock.ListAsync(db, null, ct)));
+
+        // One requisition draft (pending approval) per selected material that is purchasable, below its minimum, has none open and a positive suggestion.
+        stock.MapPost("/low-stock/requisitions", async (LowStockRequisitionsIn i, EbtDbContext db, PurchasingService purchasing, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            if (i.MaterialIds is not { Count: > 0 }) return Results.ValidationProblem(new Dictionary<string, string[]> { ["materialIds"] = ["Choose at least one material"] });
+            var created = new List<int>();
+            var skipped = new List<string>();
+            foreach (var row in await LowStock.ListAsync(db, i.MaterialIds, ct))
+            {
+                if (!row.Purchasable) { skipped.Add($"{row.Code}: not a purchased material"); continue; }
+                if (row.HasOpenRequisition) { skipped.Add($"{row.Code}: already has an open requisition"); continue; }
+                if (row.SuggestedPurchase <= 0) { skipped.Add($"{row.Code}: nothing to order, incoming covers the target"); continue; }
+                var r = await purchasing.CreateRequisitionAsync(new RequisitionInput(row.MaterialId, null, null, row.SuggestedPurchase, null, null, "Reposição de estoque mínimo", $"Saldo {row.OnHand:0.###} {row.StockUnit} abaixo do mínimo {row.MinStock:0.###}"), Who(user), ct);
+                created.Add(r.Id);
+            }
+            return Results.Ok(new LowStockRequisitionsOut(created, skipped));
+        }).RequireAuthorization(PurchasingPolicies.Request);
 
         stock.MapGet("/availability", async (EbtDbContext db, StockService svc, int? materialId, int? productId, CancellationToken ct) =>
         {

@@ -32,7 +32,8 @@ public sealed record DeliveryLineInput(int OrderLineId, decimal Quantity);
 
 public sealed record DeliveryInput(DateOnly PlannedDate, int? AddressId = null, string? Carrier = null, IReadOnlyList<DeliveryLineInput>? Lines = null, string? Notes = null);
 
-public sealed record ShipInput(DateOnly Date, string? InvoiceNumber = null, string? Carrier = null, string? VehiclePlate = null, decimal? GrossWeightKg = null, string? Cfop = null, decimal? Freight = null, string? LotNumber = null, decimal? InvoicedValue = null, bool WithoutCertificate = false);
+public sealed record EmitInvoiceInput(string? Cfop = null, decimal? Freight = null, string? Carrier = null, string? VehiclePlate = null, decimal? GrossWeightKg = null);
+public sealed record ShipInput(DateOnly Date, string? InvoiceNumber = null, string? Carrier = null, string? VehiclePlate = null, decimal? GrossWeightKg = null, string? Cfop = null, decimal? Freight = null, string? LotNumber = null, decimal? InvoicedValue = null, bool WithoutCertificate = false, bool OverrideCredit = false);
 
 public sealed record RescheduleLine(int LineId, DateOnly DueDate);
 
@@ -49,7 +50,7 @@ public sealed record QuoteTotals(decimal Products, decimal Ipi, decimal Total, d
 
 public sealed record DuplicateInput(int? CustomerId = null);
 
-public sealed record CreditCheck(decimal? Limit, decimal Open, decimal ThisOrder, bool Exceeded);
+public sealed record CreditCheck(decimal? Limit, decimal Open, decimal ThisOrder, bool Exceeded, string? LimitSource = null);
 
 public sealed record OrderLineProgress(int LineId, decimal Quantity, decimal FromStock, decimal Produced, decimal Shipped, decimal Planned, decimal Remaining, decimal Available, string? ProductionReference, ProductionOrderStatus? ProductionStatus, bool Ready);
 

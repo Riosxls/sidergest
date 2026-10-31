@@ -15,9 +15,10 @@ public class PurchasingSettings
     public StockLocation? ReceivingLocation { get; set; }
 }
 
-public class PurchaseRequisition
+public class PurchaseRequisition : IHasSource
 {
     public int Id { get; set; }
+    public DataSource Source { get; set; }
     public int Number { get; set; }
     public int? MaterialId { get; set; }
     public Material? Material { get; set; }
@@ -85,9 +86,10 @@ public class QuotationBid
     public DateTimeOffset? RespondedAt { get; set; }
 }
 
-public class PurchaseOrder
+public class PurchaseOrder : IHasSource
 {
     public int Id { get; set; }
+    public DataSource Source { get; set; }
     public int Number { get; set; }
     public int SupplierId { get; set; }
     public Supplier? Supplier { get; set; }

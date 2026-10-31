@@ -33,6 +33,36 @@ public class InventoryTests(ApiFixture api)
         (await (await c.GetAsync($"/api/stock/balances?materialId={materialId}&locationId={locationId}")).Read<Page<StockBalanceOut>>()).Items.Sum(b => b.Quantity);
 
     [Fact]
+    public async Task Low_stock_lists_materials_under_minimum_and_drafts_one_requisition()
+    {
+        var admin = await api.AdminAsync();
+        var m = await (await admin.Post("/api/materials", new MaterialIn(Code("M"), "Bobina baixa", null, null, null, "KG", "KG", 1m, 1.5m, 80m, null, null, null, 100m, 300m, false, true, false))).Read<MaterialOut>();
+        var loc = await Location(admin);
+        await Post(admin, MovementType.AdjustmentIn, Today, new StockLine(m.Id, null, loc.Id, 40m, UnitCost: 5m));
+
+        var rows = await (await admin.GetAsync("/api/stock/low-stock")).Read<List<LowStockRow>>();
+        var row = Assert.Single(rows, r => r.MaterialId == m.Id);
+        Assert.Equal(40m, row.OnHand);
+        Assert.Equal(60m, row.Missing);
+        Assert.Equal(260m, row.SuggestedPurchase);
+        Assert.False(row.HasOpenRequisition);
+
+        var made = await (await admin.Post("/api/stock/low-stock/requisitions", new LowStockRequisitionsIn([m.Id]))).Read<LowStockRequisitionsOut>();
+        var id = Assert.Single(made.RequisitionIds);
+        var req = await (await admin.GetAsync($"/api/requisitions/{id}")).Read<RequisitionOut>();
+        Assert.Equal(260m, req.Quantity);
+        Assert.Equal(RequisitionStatus.PendingApproval, req.Status);
+
+        Assert.True(Assert.Single(await (await admin.GetAsync("/api/stock/low-stock")).Read<List<LowStockRow>>(), r => r.MaterialId == m.Id).HasOpenRequisition);
+        var again = await (await admin.Post("/api/stock/low-stock/requisitions", new LowStockRequisitionsIn([m.Id]))).Read<LowStockRequisitionsOut>();
+        Assert.Empty(again.RequisitionIds);
+        Assert.Single(again.Skipped);
+
+        await Post(admin, MovementType.AdjustmentIn, Today, new StockLine(m.Id, null, loc.Id, 70m, UnitCost: 5m));
+        Assert.DoesNotContain(await (await admin.GetAsync("/api/stock/low-stock")).Read<List<LowStockRow>>(), r => r.MaterialId == m.Id);
+    }
+
+    [Fact]
     public async Task Roles_guard_stock_writes()
     {
         var admin = await api.AdminAsync();

@@ -162,11 +162,12 @@ public static class ProductionEndpoints
     {
         var g = app.MapGroup("/api/production/orders").WithTags("Production").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<ProductionOrder>());
 
-        g.MapGet("/", async (EbtDbContext db, ProductionOrderStatus? status, ProductionOrderKind? kind, int? productId, int? parentOrderId, DateOnly? dueFrom, DateOnly? dueTo, bool? open, string? q, int? skip, int? take, CancellationToken ct) =>
+        g.MapGet("/", async (EbtDbContext db, ProductionOrderStatus? status, ProductionOrderKind? kind, int? productId, int? parentOrderId, DateOnly? dueFrom, DateOnly? dueTo, bool? open, bool? excludeTest, string? q, int? skip, int? take, CancellationToken ct) =>
         {
             var o = db.ProductionOrders.AsNoTracking();
             if (status is { } st) o = o.Where(x => x.Status == st);
             if (open == true) o = o.Where(x => ProductionService.Open.Contains(x.Status));
+            if (excludeTest == true) o = o.Where(x => x.Source != DataSource.Test);
             if (kind is { } k) o = o.Where(x => x.Kind == k);
             if (productId is { } p) o = o.Where(x => x.ProductId == p);
             if (parentOrderId is { } par) o = o.Where(x => x.ParentOrderId == par);
@@ -185,7 +186,7 @@ public static class ProductionEndpoints
             var n = Math.Clamp(top ?? 50, 1, 200);
             var today = Ebt.Core.Services.Clock.Today();
             var cutoff = today.AddDays(-Math.Max(legacyDays ?? 30, 1));
-            var open = db.ProductionOrders.AsNoTracking().Where(o => ProductionService.Open.Contains(o.Status));
+            var open = db.ProductionOrders.AsNoTracking().Where(o => o.Source != DataSource.Test && ProductionService.Open.Contains(o.Status));
             var counts = (await open.GroupBy(o => o.Status).Select(x => new { x.Key, N = x.Count() }).ToListAsync(ct)).ToDictionary(x => x.Key.ToString(), x => x.N);
             var late = open.Where(o => o.DueDate < today || (o.AdjustedEnd ?? o.PlannedEnd) > o.DueDate);
             var legacy = late.Where(o => o.DueDate < cutoff);
@@ -383,13 +384,13 @@ public static class ProductionEndpoints
         g.MapPost("/schedule", async (ProductionService svc, CancellationToken ct) =>
             Results.Ok(await svc.ScheduleAsync(null, Ebt.Core.Services.Clock.Today(), ct))).RequireAuthorization(ProductionPolicies.Plan);
 
-        g.MapGet("/load", async (ProductionService svc, DateOnly? from, DateOnly? to, string? groupBy, CancellationToken ct) =>
+        g.MapGet("/load", async (ProductionService svc, DateOnly? from, DateOnly? to, string? groupBy, bool? includeTest, CancellationToken ct) =>
         {
             var start = from ?? Ebt.Core.Services.Clock.Today();
             var byWorkCenter = string.Equals(groupBy, "workCenter", StringComparison.OrdinalIgnoreCase);
             if (groupBy is not null && !byWorkCenter && !string.Equals(groupBy, "machine", StringComparison.OrdinalIgnoreCase))
                 return Results.ValidationProblem(Errors().Require(false, "groupBy", "machine or workCenter"));
-            return Results.Ok(await svc.LoadAsync(start, to ?? start.AddDays(55), byWorkCenter, ct));
+            return Results.Ok(await svc.LoadAsync(start, to ?? start.AddDays(55), byWorkCenter, ct, includeTest == true));
         });
     }
 

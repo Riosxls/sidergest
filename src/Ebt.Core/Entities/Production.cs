@@ -56,9 +56,10 @@ public class Holiday
     public required string Name { get; set; }
 }
 
-public class ProductionOrder
+public class ProductionOrder : IHasSource
 {
     public int Id { get; set; }
+    public DataSource Source { get; set; }
     public ProductionOrderKind Kind { get; set; }
     public int Number { get; set; }
     public required string Reference { get; set; }

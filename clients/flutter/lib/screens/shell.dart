@@ -15,6 +15,7 @@ import 'deliveries.dart';
 import 'entity_list.dart';
 import 'fiscal.dart';
 import 'modules.dart';
+import 'low_stock.dart';
 import 'orders.dart';
 import 'product_detail.dart';
 import 'audit.dart';
@@ -90,6 +91,7 @@ List<NavItem> _screens() => [
     (s, f, go) => LotsView(session: s, initialStatus: f ?? (s.canStock ? 'Quarantine' : null)),
   ),
   NavItem('reservations', Icons.bookmark_border, 'Reservas', 'Estoque', (s, f, go) => ReservationsView(session: s)),
+  NavItem('low-stock', Icons.trending_down, 'Estoque mínimo', 'Estoque', (s, f, go) => LowStockScreen(session: s)),
   NavItem('steel', Icons.layers_outlined, 'Controle de aço', 'Estoque', (s, f, go) => SteelScreen(session: s)),
   NavItem('closing', Icons.calculate_outlined, 'Fechamento e custo médio', 'Estoque', (s, f, go) => ClosingScreen(session: s)),
   NavItem('locations', stockLocations.icon, stockLocations.title, 'Estoque', (s, f, go) => EntityListScreen(session: s, spec: stockLocations)),

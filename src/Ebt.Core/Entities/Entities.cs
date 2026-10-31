@@ -6,9 +6,10 @@ public enum TubeShape { Circular = 0, Rectangular = 1 }
 public enum RevisionKind { Structure = 0, Process = 1, Drawing = 2 }
 public enum UserRole { Admin = 0, Engineering = 1, Reader = 2, Stock = 3, Purchasing = 4, Production = 5, Sales = 6, SalesManager = 7 }
 
-public class Customer
+public class Customer : IHasSource
 {
     public int Id { get; set; }
+    public DataSource Source { get; set; }
     public string? LegacyCode { get; set; }
     public required string Name { get; set; }
     public string? TradeName { get; set; }
@@ -28,6 +29,8 @@ public class Customer
     public string? Contact { get; set; }
     public string? Email { get; set; }
     public string? Phone { get; set; }
+    /// <summary>Overrides the credit limit of the payment term when set.</summary>
+    public decimal? CreditLimit { get; set; }
     public int? DefaultPaymentTermId { get; set; }
     public PaymentTerm? DefaultPaymentTerm { get; set; }
     public List<CustomerAddress> Addresses { get; set; } = new();
@@ -56,9 +59,10 @@ public class CustomerAddress
     public string? Phone { get; set; }
 }
 
-public class Supplier
+public class Supplier : IHasSource
 {
     public int Id { get; set; }
+    public DataSource Source { get; set; }
     public string? LegacyCode { get; set; }
     public required string Name { get; set; }
     public string? TradeName { get; set; }
@@ -108,9 +112,10 @@ public class MaterialSubgroup
     public string? Standard { get; set; }
 }
 
-public class Material
+public class Material : IHasSource
 {
     public int Id { get; set; }
+    public DataSource Source { get; set; }
     public required string Code { get; set; }
     public required string Description { get; set; }
     public int? ClassId { get; set; }
@@ -169,9 +174,10 @@ public class StandardOperation
     public required string Name { get; set; }
 }
 
-public class Product
+public class Product : IHasSource
 {
     public int Id { get; set; }
+    public DataSource Source { get; set; }
     public required string Code { get; set; }
     public required string Name { get; set; }
     public ProductKind Kind { get; set; }

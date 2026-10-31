@@ -126,12 +126,13 @@ public static class PurchasingEndpoints
     {
         var g = app.MapGroup("/api/requisitions").WithTags("Requisitions");
 
-        g.MapGet("/", async (EbtDbContext db, string? q, RequisitionStatus? status, int? materialId, string? department, int? skip, int? take, CancellationToken ct) =>
+        g.MapGet("/", async (EbtDbContext db, string? q, RequisitionStatus? status, int? materialId, string? department, bool? excludeTest, int? skip, int? take, CancellationToken ct) =>
         {
             var query = db.PurchaseRequisitions.AsNoTracking();
             if (status is { } st) query = query.Where(r => r.Status == st);
             if (materialId is { } m) query = query.Where(r => r.MaterialId == m);
             if (Clean(department) is { } d) query = query.Where(r => r.Department == d);
+            if (excludeTest == true) query = query.Where(r => r.Source != DataSource.Test);
             if (Clean(q) is { } s) query = query.Where(r => EF.Functions.ILike(r.Description, Like(s)) || r.Number.ToString() == s);
             return await PageAsync(ProjectRequisitions(query.OrderByDescending(r => r.Number)), query, skip, take, ct);
         }).RequireAuthorization(Policies.Read);
@@ -268,19 +269,20 @@ public static class PurchasingEndpoints
     {
         var g = app.MapGroup("/api/purchase-orders").WithTags("Purchase orders").AddEndpointFilter(new RowVersionFilter<PurchaseOrder>());
 
-        // Open-order count plus the suppliers with most open orders, for the dashboard (no page of orders needed).
+        // Open-order count plus the suppliers with most open orders, for the dashboard (no page of orders needed). Test records never count.
         g.MapGet("/open-summary", async (EbtDbContext db, int? top, CancellationToken ct) =>
         {
-            var open = db.PurchaseOrders.AsNoTracking().Where(o => o.Status == PurchaseOrderStatus.Open || o.Status == PurchaseOrderStatus.PartiallyReceived);
+            var open = db.PurchaseOrders.AsNoTracking().Where(o => o.Source != DataSource.Test && (o.Status == PurchaseOrderStatus.Open || o.Status == PurchaseOrderStatus.PartiallyReceived));
             var suppliers = await open.GroupBy(o => o.SupplierId).OrderByDescending(x => x.Count()).ThenBy(x => x.Key).Take(Math.Clamp(top ?? 8, 1, 50)).Select(x => x.Key).ToListAsync(ct);
             return Results.Ok(new OpenOrdersSummaryOut(await open.CountAsync(ct), suppliers));
         }).RequireAuthorization(Policies.Read);
 
-        g.MapGet("/", async (EbtDbContext db, PurchaseOrderStatus? status, int? supplierId, int? materialId, bool? open, int? skip, int? take, CancellationToken ct) =>
+        g.MapGet("/", async (EbtDbContext db, PurchaseOrderStatus? status, int? supplierId, int? materialId, bool? open, bool? excludeTest, int? skip, int? take, CancellationToken ct) =>
         {
             var query = db.PurchaseOrders.AsNoTracking();
             if (status is { } st) query = query.Where(o => o.Status == st);
             if (open == true) query = query.Where(o => o.Status == PurchaseOrderStatus.Open || o.Status == PurchaseOrderStatus.PartiallyReceived);
+            if (excludeTest == true) query = query.Where(o => o.Source != DataSource.Test);
             if (supplierId is { } sid) query = query.Where(o => o.SupplierId == sid);
             if (materialId is { } mid) query = query.Where(o => o.Lines.Any(l => l.MaterialId == mid));
             var projected = query.OrderByDescending(o => o.Number).Select(o => new OrderSummaryOut(o.Id, o.Number, o.SupplierId, o.Supplier!.Name, o.Status, o.IssuedAt,
@@ -366,12 +368,13 @@ public static class PurchasingEndpoints
 
     private static void MapTracking(WebApplication app)
     {
-        app.MapGet("/api/purchasing/overdue", async (EbtDbContext db, DateOnly? asOf, int? supplierId, CancellationToken ct) =>
+        app.MapGet("/api/purchasing/overdue", async (EbtDbContext db, DateOnly? asOf, int? supplierId, bool? includeTest, CancellationToken ct) =>
         {
             var day = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
             var query = db.PurchaseOrderLines.AsNoTracking().Where(l => !l.Closed && l.ReceivedQuantity < l.Quantity && l.DueDate < day
                 && (l.PurchaseOrder!.Status == PurchaseOrderStatus.Open || l.PurchaseOrder.Status == PurchaseOrderStatus.PartiallyReceived));
             if (supplierId is { } sid) query = query.Where(l => l.PurchaseOrder!.SupplierId == sid);
+            if (includeTest != true) query = query.Where(l => l.PurchaseOrder!.Source != DataSource.Test);
             var rows = await query.OrderBy(l => l.DueDate).Select(l => new { l, o = l.PurchaseOrder!, s = l.PurchaseOrder!.Supplier!.Name }).ToListAsync(ct);
             return rows.Select(x => new OverdueLineOut(x.o.Id, x.o.Number, x.l.Id, x.l.LineNumber, x.o.SupplierId, x.s, x.l.Description, x.l.Unit, x.l.Quantity, x.l.ReceivedQuantity,
                 x.l.Quantity - x.l.ReceivedQuantity, x.l.DueDate, day.DayNumber - x.l.DueDate.DayNumber)).ToList();

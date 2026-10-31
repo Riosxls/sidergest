@@ -644,6 +644,11 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("contact");
 
+                    b.Property<decimal?>("CreditLimit")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("credit_limit");
+
                     b.Property<int?>("DefaultPaymentTermId")
                         .HasColumnType("integer")
                         .HasColumnName("default_payment_term_id");
@@ -683,6 +688,10 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<string>("Phone")
                         .HasColumnType("text")
                         .HasColumnName("phone");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer")
+                        .HasColumnName("source");
 
                     b.Property<string>("StateRegistration")
                         .HasColumnType("text")
@@ -904,6 +913,10 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<string>("ShippedBy")
                         .HasColumnType("text")
                         .HasColumnName("shipped_by");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer")
+                        .HasColumnName("source");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -1997,6 +2010,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("requires_inspection");
 
+                    b.Property<int>("Source")
+                        .HasColumnType("integer")
+                        .HasColumnName("source");
+
                     b.Property<string>("StockUnit")
                         .IsRequired()
                         .HasColumnType("text")
@@ -2513,6 +2530,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("shape");
 
+                    b.Property<int>("Source")
+                        .HasColumnType("integer")
+                        .HasColumnName("source");
+
                     b.Property<string>("StockUnit")
                         .IsRequired()
                         .HasColumnType("text")
@@ -2727,6 +2748,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("service_cost");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer")
+                        .HasColumnName("source");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -3206,6 +3231,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("payment_terms");
 
+                    b.Property<int>("Source")
+                        .HasColumnType("integer")
+                        .HasColumnName("source");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer")
                         .HasColumnName("status");
@@ -3411,6 +3440,10 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<string>("RequestedBy")
                         .HasColumnType("text")
                         .HasColumnName("requested_by");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer")
+                        .HasColumnName("source");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -3959,6 +3992,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("sent_to");
 
+                    b.Property<int>("Source")
+                        .HasColumnType("integer")
+                        .HasColumnName("source");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer")
                         .HasColumnName("status");
@@ -4419,6 +4456,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)")
                         .HasColumnName("salesperson");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer")
+                        .HasColumnName("source");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -5103,6 +5144,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("reversed");
 
+                    b.Property<int>("Source")
+                        .HasColumnType("integer")
+                        .HasColumnName("source");
+
                     b.Property<int?>("SupplierId")
                         .HasColumnType("integer")
                         .HasColumnName("supplier_id");
@@ -5497,6 +5542,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
                         .HasColumnName("name");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer")
+                        .HasColumnName("source");
 
                     b.Property<string>("TradeName")
                         .HasColumnType("text")

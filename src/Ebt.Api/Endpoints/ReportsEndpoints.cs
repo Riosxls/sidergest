@@ -24,10 +24,10 @@ public static class ReportsEndpoints
     {
         var g = app.MapGroup("/api/reports").WithTags("Reports").RequireAuthorization(Policies.Read);
 
-        g.MapGet("/material-consumption", async (EbtDbContext db, BomService bom, DateOnly? from, DateOnly? to, int? groupId, string? materialCode, string? q, CancellationToken ct) =>
+        g.MapGet("/material-consumption", async (EbtDbContext db, BomService bom, DateOnly? from, DateOnly? to, int? groupId, string? materialCode, string? q, bool? includeTest, CancellationToken ct) =>
         {
             var (f, t) = Range(from, to);
-            var ship = await ShippedLines(db, f, t, ct);
+            var ship = await ShippedLines(db, f, t, includeTest == true, ct);
             var productIds = ship.Select(s => s.ProductId).Distinct().ToList();
 
             // Materials per unit of product: from the production order when the line was produced, otherwise from the product BOM.
@@ -71,11 +71,11 @@ public static class ReportsEndpoints
             return Results.Ok(new MaterialConsumptionOut(f, t, list, list.Sum(r => r.QuantityKg)));
         });
 
-        g.MapGet("/billing-summary", async (EbtDbContext db, DateOnly? from, DateOnly? to, string? company, CancellationToken ct) =>
+        g.MapGet("/billing-summary", async (EbtDbContext db, DateOnly? from, DateOnly? to, string? company, bool? includeTest, CancellationToken ct) =>
         {
             var (f, t) = Range(from, to);
             var co = Has(company) ? SalesService.CompanyOf(company) : null;
-            var ship = await ShippedLines(db, f, t, ct);
+            var ship = await ShippedLines(db, f, t, includeTest == true, ct);
 
             var sales = ship.Select(s => new Sale(s.CustomerId, s.Customer, s.Company, s.Date, s.Quantity,
                 Money(s.Quantity * s.UnitPrice), Money(s.Quantity * s.UnitPrice * s.IpiPercent / 100m), Money(s.Quantity * s.UnitPrice * s.IcmsPercent / 100m),
@@ -128,12 +128,12 @@ public static class ReportsEndpoints
     private sealed record Shipped(int CustomerId, string Customer, string Company, DateOnly Date, decimal Quantity, decimal UnitPrice, decimal IpiPercent, decimal IcmsPercent,
         int ProductId, decimal? NetWeightKg, int? ProductionOrderId, string? ProductionReference, decimal PoQuantity, decimal? PoMaterialCost, string DeliveryReference, string? InvoiceNumber, string ProductCode);
 
-    private static async Task<List<Shipped>> ShippedLines(EbtDbContext db, DateOnly from, DateOnly to, CancellationToken ct)
+    private static async Task<List<Shipped>> ShippedLines(EbtDbContext db, DateOnly from, DateOnly to, bool includeTest, CancellationToken ct)
     {
         var lo = new DateTimeOffset(from.AddDays(-1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var hi = new DateTimeOffset(to.AddDays(2).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var rows = await db.DeliveryLines.AsNoTracking()
-            .Where(l => (l.Delivery!.Status == DeliveryStatus.Shipped || l.Delivery.Status == DeliveryStatus.Delivered) && l.Delivery.ShippedAt >= lo && l.Delivery.ShippedAt < hi)
+            .Where(l => (includeTest || l.Delivery!.Source != DataSource.Test) && (l.Delivery!.Status == DeliveryStatus.Shipped || l.Delivery.Status == DeliveryStatus.Delivered) && l.Delivery.ShippedAt >= lo && l.Delivery.ShippedAt < hi)
             .Select(l => new
             {
                 l.Quantity, ShippedAt = l.Delivery!.ShippedAt!.Value, DeliveryReference = l.Delivery.Reference, l.Delivery.InvoiceNumber,

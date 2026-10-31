@@ -51,9 +51,10 @@ public class StockLot
     public DateTimeOffset? InspectedAt { get; set; }
 }
 
-public class StockDocument
+public class StockDocument : IHasSource
 {
     public int Id { get; set; }
+    public DataSource Source { get; set; }
     public MovementType Type { get; set; }
     public DateOnly Date { get; set; }
     public string? Reference { get; set; }

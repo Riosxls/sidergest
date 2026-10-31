@@ -24,7 +24,7 @@ public record SalesReasonIn(string? Reason);
 public record OrderCancelIn(string? Reason, bool CancelProduction = false);
 public record SalesOrderIn(int CustomerId, int AddressId, List<SalesLineInput> Lines, string? CustomerPo = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, string? Notes = null, bool OverrideCredit = false, string? Company = null, string? CustomPaymentTerm = null,
     BillTo BillTo = BillTo.Ebt, OrderOrigin Origin = OrderOrigin.System, string? Salesperson = null);
-public record SalesReleaseIn(bool UseStock = true);
+public record SalesReleaseIn(bool UseStock = true, bool OverrideCredit = false);
 public record ConfirmDeliveryIn(DateOnly? Date = null, string? ReceivedBy = null);
 
 public record QuoteLineOut(int Id, int Sequence, int ProductId, string ProductCode, string? CustomerPartNumber, string Description, decimal Quantity, string Unit, decimal UnitPrice, decimal? ListPrice, decimal? DiscountPercent,
@@ -69,6 +69,7 @@ public static class SalesPolicies
     public const string Approve = "sales-approve";
     public const string Release = "sales-release";
     public const string Ship = "sales-ship";
+    public const string PriceEdit = "price-edit";
 }
 
 public sealed class SalesExceptionHandler : IExceptionHandler
@@ -163,7 +164,7 @@ public static class SalesEndpoints
                 .Require(i.ValidTo is null || i.ValidTo >= i.ValidFrom, "validTo", "Before the start date"),
             Search = (q, s) => q.Where(p => EF.Functions.ILike(p.Product!.Code, Like(s)) || EF.Functions.ILike(p.Product.Name, Like(s)) || EF.Functions.ILike(p.Customer!.Name, Like(s))),
             Order = q => q.OrderBy(p => p.Product!.Code).ThenBy(p => p.CustomerId).ThenByDescending(p => p.ValidFrom),
-            WritePolicy = SalesPolicies.Sell
+            WritePolicy = SalesPolicies.PriceEdit
         });
 
         app.MapGet("/api/sales/price", async (int productId, int? customerId, EbtDbContext db, SalesService svc, CancellationToken ct) =>
@@ -382,7 +383,7 @@ public static class SalesEndpoints
 
         g.MapPost("/{id:int}/release", async (int id, SalesReleaseIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
-            await svc.ReleaseAsync(id, i.UseStock, Who(user), ct);
+            await svc.ReleaseAsync(id, i.UseStock, Who(user), ct, i.OverrideCredit && IsManager(user));
             return Results.Ok(await LoadOrder(db, svc, id, ct));
         }).RequireAuthorization(SalesPolicies.Release);
 
@@ -436,9 +437,15 @@ public static class SalesEndpoints
 
         g.MapPost("/{id:int}/ship", async (int id, ShipInput i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
-            await svc.ShipAsync(id, i, Who(user), ct);
+            await svc.ShipAsync(id, i, Who(user), ct, canEmitInvoice: Access.Matrix[FiscalPolicies.Emit].Any(r => user.IsInRole(r.ToString())), overrideCredit: i.OverrideCredit && IsManager(user));
             return Results.Ok(await LoadDelivery(db, id, ct));
         }).RequireAuthorization(SalesPolicies.Ship);
+
+        g.MapPost("/{id:int}/emit-invoice", async (int id, EmitInvoiceInput i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            await svc.EmitInvoiceAsync(id, i, Who(user), ct);
+            return Results.Ok(await LoadDelivery(db, id, ct));
+        }).RequireAuthorization(FiscalPolicies.Emit);
 
         g.MapPost("/{id:int}/confirm", async (int id, ConfirmDeliveryIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
@@ -455,12 +462,13 @@ public static class SalesEndpoints
 
     private static void MapPipeline(WebApplication app)
     {
-        app.MapGet("/api/sales/pipeline", async (EbtDbContext db, SalesService svc, int? customerId, CancellationToken ct) =>
+        app.MapGet("/api/sales/pipeline", async (EbtDbContext db, SalesService svc, int? customerId, bool? includeTest, CancellationToken ct) =>
         {
             var today = SalesService.Today();
             var quotes = db.Quotes.AsNoTracking().Where(q => SalesService.OpenQuote.Contains(q.Status));
             var orders = db.SalesOrders.AsNoTracking().Where(o => SalesService.OpenOrder.Contains(o.Status) || o.Status == SalesOrderStatus.Shipped
                 || o.Status == SalesOrderStatus.Delivered && o.CreatedAt >= DateTimeOffset.UtcNow.AddDays(-30));
+            if (includeTest != true) { quotes = quotes.Where(q => q.Source != DataSource.Test); orders = orders.Where(o => o.Source != DataSource.Test); }
             if (customerId is { } c)
             {
                 quotes = quotes.Where(q => q.CustomerId == c);

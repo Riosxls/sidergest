@@ -51,9 +51,12 @@ class StockDashboard {
     this.steelBalanceKg = 0,
     this.steelBalanceValue = 0,
     this.steelUnavailable = false,
+    this.lowStock = const [],
   });
 
   /// The steel lookup failed: the steel figures are unknown, not zero.
+  /// Materials below their minimum stock (empty when the lookup failed).
+  final List<Map<String, dynamic>> lowStock;
   final bool steelUnavailable;
   final int steelLots;
   final int steelPending;
@@ -160,6 +163,10 @@ Future<StockDashboard> fetchStock(ApiClient api) async {
   final closings = (r[2] as List).cast<Map<String, dynamic>>();
   var steel = <Map<String, dynamic>>[];
   var steelUnavailable = false;
+  var lowStock = <Map<String, dynamic>>[];
+  try {
+    lowStock = (await api.get('/api/stock/low-stock') as List).cast<Map<String, dynamic>>();
+  } catch (_) {}
   try {
     steel = (await api.list('/api/steel/lots', take: 200)).items;
   } catch (_) {
@@ -172,6 +179,7 @@ Future<StockDashboard> fetchStock(ApiClient api) async {
     openReservations: (r[1] as PageResult).total,
     lastClosing: closings.isEmpty ? null : closings.first,
     locations: (r[3] as PageResult).total,
+    lowStock: lowStock,
     steelLots: steel.length,
     steelPending: steel.fold<int>(0, (a, l) => a + ((l['pendingJobs'] as num?)?.toInt() ?? 0)),
     steelBalanceKg: steel.fold<num>(0, (a, l) => a + ((l['balanceKg'] as num?) ?? 0)),

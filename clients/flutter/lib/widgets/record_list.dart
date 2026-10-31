@@ -70,6 +70,9 @@ class RecordList extends StatefulWidget {
 
 class RecordListState extends State<RecordList> {
   PageResult? _page;
+
+  /// The rows currently loaded.
+  List<Map<String, dynamic>> get items => _page?.items ?? const [];
   String? _error;
   bool _loading = false;
   String _q = '';

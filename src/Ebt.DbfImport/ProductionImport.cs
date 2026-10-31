@@ -206,7 +206,7 @@ public sealed class ProductionImport : IImportStep
             {
                 o = new ProductionOrder
                 {
-                    Kind = kind, Number = number, Reference = ProductionService.ReferenceFor(kind, number), ProductId = productId, Quantity = qty, DueDate = due,
+                    Source = DataSource.Imported, Kind = kind, Number = number, Reference = ProductionService.ReferenceFor(kind, number), ProductId = productId, Quantity = qty, DueDate = due,
                     CreatedBy = r.Str($"{p}USUARIO") ?? "import", CreatedAt = Stamp(created) ?? DateTimeOffset.UtcNow
                 };
                 await service.SnapshotStructureAsync(o, ct);

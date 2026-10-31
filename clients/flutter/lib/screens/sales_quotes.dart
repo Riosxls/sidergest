@@ -801,9 +801,9 @@ class _QuoteScreenState extends State<QuoteScreen> {
       padding: const EdgeInsets.only(bottom: 8),
       child: NextStepCard(
         key: const ValueKey('quote-credit-banner'),
-        title: 'Limite de crédito do prazo',
+        title: 'Limite de crédito',
         message:
-            'Pedidos em aberto ${fmtMoney(c['open'])} + este orçamento ${fmtMoney(c['thisOrder'])} passam do limite de ${fmtMoney(c['limit'])} do prazo. '
+            'Pedidos em aberto ${fmtMoney(c['open'])} + este orçamento ${fmtMoney(c['thisOrder'])} passam do limite de ${fmtMoney(c['limit'])} ${c['limitSource'] == 'customer' ? 'do cliente' : 'do prazo'}. '
             'O pedido de venda só sai com liberação do gerente comercial.',
         tone: Tone.warning,
       ),

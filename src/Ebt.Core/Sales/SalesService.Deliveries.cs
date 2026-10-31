@@ -55,7 +55,8 @@ public sealed partial class SalesService
         }, ct);
     }
 
-    public async Task<Delivery> ShipAsync(int id, ShipInput i, string? user, CancellationToken ct = default)
+    /// <summary>Physical shipment. A caller without the right to emit the NF (<paramref name="canEmitInvoice"/> false) ships the goods and leaves the NF pending for <see cref="EmitInvoiceAsync"/>.</summary>
+    public async Task<Delivery> ShipAsync(int id, ShipInput i, string? user, CancellationToken ct = default, bool canEmitInvoice = true, bool overrideCredit = false)
     {
         return await InTransaction(async () =>
         {
@@ -63,6 +64,7 @@ public sealed partial class SalesService
             if (d.Status != DeliveryStatus.Planned) throw SalesException.Conflict($"Delivery is {d.Status}");
             var o = await LockOrderAsync(d.OrderId, ct);
             if (o.Status is not (SalesOrderStatus.Released or SalesOrderStatus.PartiallyShipped)) throw SalesException.Conflict($"Order is {o.Status}");
+            await EnsureCreditAsync(o, "expedição", overrideCredit, user, ct);
             var certified = o.CertificateWaived || await db.QualityCertificates.AnyAsync(c => c.OrderId == o.Id && c.Status == CertificateStatus.Issued, ct);
             if (!certified && !i.WithoutCertificate)
                 throw SalesException.Conflict($"{o.Reference} has no issued quality certificate. Issue one, waive it on the order, or ship without it");
@@ -87,7 +89,8 @@ public sealed partial class SalesService
             d.ShippedBy = user;
             d.InvoiceNumber = Clean(i.InvoiceNumber) ?? d.InvoiceNumber;
             // Venda (5101): stock is lowered first, then the NF is authorized; if SEFAZ rejects, the transaction rolls back and stock is untouched.
-            if (d.InvoiceNumber is null && await fiscal.EnabledAsync(ct))
+            var invoicePending = d.InvoiceNumber is null && !canEmitInvoice && await fiscal.EnabledAsync(ct);
+            if (d.InvoiceNumber is null && !invoicePending && await fiscal.EnabledAsync(ct))
             {
                 var invoice = await fiscal.IssueSaleAsync(d, o, new SaleInvoiceOptions(i.Cfop, i.Freight ?? 0m, Clean(i.Carrier), Clean(i.VehiclePlate)?.ToUpper(), i.GrossWeightKg), user, ct);
                 d.InvoiceNumber = invoice.Number.ToString();
@@ -98,9 +101,29 @@ public sealed partial class SalesService
             d.GrossWeightKg = i.GrossWeightKg ?? d.GrossWeightKg;
             d.LotNumber = Clean(i.LotNumber) ?? d.LotNumber;
             d.InvoicedValue = i.InvoicedValue ?? d.InvoicedValue;
-            Log(SalesRecordKind.Delivery, d.Id, "shipped", DeliveryStatus.Planned, d.Status, string.Join(" · ", new[] { d.InvoiceNumber is null ? null : $"NF {d.InvoiceNumber}", certified ? null : "sem certificado" }.OfType<string>()) is { Length: > 0 } n ? n : null, user);
+            Log(SalesRecordKind.Delivery, d.Id, "shipped", DeliveryStatus.Planned, d.Status, string.Join(" · ", new[] { d.InvoiceNumber is null ? null : $"NF {d.InvoiceNumber}", invoicePending ? "NF pendente" : null, certified ? null : "sem certificado" }.OfType<string>()) is { Length: > 0 } n ? n : null, user);
             await db.SaveChangesAsync(ct);
             await RefreshOrderStatusAsync(o, $"{d.Reference} expedida", user, ct);
+            return d;
+        }, ct);
+    }
+
+    /// <summary>Issues the sale NF of a delivery that was shipped without one (the shipper lacked the right to emit it).</summary>
+    public async Task<Delivery> EmitInvoiceAsync(int id, EmitInvoiceInput i, string? user, CancellationToken ct = default)
+    {
+        return await InTransaction(async () =>
+        {
+            var d = await LockDeliveryAsync(id, ct);
+            if (d.Status is not (DeliveryStatus.Shipped or DeliveryStatus.Delivered)) throw SalesException.Conflict($"Delivery is {d.Status}; ship it first");
+            if (d.InvoiceNumber is not null || await db.FiscalDocuments.AnyAsync(f => f.DeliveryId == id && f.Kind == FiscalKind.Sale && f.Status == FiscalStatus.Authorized, ct))
+                throw SalesException.Conflict("This delivery already has an NF");
+            if (!await fiscal.EnabledAsync(ct)) throw SalesException.Conflict("NF emission is disabled");
+            var o = await LockOrderAsync(d.OrderId, ct);
+            var invoice = await fiscal.IssueSaleAsync(d, o, new SaleInvoiceOptions(i.Cfop, i.Freight ?? 0m, Clean(i.Carrier) ?? d.Carrier, Clean(i.VehiclePlate)?.ToUpper() ?? d.VehiclePlate, i.GrossWeightKg ?? d.GrossWeightKg), user, ct);
+            d.InvoiceNumber = invoice.Number.ToString();
+            if (d.StockDocumentId is { } sd && await db.StockDocuments.FirstOrDefaultAsync(x => x.Id == sd, ct) is { } doc) doc.Notes = $"{doc.Notes} · NF {invoice.Number}";
+            Log(SalesRecordKind.Delivery, d.Id, "invoice-emitted", d.Status, d.Status, $"NF {invoice.Number}", user);
+            await db.SaveChangesAsync(ct);
             return d;
         }, ct);
     }
