@@ -145,6 +145,7 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz)
     private async Task<FiscalDocument> AuthorizeAndSaveAsync(FiscalSettings settings, FiscalDocument doc, Cfop cfop, NfeParty recipient, NfeTransport transport, bool interstate, CancellationToken ct)
     {
         doc.Xml = NfeXml.Build(settings, doc, cfop, recipient, transport, interstate);
+        NfeSchema.ValidateNfe(doc.Xml);
         var verdict = await sefaz.AuthorizeAsync(doc.AccessKey, doc.Xml, doc.Environment, ct);
         if (!verdict.Authorized) throw FiscalException.Rejected(verdict.Status, verdict.Message);
         doc.Protocol = verdict.Protocol ?? throw new InvalidOperationException("SEFAZ authorized without a protocol");

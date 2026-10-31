@@ -38,7 +38,7 @@ public class NfeTaxTests
         new Case("two items, odd freight split keeps the total", true, true, [new Item(100m, Ipi: 10m), new Item(200m, Ipi: 10m)], 10m, new Expected(310m, 55.80m, 31m, 1.95m, 9m, 341m)),
     };
 
-    private static FiscalDocument Build(Case c)
+    internal static FiscalDocument Build(Case c)
     {
         var doc = new FiscalDocument
         {
@@ -60,7 +60,7 @@ public class NfeTaxTests
 
     private const string Key = "35261011222333000181550010000025811123456785";
 
-    private static Cfop Cfop(bool taxed) => new()
+    internal static Cfop Cfop(bool taxed) => new()
     {
         Code = taxed ? "5101" : "5901", Description = taxed ? "Venda de producao do estabelecimento" : "Remessa para industrializacao", Taxed = taxed, IcmsCst = "00", IpiCst = "50", PisCst = "01", CofinsCst = "01", IpiFramingCode = "999"
     };
