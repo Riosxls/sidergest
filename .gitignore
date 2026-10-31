@@ -19,3 +19,4 @@ legacy/
 key.properties
 .run/
 *.dump
+backups/

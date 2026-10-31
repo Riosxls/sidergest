@@ -54,8 +54,13 @@ public static class ProductEndpoints
         }).RequireAuthorization(Policies.Write);
 
         products.MapDelete("/{id:int}/customers/{customerId:int}", async (int id, int customerId, EbtDbContext db, CancellationToken ct) =>
-            await db.ProductCustomers.Where(pc => pc.ProductId == id && pc.CustomerId == customerId).ExecuteDeleteAsync(ct) == 0 ? Results.NotFound() : Results.NoContent())
-            .RequireAuthorization(Policies.Write);
+        {
+            var link = await db.ProductCustomers.FirstOrDefaultAsync(pc => pc.ProductId == id && pc.CustomerId == customerId, ct);
+            if (link is null) return Results.NotFound();
+            db.ProductCustomers.Remove(link);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).RequireAuthorization(Policies.Write);
 
         products.MapGet("/{id:int}/routing", async (int id, EbtDbContext db, CancellationToken ct) =>
             !await db.Products.AnyAsync(p => p.Id == id, ct) ? Results.NotFound() : Results.Ok(await LoadRouting(db, id, null, ct)))
@@ -86,9 +91,15 @@ public static class ProductEndpoints
             return Results.Ok((await LoadRouting(db, op.ProductId, op.Id, ct)).Single());
         }).RequireAuthorization(Policies.Write);
 
+        // Deleted through the change tracker (not ExecuteDelete) so the audit log records it.
         ops.MapDelete("/{id:int}", async (int id, EbtDbContext db, CancellationToken ct) =>
-            await db.RoutingOperations.Where(o => o.Id == id).ExecuteDeleteAsync(ct) == 0 ? Results.NotFound() : Results.NoContent())
-            .RequireAuthorization(Policies.Write);
+        {
+            var op = await db.RoutingOperations.FindAsync([id], ct);
+            if (op is null) return Results.NotFound();
+            db.RoutingOperations.Remove(op);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).RequireAuthorization(Policies.Write);
 
         ops.MapPost("/{id:int}/items", async (int id, BomItemIn i, EbtDbContext db, BomService bom, CancellationToken ct) =>
         {
@@ -120,8 +131,13 @@ public static class ProductEndpoints
         }).RequireAuthorization(Policies.Write);
 
         items.MapDelete("/{id:int}", async (int id, EbtDbContext db, CancellationToken ct) =>
-            await db.BomItems.Where(x => x.Id == id).ExecuteDeleteAsync(ct) == 0 ? Results.NotFound() : Results.NoContent())
-            .RequireAuthorization(Policies.Write);
+        {
+            var item = await db.BomItems.FindAsync([id], ct);
+            if (item is null) return Results.NotFound();
+            db.BomItems.Remove(item);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).RequireAuthorization(Policies.Write);
 
         products.MapGet("/{id:int}/bom/explode", async (int id, decimal? quantity, BomService bom, CancellationToken ct) =>
         {

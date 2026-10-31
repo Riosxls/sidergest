@@ -134,6 +134,12 @@ if (-not $NoDocker) {
     $env:EBT_API_PORT = "$ApiPort"
     $env:EBT_DB_PORT = "$DbPort"
     $env:EBT_CORS_ORIGIN = "http://localhost:$WebPort"
+    # The API migrates the database on start. When a database is already running, dump it first and stop if the dump fails.
+    if (& docker compose ps --status running -q db 2>$null) {
+        Step "Backing up the database before the API rebuilds and migrates"
+        & powershell -NoProfile -File (Join-Path $PSScriptRoot 'backup.ps1') -Reason pre-start -Quiet
+        if ($LASTEXITCODE -ne 0) { Pop-Location; Fail "Pre-start backup failed, so the API was not rebuilt. Fix the backup (see above) or run scripts\backup.ps1 yourself." }
+    }
     Step "Starting PostgreSQL (port $DbPort) + API (port $ApiPort) with Docker (first run builds the image, takes a few minutes)"
     & docker compose up -d --build db api
     $code = $LASTEXITCODE

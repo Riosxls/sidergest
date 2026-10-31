@@ -94,6 +94,9 @@ namespace Ebt.Core.Data.Migrations
                     b.HasIndex("Entity", "EntityId")
                         .HasDatabaseName("ix_audit_log_entity_entity_id");
 
+                    b.HasIndex("User", "At")
+                        .HasDatabaseName("ix_audit_log_user_at");
+
                     b.ToTable("audit_log", (string)null);
                 });
 

@@ -149,6 +149,7 @@ public partial class EbtDbContext(DbContextOptions<EbtDbContext> options) : DbCo
             e.Property(x => x.User).HasMaxLength(120);
             e.Property(x => x.Changes).HasColumnType("jsonb");
             e.HasIndex(x => new { x.Entity, x.EntityId });
+            e.HasIndex(x => new { x.User, x.At }); // the audit screen filters by user and sorts by time
             e.HasIndex(x => x.At);
         });
         ConfigureInventory(b);

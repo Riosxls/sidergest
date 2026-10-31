@@ -174,6 +174,20 @@ public class AuthTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Two_parallel_refreshes_of_one_token_cannot_both_succeed()
+    {
+        var admin = await api.AdminAsync();
+        var name = $"race{Guid.NewGuid():N}"[..18];
+        await admin.Post("/api/users", new CreateUserRequest(name, "user-password-123", UserRole.Reader));
+        var login = await LoginFull(api, name, "user-password-123");
+
+        var anon = api.Anonymous();
+        var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => anon.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(login.RefreshToken))));
+
+        Assert.Equal(1, results.Count(r => r.StatusCode == HttpStatusCode.OK));
+    }
+
+    [Fact]
     public async Task Logout_invalidates_the_refresh_token()
     {
         var admin = await api.AdminAsync();

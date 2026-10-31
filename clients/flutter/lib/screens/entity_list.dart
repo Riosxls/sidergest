@@ -45,20 +45,24 @@ class _EntityListScreenState extends State<EntityListScreen> {
     super.dispose();
   }
 
+  int _request = 0;
+
+  /// Only the newest request may write the list: a slow answer to an older search must not replace a newer one.
   Future<void> _load() async {
+    final r = ++_request;
     setState(() => _loading = true);
     try {
       final page = await api.list(spec.path, q: _q, skip: _skip, take: pageSize);
-      if (mounted) {
+      if (mounted && r == _request) {
         setState(() {
           _page = page;
           _error = null;
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = friendlyError(e));
+      if (mounted && r == _request) setState(() => _error = friendlyError(e));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && r == _request) setState(() => _loading = false);
     }
   }
 

@@ -155,10 +155,11 @@ class _ModuleScreenState extends State<ModuleScreen> {
       _tile(Icons.verified_outlined, 'Lotes em quarentena', '${d.quarantine}', _go('lots', 'Quarantine'), true),
       _tile(Icons.bookmark_border, 'Reservas abertas', '${d.openReservations}', _go('reservations')),
       _tile(Icons.lock_outline, 'Último mês fechado', d.lastClosing == null ? 'Nenhum' : fmtPeriod(d.lastClosing!['period']), _go('closing')),
-      _tile(Icons.layers_outlined, 'Bobinas de aço', '${d.steelLots}', _go('steel')),
-      _tile(Icons.scale_outlined, 'Saldo de aço (kg)', fmt(d.steelBalanceKg), _go('steel')),
-      _tile(Icons.payments_outlined, 'Saldo de aço (R\$)', fmtMoney(d.steelBalanceValue), _go('steel')),
-      _tile(Icons.content_cut, 'No slitter', '${d.steelPending}', _go('steel')),
+      // A failed steel lookup shows a dash, not a believable zero.
+      _tile(Icons.layers_outlined, 'Bobinas de aço', d.steelUnavailable ? '—' : '${d.steelLots}', _go('steel')),
+      _tile(Icons.scale_outlined, 'Saldo de aço (kg)', d.steelUnavailable ? '—' : fmt(d.steelBalanceKg), _go('steel')),
+      _tile(Icons.payments_outlined, 'Saldo de aço (R\$)', d.steelUnavailable ? '—' : fmtMoney(d.steelBalanceValue), _go('steel')),
+      _tile(Icons.content_cut, 'No slitter', d.steelUnavailable ? '—' : '${d.steelPending}', _go('steel')),
     ];
   }
 

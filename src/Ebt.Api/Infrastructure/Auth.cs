@@ -113,7 +113,8 @@ public static class AuthEndpoints
             if (user is null)
             {
                 hasher.VerifyHashedPassword(Dummy, DummyHash, req.Password); // same cost as a real check, so timing does not reveal usernames
-                log.LogWarning("Login failed for unknown user {User} from {Ip}", name, http.Connection.RemoteIpAddress);
+                // The typed name can be a mistyped password, so it is never written to the log.
+                log.LogWarning("Login failed for an unknown user (name length {Length}) from {Ip}", name.Length, http.Connection.RemoteIpAddress);
                 return Results.Unauthorized();
             }
             var now = DateTimeOffset.UtcNow;
@@ -161,7 +162,9 @@ public static class AuthEndpoints
                 return Results.Unauthorized();
             }
             if (stored.ExpiresAt <= now || !user.Active) return Results.Unauthorized();
-            stored.RevokedAt = now;
+            // Claim the token atomically: two parallel refreshes of the same token must not both succeed, or rotation protects nothing.
+            var claimed = await db.RefreshTokens.Where(r => r.Id == stored.Id && r.RevokedAt == null).ExecuteUpdateAsync(s => s.SetProperty(r => r.RevokedAt, now), ct);
+            if (claimed == 0) return Results.Unauthorized();
             var (token, expires) = tokens.Issue(user);
             var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct);
             return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires));

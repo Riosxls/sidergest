@@ -7,7 +7,13 @@ import 'record_list.dart';
 
 export '../api.dart' show describeError, fieldLabel, friendlyError;
 
+/// Screens (by their build context) that have an action in flight. A second tap or click on the same screen is ignored until the first answers,
+/// so a double-click cannot confirm, ship or cancel twice.
+final _running = <int>{};
+
 Future<T?> runAction<T>(BuildContext context, Future<T> Function() action, {String? success}) async {
+  final key = identityHashCode(context);
+  if (!_running.add(key)) return null;
   try {
     final r = await action();
     if (success != null && context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success)));
@@ -15,6 +21,8 @@ Future<T?> runAction<T>(BuildContext context, Future<T> Function() action, {Stri
   } catch (e) {
     if (context.mounted) showError(context, friendlyError(e));
     return null;
+  } finally {
+    _running.remove(key);
   }
 }
 

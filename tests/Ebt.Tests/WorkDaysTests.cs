@@ -38,4 +38,15 @@ public class WorkDaysTests
         for (var n = 0; n <= 40; n++) Assert.Equal(n, WorkDays.Between(start, WorkDays.Add(start, n)));
         Assert.Equal(0, WorkDays.Between(start, start.AddDays(-3)));
     }
+
+    [Fact]
+    public void A_huge_input_is_capped_instead_of_walking_millions_of_days()
+    {
+        var start = new DateOnly(2026, 10, 30);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var end = WorkDays.Add(start, int.MaxValue);
+        Assert.True(WorkDays.Between(start, DateOnly.MaxValue) > 0);
+        Assert.True(sw.ElapsedMilliseconds < 2000);
+        Assert.True(end > start);
+    }
 }

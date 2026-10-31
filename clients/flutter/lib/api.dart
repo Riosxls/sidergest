@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -70,11 +71,11 @@ class ApiClient {
 
   Future<dynamic> get(String path, [Map<String, dynamic>? query]) => _send(path, () => _http.get(_uri(path, query), headers: _headers));
 
-  Future<dynamic> post(String path, Object body) => _send(path, () => _http.post(_uri(path), headers: _writeHeaders(path), body: jsonEncode(body)));
+  Future<dynamic> post(String path, Object body) => _send(path, () => _http.post(_uri(path), headers: _writeHeaders(path), body: jsonEncode(body)), write: true);
 
-  Future<dynamic> put(String path, Object body) => _send(path, () => _http.put(_uri(path), headers: _writeHeaders(path), body: jsonEncode(body)));
+  Future<dynamic> put(String path, Object body) => _send(path, () => _http.put(_uri(path), headers: _writeHeaders(path), body: jsonEncode(body)), write: true);
 
-  Future<dynamic> delete(String path) => _send(path, () => _http.delete(_uri(path), headers: _writeHeaders(path)));
+  Future<dynamic> delete(String path) => _send(path, () => _http.delete(_uri(path), headers: _writeHeaders(path)), write: true);
 
   Future<PageResult> list(String path, {String? q, int skip = 0, int take = 50, Map<String, dynamic> query = const {}}) async {
     final r = await get(path, {...query, 'q': q, 'skip': skip, 'take': take});
@@ -99,19 +100,14 @@ class ApiClient {
       ..headers.addAll({'Accept': 'application/json', if (token != null) 'Authorization': 'Bearer $token'})
       ..files.add(http.MultipartFile.fromBytes(field, bytes, filename: filename));
     return http.Response.fromStream(await _http.send(req));
-  });
+  }, write: true, timeout: transferTimeout);
 
-  /// Raw bytes of a file endpoint.
+  /// Raw bytes of a file endpoint. Goes through the same silent refresh as every other call, so a PDF opened after the access token expired still works.
   Future<Uint8List> download(String path) async {
-    http.Response r;
-    try {
-      r = await _http.get(_uri(path), headers: {if (token != null) 'Authorization': 'Bearer $token'});
-    } catch (e) {
-      throw ApiException(0, 'Servidor indisponível ($baseUrl)');
-    }
+    final r = await _call(path, () => _http.get(_uri(path), headers: {if (token != null) 'Authorization': 'Bearer $token'}), timeout: transferTimeout);
     if (r.statusCode == 401 && token != null) onUnauthorized?.call();
     if (r.statusCode >= 200 && r.statusCode < 300) return r.bodyBytes;
-    throw _error(r);
+    throw _error(r, path);
   }
 
   /// Exchanges the refresh token for a new session. Concurrent callers share one request.
@@ -121,7 +117,9 @@ class ApiClient {
     final rt = refreshToken;
     if (rt == null) return false;
     try {
-      final r = await _http.post(_uri('/api/auth/refresh'), headers: {'Content-Type': 'application/json', 'Accept': 'application/json'}, body: jsonEncode({'refreshToken': rt}));
+      final r = await _http
+          .post(_uri('/api/auth/refresh'), headers: {'Content-Type': 'application/json', 'Accept': 'application/json'}, body: jsonEncode({'refreshToken': rt}))
+          .timeout(requestTimeout);
       if (r.statusCode < 200 || r.statusCode >= 300) return false;
       final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       token = j['token'] as String;
@@ -133,22 +131,31 @@ class ApiClient {
     }
   }
 
-  Future<http.Response> _call(String path, Future<http.Response> Function() call) async {
+  /// How long a normal request may take before the user is told instead of watching a spinner forever; files get longer.
+  static const requestTimeout = Duration(seconds: 20);
+  static const transferTimeout = Duration(seconds: 90);
+
+  Future<http.Response> _call(String path, Future<http.Response> Function() call, {bool write = false, Duration timeout = requestTimeout}) async {
+    // Signing in changes nothing a user could duplicate, so a lost login is simply "server unavailable".
+    if (path.startsWith('/api/auth/')) write = false;
     try {
-      var r = await call();
+      var r = await call().timeout(timeout);
       if (r.statusCode == 401 && token != null && !_noRefresh.any(path.startsWith)) {
         if (await refresh()) {
-          r = await call();
+          r = await call().timeout(timeout);
         }
       }
       return r;
+    } on TimeoutException {
+      // A write may have reached the server before the answer was lost; say so, so nobody repeats it blindly.
+      throw ApiException(0, write ? 'O servidor demorou para responder. Confira se a ação foi registrada antes de repetir.' : 'O servidor demorou demais para responder. Tente novamente.');
     } catch (e) {
-      throw ApiException(0, 'Servidor indisponível ($baseUrl)');
+      throw ApiException(0, write ? 'Conexão perdida. Confira se a ação foi registrada antes de repetir. ($baseUrl)' : 'Servidor indisponível ($baseUrl)');
     }
   }
 
-  Future<dynamic> _send(String path, Future<http.Response> Function() call) async {
-    final r = await _call(path, call);
+  Future<dynamic> _send(String path, Future<http.Response> Function() call, {bool write = false, Duration timeout = requestTimeout}) async {
+    final r = await _call(path, call, write: write, timeout: timeout);
     if (r.statusCode == 401 && token != null) onUnauthorized?.call();
     if (r.statusCode >= 200 && r.statusCode < 300) {
       final tag = r.headers['etag'];
@@ -156,13 +163,14 @@ class ApiClient {
       if (tag != null && k != null) _versions[k] = tag;
       return r.body.isEmpty ? null : jsonDecode(utf8.decode(r.bodyBytes));
     }
-    throw _error(r);
+    throw _error(r, path);
   }
 
-  ApiException _error(http.Response r) {
+  ApiException _error(http.Response r, [String path = '']) {
     switch (r.statusCode) {
       case 401:
-        return ApiException(401, 'Usuário ou senha inválidos, ou sessão expirada');
+        // A wrong password only exists on the login call; anywhere else a 401 means the session ended.
+        return ApiException(401, path.startsWith('/api/auth/login') ? 'Usuário ou senha inválidos' : 'Sessão expirada. Entre novamente.');
       case 403:
         return ApiException(403, 'Sem permissão para esta ação');
       case 412:

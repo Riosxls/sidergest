@@ -52,12 +52,13 @@ docker build --target api -t metagest-api:latest .
 docker compose -p metagest up -d --no-deps --force-recreate --pull never api
 ```
 
-Never recreate the `db` container or run `stop.bat -Purge` without a fresh `pg_dump` (`docker exec metagest-db-1 pg_dump -U ebt -d ebt -Fc > ebt-backup.dump`).
+Never recreate the `db` container or run `stop.bat -Purge` without a fresh dump: `powershell -File scripts\backup.ps1` (writes `backups/`, gitignored; `start.ps1` runs it before every API rebuild and aborts if it fails). Restore, nightly task and the other ops notes are in `docs/OPERATIONS.md`. `db` and `api` have `restart: unless-stopped`.
 
 Manual Flutter run: `cd clients\flutter; flutter pub get; flutter run -d windows --dart-define=API_URL=http://localhost:8080`.
 
 Tests:
-- Backend: `dotnet test` (`tests/Ebt.Tests`, integration tests against real Postgres via `ApiFixture.cs`; also DBF import tests).
+- Backend: `dotnet test` (`tests/Ebt.Tests`, integration tests against real Postgres via `ApiFixture.cs`; also DBF import tests). The fixture needs a superuser connection in `EBT_TEST_PG`; with the Docker DB: `Host=localhost;Port=25432;Username=ebt;Password=<EBT_DB_PASSWORD from .env>`. It creates and drops its own database.
+- Everything: `powershell -File scripts\check.ps1` (build, backend tests, `flutter analyze`, `flutter test`; sets `EBT_TEST_PG` from `.env`). Run it before pushing, since CI is off.
 - Flutter: `cd clients\flutter; flutter test` (`clients/flutter/test`).
 
 ### Migrations

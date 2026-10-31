@@ -31,8 +31,11 @@ class StockDashboard {
     this.steelPending = 0,
     this.steelBalanceKg = 0,
     this.steelBalanceValue = 0,
+    this.steelUnavailable = false,
   });
 
+  /// The steel lookup failed: the steel figures are unknown, not zero.
+  final bool steelUnavailable;
   final int steelLots;
   final int steelPending;
   final num steelBalanceKg;
@@ -118,10 +121,14 @@ Future<StockDashboard> fetchStock(ApiClient api) async {
   final lots = r[0] as PageResult;
   final closings = (r[2] as List).cast<Map<String, dynamic>>();
   var steel = <Map<String, dynamic>>[];
+  var steelUnavailable = false;
   try {
     steel = (await api.list('/api/steel/lots', take: 200)).items;
-  } catch (_) {}
+  } catch (_) {
+    steelUnavailable = true;
+  }
   return StockDashboard(
+    steelUnavailable: steelUnavailable,
     quarantine: lots.total,
     quarantineLots: lots.items,
     openReservations: (r[1] as PageResult).total,

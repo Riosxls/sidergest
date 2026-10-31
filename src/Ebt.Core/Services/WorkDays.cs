@@ -6,11 +6,15 @@ namespace Ebt.Core.Services;
 /// </summary>
 public static class WorkDays
 {
+    /// <summary>Ten years of working days; far beyond any lead time, small enough that the day-by-day walk stays instant.</summary>
+    public const int MaxDays = 3650;
+
     public static bool IsWorkDay(DateOnly d) => d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday) && !IsHoliday(d);
 
     /// <summary>The date <paramref name="days"/> working days after <paramref name="start"/> (day 0 is the start itself).</summary>
     public static DateOnly Add(DateOnly start, int days)
     {
+        days = Math.Min(days, MaxDays); // the loop walks day by day, so a huge input must not become a CPU sink
         var d = start;
         while (days > 0)
         {
@@ -23,6 +27,7 @@ public static class WorkDays
     /// <summary>Working days after <paramref name="start"/> up to and including <paramref name="end"/>; 0 when the end is not later.</summary>
     public static int Between(DateOnly start, DateOnly end)
     {
+        if (end > start.AddDays(MaxDays * 2)) end = start.AddDays(MaxDays * 2);
         var n = 0;
         for (var d = start; d < end;)
         {
