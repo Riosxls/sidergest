@@ -96,10 +96,10 @@ List<NavItem> _screens() => [
   NavItem('orders', Icons.receipt_long_outlined, 'Pedidos de compra', 'Suprimentos', (s, f, go) => OrdersScreen(session: s)),
   NavItem('receipts', Icons.move_to_inbox_outlined, 'Recebimentos', 'Suprimentos', (s, f, go) => ReceiptsView(session: s, allowNew: true)),
   NavItem('overdue', Icons.schedule, 'Entregas em atraso', 'Suprimentos', (s, f, go) => OverdueScreen(session: s)),
-  NavItem('suppliers', Icons.local_shipping_outlined, 'Fornecedores', 'Suprimentos', (s, f, go) => SuppliersScreen(session: s)),
+  NavItem('suppliers', Icons.business_outlined, 'Fornecedores', 'Suprimentos', (s, f, go) => SuppliersScreen(session: s)),
   NavItem('production-orders', Icons.assignment_outlined, 'Ordens de fabricação', 'PCP', (s, f, go) => ProductionOrdersScreen(session: s, initialStatus: f)),
   NavItem('production-reports', Icons.edit_note, 'Apontamentos', 'PCP', (s, f, go) => ReportsScreen(session: s)),
-  NavItem('outside-processing', Icons.local_shipping_outlined, 'Beneficiamento externo', 'PCP', (s, f, go) => OutsideProcessingScreen(session: s)),
+  NavItem('outside-processing', Icons.outbox_outlined, 'Beneficiamento externo', 'PCP', (s, f, go) => OutsideProcessingScreen(session: s)),
   NavItem('planning', Icons.view_timeline_outlined, 'Programação e carga', 'PCP', (s, f, go) => PlanningScreen(session: s)),
   for (final spec in productionMasters) NavItem(spec.path, spec.icon, spec.title, 'PCP', (s, f, go) => EntityListScreen(session: s, spec: spec)),
   NavItem('settings', Icons.tune, 'Parâmetros', 'Sistema', (s, f, go) => SettingsScreen(session: s)),
@@ -250,6 +250,26 @@ class _ShellState extends State<Shell> {
   String? get _moduleSection =>
       _item.section == hiddenSection ? _item.id.substring('module:'.length) : (modules.any((m) => m.section == _item.section) ? _item.section : null);
 
+  /// Comercial has too many screens for one flat list; the rest of the modules are short enough to stay ungrouped.
+  static const _comercialGroups = {
+    'Vendas': ['customers', 'sales-pipeline', 'sales-quotes', 'viability', 'sales-orders', 'deliveries'],
+    'Fiscal e qualidade': ['certificates', 'fiscal-documents'],
+    'Relatórios': ['report-material-consumption', 'report-billing'],
+  };
+
+  String? _group(NavItem i) {
+    if (i.section != 'Comercial') return null;
+    for (final e in _comercialGroups.entries) {
+      if (e.value.contains(i.id)) return e.key;
+    }
+    return 'Preços e regras';
+  }
+
+  Widget _groupLabel(String text, ThemeData theme) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
+    child: Text(text, style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+  );
+
   Widget _menu({bool closeDrawer = false, bool rail = false}) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -276,16 +296,23 @@ class _ShellState extends State<Shell> {
         children.add(
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Text(module.section, style: theme.textTheme.labelMedium?.copyWith(color: cs.primary)),
+            child: Text(module.section, style: theme.textTheme.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w700)),
           ),
         );
       }
       children.add(one(home, title: 'Visão geral'));
-      children.addAll(_items.where((i) => i.section == section).map((i) => one(i)));
+      String? lastGroup;
+      for (final i in _items.where((i) => i.section == section)) {
+        final g = _group(i);
+        if (g != null && g != lastGroup) children.add(rail ? const Divider(indent: 16, endIndent: 16) : _groupLabel(g, theme));
+        lastGroup = g;
+        children.add(one(i));
+      }
     }
     final system = _items.where((i) => i.section == 'Sistema');
     if (system.isNotEmpty) {
       children.add(const Divider());
+      if (!rail) children.add(_groupLabel('Administração', theme));
       children.addAll(system.map((i) => one(i)));
     }
     return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);

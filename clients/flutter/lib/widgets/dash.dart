@@ -6,7 +6,10 @@ import '../entities.dart';
 
 class GridItem {
   const GridItem(this.child) : span = 1, height = DashTile.height;
-  const GridItem.panel(this.child) : span = 2, height = BarPanel.height;
+  const GridItem.panel(this.child, {this.height = BarPanel.height}) : span = 2;
+
+  /// A bar panel sized to its rows, so a short chart does not sit in a tall empty card.
+  GridItem.bars(BarPanel panel) : child = panel, span = 2, height = BarPanel.heightFor(panel.data.length);
 
   final Widget child;
   final int span;
@@ -45,6 +48,21 @@ class DashGrid extends StatelessWidget {
   );
 }
 
+/// Pull-to-refresh on touch platforms only. On desktop a mouse drag at the top would pull the whole page down and leave a gap and a spinner
+/// above the title; the refresh button and F5 cover desktop.
+class PullRefresh extends StatelessWidget {
+  const PullRefresh({super.key, required this.onRefresh, required this.child});
+
+  final Future<void> Function() onRefresh;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final desktop = const {TargetPlatform.windows, TargetPlatform.linux, TargetPlatform.macOS}.contains(Theme.of(context).platform);
+    return desktop ? child : RefreshIndicator(onRefresh: onRefresh, child: child);
+  }
+}
+
 ShapeBorder dashCardShape(BuildContext context) => RoundedRectangleBorder(
   borderRadius: BorderRadius.circular(12),
   side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
@@ -66,6 +84,8 @@ class DashTile extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final fg = alert ? cs.error : null;
+    // A zero that is not an alarm steps back so the numbers that matter stand out.
+    final valueColor = fg ?? (value == '0' ? cs.onSurfaceVariant : null);
     return Semantics(
       button: onTap != null,
       label: '$value $label',
@@ -109,7 +129,7 @@ class DashTile extends StatelessWidget {
                         value,
                         style: theme.textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.w600,
-                          color: fg,
+                          color: valueColor,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
@@ -162,18 +182,32 @@ class DashNotice extends StatelessWidget {
 }
 
 class BarPanel extends StatelessWidget {
-  const BarPanel({super.key, required this.title, required this.data, this.max});
+  const BarPanel({super.key, required this.title, required this.data, this.max, this.emptyText = 'Sem dados ainda', this.warn = const {}, this.onRowTap});
 
   static const height = 268.0;
+  static const maxRows = 10;
+  static const _rowHeight = 34.0;
+
+  /// Panel height for [rows] bars: padding, title and one slot per row; an empty panel is just a short message.
+  static double heightFor(int rows) => rows == 0 ? 120 : 84 + rows.clamp(1, maxRows) * _rowHeight;
 
   final String title;
   final Map<String, num> data;
   final num? max;
 
+  /// What to say when there is nothing to draw: name what is missing, not just "no data".
+  final String emptyText;
+
+  /// Row labels drawn in the error colour (a bucket that is a problem, like products with no operations).
+  final Set<String> warn;
+
+  /// Makes every row tappable; receives the row label.
+  final void Function(String label)? onRowTap;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final rows = data.entries.take(8).toList();
+    final rows = data.entries.take(maxRows).toList();
     final top = max ?? rows.fold<num>(1, (m, e) => e.value > m ? e.value : m);
     return Card(
       margin: EdgeInsets.zero,
@@ -184,41 +218,58 @@ class BarPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(title, style: theme.textTheme.titleMedium),
+            // One line, so the panel height computed from its row count always holds (a narrow phone would otherwise wrap the title and overflow).
+            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleMedium),
             const SizedBox(height: 12),
             if (rows.isEmpty)
               Expanded(
                 child: Center(
-                  child: Text('Sem dados ainda', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+                  child: Text(
+                    emptyText,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                  ),
                 ),
               ),
             for (final e in rows)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(
-                  children: [
-                    SizedBox(width: 120, child: Text(e.key, overflow: TextOverflow.ellipsis)),
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: FractionallySizedBox(
-                          widthFactor: (e.value / top).clamp(0, 1).toDouble(),
-                          child: Container(
-                            height: 16,
-                            decoration: BoxDecoration(color: theme.colorScheme.primary, borderRadius: BorderRadius.circular(3)),
+              InkWell(
+                onTap: onRowTap == null ? null : () => onRowTap!(e.key),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 150,
+                        child: Tooltip(
+                          message: e.key,
+                          child: Text(e.key, overflow: TextOverflow.ellipsis),
+                        ),
+                      ),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: FractionallySizedBox(
+                            widthFactor: (e.value / top).clamp(0, 1).toDouble(),
+                            child: Container(
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: warn.contains(e.key) ? theme.colorScheme.error : theme.colorScheme.primary,
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    SizedBox(
-                      width: 56,
-                      child: Text(
-                        fmtNum(e.value, e.value is int ? 0 : 1),
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                      SizedBox(
+                        width: 56,
+                        child: Text(
+                          fmtNum(e.value, e.value is int ? 0 : 1),
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
           ],

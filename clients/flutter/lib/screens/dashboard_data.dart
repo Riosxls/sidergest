@@ -61,9 +61,11 @@ class PurchasingDashboard {
   final List<Map<String, dynamic>> overdue;
   final List<Map<String, dynamic>> performance;
 
-  Map<String, num> get overdueBySupplier {
+  Map<String, num> get overdueBySupplier => overdueBySupplierOf(overdue);
+
+  Map<String, num> overdueBySupplierOf(List<Map<String, dynamic>> lines) {
     final m = <String, num>{};
-    for (final l in overdue) {
+    for (final l in lines) {
       m.update('${l['supplierName']}', (v) => v + 1, ifAbsent: () => 1);
     }
     return Map.fromEntries(m.entries.toList()..sort((a, b) => b.value.compareTo(a.value)));

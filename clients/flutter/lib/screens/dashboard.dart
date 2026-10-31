@@ -517,7 +517,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       bindings: {const SingleActivator(LogicalKeyboardKey.f5): _refresh},
       child: Focus(
         focusNode: _focus,
-        child: RefreshIndicator(
+        child: PullRefresh(
           onRefresh: _refresh,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),

@@ -82,8 +82,12 @@ class _ModuleScreenState extends State<ModuleScreen> {
 
   void Function()? _go(String id, [String? filter]) => widget.onNavigate == null ? null : () => widget.onNavigate!(id, filter);
 
-  GridItem _tile(IconData icon, String label, String value, [void Function()? onTap]) =>
-      GridItem(DashTile(icon: icon, label: label, value: value, onTap: onTap));
+  /// [alarm]: a count above zero is a problem, so the tile is drawn red; otherwise it is plain information.
+  GridItem _tile(IconData icon, String label, String value, [void Function()? onTap, bool alarm = false]) =>
+      GridItem(DashTile(icon: icon, label: label, value: value, alert: alarm && value != '0', onTap: onTap));
+
+  bool _legacyOf(Map<String, dynamic> of) =>
+      (DateTime.tryParse('${of['dueDate']}') ?? DateTime.now()).isBefore(DateTime.now().subtract(const Duration(days: legacyOverdueDays)));
 
   Widget _content(Object data) {
     final items = switch (data) {
@@ -105,36 +109,52 @@ class _ModuleScreenState extends State<ModuleScreen> {
     _tile(Icons.payments_outlined, 'Valor em propostas', fmtMoney(d.k('openQuotesValue')), _go('sales-quotes')),
     _tile(Icons.receipt_long_outlined, 'Pedidos abertos', '${d.k('openOrders').toInt()}', _go('sales-orders')),
     _tile(Icons.attach_money, 'Valor em pedidos', fmtMoney(d.k('openOrdersValue')), _go('sales-orders')),
-    _tile(Icons.event_busy_outlined, 'Pedidos atrasados', '${d.k('lateOrders').toInt()}', _go('sales-orders')),
+    _tile(Icons.event_busy_outlined, 'Pedidos atrasados', '${d.k('lateOrders').toInt()}', _go('sales-orders'), true),
     _tile(Icons.local_shipping_outlined, 'Prontos para expedir', '${d.k('readyToShip').toInt()}', _go('deliveries')),
     _tile(Icons.gavel_outlined, 'Aprovações pendentes', '${d.k('pendingApprovals').toInt()}', _go('sales-quotes')),
     _tile(Icons.draw_outlined, 'Viabilidades em assinatura', '${d.feasibilityInReview}', _go('viability', 'InReview')),
+    // A rate over no quotes means nothing; show a dash until some quote has been decided or is open.
     _tile(
       Icons.emoji_events_outlined,
       'Taxa de conversão',
-      d.kpis['winRate'] == null ? '—' : '${((d.kpis['winRate'] as num) * 100).round()}%',
+      d.kpis['winRate'] == null || (d.k('openQuotes') == 0 && d.stages.values.every((v) => v == 0)) ? '—' : '${((d.kpis['winRate'] as num) * 100).round()}%',
       _go('sales-pipeline'),
     ),
-    GridItem.panel(BarPanel(title: 'Funil por etapa', data: {for (final e in d.stages.entries) pipelineStages[e.key] ?? e.key: e.value})),
+    GridItem.bars(
+      BarPanel(
+        title: 'Funil por etapa',
+        data: {for (final e in d.stages.entries) pipelineStages[e.key] ?? e.key: e.value},
+        emptyText: 'Nenhum orçamento ou pedido no funil',
+        onRowTap: (_) => _go('sales-pipeline')?.call(),
+      ),
+    ),
   ];
 
   List<GridItem> _engineering(DashboardData d) {
     if (d.counts.values.every((v) => v == 0)) return [];
     return [
       for (final e in d.counts.entries) _tile(e.key.icon, e.key.title, '${e.value}', _go(e.key.path)),
-      GridItem.panel(BarPanel(title: 'Produtos por tipo', data: d.countBy((p) => kinds[p['kind']] ?? '—'))),
-      GridItem.panel(BarPanel(title: 'Produtos por formato', data: d.countBy((p) => shapes[p['shape']] ?? 'Sem formato'))),
-      GridItem.panel(BarPanel(title: 'Operações por produto', data: d.countBy((p) => _bucket(p['operationCount'] as int? ?? 0)))),
+      GridItem.bars(BarPanel(title: 'Produtos por tipo', data: d.countBy((p) => kinds[p['kind']] ?? '—'))),
+      GridItem.bars(BarPanel(title: 'Produtos por formato', data: d.countBy((p) => shapes[p['shape']] ?? 'Sem formato'))),
+      GridItem.bars(BarPanel(title: 'Operações por produto', data: _operationBuckets(d), warn: const {'0'}, onRowTap: (_) => _go(products.path)?.call())),
     ];
+  }
+
+  /// Buckets in reading order (0, 1–3, 4–6, 7+), not sorted by size.
+  Map<String, num> _operationBuckets(DashboardData d) {
+    final counted = d.countBy((p) => _bucket(p['operationCount'] as int? ?? 0));
+    return {
+      for (final k in const ['0', '1–3', '4–6', '7+'])
+        if (counted.containsKey(k)) k: counted[k]!,
+    };
   }
 
   List<GridItem> _stock(StockDashboard d) {
     if (d.locations == 0 && d.steelLots == 0) return [];
     return [
-      _tile(Icons.verified_outlined, 'Lotes em quarentena', '${d.quarantine}', _go('lots', 'Quarantine')),
+      _tile(Icons.verified_outlined, 'Lotes em quarentena', '${d.quarantine}', _go('lots', 'Quarantine'), true),
       _tile(Icons.bookmark_border, 'Reservas abertas', '${d.openReservations}', _go('reservations')),
-      _tile(Icons.lock_outline, 'Último mês fechado', d.lastClosing == null ? '—' : fmtPeriod(d.lastClosing!['period']), _go('closing')),
-      _tile(Icons.place_outlined, 'Locais de estoque', '${d.locations}', _go('locations')),
+      _tile(Icons.lock_outline, 'Último mês fechado', d.lastClosing == null ? 'Nenhum' : fmtPeriod(d.lastClosing!['period']), _go('closing')),
       _tile(Icons.layers_outlined, 'Bobinas de aço', '${d.steelLots}', _go('steel')),
       _tile(Icons.scale_outlined, 'Saldo de aço (kg)', fmt(d.steelBalanceKg), _go('steel')),
       _tile(Icons.payments_outlined, 'Saldo de aço (R\$)', fmtMoney(d.steelBalanceValue), _go('steel')),
@@ -144,15 +164,33 @@ class _ModuleScreenState extends State<ModuleScreen> {
 
   List<GridItem> _purchasing(PurchasingDashboard d) {
     if (d.pendingApproval + d.approved + d.openQuotations + d.openOrders + d.overdue.length == 0) return [];
+    final fresh = d.overdue.where((l) => (l['daysLate'] as num) <= legacyOverdueDays).toList();
+    final legacy = d.overdue.where((l) => (l['daysLate'] as num) > legacyOverdueDays).toList();
     final perf = {for (final p in d.performance.where((p) => (p['receivedLines'] as num) > 0)) '${p['supplierName']}': p['onTimePercent'] as num};
     return [
       _tile(Icons.assignment_late_outlined, 'Requisições a aprovar', '${d.pendingApproval}', _go('requisitions', 'PendingApproval')),
       _tile(Icons.assignment_turned_in_outlined, 'Aprovadas sem cotação', '${d.approved}', _go('requisitions', 'Approved')),
       _tile(Icons.request_quote_outlined, 'Cotações abertas', '${d.openQuotations}', _go('quotations')),
       _tile(Icons.receipt_long_outlined, 'Pedidos abertos', '${d.openOrders}', _go('orders')),
-      _tile(Icons.local_shipping_outlined, 'Entregas em atraso', '${d.overdue.length}', _go('overdue')),
-      GridItem.panel(BarPanel(title: 'Atrasos por fornecedor', data: d.overdueBySupplier)),
-      GridItem.panel(BarPanel(title: 'Pontualidade 12 meses (%)', data: perf, max: 100)),
+      _tile(Icons.schedule, 'Entregas em atraso', '${fresh.length}', _go('overdue'), true),
+      _tile(Icons.history, 'Atrasadas há mais de $legacyOverdueDays dias', '${legacy.length}', _go('overdue')),
+      GridItem.bars(
+        BarPanel(
+          title: 'Atrasos recentes por fornecedor',
+          data: d.overdueBySupplierOf(fresh),
+          emptyText: 'Nenhuma entrega atrasada nos últimos $legacyOverdueDays dias',
+          onRowTap: (_) => _go('overdue')?.call(),
+        ),
+      ),
+      GridItem.bars(
+        BarPanel(
+          title: 'Pontualidade 12 meses (%)',
+          data: perf,
+          max: 100,
+          emptyText: 'Sem recebimentos com data prevista nos últimos 12 meses',
+          onRowTap: (_) => _go('suppliers')?.call(),
+        ),
+      ),
     ];
   }
 
@@ -162,10 +200,18 @@ class _ModuleScreenState extends State<ModuleScreen> {
       _tile(Icons.assignment_outlined, 'OFs a liberar', '${d.count('Created')}', _go('production-orders', 'Created')),
       _tile(Icons.play_circle_outline, 'Liberadas', '${d.count('Released')}', _go('production-orders', 'Released')),
       _tile(Icons.precision_manufacturing_outlined, 'Em produção', '${d.count('InProduction')}', _go('production-orders', 'InProduction')),
-      _tile(Icons.pause_circle_outline, 'Paradas', '${d.count('Stopped')}', _go('production-orders', 'Stopped')),
-      _tile(Icons.schedule, 'Atrasadas', '${d.late.length}', _go('production-orders')),
-      _tile(Icons.local_shipping_outlined, 'Remessas em terceiros', '${d.shipments.length}', _go('outside-processing')),
-      GridItem.panel(BarPanel(title: 'Pico de carga 4 semanas (%)', data: d.peakLoad)),
+      _tile(Icons.pause_circle_outline, 'Paradas', '${d.count('Stopped')}', _go('production-orders', 'Stopped'), true),
+      _tile(Icons.schedule, 'Atrasadas', '${d.late.where((o) => !_legacyOf(o)).length}', _go('production-orders'), true),
+      _tile(Icons.history, 'Atrasadas há mais de $legacyOverdueDays dias', '${d.late.where(_legacyOf).length}', _go('production-orders')),
+      _tile(Icons.outbox_outlined, 'Remessas em terceiros', '${d.shipments.length}', _go('outside-processing')),
+      GridItem.bars(
+        BarPanel(
+          title: 'Pico de carga 4 semanas (%)',
+          data: d.peakLoad,
+          emptyText: 'Nenhuma OF programada nas próximas 4 semanas',
+          onRowTap: (_) => _go('planning')?.call(),
+        ),
+      ),
     ];
   }
 
@@ -180,6 +226,22 @@ class _ModuleScreenState extends State<ModuleScreen> {
   Widget _links() {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    // With the sidebar showing, the same screens are one click away; keep them as a compact row under the data instead of a wall of cards.
+    if (MediaQuery.sizeOf(context).width >= 900) {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final l in widget.links)
+            ActionChip(
+              key: ValueKey('link-${l.id}'),
+              avatar: Icon(l.icon, size: 18, color: cs.primary),
+              label: Text(l.title),
+              onPressed: _go(l.id),
+            ),
+        ],
+      );
+    }
     return LayoutBuilder(
       builder: (context, c) {
         const gap = 12.0;
@@ -231,7 +293,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
       bindings: {const SingleActivator(LogicalKeyboardKey.f5): _refresh},
       child: Focus(
         focusNode: _focus,
-        child: RefreshIndicator(
+        child: PullRefresh(
           onRefresh: _refresh,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -243,23 +305,19 @@ class _ModuleScreenState extends State<ModuleScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // The app bar already names the module; this row carries what it is for and when the numbers were read.
                     Row(
                       children: [
                         Icon(widget.module.icon, color: theme.colorScheme.primary),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(widget.module.section, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
+                          child: Text(widget.module.blurb, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                         ),
                         if (updated != null) Text('Atualizado às ${hhmm(updated)}', style: theme.textTheme.bodySmall),
                         IconButton(tooltip: 'Atualizar (F5)', onPressed: _refresh, icon: const Icon(Icons.refresh)),
                       ],
                     ),
-                    Text(widget.module.blurb, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                    const SizedBox(height: 16),
-                    Text('Telas', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
-                    _links(),
-                    const SizedBox(height: 24),
                     Text('Indicadores', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
                     FutureBuilder<Object>(
@@ -270,6 +328,10 @@ class _ModuleScreenState extends State<ModuleScreen> {
                         return _content(snap.data!);
                       },
                     ),
+                    const SizedBox(height: 24),
+                    Text('Telas', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    _links(),
                   ],
                 ),
               ),
