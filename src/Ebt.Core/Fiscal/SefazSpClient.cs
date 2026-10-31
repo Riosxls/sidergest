@@ -117,6 +117,40 @@ public sealed class SefazSpClient : ISefazClient, IDisposable
             : new SefazResult(false, status, message, null, false);
     }
 
+    public async Task<SefazConsultResult> ConsultAsync(string accessKey, string xml, SefazEnvironment environment, CancellationToken ct)
+    {
+        var body = $"<consSitNFe xmlns=\"{Nfe}\" versao=\"4.00\"><tpAmb>{(int)environment}</tpAmb><xServ>CONSULTAR</xServ><chNFe>{accessKey}</chNFe></consSitNFe>";
+        var ret = await CallAsync(environment, "nfeconsultaprotocolo4", "NFeConsultaProtocolo4", "nfeConsultaNF", body, accessKey, ct);
+        var status = Text(ret, "cStat") ?? "?";
+        var message = Text(ret, "xMotivo") ?? "";
+        switch (status)
+        {
+            case "100" or "150":
+            {
+                var prot = ret.Element(N + "protNFe") ?? throw new FiscalException(502, $"SEFAZ reported the NF authorized without protNFe (key {accessKey})");
+                var protocol = (string?)prot.Element(N + "infProt")?.Element(N + "nProt");
+                string? proc = null;
+                if (!string.IsNullOrWhiteSpace(xml))
+                {
+                    var signed = NfeSigner.SignNfe(xml, certificate); // RSA PKCS#1 v1.5 is deterministic: same bytes the SEFAZ authorized
+                    proc = new XElement(N + "nfeProc", new XAttribute("versao", "4.00"), XElement.Parse(StripDeclaration(signed)), prot).ToString(SaveOptions.DisableFormatting);
+                }
+                return new SefazConsultResult(SefazConsultOutcome.Authorized, status, message, protocol, false, proc);
+            }
+            case "101" or "151" or "155":
+            {
+                var protocol = ret.Descendants(N + "infEvento").Select(e => (string?)e.Element(N + "nProt")).FirstOrDefault(p => p is not null);
+                return new SefazConsultResult(SefazConsultOutcome.Cancelled, status, message, protocol, false);
+            }
+            case "217" or "562":
+                return new SefazConsultResult(SefazConsultOutcome.NotFound, status, message, null, false);
+            case "110" or "301" or "302" or "303":
+                return new SefazConsultResult(SefazConsultOutcome.Denied, status, message, null, false);
+            default:
+                return new SefazConsultResult(SefazConsultOutcome.Unknown, status, message, null, false);
+        }
+    }
+
     private async Task<XElement> CallAsync(SefazEnvironment env, string service, string wsdlName, string operation, string payload, string accessKey, CancellationToken ct)
     {
         var url = $"https://{Host(env)}/ws/{service}.asmx";
@@ -139,7 +173,7 @@ public sealed class SefazSpClient : ISefazClient, IDisposable
         try
         {
             var doc = XDocument.Parse(text);
-            return doc.Descendants().FirstOrDefault(e => e.Name.LocalName is "retEnviNFe" or "retConsReciNFe" or "retEnvEvento") ?? throw new FormatException("no result element");
+            return doc.Descendants().FirstOrDefault(e => e.Name.LocalName is "retEnviNFe" or "retConsReciNFe" or "retEnvEvento" or "retConsSitNFe") ?? throw new FormatException("no result element");
         }
         catch (Exception e) when (e is System.Xml.XmlException or FormatException)
         {

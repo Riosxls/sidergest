@@ -83,6 +83,7 @@ public partial class EbtDbContext
             e.Property(x => x.AccessKey).HasMaxLength(44);
             e.Property(x => x.Protocol).HasMaxLength(20);
             e.Property(x => x.CancelProtocol).HasMaxLength(20);
+            e.Property(x => x.StatusMessage).HasMaxLength(500);
             e.Property(x => x.RecipientName).HasMaxLength(120);
             e.Property(x => x.RecipientDocument).HasMaxLength(14);
             e.Property(x => x.RecipientUf).HasMaxLength(2);

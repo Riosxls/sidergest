@@ -114,4 +114,35 @@ public class SefazClientTests
         Assert.Contains("<Signature", call.Body);
         Assert.Contains("<CNPJ>11222333000181</CNPJ>", call.Body);
     }
+
+    private static string Sit(string cStat, string motivo, string extra = "") =>
+        $"<retConsSitNFe xmlns=\"{NfeSigner.Ns}\" versao=\"4.00\"><tpAmb>2</tpAmb><cStat>{cStat}</cStat><xMotivo>{motivo}</xMotivo>{extra}</retConsSitNFe>";
+
+    [Fact]
+    public async Task Consult_by_key_returns_the_authorization_and_rebuilds_the_nfeProc()
+    {
+        var prot = $"<protNFe versao=\"4.00\"><infProt><chNFe>{Key}</chNFe><cStat>100</cStat><xMotivo>Autorizado</xMotivo><nProt>135261234567890</nProt></infProt></protNFe>";
+        var handler = new Fake((_, _) => Soap(Sit("100", "Autorizado o uso da NF-e", prot)));
+        var r = await new SefazSpClient(new SefazOptions(), Certificate(), handler).ConsultAsync(Key, Nfe, SefazEnvironment.Homologation, default);
+        Assert.Equal(SefazConsultOutcome.Authorized, r.Outcome);
+        Assert.Equal("135261234567890", r.Protocol);
+        Assert.Contains("<nfeProc", r.AuthorizedXml);
+        Assert.Contains("<Signature", r.AuthorizedXml);
+        var call = Assert.Single(handler.Calls);
+        Assert.EndsWith("nfeconsultaprotocolo4.asmx", call.Url);
+        Assert.Contains($"<chNFe>{Key}</chNFe>", call.Body);
+        Assert.Contains("<xServ>CONSULTAR</xServ>", call.Body);
+    }
+
+    [Theory]
+    [InlineData("217", SefazConsultOutcome.NotFound)]
+    [InlineData("101", SefazConsultOutcome.Cancelled)]
+    [InlineData("301", SefazConsultOutcome.Denied)]
+    [InlineData("999", SefazConsultOutcome.Unknown)]
+    public async Task Consult_maps_the_other_situations(string cStat, SefazConsultOutcome expected)
+    {
+        var r = await new SefazSpClient(new SefazOptions(), Certificate(), new Fake((_, _) => Soap(Sit(cStat, "x")))).ConsultAsync(Key, Nfe, SefazEnvironment.Homologation, default);
+        Assert.Equal(expected, r.Outcome);
+        Assert.Null(r.AuthorizedXml);
+    }
 }

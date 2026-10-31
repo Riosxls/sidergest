@@ -6,10 +6,11 @@ using Microsoft.EntityFrameworkCore;
 namespace Ebt.Core.Fiscal;
 
 /// <summary>
-/// NF-e emission. An NF is recorded only after SEFAZ authorizes it: on a rejection (or any later failure inside the caller's transaction)
-/// no document row exists and the NF number is not consumed. Callers lower stock and update the delivery/shipment in the same transaction.
+/// NF-e emission, pending-first: the number is reserved and the document committed as Pending (on its own connection) before SEFAZ is called, and the
+/// answer is committed the same way, so a crash or lost answer never loses track of a number. A definite rejection gives the number back when possible.
+/// Callers lower stock and update the delivery/shipment in their own transaction; only the lines and the link are written there.
 /// </summary>
-public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz)
+public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContextOptions<EbtDbContext> options)
 {
     private static readonly string[] IcmsCalculated = ["00", "20"];
     private static readonly string[] IpiCalculated = ["00", "49", "50", "99"];
@@ -30,7 +31,7 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz)
     {
         return await InTransaction(async () =>
         {
-            var settings = await LockSettingsAsync(ct);
+            var settings = await ReadSettingsAsync(ct);
             RequireIssuer(settings);
             var customer = await db.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == order.CustomerId, ct) ?? throw FiscalException.NotFound("Customer");
             var address = await db.CustomerAddresses.AsNoTracking().FirstOrDefaultAsync(a => a.Id == delivery.AddressId, ct) ?? throw FiscalException.NotFound("Delivery address");
@@ -82,7 +83,7 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz)
         if (opt.UnitValue <= 0) throw FiscalException.Invalid("unitValue", "Give the reference unit value of the pieces sent");
         return await InTransaction(async () =>
         {
-            var settings = await LockSettingsAsync(ct);
+            var settings = await ReadSettingsAsync(ct);
             RequireIssuer(settings);
             var supplier = await db.Suppliers.AsNoTracking().Include(s => s.Addresses).FirstOrDefaultAsync(s => s.Id == shipment.SupplierId, ct) ?? throw FiscalException.NotFound("Supplier");
             var a = supplier.Addresses.Where(x => !string.IsNullOrWhiteSpace(x.Document)).OrderBy(x => x.Id).FirstOrDefault()
@@ -116,7 +117,7 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz)
         if (why is null || why.Length < 15) throw FiscalException.Invalid("reason", "Give the reason for the cancellation (at least 15 characters, SEFAZ rule)");
         return await InTransaction(async () =>
         {
-            var settings = await LockSettingsAsync(ct);
+            var settings = await ReadSettingsAsync(ct);
             var doc = await db.FiscalDocuments.FirstOrDefaultAsync(d => d.Id == id, ct) ?? throw FiscalException.NotFound("NF");
             if (doc.Status != FiscalStatus.Authorized) throw FiscalException.Conflict($"NF {doc.Number} is {doc.Status}");
             if (settings.CancelWindowHours > 0 && DateTimeOffset.UtcNow - doc.IssuedAt > TimeSpan.FromHours(settings.CancelWindowHours))
@@ -142,20 +143,181 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz)
         }, ct);
     }
 
+    /// <summary>
+    /// Pending-first emission. 1) the layout is validated with the provisional number (a bad layout burns nothing); 2) on its own connection the number is
+    /// reserved and the document saved as Pending, committed before SEFAZ is called, holding the fiscal_settings lock only for that short transaction;
+    /// 3) SEFAZ is called with no lock held; 4) the answer is committed on its own connection too: Authorized, or the reservation is released/kept as Rejected.
+    /// A lost answer leaves the document Pending for <see cref="ReconcileAsync"/>. The caller's own transaction only receives the lines and the delivery/shipment link.
+    /// </summary>
     private async Task<FiscalDocument> AuthorizeAndSaveAsync(FiscalSettings settings, FiscalDocument doc, Cfop cfop, NfeParty recipient, NfeTransport transport, bool interstate, CancellationToken ct)
     {
-        doc.Xml = NfeXml.Build(settings, doc, cfop, recipient, transport, interstate);
-        NfeSchema.ValidateNfe(doc.Xml);
-        var verdict = await sefaz.AuthorizeAsync(doc.AccessKey, doc.Xml, doc.Environment, ct);
-        if (!verdict.Authorized) throw FiscalException.Rejected(verdict.Status, verdict.Message);
-        doc.Protocol = verdict.Protocol ?? throw new InvalidOperationException("SEFAZ authorized without a protocol");
-        doc.Simulated = verdict.Simulated;
-        if (verdict.AuthorizedXml is { } authorizedXml) doc.Xml = authorizedXml;
-        settings.NextNumber = doc.Number + 1;
-        db.FiscalDocuments.Add(doc);
+        NfeSchema.ValidateNfe(NfeXml.Build(settings, doc, cfop, recipient, transport, interstate));
+        await ReserveAsync(doc, cfop, recipient, transport, interstate, ct);
+
+        SefazResult verdict;
+        try { verdict = await sefaz.AuthorizeAsync(doc.AccessKey, doc.Xml, doc.Environment, ct); }
+        catch (Exception e)
+        {
+            await NoteAsync(doc.Id, $"SEFAZ answer unknown: {e.Message}");
+            throw;
+        }
+        if (!verdict.Authorized)
+        {
+            var denied = verdict.Status is "110" or "301" or "302" or "303";
+            await ReleaseOrRejectAsync(doc.Id, verdict.Status, verdict.Message, reusable: !denied, ct);
+            throw FiscalException.Rejected(verdict.Status, verdict.Message);
+        }
+        if (verdict.Protocol is null)
+        {
+            await NoteAsync(doc.Id, "SEFAZ authorized without a protocol; reconcile it");
+            throw new InvalidOperationException("SEFAZ authorized without a protocol");
+        }
+        await using (var c = new EbtDbContext(options))
+        {
+            var done = await c.FiscalDocuments.FirstAsync(d => d.Id == doc.Id, CancellationToken.None);
+            done.Status = FiscalStatus.Authorized;
+            done.Protocol = verdict.Protocol;
+            done.Simulated = verdict.Simulated;
+            done.StatusMessage = null;
+            if (verdict.AuthorizedXml is { } authorizedXml) done.Xml = authorizedXml;
+            await c.SaveChangesAsync(CancellationToken.None);
+        }
+        // Back in the caller's transaction: attach the lines and link the delivery/shipment to the already authorized row.
+        var row = await db.FiscalDocuments.FirstAsync(d => d.Id == doc.Id, ct);
+        row.DeliveryId = doc.DeliveryId;
+        row.OutsideShipmentId = doc.OutsideShipmentId;
+        foreach (var l in doc.Lines) row.Lines.Add(l);
+        foreach (var i in doc.Installments) row.Installments.Add(i);
         await db.SaveChangesAsync(ct);
-        return doc;
+        return row;
     }
+
+    private async Task ReserveAsync(FiscalDocument doc, Cfop cfop, NfeParty recipient, NfeTransport transport, bool interstate, CancellationToken ct)
+    {
+        await using var c = new EbtDbContext(options);
+        await using var tx = await c.Database.BeginTransactionAsync(ct);
+        var s = await LockSettingsAsync(c, ct);
+        RequireIssuer(s);
+        doc.Series = s.Series;
+        doc.Number = s.NextNumber;
+        doc.Environment = s.Environment;
+        doc.AccessKey = NfeKey.Build(NfeKey.UfCodes[s.Uf], doc.IssuedAt.ToOffset(BrazilOffset), s.Cnpj!, s.Series, doc.Number, NfeKey.NewCodeNumber(doc.Number));
+        doc.Xml = NfeXml.Build(s, doc, cfop, recipient, transport, interstate);
+        NfeSchema.ValidateNfe(doc.Xml);
+        // Only the header is saved now (no links to rows the caller may hold locked); lines and links follow once SEFAZ authorizes.
+        var shell = new FiscalDocument
+        {
+            Kind = doc.Kind, Status = FiscalStatus.Pending, CfopCode = doc.CfopCode, Series = doc.Series, Number = doc.Number, AccessKey = doc.AccessKey, Environment = doc.Environment, Protocol = "", IssuedAt = doc.IssuedAt,
+            IssuedBy = doc.IssuedBy, CustomerId = doc.CustomerId, SupplierId = doc.SupplierId, RecipientName = doc.RecipientName, RecipientDocument = doc.RecipientDocument, RecipientUf = doc.RecipientUf,
+            ProductsTotal = doc.ProductsTotal, FreightTotal = doc.FreightTotal, IcmsBase = doc.IcmsBase, IcmsTotal = doc.IcmsTotal, IpiTotal = doc.IpiTotal, PisTotal = doc.PisTotal, CofinsTotal = doc.CofinsTotal,
+            InvoiceTotal = doc.InvoiceTotal, AdditionalInfo = doc.AdditionalInfo, Xml = doc.Xml
+        };
+        c.FiscalDocuments.Add(shell);
+        s.NextNumber = doc.Number + 1;
+        await c.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        doc.Id = shell.Id;
+    }
+
+    private async Task NoteAsync(int id, string message)
+    {
+        await using var c = new EbtDbContext(options);
+        var row = await c.FiscalDocuments.FirstAsync(d => d.Id == id, CancellationToken.None);
+        row.StatusMessage = Cut(message, 500);
+        await c.SaveChangesAsync(CancellationToken.None);
+    }
+
+    /// <summary>A definite refusal: the number goes back to <c>next_number</c> when nobody took a later one (and SEFAZ did not deny the NF); otherwise the row stays Rejected, a gap for inutilização.</summary>
+    private async Task<bool> ReleaseOrRejectAsync(int id, string status, string message, bool reusable, CancellationToken ct)
+    {
+        await using var c = new EbtDbContext(options);
+        await using var tx = await c.Database.BeginTransactionAsync(ct);
+        var s = await LockSettingsAsync(c, ct);
+        var row = await c.FiscalDocuments.FirstAsync(d => d.Id == id, ct);
+        var release = reusable && row.Status == FiscalStatus.Pending && s.Series == row.Series && s.NextNumber == row.Number + 1;
+        if (release)
+        {
+            s.NextNumber = row.Number;
+            c.FiscalDocuments.Remove(row);
+        }
+        else if (row.Status == FiscalStatus.Pending)
+        {
+            row.Status = FiscalStatus.Rejected;
+            row.StatusMessage = Cut($"SEFAZ {status}: {message}", 500);
+        }
+        await c.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return release;
+    }
+
+    /// <summary>
+    /// Resolves one Pending NF by asking SEFAZ about its access key (NFeConsultaProtocolo4). Documents younger than <paramref name="minAgeMinutes"/> are left alone
+    /// (the original request may still be waiting for SEFAZ). Authorized: becomes Authorized; unknown to SEFAZ: the number is released or the row kept Rejected.
+    /// </summary>
+    public async Task<ReconcileResult> ReconcileAsync(int id, int minAgeMinutes = 10, CancellationToken ct = default)
+    {
+        var doc = await db.FiscalDocuments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id, ct) ?? throw FiscalException.NotFound("NF");
+        if (doc.Status != FiscalStatus.Pending) throw FiscalException.Conflict($"NF {doc.Number} is {doc.Status}, not Pending");
+        if (DateTimeOffset.UtcNow - doc.IssuedAt < TimeSpan.FromMinutes(minAgeMinutes))
+            return Result(doc, "waiting", $"Sent less than {minAgeMinutes} minutes ago; the original request may still be waiting for SEFAZ", doc.Status);
+        SefazConsultResult r;
+        try { r = await sefaz.ConsultAsync(doc.AccessKey, doc.Xml, doc.Environment, ct); }
+        catch (FiscalException e) when (e.Status == 502) { return Result(doc, "unreachable", e.Message, doc.Status); }
+
+        switch (r.Outcome)
+        {
+            case SefazConsultOutcome.Authorized:
+            {
+                await using var c = new EbtDbContext(options);
+                var row = await c.FiscalDocuments.FirstAsync(d => d.Id == id, ct);
+                if (row.Status != FiscalStatus.Pending) return Result(row, "skipped", $"NF {row.Number} is now {row.Status}", row.Status);
+                row.Status = FiscalStatus.Authorized;
+                row.Protocol = r.Protocol ?? throw new InvalidOperationException("SEFAZ reported the NF authorized without a protocol");
+                row.Simulated = r.Simulated;
+                if (r.AuthorizedXml is { } proc) row.Xml = proc;
+                var unlinked = row.DeliveryId is null && row.OutsideShipmentId is null;
+                row.StatusMessage = unlinked
+                    ? "Authorized by SEFAZ after the answer was lost, with no delivery/shipment attached: cancel this NF (within the window) or link it by hand before issuing another"
+                    : null;
+                await c.SaveChangesAsync(ct);
+                return Result(row, "authorized", row.StatusMessage ?? r.Message, row.Status, unlinked);
+            }
+            case SefazConsultOutcome.Cancelled:
+            {
+                await using var c = new EbtDbContext(options);
+                var row = await c.FiscalDocuments.FirstAsync(d => d.Id == id, ct);
+                if (row.Status != FiscalStatus.Pending) return Result(row, "skipped", $"NF {row.Number} is now {row.Status}", row.Status);
+                row.Status = FiscalStatus.Cancelled;
+                row.CancelledAt = DateTimeOffset.UtcNow;
+                row.CancelledBy = "conciliação";
+                row.CancelReason = "Cancelada direto na SEFAZ (encontrada na conciliação)";
+                row.CancelProtocol = r.Protocol;
+                await c.SaveChangesAsync(ct);
+                return Result(row, "cancelled", r.Message, row.Status);
+            }
+            case SefazConsultOutcome.NotFound or SefazConsultOutcome.Denied:
+            {
+                var released = await ReleaseOrRejectAsync(id, r.Status, r.Message, reusable: r.Outcome == SefazConsultOutcome.NotFound, ct);
+                if (released) return Result(doc, "released", $"SEFAZ has no record of NF {doc.Number}; the number went back to the sequence", FiscalStatus.Rejected);
+                var after = await db.FiscalDocuments.AsNoTracking().FirstAsync(d => d.Id == id, ct);
+                return Result(after, "rejected", $"SEFAZ {r.Status}: {r.Message}. The number stays used: inutilize it if it will not be reissued", after.Status);
+            }
+            default:
+                return Result(doc, "unknown", $"SEFAZ {r.Status}: {r.Message}", doc.Status);
+        }
+    }
+
+    /// <summary>Reconciles every Pending NF (oldest first).</summary>
+    public async Task<IReadOnlyList<ReconcileResult>> ReconcilePendingAsync(int minAgeMinutes = 10, CancellationToken ct = default)
+    {
+        var ids = await db.FiscalDocuments.AsNoTracking().Where(d => d.Status == FiscalStatus.Pending).OrderBy(d => d.Series).ThenBy(d => d.Number).Select(d => d.Id).ToListAsync(ct);
+        var results = new List<ReconcileResult>();
+        foreach (var id in ids) results.Add(await ReconcileAsync(id, minAgeMinutes, ct));
+        return results;
+    }
+
+    private static ReconcileResult Result(FiscalDocument d, string outcome, string message, FiscalStatus status, bool unlinked = false) =>
+        new(d.Id, d.Series, d.Number, d.AccessKey, outcome, message, status, unlinked);
 
     private static FiscalDocument NewDocument(FiscalSettings s, Cfop cfop, FiscalKind kind, DateTimeOffset issuedAt, string? user, NfeParty recipient, int? customerId, int? supplierId)
     {
@@ -163,7 +325,7 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz)
         var key = NfeKey.Build(NfeKey.UfCodes[s.Uf], issuedAt.ToOffset(BrazilOffset), s.Cnpj!, s.Series, number, NfeKey.NewCodeNumber(number));
         return new FiscalDocument
         {
-            Kind = kind, Status = FiscalStatus.Authorized, CfopCode = cfop.Code, Series = s.Series, Number = number, AccessKey = key, Environment = s.Environment, Protocol = "", IssuedAt = issuedAt, IssuedBy = user,
+            Kind = kind, Status = FiscalStatus.Pending, CfopCode = cfop.Code, Series = s.Series, Number = number, AccessKey = key, Environment = s.Environment, Protocol = "", IssuedAt = issuedAt, IssuedBy = user,
             CustomerId = customerId, SupplierId = supplierId, RecipientName = recipient.Name, RecipientDocument = Digits(recipient.Document), RecipientUf = recipient.Uf, Xml = ""
         };
     }
@@ -270,11 +432,14 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz)
 
     private static string RequireNcm(Product p) => Digits(p.Ncm) is { Length: 8 } ncm ? ncm : throw FiscalException.Blocked($"Product {p.Code} has no valid 8-digit NCM");
 
-    private async Task<FiscalSettings> LockSettingsAsync(CancellationToken ct)
+    /// <summary>Current issuer settings, neither locked nor tracked: emission needs only the issuer data, the number is taken later on its own connection.</summary>
+    private async Task<FiscalSettings> ReadSettingsAsync(CancellationToken ct) => await db.FiscalSettings.AsNoTracking().FirstAsync(ct);
+
+    private static async Task<FiscalSettings> LockSettingsAsync(EbtDbContext c, CancellationToken ct)
     {
-        await db.Database.SqlQuery<int>($"SELECT id AS \"Value\" FROM fiscal_settings WHERE id = 1 FOR UPDATE").ToListAsync(ct);
-        var s = await db.FiscalSettings.FirstAsync(ct);
-        await db.Entry(s).ReloadAsync(ct);
+        await c.Database.SqlQuery<int>($"SELECT id AS \"Value\" FROM fiscal_settings WHERE id = 1 FOR UPDATE").ToListAsync(ct);
+        var s = await c.FiscalSettings.FirstAsync(ct);
+        await c.Entry(s).ReloadAsync(ct);
         return s;
     }
 
@@ -296,6 +461,7 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz)
         }
     }
 
+    private static string Cut(string s, int max) => s.Length <= max ? s : s[..max];
     private static string Join(params string?[] parts) => string.Join(" | ", parts.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()));
     private static decimal Money(decimal d) => Math.Round(d, 2, MidpointRounding.AwayFromZero);
     private static string Digits(string? s) => string.Concat((s ?? "").Where(char.IsDigit));

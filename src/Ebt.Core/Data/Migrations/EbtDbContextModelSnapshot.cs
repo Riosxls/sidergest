@@ -1348,6 +1348,11 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("status");
 
+                    b.Property<string>("StatusMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("status_message");
+
                     b.Property<int?>("SupplierId")
                         .HasColumnType("integer")
                         .HasColumnName("supplier_id");
