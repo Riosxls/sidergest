@@ -56,6 +56,32 @@ public class ProductionTests(ApiFixture api)
         (await (await c.GetAsync($"/api/stock/balances?{item}={id}&locationId={locationId}")).Read<Page<StockBalanceOut>>()).Items.Sum(b => b.Quantity);
 
     [Fact]
+    public async Task Product_without_routing_gets_a_suggested_process_that_can_be_rewritten_before_release()
+    {
+        var c = await api.AdminAsync();
+        var product = await (await c.Post("/api/products", Tube(Code("N")) with { DiameterMm = 9.52m, LengthMm = 3000m })).Read<ProductOut>();
+        var created = await (await c.Post("/api/production/orders", new ProductionOrderIn(product.Id, 10m, Today.AddDays(30), PrimaryTube: "Rolo 14,00 x 1,20 mm"))).Read<ProductionOrderOut>();
+
+        Assert.Equal(["Perfilar 14,00mm", "Trefilar para 9,52mm", "Endireitar e Cortar 3000", "Inspeção Final"], created.Operations.Select(o => o.Description));
+        Assert.Equal([10, 20, 30, 40], created.Operations.Select(o => o.Sequence));
+
+        var first = created.Operations[0];
+        var rewritten = await c.Put($"/api/production/orders/{created.Id}/process", new ProcessIn([
+            new ProcessLine(first.Sequence, "Perfilar 14,00mm", "± 0,10", null, null),
+            new ProcessLine(null, "Trefilar para 11,00mm", "± 0,05", null, null),
+            new ProcessLine(created.Operations[1].Sequence, "Trefilar para 9,52mm", "± 0,05", "11,00", "9,52"),
+            new ProcessLine(created.Operations[3].Sequence, "Inspeção Final", "Visual/Dimensional", null, null),
+        ]));
+        var after = await rewritten.Read<ProductionOrderOut>();
+        Assert.Equal(["Perfilar 14,00mm", "Trefilar para 11,00mm", "Trefilar para 9,52mm", "Inspeção Final"], after.Operations.OrderBy(o => o.Sequence).Select(o => o.Description));
+        Assert.Equal("± 0,05", after.Operations.Single(o => o.Description == "Trefilar para 9,52mm").Tolerance);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await c.Put($"/api/production/orders/{created.Id}/process", new ProcessIn([new ProcessLine(null, " ", null, null, null)]))).StatusCode);
+        (await c.Post($"/api/production/orders/{created.Id}/release", new ReleaseIn(true))).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await c.Put($"/api/production/orders/{created.Id}/process", new ProcessIn([new ProcessLine(null, "Outra", null, null, null)]))).StatusCode);
+    }
+
+    [Fact]
     public async Task Roles_guard_production_endpoints()
     {
         var admin = await api.AdminAsync();

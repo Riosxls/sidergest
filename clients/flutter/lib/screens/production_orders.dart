@@ -490,6 +490,13 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
     if (r != null) _set(r);
   }
 
+  Future<void> _editProcess(List<Map<String, dynamic>> ops) async {
+    final lines = await showDialog<List<Map<String, dynamic>>>(context: context, builder: (_) => _ProcessDialog(ops: ops));
+    if (lines == null || !mounted) return;
+    final r = await runAction(context, () => api.put('$base/process', {'operations': lines}), success: 'Processo salvo');
+    if (r != null) _set(r);
+  }
+
   Future<void> _outsource(Map<String, dynamic> op) async {
     final r = await submitForm(
       context,
@@ -560,6 +567,10 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
       children: [
         Section(
           title: 'Roteiro',
+          actions: [
+            if (o['status'] == 'Created' && s.canProduce)
+              TextButton.icon(key: const ValueKey('op-edit-process'), onPressed: () => _editProcess(ops), icon: const Icon(Icons.edit_outlined), label: const Text('Editar processo')),
+          ],
           child: SimpleTable(
             columns: [
               col('Seq.', 'sequence'),
@@ -787,4 +798,110 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
       );
     },
   );
+}
+
+/// Edits the process written on the OF paper: one row per operation (description, requirements, start and final measures).
+class _ProcessDialog extends StatefulWidget {
+  const _ProcessDialog({required this.ops});
+
+  final List<Map<String, dynamic>> ops;
+
+  @override
+  State<_ProcessDialog> createState() => _ProcessDialogState();
+}
+
+class _ProcessRow {
+  _ProcessRow(Map<String, dynamic>? op)
+    : sequence = op?['sequence'] as int?,
+      description = TextEditingController(text: '${op?['description'] ?? ''}'),
+      tolerance = TextEditingController(text: '${op?['tolerance'] ?? ''}'),
+      start = TextEditingController(text: '${op?['measureStart'] ?? ''}'),
+      end = TextEditingController(text: '${op?['measureEnd'] ?? ''}');
+
+  final int? sequence;
+  final TextEditingController description, tolerance, start, end;
+
+  void dispose() {
+    for (final c in [description, tolerance, start, end]) {
+      c.dispose();
+    }
+  }
+}
+
+class _ProcessDialogState extends State<_ProcessDialog> {
+  late final List<_ProcessRow> _rows = [for (final op in widget.ops) _ProcessRow(op)];
+
+  @override
+  void dispose() {
+    for (final r in _rows) {
+      r.dispose();
+    }
+    super.dispose();
+  }
+
+  Widget _field(TextEditingController c, String label, {Key? key}) => TextField(key: key, controller: c, onChanged: (_) => setState(() {}), decoration: InputDecoration(labelText: label, isDense: true));
+
+  @override
+  Widget build(BuildContext context) {
+    final valid = _rows.isNotEmpty && _rows.every((r) => r.description.text.trim().isNotEmpty);
+    return AlertDialog(
+      title: const Text('Processo da ordem de produção'),
+      content: SizedBox(
+        width: 760,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Tudo o que o produto passa, na ordem. Isto é o que sai impresso no meio da ordem de fabricação.'),
+              const SizedBox(height: 12),
+              for (final (i, r) in _rows.indexed)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(padding: const EdgeInsets.only(top: 12, right: 8), child: Text('${r.sequence ?? (i + 1) * 10}')),
+                      Expanded(flex: 4, child: _field(r.description, 'Descrição da operação', key: ValueKey('process-desc-$i'))),
+                      const SizedBox(width: 8),
+                      Expanded(flex: 2, child: _field(r.tolerance, 'Requisitos/Tolerância')),
+                      const SizedBox(width: 8),
+                      Expanded(flex: 2, child: _field(r.start, 'Início')),
+                      const SizedBox(width: 8),
+                      Expanded(flex: 2, child: _field(r.end, 'Final')),
+                      IconButton(
+                        key: ValueKey('process-del-$i'),
+                        tooltip: 'Remover',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: r.sequence != null ? null : () => setState(() => _rows.removeAt(i).dispose()),
+                      ),
+                    ],
+                  ),
+                ),
+              TextButton.icon(key: const ValueKey('process-add'), onPressed: () => setState(() => _rows.add(_ProcessRow(null))), icon: const Icon(Icons.add), label: const Text('Adicionar operação')),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        FilledButton(
+          key: const ValueKey('process-save'),
+          onPressed: !valid
+              ? null
+              : () => Navigator.pop(context, [
+                  for (final r in _rows)
+                    {
+                      'sequence': r.sequence,
+                      'description': r.description.text,
+                      'tolerance': r.tolerance.text,
+                      'measureStart': r.start.text,
+                      'measureEnd': r.end.text,
+                    },
+                ]),
+          child: const Text('Salvar'),
+        ),
+      ],
+    );
+  }
 }

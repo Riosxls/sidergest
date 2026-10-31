@@ -24,6 +24,7 @@ public record HolidayOut(int Id, DateOnly Date, string Name);
 public record ProductionOrderIn(int ProductId, decimal Quantity, DateOnly DueDate, ProductionOrderKind Kind = ProductionOrderKind.Standard, int? CustomerId = null, int? ParentOrderId = null, int? PreviousOrderId = null, int? Bales = null, string? Notes = null, string? PrimaryTube = null);
 public record OrderUpdateIn(decimal Quantity, DateOnly DueDate, int? CustomerId, int? Bales, string? Notes, string? PrimaryTube = null);
 public record OperationDetailsIn(string? Tolerance, string? MeasureStart, string? MeasureEnd);
+public record ProcessIn(List<ProcessLine>? Operations);
 public record ProductionReasonIn(string? Reason, bool Technical = false);
 public record ReleaseIn(bool Force = false);
 public record OverrunIn(decimal Quantity, string? Justification);
@@ -250,6 +251,12 @@ public static class ProductionEndpoints
             return Results.Ok(await db.StockDocuments.AsNoTracking().Where(d => d.Reference == reference).OrderBy(d => d.Id)
                 .Select(d => new StockDocumentSummary(d.Id, d.Type, d.Date, d.Reference, d.SupplierId, d.CustomerId, d.ReversalOfId, d.Reversed, d.CreatedBy, d.CreatedAt, d.Movements.Count)).ToListAsync(ct));
         });
+
+        g.MapPut("/{id:int}/process", async (int id, ProcessIn i, EbtDbContext db, ProductionService svc, CancellationToken ct) =>
+        {
+            await svc.ReplaceProcessAsync(id, i.Operations ?? [], ct);
+            return Results.Ok(await Load(db, svc, id, ct));
+        }).RequireAuthorization(ProductionPolicies.Plan);
 
         g.MapPut("/{id:int}/operations/{seq:int}/details", async (int id, int seq, OperationDetailsIn i, EbtDbContext db, ProductionService svc, CancellationToken ct) =>
         {

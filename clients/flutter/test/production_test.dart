@@ -123,6 +123,7 @@ class Fake {
     final m = r.method;
     if (p == '/api/production/orders' && m == 'GET') return json(page([summary]));
     if (p == '/api/production/orders/7') return json(order());
+    if (p == '/api/production/orders/7/process' && m == 'PUT') return json(order());
     if (p == '/api/production/orders/7/release') {
       if (body(r)['force'] != true) return json({'title': 'Conflict', 'detail': 'Missing material: BOB-15 short by 50 KG', 'status': 409}, 409);
       status = 'Released';
@@ -248,6 +249,26 @@ void main() {
     expect(fake.body(fake.last('POST', '/api/production/orders/7/release'))['force'], isTrue);
     expect(find.byKey(const ValueKey('of-release')), findsNothing);
     expect(find.text('Entrada PA'), findsOneWidget);
+  });
+
+  testWidgets('planner edits the process written on the OF before release', (tester) async {
+    final fake = Fake();
+    await pumpScreen(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
+    await tester.tap(find.text('Operações'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('op-edit-process')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('process-add')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('process-desc-1')), 'Trefilar para 11,00mm');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('process-save')));
+    await tester.pumpAndSettle();
+    final ops = fake.body(fake.last('PUT', '/api/production/orders/7/process'))['operations'] as List;
+    expect(ops.length, 2);
+    expect(ops.last['description'], 'Trefilar para 11,00mm');
+    expect(ops.last['sequence'], isNull);
+    expect(ops.first['sequence'], 10);
   });
 
   testWidgets('shop-floor report from the operation tab', (tester) async {
