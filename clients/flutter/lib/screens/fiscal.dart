@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
+import '../reports/danfe_doc.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/page_column.dart';
@@ -158,6 +159,13 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
       appBar: AppBar(
         title: Text(d == null ? 'Nota fiscal' : 'NF ${d['number']} · ${d['recipientName']}', overflow: TextOverflow.ellipsis),
         actions: [
+          if (d != null && d['status'] != 'Pending' && d['status'] != 'Rejected')
+            IconButton(
+              key: const ValueKey('fiscal-danfe'),
+              tooltip: 'DANFE (PDF)',
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              onPressed: () => printDanfe(context, api, d),
+            ),
           if (canCancel)
             PopupMenuButton<VoidCallback>(
               onSelected: (f) => f(),
