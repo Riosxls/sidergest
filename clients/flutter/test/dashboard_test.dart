@@ -52,12 +52,24 @@ Future<(Session, List<http.Request>)> pumpShell(
     log.add(r);
     final p = r.url.path;
     if (lists.contains(p)) return json([]);
-    if (p == '/api/products' && r.url.queryParameters['q'] == 'T-1') {
-      return json(
-        page([
-          {'id': 1, 'code': 'T-100', 'name': 'Tubo 25x1,5'},
-        ]),
-      );
+    if (p == '/api/search' && r.url.queryParameters['q'] == 'T-1') {
+      return json({
+        'query': 'T-1',
+        'groups': [
+          {
+            'key': 'products',
+            'hits': [
+              {'id': 1, 'title': 'T-100  Tubo 25x1,5', 'subtitle': null},
+            ],
+          },
+          {
+            'key': 'customers',
+            'hits': [
+              {'id': 3, 'title': 'Metalúrgica T-1', 'subtitle': '12.345.678/0001-90'},
+            ],
+          },
+        ],
+      });
     }
     if (p == '/api/production/orders') return json(page(r.url.queryParameters['status'] == 'Created' ? [] : [stopped]));
     return json(page([]));
@@ -252,7 +264,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
     expect(find.text('T-100  Tubo 25x1,5'), findsOneWidget);
-    expect(log.any((r) => r.url.path == '/api/products' && r.url.queryParameters['q'] == 'T-1'), isTrue);
+    expect(find.text('Metalúrgica T-1'), findsOneWidget);
+    expect(find.text('Produtos'), findsOneWidget);
+    expect(find.text('Clientes'), findsOneWidget);
+    final searches = log.where((r) => r.url.path == '/api/search' && r.url.queryParameters['q'] == 'T-1').toList();
+    expect(searches, hasLength(1), reason: 'one debounced round trip for all groups');
+    expect(searches.single.url.queryParameters['q'], 'T-1');
+    expect(searches.single.url.queryParameters['take'], '4');
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.byType(Dialog), findsNothing);
