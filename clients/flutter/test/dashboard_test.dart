@@ -71,6 +71,22 @@ Future<(Session, List<http.Request>)> pumpShell(
         ],
       });
     }
+    if (p == '/api/production/orders/9') {
+      return json({...stopped, 'id': 9, 'reference': 'OF-9', 'warnings': [], 'children': [], 'operations': [], 'materials': []});
+    }
+    if (p == '/api/production/orders/dashboard') {
+      return json({
+        'openTotal': 1,
+        'byStatus': {'Stopped': 1},
+        'lateFresh': {'total': 0, 'items': []},
+        'lateLegacy': {
+          'total': 120,
+          'items': [
+            {...stopped, 'id': 9, 'reference': 'OF-9', 'dueDate': '2020-01-01'},
+          ],
+        },
+      });
+    }
     if (p == '/api/production/orders') return json(page(r.url.queryParameters['status'] == 'Created' ? [] : [stopped]));
     return json(page([]));
   });
@@ -101,6 +117,7 @@ Future<void> openPalette(WidgetTester tester) async {
 }
 
 void main() {
+  legacyListTest();
   testWidgets('onboarding card replaces empty sections, alert tile opens filtered orders, F5 refreshes', (tester) async {
     final (_, log) = await pumpShell(tester, 'Production');
     expect(find.text('Primeiros passos'), findsOneWidget);
@@ -324,5 +341,21 @@ void main() {
       expect(t.cardTheme.color, t.colorScheme.surfaceContainerHigh);
       expect((t.cardTheme.shape as RoundedRectangleBorder).side.color, t.colorScheme.outlineVariant);
     }
+  });
+}
+
+void legacyListTest() {
+  testWidgets('legacy OF alert shows the server total, notes the cap and opens the listed OF', (tester) async {
+    final (_, log) = await pumpShell(tester, 'Production');
+    expect(log.any((r) => r.url.path == '/api/production/orders/dashboard' && r.url.queryParameters['legacyDays'] == '30'), isTrue);
+    expect(log.any((r) => r.url.path == '/api/production/orders' && r.url.queryParameters['skip'] != null && r.url.queryParameters['open'] == 'true'), isFalse, reason: 'no full OF list');
+    await tester.tap(find.text('OFs atrasadas há mais de 30 dias'));
+    await tester.pumpAndSettle();
+    expect(find.text('OFs atrasadas há mais de 30 dias (120)'), findsOneWidget);
+    expect(find.text('Mostrando as 1 primeiras de 120.'), findsOneWidget);
+    await tester.tap(find.textContaining('OF-9'));
+    await tester.pumpAndSettle();
+    expect(log.any((r) => r.url.path == '/api/production/orders/9'), isTrue);
+    expect(find.textContaining('OF-9'), findsWidgets);
   });
 }

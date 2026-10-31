@@ -10,6 +10,9 @@ namespace Ebt.Api.Endpoints;
 
 public record ProductIn(string Code, string Name, ProductKind Kind, TubeShape? Shape, decimal? DiameterMm, decimal? WidthMm, decimal? HeightMm, decimal? ThicknessMm, decimal? LengthMm, decimal? NetWeightKg, decimal? LossPercent, string Ncm, string StockUnit, int? PiecesPerPackage, bool Blocked, string? DrawingRevision, string? ProcessRevision);
 public record ProductOut(int Id, string Code, string Name, ProductKind Kind, TubeShape? Shape, decimal? DiameterMm, decimal? WidthMm, decimal? HeightMm, decimal? ThicknessMm, decimal? LengthMm, decimal? NetWeightKg, decimal? LossPercent, string Ncm, string StockUnit, int? PiecesPerPackage, bool Blocked, string? DrawingRevision, string? ProcessRevision, int OperationCount);
+public record ProductRef(int Id, string Code, string Name);
+public record ProductDashboardOut(int Total, IReadOnlyDictionary<string, int> ByKind, IReadOnlyDictionary<string, int> ByShape, IReadOnlyDictionary<string, int> OperationBuckets,
+    int BlockedTotal, IReadOnlyList<ProductRef> Blocked, int WithoutRoutingTotal, IReadOnlyList<ProductRef> WithoutRouting);
 public record ProductCustomerIn(string? CustomerPartNumber, string? CustomerDescription, bool Active = true);
 public record ProductCustomerOut(int ProductId, int CustomerId, string CustomerName, string? CustomerPartNumber, string? CustomerDescription, bool Active);
 public record RoutingOperationIn(int Sequence, int? StandardOperationId, int? MachineId, int? WorkCenterId, int? ToolId, decimal? SetupHours, decimal? PiecesPerHour, decimal? Operators, string? Description, string? Standard, string? Notes);
@@ -35,7 +38,25 @@ public static class ProductEndpoints
             BeforeDelete = async (id, db, ct) => await db.BomItems.AnyAsync(b => b.ComponentProductId == id, ct) ? "Product is used as a component in another bill of materials" : null
         });
 
-        products.MapGet("/{id:int}/customers", async (int id, EbtDbContext db, CancellationToken ct) =>
+        // Aggregates for the Engenharia dashboard, so the client never loads the whole catalogue.
+        products.MapGet("/dashboard", async (EbtDbContext db, int? top, CancellationToken ct) =>
+        {
+            var n = Math.Clamp(top ?? 50, 1, 200);
+            var all = db.Products.AsNoTracking();
+            var byKind = (await all.GroupBy(p => p.Kind).Select(g => new { g.Key, N = g.Count() }).ToListAsync(ct)).ToDictionary(x => x.Key.ToString(), x => x.N);
+            var byShape = (await all.GroupBy(p => p.Shape).Select(g => new { g.Key, N = g.Count() }).ToListAsync(ct)).ToDictionary(x => x.Key?.ToString() ?? "None", x => x.N);
+            var ops = await all.Select(p => p.Routing.Count).GroupBy(c => c == 0 ? 0 : c <= 3 ? 1 : c <= 6 ? 2 : 3).Select(g => new { g.Key, N = g.Count() }).ToListAsync(ct);
+            int Bucket(int k) => ops.FirstOrDefault(o => o.Key == k)?.N ?? 0;
+            var blocked = all.Where(p => p.Blocked);
+            var noRouting = all.Where(p => p.Routing.Count == 0);
+            return Results.Ok(new ProductDashboardOut(
+                await all.CountAsync(ct), byKind, byShape,
+                new Dictionary<string, int> { ["0"] = Bucket(0), ["1-3"] = Bucket(1), ["4-6"] = Bucket(2), ["7+"] = Bucket(3) },
+                await blocked.CountAsync(ct), await blocked.OrderBy(p => p.Code).Take(n).Select(p => new ProductRef(p.Id, p.Code, p.Name)).ToListAsync(ct),
+                await noRouting.CountAsync(ct), await noRouting.OrderBy(p => p.Code).Take(n).Select(p => new ProductRef(p.Id, p.Code, p.Name)).ToListAsync(ct)));
+        }).RequireAuthorization(Policies.Read);
+
+        products.MapGet("/{id:int}/customers",async (int id, EbtDbContext db, CancellationToken ct) =>
             await db.ProductCustomers.AsNoTracking().Where(pc => pc.ProductId == id).OrderBy(pc => pc.Customer!.Name)
                 .Select(pc => new ProductCustomerOut(pc.ProductId, pc.CustomerId, pc.Customer!.Name, pc.CustomerPartNumber, pc.CustomerDescription, pc.Active))
                 .ToListAsync(ct)).RequireAuthorization(Policies.Read);

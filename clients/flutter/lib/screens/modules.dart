@@ -64,7 +64,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
       'Engenharia' => fetchEngineering(api, dashboardCounted),
       'Estoque' => fetchStock(api),
       'Suprimentos' => fetchPurchasing(api),
-      _ => fetchProduction(api),
+      _ => fetchProduction(api, legacyDays: legacyOverdueDays),
     };
   }
 
@@ -85,9 +85,6 @@ class _ModuleScreenState extends State<ModuleScreen> {
   /// [alarm]: a count above zero is a problem, so the tile is drawn red; otherwise it is plain information.
   GridItem _tile(IconData icon, String label, String value, [void Function()? onTap, bool alarm = false]) =>
       GridItem(DashTile(icon: icon, label: label, value: value, alert: alarm && value != '0', onTap: onTap));
-
-  bool _legacyOf(Map<String, dynamic> of) =>
-      (DateTime.tryParse('${of['dueDate']}') ?? DateTime.now()).isBefore(DateTime.now().subtract(const Duration(days: legacyOverdueDays)));
 
   Widget _content(Object data) {
     final items = switch (data) {
@@ -134,19 +131,25 @@ class _ModuleScreenState extends State<ModuleScreen> {
     if (d.counts.values.every((v) => v == 0)) return [];
     return [
       for (final e in d.counts.entries) _tile(e.key.icon, e.key.title, '${e.value}', _go(e.key.path)),
-      GridItem.bars(BarPanel(title: 'Produtos por tipo', data: d.countBy((p) => kinds[p['kind']] ?? '—'))),
-      GridItem.bars(BarPanel(title: 'Produtos por formato', data: d.countBy((p) => shapes[p['shape']] ?? 'Sem formato'))),
+      GridItem.bars(BarPanel(title: 'Produtos por tipo', data: _ranked(d.byKind, (k) => kinds[k] ?? '—'))),
+      GridItem.bars(BarPanel(title: 'Produtos por formato', data: _ranked(d.byShape, (k) => shapes[k] ?? 'Sem formato'))),
       GridItem.bars(BarPanel(title: 'Operações por produto', data: _operationBuckets(d), warn: const {'0'}, onRowTap: (_) => _go(products.path)?.call())),
     ];
   }
 
   /// Buckets in reading order (0, 1–3, 4–6, 7+), not sorted by size.
-  Map<String, num> _operationBuckets(DashboardData d) {
-    final counted = d.countBy((p) => _bucket(p['operationCount'] as int? ?? 0));
-    return {
-      for (final k in const ['0', '1–3', '4–6', '7+'])
-        if (counted.containsKey(k)) k: counted[k]!,
-    };
+  Map<String, num> _operationBuckets(DashboardData d) => {
+    for (final k in const ['0', '1-3', '4-6', '7+'])
+      if ((d.operationBuckets[k] ?? 0) > 0) k.replaceAll('-', '–'): d.operationBuckets[k]!,
+  };
+
+  /// Server counts relabelled for display, biggest first.
+  Map<String, num> _ranked(Map<String, int> counts, String Function(String) label) {
+    final m = <String, int>{};
+    for (final e in counts.entries) {
+      m.update(label(e.key), (v) => v + e.value, ifAbsent: () => e.value);
+    }
+    return Map.fromEntries(m.entries.toList()..sort((a, b) => b.value.compareTo(a.value)));
   }
 
   List<GridItem> _stock(StockDashboard d) {
@@ -196,14 +199,14 @@ class _ModuleScreenState extends State<ModuleScreen> {
   }
 
   List<GridItem> _production(ProductionDashboard d) {
-    if (d.orders.isEmpty && d.shipments.isEmpty) return [];
+    if (d.openTotal == 0 && d.shipments.isEmpty) return [];
     return [
       _tile(Icons.assignment_outlined, 'OFs a liberar', '${d.count('Created')}', _go('production-orders', 'Created')),
       _tile(Icons.play_circle_outline, 'Liberadas', '${d.count('Released')}', _go('production-orders', 'Released')),
       _tile(Icons.precision_manufacturing_outlined, 'Em produção', '${d.count('InProduction')}', _go('production-orders', 'InProduction')),
       _tile(Icons.pause_circle_outline, 'Paradas', '${d.count('Stopped')}', _go('production-orders', 'Stopped'), true),
-      _tile(Icons.schedule, 'Atrasadas', '${d.late.where((o) => !_legacyOf(o)).length}', _go('production-orders'), true),
-      _tile(Icons.history, 'Atrasadas há mais de $legacyOverdueDays dias', '${d.late.where(_legacyOf).length}', _go('production-orders')),
+      _tile(Icons.schedule, 'Atrasadas', '${d.lateFresh.total}', _go('production-orders'), true),
+      _tile(Icons.history, 'Atrasadas há mais de $legacyOverdueDays dias', '${d.lateLegacy.total}', _go('production-orders')),
       _tile(Icons.outbox_outlined, 'Remessas em terceiros', '${d.shipments.length}', _go('outside-processing')),
       GridItem.bars(
         BarPanel(
@@ -215,14 +218,6 @@ class _ModuleScreenState extends State<ModuleScreen> {
       ),
     ];
   }
-
-  static String _bucket(int n) => n == 0
-      ? '0'
-      : n <= 3
-      ? '1–3'
-      : n <= 6
-      ? '4–6'
-      : '7+';
 
   Widget _links() {
     final theme = Theme.of(context);

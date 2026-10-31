@@ -327,6 +327,7 @@ class Fake {
       return json(quotation());
     }
     if (p == '/api/purchase-orders/from-quotation') return json(order, 201);
+    if (p == '/api/purchase-orders/open-summary') return json({'total': 1, 'supplierIds': [1]});
     if (p == '/api/purchase-orders') return json(page([orderSummary]));
     if (p == '/api/purchase-orders/90') return json(order);
     if (p == '/api/goods-receipts' && m == 'POST') return json({'id': 5, 'number': 55}, 201);

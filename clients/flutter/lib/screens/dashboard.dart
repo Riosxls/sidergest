@@ -86,16 +86,23 @@ List<DashAlert> buildAlerts(
     String Function(Map<String, dynamic>) label,
     void Function(Map<String, dynamic>) open, {
     String? all,
+    int? total,
   }) =>
       () => showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('$title (${items.length})'),
+          title: Text('$title (${total ?? items.length})'),
           content: SizedBox(
             width: 560,
             child: ListView(
               shrinkWrap: true,
               children: [
+                // The server caps the list; say so and send the user to the full screen.
+                if (total != null && total > items.length)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text('Mostrando as ${items.length} primeiras de $total.', style: Theme.of(ctx).textTheme.bodySmall),
+                  ),
                 for (final e in items)
                   ListTile(
                     dense: true,
@@ -123,11 +130,8 @@ List<DashAlert> buildAlerts(
         ),
       );
 
-  final cutoff = DateTime.now().subtract(const Duration(days: legacyOverdueDays));
-  bool legacyOf(Map<String, dynamic> x) => (DateTime.tryParse('${x['dueDate']}') ?? DateTime.now()).isBefore(cutoff);
-  final allLate = production == null ? <Map<String, dynamic>>[] : (production.late..sort((a, b) => '${a['dueDate']}'.compareTo('${b['dueDate']}')));
-  final late = allLate.where((x) => !legacyOf(x)).toList();
-  final lateLegacy = allLate.where(legacyOf).toList();
+  final late = production?.lateFresh ?? const LateOrders(0, []);
+  final lateLegacy = production?.lateLegacy ?? const LateOrders(0, []);
   final allOverdue = purchasing == null
       ? <Map<String, dynamic>>[]
       : ([...purchasing.overdue]..sort((a, b) => (b['daysLate'] as num).compareTo(a['daysLate'] as num)));
@@ -162,30 +166,32 @@ List<DashAlert> buildAlerts(
         'PCP',
         Icons.schedule,
         'OFs atrasadas',
-        late.length,
+        late.total,
         'production-orders',
         null,
         showList(
           'OFs atrasadas',
-          late,
+          late.items,
           (x) => '${x['reference']} · ${x['productCode']} · ${fmt(x['quantity'])} · ${fmtDay(x['dueDate'])}',
           (x) => openProductionOrder(context, session, x['id'] as int).then((_) => refresh()),
           all: 'production-orders',
+          total: late.total,
         ),
       ),
       DashAlert(
         'PCP',
         Icons.history,
         'OFs atrasadas há mais de $legacyOverdueDays dias',
-        lateLegacy.length,
+        lateLegacy.total,
         'production-orders',
         null,
         showList(
           'OFs atrasadas há mais de $legacyOverdueDays dias',
-          lateLegacy,
+          lateLegacy.items,
           (x) => '${x['reference']} · ${x['productCode']} · ${fmt(x['quantity'])} · ${fmtDay(x['dueDate'])}',
           (x) => openProductionOrder(context, session, x['id'] as int).then((_) => refresh()),
           all: 'production-orders',
+          total: lateLegacy.total,
         ),
         muted: true,
       ),
@@ -250,19 +256,19 @@ List<DashAlert> buildAlerts(
         'Engenharia',
         Icons.block,
         'Produtos bloqueados',
-        eng.blocked.length,
+        eng.blockedTotal,
         products.path,
         null,
-        showList('Produtos bloqueados', eng.blocked, productLabel, openProduct),
+        showList('Produtos bloqueados', eng.blocked, productLabel, openProduct, all: products.path, total: eng.blockedTotal),
       ),
       DashAlert(
         'Engenharia',
         Icons.warning_amber,
         'Produtos sem roteiro',
-        eng.withoutRouting.length,
+        eng.withoutRoutingTotal,
         products.path,
         null,
-        showList('Produtos sem roteiro', eng.withoutRouting, productLabel, openProduct),
+        showList('Produtos sem roteiro', eng.withoutRouting, productLabel, openProduct, all: products.path, total: eng.withoutRoutingTotal),
       ),
     ],
   ].where((a) => a.count > 0).toList();
@@ -285,7 +291,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late Future<DashboardData> _eng = fetchEngineering(widget.session.api, dashboardCounted);
   late Future<StockDashboard> _stock = fetchStock(widget.session.api);
   late Future<PurchasingDashboard> _purchasing = fetchPurchasing(widget.session.api);
-  late Future<ProductionDashboard> _production = fetchProduction(widget.session.api);
+  late Future<ProductionDashboard> _production = fetchProduction(widget.session.api, legacyDays: legacyOverdueDays);
   late Future<CommercialDashboard> _commercial = fetchCommercial(widget.session.api);
   late Future<List<Object?>> _all = _combine();
   DateTime? _updated;
@@ -336,7 +342,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _eng = fetchEngineering(widget.session.api, dashboardCounted);
       _stock = fetchStock(widget.session.api);
       _purchasing = fetchPurchasing(widget.session.api);
-      _production = fetchProduction(widget.session.api);
+      _production = fetchProduction(widget.session.api, legacyDays: legacyOverdueDays);
       _commercial = fetchCommercial(widget.session.api);
       _all = _combine();
     });
@@ -360,7 +366,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           pu == null || pu.pendingApproval + pu.approved + pu.openQuotations + pu.openOrders + pu.overdue.length > 0,
           'requisitions',
         ),
-        ('Criar a primeira ordem de fabricação', 'production', pr == null || pr.orders.isNotEmpty || pr.shipments.isNotEmpty, 'production-orders'),
+        ('Criar a primeira ordem de fabricação', 'production', pr == null || pr.openTotal > 0 || pr.shipments.isNotEmpty, 'production-orders'),
       ];
       final done = steps.where((s) => s.$3).length;
       if (done == steps.length) return const SizedBox.shrink();
@@ -454,7 +460,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ? null
             : ['${co.k('openQuotes').toInt()} propostas abertas', '${co.k('openOrders').toInt()} pedidos abertos · ${fmtMoney(co.k('openOrdersValue'))}'];
       case 'Engenharia':
-        return e == null ? null : ['${e.products.length} produtos', '${e.counts[materials] ?? 0} materiais · ${e.counts[machines] ?? 0} máquinas'];
+        return e == null ? null : ['${e.total} produtos', '${e.counts[materials] ?? 0} materiais · ${e.counts[machines] ?? 0} máquinas'];
       case 'Estoque':
         return st == null ? null : ['${st.openReservations} reservas abertas', '${st.steelLots} bobinas · ${fmt(st.steelBalanceKg)} kg de aço'];
       case 'Suprimentos':

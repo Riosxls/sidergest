@@ -33,6 +33,7 @@ public record DueDateIn(DateOnly DueDate);
 public record OrderLineOut(int Id, int LineNumber, int? MaterialId, string? MaterialCode, string Description, string Unit, decimal Quantity, decimal UnitPrice, decimal DiscountPercent, decimal IcmsPercent, decimal IpiPercent, DateOnly DueDate, decimal ReceivedQuantity, decimal OpenQuantity, bool Closed, int? QuotationBidId, decimal Total);
 public record OrderOut(int Id, int Number, int SupplierId, string SupplierName, PurchaseOrderStatus Status, string? PaymentTerms, string? Notes, string? IssuedBy, DateTimeOffset IssuedAt, string? ClosedBy, DateTimeOffset? ClosedAt, string? CloseReason, decimal Total, IReadOnlyList<OrderLineOut> Lines);
 public record OrderSummaryOut(int Id, int Number, int SupplierId, string SupplierName, PurchaseOrderStatus Status, DateTimeOffset IssuedAt, DateOnly? NextDueDate, int LineCount);
+public record OpenOrdersSummaryOut(int Total, IReadOnlyList<int> SupplierIds);
 
 public record ReceiptLineIn(int PurchaseOrderLineId, decimal Quantity, decimal? UnitPrice, string? LotCode);
 public record ReceiptIn(int SupplierId, string InvoiceNumber, string? InvoiceSeries, DateOnly InvoiceDate, DateTimeOffset? ReceivedAt, decimal? InvoiceTotal, string? DivergenceJustification, string? Notes, IReadOnlyList<ReceiptLineIn> Lines);
@@ -266,6 +267,14 @@ public static class PurchasingEndpoints
     private static void MapOrders(WebApplication app)
     {
         var g = app.MapGroup("/api/purchase-orders").WithTags("Purchase orders").AddEndpointFilter(new RowVersionFilter<PurchaseOrder>());
+
+        // Open-order count plus the suppliers with most open orders, for the dashboard (no page of orders needed).
+        g.MapGet("/open-summary", async (EbtDbContext db, int? top, CancellationToken ct) =>
+        {
+            var open = db.PurchaseOrders.AsNoTracking().Where(o => o.Status == PurchaseOrderStatus.Open || o.Status == PurchaseOrderStatus.PartiallyReceived);
+            var suppliers = await open.GroupBy(o => o.SupplierId).OrderByDescending(x => x.Count()).ThenBy(x => x.Key).Take(Math.Clamp(top ?? 8, 1, 50)).Select(x => x.Key).ToListAsync(ct);
+            return Results.Ok(new OpenOrdersSummaryOut(await open.CountAsync(ct), suppliers));
+        }).RequireAuthorization(Policies.Read);
 
         g.MapGet("/", async (EbtDbContext db, PurchaseOrderStatus? status, int? supplierId, int? materialId, bool? open, int? skip, int? take, CancellationToken ct) =>
         {

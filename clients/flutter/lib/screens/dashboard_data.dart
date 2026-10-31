@@ -1,23 +1,42 @@
 import '../api.dart';
 import '../entities.dart';
-import 'production_orders.dart';
 
+Map<String, int> _intMap(Object? m) => {for (final e in ((m as Map?) ?? const {}).entries) '${e.key}': (e.value as num).toInt()};
+List<Map<String, dynamic>> _rows(Object? l) => ((l as List?) ?? const []).cast<Map<String, dynamic>>();
+
+/// Engenharia numbers as the server aggregates them (`GET /api/products/dashboard`): the lists are capped, the totals are not.
 class DashboardData {
-  DashboardData(this.counts, this.products);
+  DashboardData(
+    this.counts, {
+    this.total = 0,
+    this.byKind = const {},
+    this.byShape = const {},
+    this.operationBuckets = const {},
+    this.blockedTotal = 0,
+    this.blocked = const [],
+    this.withoutRoutingTotal = 0,
+    this.withoutRouting = const [],
+  });
 
   final Map<EntitySpec, int> counts;
-  final List<Map<String, dynamic>> products;
+  final int total;
+  final Map<String, int> byKind;
+  final Map<String, int> byShape;
 
-  List<Map<String, dynamic>> get withoutRouting => products.where((p) => (p['operationCount'] ?? 0) == 0).toList();
-  List<Map<String, dynamic>> get blocked => products.where((p) => p['blocked'] == true).toList();
+  /// Keys `0`, `1-3`, `4-6`, `7+`.
+  final Map<String, int> operationBuckets;
+  final int blockedTotal;
+  final List<Map<String, dynamic>> blocked;
+  final int withoutRoutingTotal;
+  final List<Map<String, dynamic>> withoutRouting;
+}
 
-  Map<String, int> countBy(String Function(Map<String, dynamic>) key) {
-    final m = <String, int>{};
-    for (final p in products) {
-      m.update(key(p), (v) => v + 1, ifAbsent: () => 1);
-    }
-    return Map.fromEntries(m.entries.toList()..sort((a, b) => b.value.compareTo(a.value)));
-  }
+/// Late open OFs of one kind: the full count and the first few (by due date) for the alert list.
+class LateOrders {
+  const LateOrders(this.total, this.items);
+
+  final int total;
+  final List<Map<String, dynamic>> items;
 }
 
 class StockDashboard {
@@ -76,14 +95,23 @@ class PurchasingDashboard {
 }
 
 class ProductionDashboard {
-  ProductionDashboard({required this.orders, required this.shipments, required this.load});
+  ProductionDashboard({
+    required this.openTotal,
+    required this.byStatus,
+    required this.lateFresh,
+    required this.lateLegacy,
+    required this.shipments,
+    required this.load,
+  });
 
-  final List<Map<String, dynamic>> orders;
+  final int openTotal;
+  final Map<String, int> byStatus;
+  final LateOrders lateFresh;
+  final LateOrders lateLegacy;
   final List<Map<String, dynamic>> shipments;
   final List<Map<String, dynamic>> load;
 
-  int count(String status) => orders.where((o) => o['status'] == status).length;
-  List<Map<String, dynamic>> get late => orders.where(productionLate).toList();
+  int count(String status) => byStatus[status] ?? 0;
 
   Map<String, num> get peakLoad {
     final m = <String, num>{};
@@ -107,8 +135,18 @@ class CommercialDashboard {
 
 Future<DashboardData> fetchEngineering(ApiClient api, List<EntitySpec> counted) async {
   final pages = await Future.wait(counted.map((s) => api.list(s.path, take: 1)));
-  final all = await api.listAll(products.path);
-  return DashboardData({for (var i = 0; i < counted.length; i++) counted[i]: pages[i].total}, all);
+  final p = await api.get('/api/products/dashboard', {'top': 50}) as Map<String, dynamic>;
+  return DashboardData(
+    {for (var i = 0; i < counted.length; i++) counted[i]: pages[i].total},
+    total: (p['total'] as num?)?.toInt() ?? 0,
+    byKind: _intMap(p['byKind']),
+    byShape: _intMap(p['byShape']),
+    operationBuckets: _intMap(p['operationBuckets']),
+    blockedTotal: (p['blockedTotal'] as num?)?.toInt() ?? 0,
+    blocked: _rows(p['blocked']),
+    withoutRoutingTotal: (p['withoutRoutingTotal'] as num?)?.toInt() ?? 0,
+    withoutRouting: _rows(p['withoutRouting']),
+  );
 }
 
 Future<StockDashboard> fetchStock(ApiClient api) async {
@@ -146,33 +184,41 @@ Future<PurchasingDashboard> fetchPurchasing(ApiClient api) async {
     api.list('/api/requisitions', take: 1, query: {'status': 'PendingApproval'}),
     api.list('/api/requisitions', take: 1, query: {'status': 'Approved'}),
     api.list('/api/quotations', take: 1, query: {'status': 'Open'}),
-    api.list('/api/purchase-orders', take: 200, query: {'open': true}),
+    api.get('/api/purchase-orders/open-summary', {'top': 8}),
     api.get('/api/purchasing/overdue'),
   ]);
-  final orders = r[3] as PageResult;
+  final orders = r[3] as Map<String, dynamic>;
   final now = DateTime.now();
   final from = isoDate(DateTime(now.year - 1, now.month, now.day));
-  final supplierIds = orders.items.map((o) => o['supplierId'] as int).toSet().take(8);
+  final supplierIds = ((orders['supplierIds'] as List?) ?? const []).cast<int>();
   final perf = await Future.wait(supplierIds.map((id) => api.get('/api/suppliers/$id/performance', {'from': from, 'to': isoDate(now)})));
   return PurchasingDashboard(
     pendingApproval: (r[0] as PageResult).total,
     approved: (r[1] as PageResult).total,
     openQuotations: (r[2] as PageResult).total,
-    openOrders: orders.total,
+    openOrders: (orders['total'] as num?)?.toInt() ?? 0,
     overdue: (r[4] as List).cast<Map<String, dynamic>>(),
     performance: perf.cast<Map<String, dynamic>>(),
   );
 }
 
-Future<ProductionDashboard> fetchProduction(ApiClient api) async {
+Future<ProductionDashboard> fetchProduction(ApiClient api, {required int legacyDays}) async {
   final now = DateTime.now();
   final r = await Future.wait([
-    api.listAll('/api/production/orders', query: {'open': true}),
+    api.get('/api/production/orders/dashboard', {'legacyDays': legacyDays, 'top': 50}),
     api.get('/api/production/outside-shipments', {'open': true}),
     api.get('/api/production/load', {'from': isoDate(now), 'to': isoDate(now.add(const Duration(days: 27)))}),
   ]);
+  final o = r[0] as Map<String, dynamic>;
+  LateOrders late(Object? j) {
+    final m = j as Map?;
+    return LateOrders((m?['total'] as num?)?.toInt() ?? 0, _rows(m?['items']));
+  }
   return ProductionDashboard(
-    orders: r[0] as List<Map<String, dynamic>>,
+    openTotal: (o['openTotal'] as num?)?.toInt() ?? 0,
+    byStatus: _intMap(o['byStatus']),
+    lateFresh: late(o['lateFresh']),
+    lateLegacy: late(o['lateLegacy']),
     shipments: (r[1] as List).cast<Map<String, dynamic>>(),
     load: (r[2] as List).cast<Map<String, dynamic>>(),
   );
