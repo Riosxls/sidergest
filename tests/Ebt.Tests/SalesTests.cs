@@ -464,6 +464,45 @@ public class SalesTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Customer_credit_limit_overrides_the_term_and_blocks_release_and_shipment_until_a_manager_overrides()
+    {
+        var admin = await api.AdminAsync();
+        var sales = await api.UserAsync(UserRole.Sales);
+        var stock = await api.UserAsync(UserRole.Stock);
+        var manager = await api.UserAsync(UserRole.SalesManager);
+        async Task SetLimit(Setup s, decimal limit)
+        {
+            var company = new CustomerCompany("26133636000103", "148061942112", true, "Av. Brasil", "100", null, "Centro", "Embu", "SP", "06800000", null, null, null, s.Term.Id, CreditLimit: limit);
+            var res = await admin.Put($"/api/customers/{s.Customer.Id}", new CustomerIn(s.Customer.Name, null, null, ConsumerType.Normal, Company: company));
+            Assert.Equal(limit, (await res.Read<CustomerOut>()).Company!.CreditLimit);
+        }
+
+        // Release: limit lowered after the order was created.
+        var s1 = await Arrange(admin, stock: 0m);
+        var o1 = await (await sales.Post("/api/sales/orders", new SalesOrderIn(s1.Customer.Id, s1.Address.Id, [new SalesLineInput(s1.Tube.Id, 10m)], null, s1.Term.Id))).Read<SalesOrderOut>();
+        await SetLimit(s1, 100m);
+        var credit = (await (await admin.GetAsync($"/api/sales/orders/{o1.Id}")).Read<SalesOrderOut>()).Credit;
+        Assert.Equal(100m, credit.Limit);
+        Assert.Equal("customer", credit.LimitSource);
+        Assert.Equal(HttpStatusCode.Conflict, (await sales.Post($"/api/sales/orders/{o1.Id}/release", new SalesReleaseIn(OverrideCredit: true))).StatusCode);
+        var released = await (await manager.Post($"/api/sales/orders/{o1.Id}/release", new SalesReleaseIn(OverrideCredit: true))).Read<SalesOrderOut>();
+        Assert.Contains(released.History, h => h.Action == "credit-override" && h.Note!.Contains("liberação"));
+
+        // Shipment: same rule, an authorised order is not asked again.
+        var s2 = await Arrange(admin, stock: 10m);
+        var o2 = await (await sales.Post("/api/sales/orders", new SalesOrderIn(s2.Customer.Id, s2.Address.Id, [new SalesLineInput(s2.Tube.Id, 10m)], null, s2.Term.Id))).Read<SalesOrderOut>();
+        (await sales.Post($"/api/sales/orders/{o2.Id}/release", new SalesReleaseIn())).EnsureSuccessStatusCode();
+        await SetLimit(s2, 100m);
+        var d2 = await (await admin.Post($"/api/sales/orders/{o2.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
+        var blocked = await stock.Post($"/api/sales/deliveries/{d2.Id}/ship", new ShipInput(Today, WithoutCertificate: true, OverrideCredit: true));
+        Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+        Assert.Contains("Credit limit", await blocked.Content.ReadAsStringAsync());
+        var shipped = await (await manager.Post($"/api/sales/deliveries/{d2.Id}/ship", new ShipInput(Today, WithoutCertificate: true, OverrideCredit: true))).Read<DeliveryOut>();
+        Assert.Equal(DeliveryStatus.Shipped, shipped.Status);
+        Assert.Contains((await (await admin.GetAsync($"/api/sales/orders/{o2.Id}")).Read<SalesOrderOut>()).History, h => h.Action == "credit-override" && h.Note!.Contains("expedição"));
+    }
+
+    [Fact]
     public async Task Credit_limit_needs_manager_override()
     {
         var admin = await api.AdminAsync();

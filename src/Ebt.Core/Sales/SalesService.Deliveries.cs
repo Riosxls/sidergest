@@ -56,7 +56,7 @@ public sealed partial class SalesService
     }
 
     /// <summary>Physical shipment. A caller without the right to emit the NF (<paramref name="canEmitInvoice"/> false) ships the goods and leaves the NF pending for <see cref="EmitInvoiceAsync"/>.</summary>
-    public async Task<Delivery> ShipAsync(int id, ShipInput i, string? user, CancellationToken ct = default, bool canEmitInvoice = true)
+    public async Task<Delivery> ShipAsync(int id, ShipInput i, string? user, CancellationToken ct = default, bool canEmitInvoice = true, bool overrideCredit = false)
     {
         return await InTransaction(async () =>
         {
@@ -64,6 +64,7 @@ public sealed partial class SalesService
             if (d.Status != DeliveryStatus.Planned) throw SalesException.Conflict($"Delivery is {d.Status}");
             var o = await LockOrderAsync(d.OrderId, ct);
             if (o.Status is not (SalesOrderStatus.Released or SalesOrderStatus.PartiallyShipped)) throw SalesException.Conflict($"Order is {o.Status}");
+            await EnsureCreditAsync(o, "expedição", overrideCredit, user, ct);
             var certified = o.CertificateWaived || await db.QualityCertificates.AnyAsync(c => c.OrderId == o.Id && c.Status == CertificateStatus.Issued, ct);
             if (!certified && !i.WithoutCertificate)
                 throw SalesException.Conflict($"{o.Reference} has no issued quality certificate. Issue one, waive it on the order, or ship without it");

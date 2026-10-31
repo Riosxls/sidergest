@@ -229,6 +229,8 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     );
     if (!proceed || !mounted) return;
     var useStock = true;
+    var overrideCredit = false;
+    final creditExceeded = (_o!['credit'] as Map?)?['exceeded'] == true && s.canApproveSales;
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
@@ -252,6 +254,15 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
                   value: useStock,
                   onChanged: (v) => set(() => useStock = v),
                 ),
+                if (creditExceeded)
+                  SwitchListTile(
+                    key: const ValueKey('override-credit'),
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Autorizar acima do limite de crédito'),
+                    subtitle: const Text('Fica registrado no histórico do pedido'),
+                    value: overrideCredit,
+                    onChanged: (v) => set(() => overrideCredit = v),
+                ),
               ],
             ),
           ),
@@ -263,7 +274,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       ),
     );
     if (ok != true || !mounted) return;
-    final r = await runAction(context, () => api.post('$base/release', {'useStock': useStock}), success: 'Pedido liberado para produção');
+    final r = await runAction(context, () => api.post('$base/release', {'useStock': useStock, if (overrideCredit) 'overrideCredit': true}), success: 'Pedido liberado para produção');
     if (r is Map<String, dynamic>) setState(() => _o = r);
   }
 

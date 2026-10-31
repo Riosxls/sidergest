@@ -103,12 +103,13 @@ public sealed partial class SalesService
         }, ct);
     }
 
-    public async Task<SalesOrder> ReleaseAsync(int id, bool useStock, string? user, CancellationToken ct = default)
+    public async Task<SalesOrder> ReleaseAsync(int id, bool useStock, string? user, CancellationToken ct = default, bool overrideCredit = false)
     {
         return await InTransaction(async () =>
         {
             var o = await LockOrderAsync(id, ct);
             if (o.Status != SalesOrderStatus.Created) throw SalesException.Conflict($"Order is {o.Status}; only new orders can be released");
+            await EnsureCreditAsync(o, "liberação", overrideCredit, user, ct);
             var notes = new List<string>();
             foreach (var line in o.Lines.OrderBy(l => l.Sequence))
             {
@@ -263,16 +264,32 @@ public sealed partial class SalesService
         }, ct);
     }
 
+    /// <summary>
+    /// Hard credit check at release and shipment. An order already authorised by a manager (credit-override event, written at creation or here) passes;
+    /// otherwise an exceeded limit blocks unless a manager overrides, and the override is logged on the order.
+    /// </summary>
+    private async Task EnsureCreditAsync(SalesOrder o, string stage, bool overrideCredit, string? user, CancellationToken ct)
+    {
+        var credit = await CreditAsync(o.CustomerId, o.PaymentTermId, 0m, null, ct);
+        if (!credit.Exceeded) return;
+        if (await db.SalesEvents.AnyAsync(e => e.Kind == SalesRecordKind.Order && e.RecordId == o.Id && e.Action == "credit-override", ct)) return;
+        if (!overrideCredit)
+            throw SalesException.Conflict($"Credit limit exceeded: limit {credit.Limit:0.00}, open {credit.Open:0.00}; a manager must authorise the {stage}");
+        Log(SalesRecordKind.Order, o.Id, "credit-override", null, null, $"{stage}: limite {credit.Limit:0.00} excedido (aberto {credit.Open:0.00})", user);
+    }
+
     public async Task<CreditCheck> CreditAsync(int customerId, int? paymentTermId, decimal thisOrder, int? excludeOrderId, CancellationToken ct = default)
     {
-        var limit = paymentTermId is { } pt ? await db.PaymentTerms.Where(p => p.Id == pt).Select(p => p.CreditLimit).FirstOrDefaultAsync(ct) : null;
+        var customerLimit = await db.Customers.AsNoTracking().Where(c => c.Id == customerId).Select(c => c.CreditLimit).FirstOrDefaultAsync(ct);
+        var termLimit = paymentTermId is { } pt ? await db.PaymentTerms.Where(p => p.Id == pt).Select(p => p.CreditLimit).FirstOrDefaultAsync(ct) : null;
+        var limit = customerLimit ?? termLimit;
         var lines = await db.SalesOrderLines.AsNoTracking()
             .Where(l => l.Order!.CustomerId == customerId && OpenOrder.Contains(l.Order.Status) && l.OrderId != excludeOrderId)
             .Select(l => new { l.Id, l.Quantity, l.UnitPrice, l.IpiPercent }).ToListAsync(ct);
         var ids = lines.Select(l => l.Id).ToList();
         var shipped = await ShippedAsync(ids, ct);
         var open = lines.Sum(l => Money(Math.Max(0, l.Quantity - shipped.GetValueOrDefault(l.Id)) * l.UnitPrice * (1 + l.IpiPercent / 100m)));
-        return new CreditCheck(limit, open, thisOrder, limit is { } lim && open + thisOrder > lim);
+        return new CreditCheck(limit, open, thisOrder, limit is { } lim && open + thisOrder > lim, customerLimit is not null ? "customer" : termLimit is not null ? "term" : null);
     }
 
     public async Task<Dictionary<int, decimal>> ShippedAsync(IReadOnlyCollection<int> orderLineIds, CancellationToken ct = default) =>

@@ -644,6 +644,11 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("contact");
 
+                    b.Property<decimal?>("CreditLimit")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("credit_limit");
+
                     b.Property<int?>("DefaultPaymentTermId")
                         .HasColumnType("integer")
                         .HasColumnName("default_payment_term_id");

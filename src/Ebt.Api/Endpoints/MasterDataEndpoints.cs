@@ -6,7 +6,7 @@ using static Ebt.Api.Infrastructure.Crud;
 
 namespace Ebt.Api.Endpoints;
 
-public record CustomerCompany(string? Document, string? StateRegistration, bool IcmsContributor, string? Street, string? Number, string? Complement, string? District, string? City, string? Uf, string? ZipCode, string? Contact, string? Email, string? Phone, int? PaymentTermId = null, string? PaymentTermName = null);
+public record CustomerCompany(string? Document, string? StateRegistration, bool IcmsContributor, string? Street, string? Number, string? Complement, string? District, string? City, string? Uf, string? ZipCode, string? Contact, string? Email, string? Phone, int? PaymentTermId = null, string? PaymentTermName = null, decimal? CreditLimit = null);
 public record CustomerIn(string Name, string? TradeName, string? LegacyCode, ConsumerType ConsumerType, bool Active = true, CustomerAddressIn? Address = null, CustomerCompany? Company = null);
 public record CustomerOut(int Id, string Name, string? TradeName, string? LegacyCode, ConsumerType ConsumerType, bool Active, int AddressCount, CustomerAddressOut? DefaultAddress = null, CustomerCompany? Company = null);
 public record CustomerAddressIn(string Document, string Uf, string? LegacyCode, string? StateRegistration, bool IcmsContributor, string? Street, string? Number, string? Complement, string? District, string? City, string? CityIbgeCode, string? ZipCode, string? DefaultCfop, string? Buyer, string? Email, string? Phone);
@@ -43,7 +43,7 @@ public static class MasterDataEndpoints
                 c.Addresses.OrderBy(a => a.LegacyCode).ThenBy(a => a.Id)
                     .Select(a => new CustomerAddressOut(a.Id, a.CustomerId, a.Document, a.Uf, a.LegacyCode, a.StateRegistration, a.IcmsContributor, a.Street, a.Number, a.Complement, a.District, a.City, a.CityIbgeCode, a.ZipCode, a.DefaultCfop, a.Buyer, a.Email, a.Phone))
                     .FirstOrDefault(),
-                new CustomerCompany(c.Document, c.StateRegistration, c.IcmsContributor, c.Street, c.Number, c.Complement, c.District, c.City, c.Uf, c.ZipCode, c.Contact, c.Email, c.Phone, c.DefaultPaymentTermId, c.DefaultPaymentTerm != null ? c.DefaultPaymentTerm.Name : null)),
+                new CustomerCompany(c.Document, c.StateRegistration, c.IcmsContributor, c.Street, c.Number, c.Complement, c.District, c.City, c.Uf, c.ZipCode, c.Contact, c.Email, c.Phone, c.DefaultPaymentTermId, c.DefaultPaymentTerm != null ? c.DefaultPaymentTerm.Name : null, c.CreditLimit)),
             Create = i =>
             {
                 var c = new Customer { Name = i.Name.Trim(), TradeName = Clean(i.TradeName), LegacyCode = Clean(i.LegacyCode), ConsumerType = i.ConsumerType, Active = i.Active };
@@ -66,7 +66,8 @@ public static class MasterDataEndpoints
                     errors.Require(!Has(co.Document) || Digits(co.Document, 11, 14), "company.document", "CPF (11) or CNPJ (14) digits")
                         .Require(!Has(co.Uf) || co.Uf.Trim().Length == 2, "company.uf", "Two-letter state")
                         .Require(!Has(co.ZipCode) || Digits(co.ZipCode, 8), "company.zipCode", "8 digits")
-                        .Require(!co.IcmsContributor || Has(co.StateRegistration), "company.stateRegistration", "Required for ICMS contributors");
+                        .Require(!co.IcmsContributor || Has(co.StateRegistration), "company.stateRegistration", "Required for ICMS contributors")
+                        .Require(co.CreditLimit is null or >= 0, "company.creditLimit", "Cannot be negative");
                 if (i.Address is { } a)
                     foreach (var (k, v) in ValidateAddress(a)) errors[$"address.{char.ToLowerInvariant(k[0])}{k[1..]}"] = v;
                 return errors;
@@ -215,6 +216,7 @@ public static class MasterDataEndpoints
         c.Email = Clean(i.Email);
         c.Phone = Clean(i.Phone);
         c.DefaultPaymentTermId = i.PaymentTermId;
+        c.CreditLimit = i.CreditLimit;
     }
 
     private static void MapCustomerAddresses(WebApplication app)

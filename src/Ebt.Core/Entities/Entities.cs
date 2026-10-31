@@ -29,6 +29,8 @@ public class Customer : IHasSource
     public string? Contact { get; set; }
     public string? Email { get; set; }
     public string? Phone { get; set; }
+    /// <summary>Overrides the credit limit of the payment term when set.</summary>
+    public decimal? CreditLimit { get; set; }
     public int? DefaultPaymentTermId { get; set; }
     public PaymentTerm? DefaultPaymentTerm { get; set; }
     public List<CustomerAddress> Addresses { get; set; } = new();

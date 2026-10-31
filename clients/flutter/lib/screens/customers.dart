@@ -37,6 +37,7 @@ const _companyFields = [
   FieldSpec('email', 'E-mail'),
   FieldSpec('phone', 'Telefone'),
   FieldSpec('paymentTermId', 'Prazo padrão', type: FieldType.lookup, lookup: LookupSpec('/api/sales/payment-terms'), hint: 'Usado como padrão nos orçamentos'),
+  FieldSpec('creditLimit', 'Limite de crédito (R\$)', type: FieldType.decimal, hint: 'Vazio = vale o limite do prazo'),
 ];
 
 List<FieldSpec> _companyFormFields() => [

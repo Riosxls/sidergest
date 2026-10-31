@@ -24,7 +24,7 @@ public record SalesReasonIn(string? Reason);
 public record OrderCancelIn(string? Reason, bool CancelProduction = false);
 public record SalesOrderIn(int CustomerId, int AddressId, List<SalesLineInput> Lines, string? CustomerPo = null, int? PaymentTermId = null, FreightTerms Freight = FreightTerms.Cif, string? Notes = null, bool OverrideCredit = false, string? Company = null, string? CustomPaymentTerm = null,
     BillTo BillTo = BillTo.Ebt, OrderOrigin Origin = OrderOrigin.System, string? Salesperson = null);
-public record SalesReleaseIn(bool UseStock = true);
+public record SalesReleaseIn(bool UseStock = true, bool OverrideCredit = false);
 public record ConfirmDeliveryIn(DateOnly? Date = null, string? ReceivedBy = null);
 
 public record QuoteLineOut(int Id, int Sequence, int ProductId, string ProductCode, string? CustomerPartNumber, string Description, decimal Quantity, string Unit, decimal UnitPrice, decimal? ListPrice, decimal? DiscountPercent,
@@ -383,7 +383,7 @@ public static class SalesEndpoints
 
         g.MapPost("/{id:int}/release", async (int id, SalesReleaseIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
-            await svc.ReleaseAsync(id, i.UseStock, Who(user), ct);
+            await svc.ReleaseAsync(id, i.UseStock, Who(user), ct, i.OverrideCredit && IsManager(user));
             return Results.Ok(await LoadOrder(db, svc, id, ct));
         }).RequireAuthorization(SalesPolicies.Release);
 
@@ -437,7 +437,7 @@ public static class SalesEndpoints
 
         g.MapPost("/{id:int}/ship", async (int id, ShipInput i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
-            await svc.ShipAsync(id, i, Who(user), ct, canEmitInvoice: Access.Matrix[FiscalPolicies.Emit].Any(r => user.IsInRole(r.ToString())));
+            await svc.ShipAsync(id, i, Who(user), ct, canEmitInvoice: Access.Matrix[FiscalPolicies.Emit].Any(r => user.IsInRole(r.ToString())), overrideCredit: i.OverrideCredit && IsManager(user));
             return Results.Ok(await LoadDelivery(db, id, ct));
         }).RequireAuthorization(SalesPolicies.Ship);
 

@@ -153,6 +153,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
         const FieldSpec('lotNumber', 'Nº do lote'),
         const FieldSpec('invoicedValue', 'Valor faturado (R\$)', type: FieldType.decimal, hint: 'Total da NF, com impostos'),
         FieldSpec('grossWeightKg', 'Peso bruto (kg)', type: FieldType.decimal, defaultValue: d['grossWeightKg']),
+        if (s.canApproveSales) const FieldSpec('overrideCredit', 'Autorizar acima do limite de crédito', type: FieldType.boolean, defaultValue: false, hint: 'Só vale se o cliente passou do limite; fica no histórico'),
       ],
       submit: (b) => api.post('$base/ship', {...b, if (withoutCertificate) 'withoutCertificate': true}),
     );
