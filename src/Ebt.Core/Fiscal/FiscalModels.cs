@@ -34,6 +34,9 @@ public sealed record SefazConsultResult(SefazConsultOutcome Outcome, string Stat
 
 public interface ISefazClient
 {
+    /// <summary>True for the local stub: documents reserved through it are flagged Simulated from the start.</summary>
+    bool IsSimulated { get; }
+
     /// <summary>Asks SEFAZ what happened to an access key (NFeConsultaProtocolo4). <paramref name="xml"/> is the unsigned NFe stored locally, used to rebuild the nfeProc. Throws a 502 <see cref="FiscalException"/> when SEFAZ cannot be reached.</summary>
     Task<SefazConsultResult> ConsultAsync(string accessKey, string xml, SefazEnvironment environment, CancellationToken ct);
 

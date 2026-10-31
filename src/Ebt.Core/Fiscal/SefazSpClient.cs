@@ -62,6 +62,8 @@ public sealed class SefazSpClient : ISefazClient, IDisposable
         ownsHttp = true;
     }
 
+    public bool IsSimulated => false;
+
     public static string Host(SefazEnvironment env) => env == SefazEnvironment.Production ? "nfe.fazenda.sp.gov.br" : "homologacao.nfe.fazenda.sp.gov.br";
 
     public async Task<SefazResult> AuthorizeAsync(string accessKey, string xml, SefazEnvironment environment, CancellationToken ct)

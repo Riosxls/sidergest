@@ -207,7 +207,7 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
         // Only the header is saved now (no links to rows the caller may hold locked); lines and links follow once SEFAZ authorizes.
         var shell = new FiscalDocument
         {
-            Kind = doc.Kind, Status = FiscalStatus.Pending, CfopCode = doc.CfopCode, Series = doc.Series, Number = doc.Number, AccessKey = doc.AccessKey, Environment = doc.Environment, Protocol = "", IssuedAt = doc.IssuedAt,
+            Kind = doc.Kind, Status = FiscalStatus.Pending, CfopCode = doc.CfopCode, Series = doc.Series, Number = doc.Number, AccessKey = doc.AccessKey, Environment = doc.Environment, Simulated = sefaz.IsSimulated, Protocol = "", IssuedAt = doc.IssuedAt,
             IssuedBy = doc.IssuedBy, CustomerId = doc.CustomerId, SupplierId = doc.SupplierId, RecipientName = doc.RecipientName, RecipientDocument = doc.RecipientDocument, RecipientUf = doc.RecipientUf,
             ProductsTotal = doc.ProductsTotal, FreightTotal = doc.FreightTotal, IcmsBase = doc.IcmsBase, IcmsTotal = doc.IcmsTotal, IpiTotal = doc.IpiTotal, PisTotal = doc.PisTotal, CofinsTotal = doc.CofinsTotal,
             InvoiceTotal = doc.InvoiceTotal, AdditionalInfo = doc.AdditionalInfo, Xml = doc.Xml

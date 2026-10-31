@@ -17,6 +17,8 @@ public sealed class StubSefazClient : ISefazClient
     public const string TimeoutMarker = "#SEFAZ-TIMEOUT#";
     public const string TimeoutAuthorizedMarker = "#SEFAZ-TIMEOUT-AUTORIZADA#";
 
+    public bool IsSimulated => true;
+
     private readonly ConcurrentDictionary<string, string> authorized = new();
     private readonly ConcurrentDictionary<string, string> cancelled = new();
 
