@@ -1,10 +1,12 @@
-# CLAUDE.md — SiderGest
+# CLAUDE.md — MetaGest
+
+The app was renamed from SiderGest to **MetaGest** (display name, window, manifest, docs). The folder `sidergest`, the docker compose project (`sidergest-db-1`, volumes, image `sidergest-api`), the dev password `sidergest123` and the repo name keep the old name on purpose: renaming them would orphan the database volume.
 
 Primary context file for future sessions. Read fully before changing code.
 
 ## Project overview
 
-EBT (Brazilian steel-tube manufacturer) is replacing its legacy **Emissor NF** system (HDS / xHarbour / DBF files; old executable `C:\Users\italo\Desktop\EBT\SI\NF\NF.exe`) with **SiderGest**:
+EBT (Brazilian steel-tube manufacturer) is replacing its legacy **Emissor NF** system (HDS / xHarbour / DBF files; old executable `C:\Users\italo\Desktop\EBT\SI\NF\NF.exe`) with **MetaGest**:
 
 - Backend: ASP.NET Core 8 minimal API + EF Core + PostgreSQL 16 (`src/`).
 - Clients: Flutter for Windows, Android and Web (`clients/flutter`).

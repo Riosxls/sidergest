@@ -22,7 +22,7 @@ class EbtApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: session,
       builder: (_, _) => MaterialApp(
-        title: 'SiderGest',
+        title: 'MetaGest',
         debugShowCheckedModeBanner: false,
         theme: appTheme(Brightness.light, comfortable: session.comfortable),
         darkTheme: appTheme(Brightness.dark, comfortable: session.comfortable),

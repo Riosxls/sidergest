@@ -1,4 +1,4 @@
-# SiderGest — Engenharia, Estoque, Suprimentos, PCP
+# MetaGest — Engenharia, Estoque, Suprimentos, PCP
 
 ## Quick start (Windows)
 

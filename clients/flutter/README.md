@@ -1,4 +1,4 @@
-# SiderGest — Flutter client
+# MetaGest — Flutter client
 
 Flutter 3.47 (Dart 3.13). One codebase for Windows, Android and Web, talking to the REST API in `../../src/Ebt.Api` (Engenharia, Estoque, Suprimentos).
 

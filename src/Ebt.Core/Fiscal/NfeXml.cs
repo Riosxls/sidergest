@@ -59,7 +59,7 @@ public static class NfeXml
         var ide = E("ide",
             E("cUF", key[..2]), E("cNF", key.Substring(35, 8)), E("natOp", Cut(cfop.Description, 60)), E("mod", "55"), E("serie", doc.Series.ToString(Inv)), E("nNF", doc.Number.ToString(Inv)),
             E("dhEmi", local.ToString("yyyy-MM-dd'T'HH:mm:sszzz", Inv)), E("tpNF", "1"), E("idDest", interstate ? "2" : "1"), E("cMunFG", issuer.CityIbgeCode), E("tpImp", "1"), E("tpEmis", "1"),
-            E("cDV", key[43..]), E("tpAmb", ((int)doc.Environment).ToString(Inv)), E("finNFe", "1"), E("indFinal", "0"), E("indPres", "9"), E("procEmi", "0"), E("verProc", "SiderGest 1.0"));
+            E("cDV", key[43..]), E("tpAmb", ((int)doc.Environment).ToString(Inv)), E("finNFe", "1"), E("indFinal", "0"), E("indPres", "9"), E("procEmi", "0"), E("verProc", "MetaGest 1.0"));
 
         var emit = E("emit", E("CNPJ", issuer.Cnpj), E("xNome", Cut(issuer.CompanyName, 60)), OptE("xFant", Cut(issuer.TradeName, 60)),
             E("enderEmit", E("xLgr", Cut(issuer.Street, 60)), E("nro", Cut(issuer.Number, 60)), OptE("xCpl", Cut(issuer.Complement, 60)), E("xBairro", Cut(issuer.District, 60)), E("cMun", issuer.CityIbgeCode),

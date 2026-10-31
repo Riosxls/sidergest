@@ -106,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   Icon(Icons.precision_manufacturing, size: 56, color: cs.primary),
                   const SizedBox(height: 8),
-                  Text('SiderGest', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall),
+                  Text('MetaGest', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall),
                   const SizedBox(height: 24),
                   TextField(
                     key: const ValueKey('login-user'),
