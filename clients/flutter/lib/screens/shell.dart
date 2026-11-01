@@ -167,7 +167,9 @@ class _ShellState extends State<Shell> {
       setState(() {
         _collapsed = p.getBool('navCollapsed') ?? false;
       });
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
   }
 
   Future<void> _toggleCollapsed() async {
@@ -175,7 +177,9 @@ class _ShellState extends State<Shell> {
     try {
       final p = await SharedPreferences.getInstance();
       await p.setBool('navCollapsed', _collapsed);
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
   }
 
   void _go(String id, [String? filter]) {

@@ -175,13 +175,17 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       var certs = const <Map<String, dynamic>>[];
       try {
         certs = (await api.list('/api/sales/certificates', query: {'orderId': widget.id}, take: 200)).items;
-      } catch (_) {}
+      } catch (_) {
+        // Optional context; the screen works without it.
+      }
       // The customer's purchase order lives on the quote; optional as well (orders can be typed without one).
       Map<String, dynamic>? quote;
       if (o['quoteId'] != null) {
         try {
           quote = await api.get('/api/sales/quotes/${o['quoteId']}') as Map<String, dynamic>;
-        } catch (_) {}
+        } catch (_) {
+          // Optional context; the screen works without it.
+        }
       }
       if (mounted) {
         setState(() {

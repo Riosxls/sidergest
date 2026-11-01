@@ -440,7 +440,9 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
         _termId = termId;
         _termName = company?['paymentTermName'] as String?;
       });
-    } catch (_) {}
+    } catch (_) {
+      // Optional context; the screen works without it.
+    }
   }
 
   Future<void> _loadAddresses(int customerId, {bool keep = false}) async {
@@ -458,7 +460,9 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
           _email.text = '${first?['email'] ?? ''}';
         }
       });
-    } catch (_) {}
+    } catch (_) {
+      // Optional context; the screen works without it.
+    }
   }
 
   String? _t(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
@@ -795,7 +799,9 @@ class _QuoteScreenState extends State<QuoteScreen> {
     try {
       final c = await api.get('$base/credit');
       if (mounted && c is Map<String, dynamic>) setState(() => _credit = c);
-    } catch (_) {}
+    } catch (_) {
+      // Optional context; the screen works without it.
+    }
   }
 
   static const _openStatuses = ['Draft', 'PendingApproval', 'Approved', 'Sent', 'Accepted', 'PurchaseOrder'];
@@ -876,7 +882,9 @@ class _QuoteScreenState extends State<QuoteScreen> {
     var opened = false;
     try {
       opened = await launchUrl(uri);
-    } catch (_) {}
+    } catch (_) {
+      // Optional context; the screen works without it.
+    }
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum programa de e-mail configurado neste computador')));
     }

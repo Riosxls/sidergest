@@ -53,7 +53,9 @@ class RecentStore {
   static Future<void> clear() async {
     try {
       await (await SharedPreferences.getInstance()).remove(_key);
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
   }
 
   static Future<void> add(RecentItem item) async {
@@ -63,7 +65,9 @@ class RecentStore {
       list.insert(0, item);
       final p = await SharedPreferences.getInstance();
       await p.setString(_key, jsonEncode([for (final e in list.take(max)) e.toJson()]));
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
   }
 }
 

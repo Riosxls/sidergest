@@ -166,7 +166,9 @@ Future<StockDashboard> fetchStock(ApiClient api) async {
   var lowStock = <Map<String, dynamic>>[];
   try {
     lowStock = (await api.get('/api/stock/low-stock') as List).cast<Map<String, dynamic>>();
-  } catch (_) {}
+  } catch (_) {
+    // Optional context; the screen works without it.
+  }
   try {
     steel = (await api.list('/api/steel/lots', take: 200)).items;
   } catch (_) {

@@ -31,7 +31,9 @@ class PrintLog {
   static Future<void> clear() async {
     try {
       await (await SharedPreferences.getInstance()).remove(_key);
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
   }
 
   static Future<void> mark(String? doc) async {
@@ -40,7 +42,9 @@ class PrintLog {
       final prefs = await SharedPreferences.getInstance();
       final list = prefs.getStringList(_key) ?? <String>[];
       if (!list.contains(doc)) await prefs.setStringList(_key, [...list.length > 500 ? list.sublist(list.length - 500) : list, doc]);
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
   }
 }
 

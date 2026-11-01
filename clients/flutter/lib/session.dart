@@ -136,7 +136,9 @@ class Session extends ChangeNotifier {
       idleLockMinutes = idleLockChoices.contains(idle) ? idle : 0;
       AppPrefs.rowsPerPage = rowsPerPage;
       AppPrefs.printPrompts = printPrompts;
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
     try {
       final v = await _storage.readAll();
       final exp = DateTime.tryParse(v['expiresAt'] ?? '');
@@ -155,7 +157,9 @@ class Session extends ChangeNotifier {
         if (!accessValid && !await api.refresh()) await logout();
         if (api.token != null) await _syncProfile();
       }
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
     notifyListeners();
   }
 
@@ -169,7 +173,9 @@ class Session extends ChangeNotifier {
       displayName = me['displayName'] as String?;
       email = me['email'] as String?;
       if (remember) await _storage.write(key: 'permissions', value: jsonEncode(permissions.toList()));
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
   }
 
   /// Applies a login/refresh response and persists it.
@@ -197,7 +203,9 @@ class Session extends ChangeNotifier {
         await _storage.write(key: 'refreshToken', value: api.refreshToken);
         await _storage.write(key: 'refreshExpiresAt', value: refreshExpiresAt?.toIso8601String());
       }
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
   }
 
   /// [remember] keeps the session across app restarts and offers [user] again next time; without it nothing is stored.
@@ -218,7 +226,9 @@ class Session extends ChangeNotifier {
       } else {
         await p.remove('lastUser');
       }
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
     await _apply(r);
   }
 
@@ -234,14 +244,18 @@ class Session extends ChangeNotifier {
       } else {
         await p.remove('lastUser');
       }
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
     if (value) {
       await _persist();
     } else {
       for (final k in _secureKeys) {
         try {
           await _storage.delete(key: k);
-        } catch (_) {}
+        } catch (_) {
+          // Local storage is best effort; the in-memory value stays.
+        }
       }
     }
     notifyListeners();
@@ -252,7 +266,9 @@ class Session extends ChangeNotifier {
     notifyListeners();
     try {
       await (await SharedPreferences.getInstance()).setBool('comfortable', value);
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
   }
 
   Future<void> setTextScale(double value) async {
@@ -260,7 +276,9 @@ class Session extends ChangeNotifier {
     notifyListeners();
     try {
       await (await SharedPreferences.getInstance()).setDouble('textScale', value);
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
   }
 
   Future<void> _savePref(String key, Object value) async {
@@ -275,7 +293,9 @@ class Session extends ChangeNotifier {
         case final String v:
           await p.setString(key, v);
       }
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
   }
 
   Future<void> setHomeScreen(String id) {
@@ -341,7 +361,9 @@ class Session extends ChangeNotifier {
     try {
       final p = await SharedPreferences.getInstance();
       await p.setString('themeMode', mode.name);
-    } catch (_) {}
+    } catch (_) {
+      // Local storage is best effort; the in-memory value stays.
+    }
   }
 
   Future<void> logout() async {
@@ -362,7 +384,9 @@ class Session extends ChangeNotifier {
     for (final k in _secureKeys) {
       try {
         await _storage.delete(key: k);
-      } catch (_) {}
+      } catch (_) {
+        // Local storage is best effort; the in-memory value stays.
+      }
     }
     notifyListeners();
   }
