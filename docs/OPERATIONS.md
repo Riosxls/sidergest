@@ -22,11 +22,12 @@ Admins choose the schedule in **Configurações > Administração > Cópia de se
 The API container cannot run `pg_dump` (no Docker access, read-only), so the plan is stored in the table `backup_settings` and a small agent on the server computer carries it out:
 
 ```
-powershell -File scripts\install-backup-agent.ps1            # once: registers the task "MetaGest backup agent" (every 5 minutes)
+powershell -File scripts\install-backup-agent.ps1            # once: registers the task "MetaGest backup agent" (starts at logon, then checks the plan every few seconds)
 powershell -File scripts\install-backup-agent.ps1 -Remove    # unregister
 ```
 
 - `scripts\backup-agent.ps1` reads the plan, runs `backup.ps1` when a backup is due (also `-CopyTo` the chosen destination), and writes the result and a heartbeat back. The app shows the last result, the next run and warns when the agent has not been seen for 15 minutes.
+- "Fazer backup agora" starts within about 5 seconds because the agent loops. While a backup runs, `scripts\backup.ps1` writes `backup-status\progress.json` (percent and stage); the API reads it through the read-only mount and the app shows a progress bar. `pg_dump` reports no percentage, so the dump stage compares the growing file with the size of the previous dump (first run: a quarter of the database size); treat it as approximate. A progress file that stops updating for 90 seconds counts as a dead run.
 - Daily and weekly times are local time of the server computer. A missed slot (computer off) runs at the next check.
 - The destination must be a full path (`D:\backups\metagest` or `\\server\share`); the app and the agent both refuse anything else. A destination that is not reachable shows as a failed run in the app.
 - The schedule rules live in `Ebt.Core/Maintenance/BackupSchedule.cs` and in `backup-agent.ps1`; change both together.

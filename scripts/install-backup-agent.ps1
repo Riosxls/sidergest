@@ -1,8 +1,9 @@
 param([switch]$Remove)
 
-# Registers (or removes) the Windows scheduled task that runs scripts\backup-agent.ps1 every 5 minutes for the current user.
-# Run it once on the server computer. What to back up, where to copy it and how often is set in the app (Configurações > Administração).
-# The task also runs on battery power and catches up after sleep, because the server computer may be a laptop.
+# Registers (or removes) the Windows scheduled task for scripts/backup-agent.ps1, for the current user.
+# The agent is a loop that checks the backup plan every few seconds, so "Fazer backup agora" in the app starts at once. The task starts it at
+# logon and every 5 minutes as a watchdog (a second copy exits at once because of a mutex). It also runs on battery power and has no time limit.
+# What to back up, where to copy it and how often is set in the app (Configurações > Administração).
 $ErrorActionPreference = 'Stop'
 $Task = 'MetaGest backup agent'
 if ($Remove) {
@@ -12,7 +13,11 @@ if ($Remove) {
 }
 $script = Join-Path $PSScriptRoot 'backup-agent.ps1'
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`""
-$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5)
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 1)
-Register-ScheduledTask -TaskName $Task -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
-Write-Host "Task '$Task' registered. The app shows 'agente ativo' within 5 minutes."
+$triggers = @(
+    (New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME),
+    (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5))
+)
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
+Register-ScheduledTask -TaskName $Task -Action $action -Trigger $triggers -Settings $settings -Force | Out-Null
+Start-ScheduledTask -TaskName $Task
+Write-Host "Task '$Task' registered and started. The app shows 'agente ativo' within a minute."

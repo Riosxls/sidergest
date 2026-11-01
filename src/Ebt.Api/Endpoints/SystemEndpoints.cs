@@ -18,10 +18,10 @@ public record BackupSettingsInput(bool Enabled, string? Frequency, string? TimeO
 
 /// <summary>The backup plan plus what the agent on the server computer reported back.</summary>
 public record BackupSettingsDto(bool Enabled, string Frequency, string TimeOfDay, int Weekday, string? Destination, int Keep,
-    DateTimeOffset? RunRequestedAt, DateTimeOffset? LastRunAt, bool? LastRunOk, string? LastRunMessage, DateTimeOffset? AgentSeenAt, DateTimeOffset? NextRunAt)
+    DateTimeOffset? RunRequestedAt, DateTimeOffset? LastRunAt, bool? LastRunOk, string? LastRunMessage, DateTimeOffset? AgentSeenAt, DateTimeOffset? NextRunAt, SystemEndpoints.BackupProgress? Progress)
 {
-    public static BackupSettingsDto From(BackupSettings s) => new(s.Enabled, s.Frequency.ToString(), s.TimeOfDay.ToString("HH:mm"), (int)s.Weekday, s.Destination, s.Keep,
-        s.RunRequestedAt, s.LastRunAt, s.LastRunOk, s.LastRunMessage, s.AgentSeenAt, BackupSchedule.NextRun(s, DateTimeOffset.UtcNow));
+    public static BackupSettingsDto From(BackupSettings s, SystemEndpoints.BackupProgress? progress) => new(s.Enabled, s.Frequency.ToString(), s.TimeOfDay.ToString("HH:mm"), (int)s.Weekday, s.Destination, s.Keep,
+        s.RunRequestedAt, s.LastRunAt, s.LastRunOk, s.LastRunMessage, s.AgentSeenAt, BackupSchedule.NextRun(s, DateTimeOffset.UtcNow), progress);
 }
 public static class SystemEndpoints
 {
@@ -44,6 +44,31 @@ public static class SystemEndpoints
             return s is null ? none : new BackupStatus(true, null, s.Count, s.LastBackupAt, s.LastBackupFile, s.LastBackupSizeBytes);
         }
         catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException) { return none; }
+    }
+
+    /// <summary>What <c>scripts/backup.ps1</c> writes to <c>progress.json</c> while it runs.</summary>
+    public record BackupProgress(bool Running, int Percent, string? Stage, DateTimeOffset? StartedAt, DateTimeOffset? UpdatedAt);
+
+    /// <summary>A running backup that has not updated its file for this long is treated as dead (crashed script, computer asleep).</summary>
+    public static readonly TimeSpan ProgressStaleAfter = TimeSpan.FromSeconds(90);
+
+    /// <summary>
+    /// Reads <c>progress.json</c> next to <c>status.json</c>. Null when there is none; a "running" file that stopped updating is reported as not running.
+    /// </summary>
+    public static BackupProgress? ScanProgress(string? directory, DateTimeOffset? now = null)
+    {
+        if (string.IsNullOrWhiteSpace(directory)) return null;
+        var path = Path.Combine(directory, "progress.json");
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var p = JsonSerializer.Deserialize<BackupProgress>(File.ReadAllText(path), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            if (p is null) return null;
+            var percent = Math.Clamp(p.Percent, 0, 100);
+            var stale = p.Running && (p.UpdatedAt is null || (now ?? DateTimeOffset.UtcNow) - p.UpdatedAt.Value > ProgressStaleAfter);
+            return p with { Percent = percent, Running = p.Running && !stale };
+        }
+        catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException) { return null; }
     }
 
     public static void MapSystem(this WebApplication app)
@@ -80,8 +105,8 @@ public static class SystemEndpoints
             .WithTags("System").RequireAuthorization(Policies.Admin);
 
         var backup = app.MapGroup("/api/admin/backup-settings").WithTags("System").RequireAuthorization(Policies.Admin);
-        backup.MapGet("/", async (EbtDbContext db, CancellationToken ct) => Results.Ok(BackupSettingsDto.From(await LoadBackupSettings(db, ct))));
-        backup.MapPut("/", async (BackupSettingsInput i, EbtDbContext db, CancellationToken ct) =>
+        backup.MapGet("/", async (EbtDbContext db, IConfiguration config, CancellationToken ct) => Results.Ok(BackupSettingsDto.From(await LoadBackupSettings(db, ct), ScanProgress(config["Backup:Directory"]))));
+        backup.MapPut("/", async (BackupSettingsInput i, EbtDbContext db, IConfiguration config, CancellationToken ct) =>
         {
             var errors = Errors()
                 .Require(Enum.TryParse<BackupFrequency>(i.Frequency, out _) && Enum.IsDefined(Enum.Parse<BackupFrequency>(i.Frequency!)), "frequency", "Hourly, Every6Hours, Daily or Weekly")
@@ -98,14 +123,14 @@ public static class SystemEndpoints
             s.Destination = string.IsNullOrWhiteSpace(i.Destination) ? null : i.Destination.Trim();
             s.Keep = i.Keep;
             await db.SaveChangesAsync(ct);
-            return Results.Ok(BackupSettingsDto.From(s));
+            return Results.Ok(BackupSettingsDto.From(s, ScanProgress(config["Backup:Directory"])));
         });
-        backup.MapPost("/run-now", async (EbtDbContext db, CancellationToken ct) =>
+        backup.MapPost("/run-now", async (EbtDbContext db, IConfiguration config, CancellationToken ct) =>
         {
             var s = await LoadBackupSettings(db, ct);
             s.RunRequestedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
-            return Results.Ok(BackupSettingsDto.From(s));
+            return Results.Ok(BackupSettingsDto.From(s, ScanProgress(config["Backup:Directory"])));
         });
     }
 

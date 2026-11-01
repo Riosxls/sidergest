@@ -1,8 +1,10 @@
 param(
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$Once,
+    [int]$PollSeconds = 4
 )
 
-# Runs on the server computer (Task Scheduler, every 5 minutes; see install-backup-agent.ps1). Reads the backup plan the admin
+# Runs on the server computer (Task Scheduler starts it at logon and every 5 minutes as a watchdog; it then loops every few seconds so "Fazer backup agora" starts at once; see install-backup-agent.ps1). Reads the backup plan the admin
 # set in the app (table backup_settings), runs scripts\backup.ps1 when a backup is due and reports the result back to the table.
 # The API container cannot do this itself: it has no Docker access and no pg_dump. Schedule rules mirror
 # Ebt.Core/Maintenance/BackupSchedule.cs; keep the two in sync.
@@ -56,7 +58,8 @@ function Get-Instant($Value) {
 function Invoke-Agent {
     Push-Location $Root
     try {
-        $container = (& docker compose ps --status running -q db 2>$null | Select-Object -First 1)
+        if (-not $script:Container) { $script:Container = (& docker compose ps --status running -q db 2>$null | Select-Object -First 1) }
+        $container = $script:Container
         if (-not $container) { return }   # Docker or the database is down: nothing to do, try again in 5 minutes.
 
         $row = try { Invoke-Sql $container @"
@@ -64,14 +67,17 @@ select enabled, frequency, to_char(time_of_day, 'HH24:MI'), weekday, coalesce(de
        coalesce(extract(epoch from run_requested_at)::bigint, 0), coalesce(extract(epoch from last_run_at)::bigint, 0)
 from backup_settings where id = 1
 "@ } catch { $null }
-        if (-not $row) { return }   # The API has not migrated the table yet.
+        if (-not $row) { $script:Container = $null; return }   # The API has not migrated the table yet, or the db container was recreated.
         $f = ($row | Select-Object -First 1) -split '\|'
         $plan = [pscustomobject]@{
             Enabled = $f[0] -eq 't'; Frequency = [int]$f[1]; Time = $f[2]; Weekday = [int]$f[3]
             Destination = $f[4]; Keep = [int]$f[5]; RunRequested = Get-Instant $f[6]; LastRun = Get-Instant $f[7]
         }
 
-        Invoke-Sql $container 'update backup_settings set agent_seen_at = now() where id = 1' | Out-Null
+        if (((Get-Date) - $script:LastBeat).TotalSeconds -ge 60) {
+            Invoke-Sql $container 'update backup_settings set agent_seen_at = now() where id = 1' | Out-Null
+            $script:LastBeat = Get-Date
+        }
 
         $now = [DateTimeOffset]::UtcNow
         $due = Get-NextDue $plan $now
@@ -102,5 +108,12 @@ from backup_settings where id = 1
 if ($MyInvocation.InvocationName -ne '.') {
     $mutex = New-Object Threading.Mutex($false, 'Global\MetaGestBackupAgent')
     if (-not $mutex.WaitOne(0)) { exit 0 }   # a previous run is still dumping
-    try { Invoke-Agent } catch { Write-Host "BACKUP AGENT FAILED: $($_.Exception.Message)" -ForegroundColor Red; exit 1 } finally { $mutex.ReleaseMutex() }
+    $script:Container = $null
+    $script:LastBeat = [datetime]::MinValue
+    try {
+        do {
+            try { Invoke-Agent } catch { $script:Container = $null; Write-Host "BACKUP AGENT: $($_.Exception.Message)" -ForegroundColor Red }
+            if (-not $Once -and -not $DryRun) { Start-Sleep -Seconds $PollSeconds }
+        } while (-not $Once -and -not $DryRun)
+    } finally { $mutex.ReleaseMutex() }
 }

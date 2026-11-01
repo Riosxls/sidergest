@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Ebt.Api.Endpoints;
+using Ebt.Api.Infrastructure;
 using Ebt.Core.Entities;
 using Ebt.Core.Maintenance;
 using Ebt.Core.Services;
@@ -113,5 +114,61 @@ public class BackupSettingsTests(ApiFixture api)
         Assert.Equal(now, BackupSchedule.NextRun(s, now));
         s.LastRunAt = now.AddSeconds(1); // the run happened after the request
         Assert.Null(BackupSchedule.NextRun(s, now.AddSeconds(2)));
+    }
+
+    private static string ProgressJson(bool running, int percent, DateTimeOffset updated) =>
+        "{\"running\":" + (running ? "true" : "false") + ",\"percent\":" + percent + ",\"stage\":\"Gravando\",\"startedAt\":\"" + updated.AddSeconds(-5).ToString("o") + "\",\"updatedAt\":\"" + updated.ToString("o") + "\"}";
+
+    [Fact]
+    public void Progress_is_read_from_the_file_and_clamped()
+    {
+        var dir = Directory.CreateTempSubdirectory("ebt-progress-").FullName;
+        try
+        {
+            Assert.Null(SystemEndpoints.ScanProgress(dir));
+            Assert.Null(SystemEndpoints.ScanProgress(null));
+            var now = DateTimeOffset.UtcNow;
+            File.WriteAllText(Path.Combine(dir, "progress.json"), ProgressJson(true, 140, now));
+            var p = SystemEndpoints.ScanProgress(dir, now)!;
+            Assert.True(p.Running);
+            Assert.Equal(100, p.Percent);
+            Assert.Equal("Gravando", p.Stage);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void A_running_file_that_stopped_updating_is_reported_as_not_running()
+    {
+        var dir = Directory.CreateTempSubdirectory("ebt-progress-").FullName;
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            File.WriteAllText(Path.Combine(dir, "progress.json"), ProgressJson(true, 42, now.AddMinutes(-5)));
+            var p = SystemEndpoints.ScanProgress(dir, now)!;
+            Assert.False(p.Running);
+            Assert.Equal(42, p.Percent);
+            File.WriteAllText(Path.Combine(dir, "progress.json"), "{ not json");
+            Assert.Null(SystemEndpoints.ScanProgress(dir, now));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public async Task Settings_response_carries_the_progress_of_the_running_backup()
+    {
+        var dir = Directory.CreateTempSubdirectory("ebt-progress-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "progress.json"), ProgressJson(true, 37, DateTimeOffset.UtcNow));
+            var host = api.Anonymous(new Dictionary<string, string> { ["Backup:Directory"] = dir });
+            var login = await (await host.PostAsJsonAsync("/api/auth/login", new LoginRequest(ApiFixture.AdminUser, ApiFixture.AdminPassword))).Read<LoginResponse>();
+            host.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", login.Token);
+            var s = (await host.GetFromJsonAsync<BackupSettingsDto>(Url, ApiFixture.Json))!;
+            Assert.NotNull(s.Progress);
+            Assert.True(s.Progress!.Running);
+            Assert.Equal(37, s.Progress.Percent);
+        }
+        finally { Directory.Delete(dir, true); }
     }
 }
