@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -49,7 +50,8 @@ class _FiscalDocumentsScreenState extends State<FiscalDocumentsScreen> {
       submit: (b) => widget.session.api.post('/api/fiscal/inutilizations', b),
     );
     if (r != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Numeração ${r['fromNumber']} a ${r['toNumber']} inutilizada (protocolo ${r['protocol']})')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Numeração ${r['fromNumber']} a ${r['toNumber']} inutilizada (protocolo ${r['protocol']})')));
       unawaited(_list.currentState?.reload());
     }
   }
@@ -179,8 +181,7 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
                 ),
               ],
             ),
-          if (canReconcile)
-            TextButton.icon(onPressed: _reconcile, icon: const Icon(Icons.sync), label: const Text('Conciliar com a SEFAZ')),
+          if (canReconcile) TextButton.icon(onPressed: _reconcile, icon: const Icon(Icons.sync), label: const Text('Conciliar com a SEFAZ')),
         ],
       ),
       body: _error != null && d == null
@@ -196,27 +197,7 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        RecordHeader(
-          icon: Icons.description_outlined,
-          kind: fiscalKinds['${d['kind']}'] ?? '${d['kind']}',
-          title: 'NF ${d['number']} · série ${d['series']}',
-          badge: StatusBadge(
-            fiscalStatuses[d['status']] ?? '${d['status']}',
-            tone: switch (d['status']) {
-              'Authorized' => Tone.success,
-              'Pending' => Tone.warning,
-              _ => Tone.danger,
-            },
-          ),
-          fields: [
-            ('Destinatário', '${d['recipientName']}'),
-            ('CNPJ/CPF', '${d['recipientDocument']}'),
-            ('CFOP', '${d['cfopCode']}'),
-            ('Emissão', fmtDate(d['issuedAt'])),
-            ('Valor da nota', fmtMoney(d['invoiceTotal'])),
-            if (d['deliveryReference'] != null) ('Entrega', '${d['deliveryReference']}'),
-          ],
-        ),
+        _header(d),
         if (d['simulated'] == true) ...[
           gap,
           const NextStepCard(
@@ -225,58 +206,19 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
             tone: Tone.warning,
           ),
         ],
-        if (d['status'] == 'Pending' || d['status'] == 'Rejected' || d['statusMessage'] != null) ...[
-          gap,
-          NextStepCard(
-            title: switch (d['status']) {
-              'Pending' => 'Aguardando resposta da SEFAZ',
-              'Rejected' => 'NF rejeitada: número perdido',
-              _ => 'Observação',
-            },
-            message: d['status'] == 'Pending'
-                ? 'A resposta da SEFAZ não chegou. Use "Conciliar com a SEFAZ" para consultar a chave antes de emitir de novo. ${fmt(d['statusMessage'])}'
-                : d['status'] == 'Rejected'
-                ? '${fmt(d['statusMessage'])} Se o número não será reaproveitado, use "Inutilizar numeração" na lista de notas.'
-                : fmt(d['statusMessage']),
-            tone: d['status'] == 'Rejected' ? Tone.danger : Tone.warning,
-          ),
-        ],
+        if (d['status'] == 'Pending' || d['status'] == 'Rejected' || d['statusMessage'] != null) ...[gap, _statusNote(d)],
         if (cancelled) ...[
           gap,
-          NextStepCard(title: 'NF cancelada', message: '${fmt(d['cancelReason'])} · ${fmt(d['cancelledBy'])} em ${fmtDate(d['cancelledAt'])}', tone: Tone.danger),
+          NextStepCard(
+            title: 'NF cancelada',
+            message: '${fmt(d['cancelReason'])} · ${fmt(d['cancelledBy'])} em ${fmtDate(d['cancelledAt'])}',
+            tone: Tone.danger,
+          ),
         ],
         gap,
-        Section(
-          title: 'Itens',
-          child: SimpleTable(
-            columns: [
-              col('Item', 'sequence'),
-              col('Código', 'code'),
-              col('Descrição', 'description'),
-              col('NCM', 'ncm'),
-              ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
-              ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
-              moneyCol('Total', 'total'),
-              ColumnSpec('ICMS', (e) => '${e['icmsCst']} · ${fmtMoney(e['icmsValue'])}', numeric: true),
-              ColumnSpec('IPI', (e) => '${e['ipiCst']} · ${fmtMoney(e['ipiValue'])}', numeric: true),
-            ],
-            rows: (d['lines'] as List).cast<Map<String, dynamic>>(),
-          ),
-        ),
+        _itemsSection(d),
         gap,
-        Section(
-          title: 'Totais',
-          child: InfoGrid([
-            ('Produtos', fmtMoney(d['productsTotal'])),
-            ('Frete', fmtMoney(d['freightTotal'])),
-            ('Base ICMS', fmtMoney(d['icmsBase'])),
-            ('ICMS', fmtMoney(d['icmsTotal'])),
-            ('IPI', fmtMoney(d['ipiTotal'])),
-            ('PIS', fmtMoney(d['pisTotal'])),
-            ('COFINS', fmtMoney(d['cofinsTotal'])),
-            ('Total da nota', fmtMoney(d['invoiceTotal'])),
-          ]),
-        ),
+        _totalsSection(d),
         if ((d['installments'] as List).isNotEmpty) ...[
           gap,
           Section(
@@ -288,16 +230,7 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
           ),
         ],
         gap,
-        Section(
-          title: 'Autorização',
-          child: InfoGrid([
-            ('Chave de acesso', fmt(d['accessKey'])),
-            ('Protocolo', fmt(d['protocol'])),
-            ('Ambiente', d['environment'] == 'Production' ? 'Produção' : 'Homologação'),
-            ('Emitida por', fmt(d['issuedBy'])),
-            ('Informações adicionais', fmt(d['additionalInfo'])),
-          ]),
-        ),
+        _authSection(d),
       ],
     );
   }
@@ -374,61 +307,152 @@ class _FiscalSettingsScreenState extends State<FiscalSettingsScreen> {
         if (has('street').isEmpty || has('city').isEmpty || has('cityIbgeCode').isEmpty) 'endereço completo',
       ];
       final address = [d['street'], d['number'], d['district'], d['city'], d['uf'], d['zipCode']].where((x) => x != null && '$x'.isNotEmpty).join(', ');
-      return PageColumn(child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          NextStepCard(
-            title: d['enabled'] == true ? 'Emissão de NF-e ligada' : 'Emissão de NF-e desligada',
-            message: d['enabled'] == true
-                ? 'Expedir entrega e enviar remessa de beneficiamento sem informar a NF emitem a nota. Ambiente: ${_environments[d['environment']] ?? d['environment']}. A SEFAZ ainda é simulada.'
-                : 'Enquanto desligada, o número da NF continua sendo digitado à mão.',
-            tone: d['enabled'] == true ? Tone.success : Tone.warning,
-            actions: [
-              if (widget.session.isAdmin) FilledButton.tonalIcon(onPressed: () => _edit(d), icon: const Icon(Icons.edit_outlined), label: const Text('Editar parâmetros')),
-            ],
-          ),
-          if (missing.isNotEmpty) ...[
-            gap,
+      return PageColumn(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
             NextStepCard(
-              title: 'Dados do emitente incompletos',
-              message: 'Falta preencher: ${missing.join(', ')}. A NF-e não pode ser emitida sem esses dados.',
-              tone: Tone.warning,
+              title: d['enabled'] == true ? 'Emissão de NF-e ligada' : 'Emissão de NF-e desligada',
+              message: d['enabled'] == true
+                  ? 'Expedir entrega e enviar remessa de beneficiamento sem informar a NF emitem a nota. Ambiente: ${_environments[d['environment']] ?? d['environment']}. A SEFAZ ainda é simulada.'
+                  : 'Enquanto desligada, o número da NF continua sendo digitado à mão.',
+              tone: d['enabled'] == true ? Tone.success : Tone.warning,
+              actions: [
+                if (widget.session.isAdmin)
+                  FilledButton.tonalIcon(onPressed: () => _edit(d), icon: const Icon(Icons.edit_outlined), label: const Text('Editar parâmetros')),
+              ],
+            ),
+            if (missing.isNotEmpty) ...[
+              gap,
+              NextStepCard(
+                title: 'Dados do emitente incompletos',
+                message: 'Falta preencher: ${missing.join(', ')}. A NF-e não pode ser emitida sem esses dados.',
+                tone: Tone.warning,
+              ),
+            ],
+            gap,
+            Section(
+              title: 'Emitente',
+              actions: [if (widget.session.isAdmin) IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined), onPressed: () => _edit(d))],
+              child: InfoGrid([
+                ('Razão social', or('companyName')),
+                ('CNPJ', or('cnpj')),
+                ('Inscrição estadual', or('stateRegistration')),
+                (
+                  'Regime tributário',
+                  switch (d['taxRegime']) {
+                    1 => 'Simples Nacional',
+                    2 => 'Simples Nacional (excesso)',
+                    _ => 'Regime normal',
+                  },
+                ),
+                ('Endereço', address.isEmpty || address == '${d['uf']}' ? 'Não informado' : address),
+                ('Código IBGE', or('cityIbgeCode')),
+              ]),
+            ),
+            gap,
+            Section(
+              title: 'Emissão',
+              actions: [if (widget.session.isAdmin) IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined), onPressed: () => _edit(d))],
+              child: InfoGrid([
+                ('Ambiente', _environments[d['environment']] ?? '${d['environment']}'),
+                ('Série', '${d['series']}'),
+                ('Próximo número', '${d['nextNumber']}'),
+                ('Prazo para cancelar', d['cancelWindowHours'] == 0 ? 'Sem limite' : '${d['cancelWindowHours']} h'),
+              ]),
             ),
           ],
-          gap,
-          Section(
-            title: 'Emitente',
-            actions: [
-              if (widget.session.isAdmin) IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined), onPressed: () => _edit(d)),
-            ],
-            child: InfoGrid([
-              ('Razão social', or('companyName')),
-              ('CNPJ', or('cnpj')),
-              ('Inscrição estadual', or('stateRegistration')),
-              ('Regime tributário', switch (d['taxRegime']) {
-                1 => 'Simples Nacional',
-                2 => 'Simples Nacional (excesso)',
-                _ => 'Regime normal',
-              }),
-              ('Endereço', address.isEmpty || address == '${d['uf']}' ? 'Não informado' : address),
-              ('Código IBGE', or('cityIbgeCode')),
-            ]),
-          ),
-          gap,
-          Section(
-            title: 'Emissão',
-            actions: [
-              if (widget.session.isAdmin) IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined), onPressed: () => _edit(d)),
-            ],
-            child: InfoGrid([
-              ('Ambiente', _environments[d['environment']] ?? '${d['environment']}'),
-              ('Série', '${d['series']}'),
-              ('Próximo número', '${d['nextNumber']}'),
-              ('Prazo para cancelar', d['cancelWindowHours'] == 0 ? 'Sem limite' : '${d['cancelWindowHours']} h'),
-            ]),
-          ),
-        ],
-      ));
+        ),
+      );
     },
   );
+
+  Widget _header(Map<String, dynamic> d) {
+    return RecordHeader(
+      icon: Icons.description_outlined,
+      kind: fiscalKinds['${d['kind']}'] ?? '${d['kind']}',
+      title: 'NF ${d['number']} · série ${d['series']}',
+      badge: StatusBadge(
+        fiscalStatuses[d['status']] ?? '${d['status']}',
+        tone: switch (d['status']) {
+          'Authorized' => Tone.success,
+          'Pending' => Tone.warning,
+          _ => Tone.danger,
+        },
+      ),
+      fields: [
+        ('Destinatário', '${d['recipientName']}'),
+        ('CNPJ/CPF', '${d['recipientDocument']}'),
+        ('CFOP', '${d['cfopCode']}'),
+        ('Emissão', fmtDate(d['issuedAt'])),
+        ('Valor da nota', fmtMoney(d['invoiceTotal'])),
+        if (d['deliveryReference'] != null) ('Entrega', '${d['deliveryReference']}'),
+      ],
+    );
+  }
+
+  Widget _statusNote(Map<String, dynamic> d) {
+    return NextStepCard(
+      title: switch (d['status']) {
+        'Pending' => 'Aguardando resposta da SEFAZ',
+        'Rejected' => 'NF rejeitada: número perdido',
+        _ => 'Observação',
+      },
+      message: d['status'] == 'Pending'
+          ? 'A resposta da SEFAZ não chegou. Use "Conciliar com a SEFAZ" para consultar a chave antes de emitir de novo. ${fmt(d['statusMessage'])}'
+          : d['status'] == 'Rejected'
+          ? '${fmt(d['statusMessage'])} Se o número não será reaproveitado, use "Inutilizar numeração" na lista de notas.'
+          : fmt(d['statusMessage']),
+      tone: d['status'] == 'Rejected' ? Tone.danger : Tone.warning,
+    );
+  }
+
+  Widget _itemsSection(Map<String, dynamic> d) {
+    return Section(
+      title: 'Itens',
+      child: SimpleTable(
+        columns: [
+          col('Item', 'sequence'),
+          col('Código', 'code'),
+          col('Descrição', 'description'),
+          col('NCM', 'ncm'),
+          ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
+          ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
+          moneyCol('Total', 'total'),
+          ColumnSpec('ICMS', (e) => '${e['icmsCst']} · ${fmtMoney(e['icmsValue'])}', numeric: true),
+          ColumnSpec('IPI', (e) => '${e['ipiCst']} · ${fmtMoney(e['ipiValue'])}', numeric: true),
+        ],
+        rows: (d['lines'] as List).cast<Map<String, dynamic>>(),
+      ),
+    );
+  }
+
+  Widget _totalsSection(Map<String, dynamic> d) {
+    return Section(
+      title: 'Totais',
+      child: InfoGrid([
+        ('Produtos', fmtMoney(d['productsTotal'])),
+        ('Frete', fmtMoney(d['freightTotal'])),
+        ('Base ICMS', fmtMoney(d['icmsBase'])),
+        ('ICMS', fmtMoney(d['icmsTotal'])),
+        ('IPI', fmtMoney(d['ipiTotal'])),
+        ('PIS', fmtMoney(d['pisTotal'])),
+        ('COFINS', fmtMoney(d['cofinsTotal'])),
+        ('Total da nota', fmtMoney(d['invoiceTotal'])),
+      ]),
+    );
+  }
+
+  Widget _authSection(Map<String, dynamic> d) {
+    return Section(
+      title: 'Autorização',
+      child: InfoGrid([
+        ('Chave de acesso', fmt(d['accessKey'])),
+        ('Protocolo', fmt(d['protocol'])),
+        ('Ambiente', d['environment'] == 'Production' ? 'Produção' : 'Homologação'),
+        ('Emitida por', fmt(d['issuedBy'])),
+        ('Informações adicionais', fmt(d['additionalInfo'])),
+      ]),
+    );
+  }
 }
