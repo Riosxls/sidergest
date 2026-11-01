@@ -37,6 +37,7 @@ Set<DateTime> nationalHolidays(int year) => _holidayCache.putIfAbsent(year, () {
 
 DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
+/// True for Monday to Friday that is not a national holiday.
 bool isWorkDay(DateTime d) {
   final day = _day(d);
   return day.weekday < DateTime.saturday && !nationalHolidays(day.year).contains(day);

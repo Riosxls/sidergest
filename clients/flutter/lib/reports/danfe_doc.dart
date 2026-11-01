@@ -57,6 +57,7 @@ pw.Widget _title(String t) => pw.Padding(
   child: pw.Text(t, style: const pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
 );
 
+/// DANFE PDF of an NF-e document [d] for the [issuer]; marked when cancelled, simulated or issued in homologation.
 Future<Uint8List> buildDanfePdf(Map<String, dynamic> d, Map<String, dynamic> issuer) async {
   final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-regular.ttf'));
   final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-bold.ttf'));

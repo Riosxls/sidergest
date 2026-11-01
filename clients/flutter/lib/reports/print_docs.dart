@@ -535,7 +535,9 @@ Future<Uint8List> buildProductionOrderPdf(ApiClient api, Map<String, dynamic> o)
   Map<String, dynamic>? product;
   try {
     product = await api.get('/api/products/${o['productId']}') as Map<String, dynamic>;
-  } catch (_) {}
+  } catch (_) {
+    // Optional data; the document prints without it.
+  }
   final ops = (o['operations'] as List).cast<Map<String, dynamic>>();
   final mats = (o['materials'] as List).cast<Map<String, dynamic>>();
   final qty = (o['quantity'] as num?) ?? 0;
