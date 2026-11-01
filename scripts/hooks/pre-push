@@ -1,0 +1,4 @@
+#!/bin/sh
+# Opt-in local gate while GitHub CI is off. Install with: powershell -File scripts\install-hooks.ps1
+# Runs build, tests and coverage thresholds before a push. Bypass once with: git push --no-verify
+exec powershell -NoProfile -ExecutionPolicy Bypass -File "$(git rev-parse --show-toplevel)/scripts/check.ps1" -Coverage
