@@ -31,7 +31,13 @@ Map<String, dynamic> _settings({Object? agentSeenAt = 'now', bool enabled = true
 Map<String, dynamic>? _live;
 bool _failGet = false;
 
-Future<(Session, List<http.Request>)> _pump(WidgetTester tester, Map<String, dynamic> initial, {Widget Function(Session)? home, int putStatus = 200, bool settle = true}) async {
+Future<(Session, List<http.Request>)> _pump(
+  WidgetTester tester,
+  Map<String, dynamic> initial, {
+  Widget Function(Session)? home,
+  int putStatus = 200,
+  bool settle = true,
+}) async {
   tester.view.physicalSize = const Size(1200, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -255,8 +261,9 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
     }
     final gets = log.where((r) => r.method == 'GET').length;
-    await tester.pump(const Duration(seconds: 5));
-    expect(log.where((r) => r.method == 'GET').length, gets);
+    await tester.pump(const Duration(seconds: 9));
+    // Only the slow ten-second refresh is left: at most one more call in nine seconds, not nine.
+    expect(log.where((r) => r.method == 'GET').length, lessThanOrEqualTo(gets + 1));
     await _unmount(tester);
   });
 
@@ -286,6 +293,154 @@ void main() {
     expect(find.byKey(const ValueKey('backup-agent-warning')), findsOneWidget);
   });
 
+  testWidgets('a view left open notices the agent and the finished backup on its own', (tester) async {
+    final (_, log) = await _pump(tester, _settings(agentSeenAt: null)..['lastRunAt'] = null);
+    expect(find.byKey(const ValueKey('backup-agent-warning')), findsOneWidget);
+    expect(find.text('Nenhum backup automático executado ainda'), findsOneWidget);
+    _live = _settings();
+    final before = log.where((r) => r.method == 'GET').length;
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    expect(log.where((r) => r.method == 'GET').length, before + 1);
+    expect(find.byKey(const ValueKey('backup-agent-warning')), findsNothing);
+    expect(find.textContaining('Último backup deu certo'), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('a silent reload keeps unsaved edits but updates the status', (tester) async {
+    await _pump(tester, _settings());
+    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '30');
+    _live = {..._settings(), 'keep': 99, 'lastRunMessage': 'Cópia nova'};
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    expect(find.text('Cópia nova'), findsOneWidget);
+    expect(find.text('30'), findsOneWidget);
+    expect(find.text('99'), findsNothing);
+    await _unmount(tester);
+  });
+
+  testWidgets('a silent reload refreshes a clean form', (tester) async {
+    await _pump(tester, _settings());
+    _live = {..._settings(), 'keep': 99};
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    expect(find.text('99'), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('the refresh button reloads at once', (tester) async {
+    final (_, log) = await _pump(tester, _settings(agentSeenAt: null));
+    expect(find.byTooltip('Atualizar'), findsOneWidget);
+    _live = _settings();
+    final before = log.where((r) => r.method == 'GET').length;
+    await tester.tap(find.byKey(const ValueKey('backup-refresh')));
+    await tester.pump();
+    await tester.pump();
+    expect(log.where((r) => r.method == 'GET').length, before + 1);
+    expect(find.byKey(const ValueKey('backup-agent-warning')), findsNothing);
+    await _unmount(tester);
+  });
+
+  testWidgets('a failing reload keeps the old state and shows no message', (tester) async {
+    await _pump(tester, _settings(agentSeenAt: null));
+    _failGet = true;
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('backup-refresh')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(SnackBar), findsNothing);
+    expect(find.byKey(const ValueKey('backup-agent-warning')), findsOneWidget);
+    expect(find.textContaining('Último backup deu certo'), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('a reload that finds a waiting request switches to fast polling, and timers die with the view', (tester) async {
+    final (_, log) = await _pump(tester, _settings());
+    _live = {..._settings(), 'runRequestedAt': DateTime.now().toUtc().toIso8601String()};
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    expect(find.text('Aguardando o programa de backup…'), findsOneWidget);
+    final before = log.where((r) => r.method == 'GET').length;
+    await tester.pump(const Duration(seconds: 1));
+    expect(log.where((r) => r.method == 'GET').length, before + 1);
+    await _unmount(tester);
+    final after = log.length;
+    await tester.pump(const Duration(seconds: 30));
+    expect(log.length, after);
+  });
+
+  testWidgets('Fazer backup agora saves a dirty form first, then requests the run', (tester) async {
+    final (_, log) = await _pump(tester, _settings());
+    await tester.enterText(find.byKey(const ValueKey('backup-destination')), r'E:\copias');
+    await tester.tap(find.byKey(const ValueKey('backup-run-now')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    final writes = log.where((r) => r.method != 'GET' && r.url.path.startsWith('/api/admin/backup-settings')).toList();
+    expect(writes.map((r) => r.method), ['PUT', 'POST']);
+    expect(writes[1].url.path, endsWith('/run-now'));
+    expect((jsonDecode(writes[0].body) as Map)['destination'], r'E:\copias');
+    expect(find.text('Alterações salvas. Pedido enviado. O backup começa em instantes.'), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('an invalid form blocks Fazer backup agora', (tester) async {
+    final (_, log) = await _pump(tester, _settings());
+    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '0');
+    await tester.tap(find.byKey(const ValueKey('backup-run-now')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Informe de 1 a 365 cópias para guardar.'), findsOneWidget);
+    expect(log.where((r) => r.method != 'GET' && r.url.path.startsWith('/api/admin/backup-settings')), isEmpty);
+  });
+
+  testWidgets('a failed save does not request the run', (tester) async {
+    final (_, log) = await _pump(tester, _settings(), putStatus: 400);
+    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '20');
+    await tester.tap(find.byKey(const ValueKey('backup-run-now')));
+    await tester.pump();
+    await tester.pump();
+    expect(log.where((r) => r.method == 'PUT'), hasLength(1));
+    expect(log.where((r) => r.url.path.endsWith('/run-now')), isEmpty);
+  });
+
+  testWidgets('picking a folder on a clean form saves it at once and opens the picker at the last folder', (tester) async {
+    String? seen = 'unset';
+    final (_, log) = await _pump(
+      tester,
+      _settings(destination: r'D:\backups'),
+      home: (s) => BackupSettingsView(
+        session: s,
+        canBrowse: true,
+        pickFolder: (d) async {
+          seen = d;
+          return r'E:\copias';
+        },
+      ),
+    );
+    await _tap(tester, find.byKey(const ValueKey('backup-pick-folder')));
+    expect(seen, r'D:\backups');
+    final put = log.singleWhere((r) => r.method == 'PUT');
+    expect((jsonDecode(put.body) as Map)['destination'], r'E:\copias');
+    expect(find.text('Pasta de destino salva.'), findsOneWidget);
+    expect(find.text(r'E:\copias'), findsOneWidget);
+    await _tap(tester, find.byKey(const ValueKey('backup-pick-folder')));
+    expect(seen, r'E:\copias');
+  });
+
+  testWidgets('picking a folder on a dirty form only fills the field', (tester) async {
+    final (_, log) = await _pump(
+      tester,
+      _settings(),
+      home: (s) => BackupSettingsView(session: s, canBrowse: true, pickFolder: (_) async => r'E:\copias'),
+    );
+    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '30');
+    await _tap(tester, find.byKey(const ValueKey('backup-pick-folder')));
+    expect(log.where((r) => r.method == 'PUT'), isEmpty);
+    expect(find.text(r'E:\copias'), findsOneWidget);
+  });
+
   testWidgets('folder picker button is hidden on the test platform and shown when forced', (tester) async {
     await _pump(tester, _settings());
     expect(find.byKey(const ValueKey('backup-pick-folder')), findsNothing);
@@ -302,7 +457,7 @@ void main() {
     final (_, log) = await _pump(
       tester,
       _settings(destination: r'D:\backups'),
-      home: (s) => BackupSettingsView(session: s, canBrowse: true, pickFolder: () async => answer.isEmpty ? null : answer),
+      home: (s) => BackupSettingsView(session: s, canBrowse: true, pickFolder: (_) async => answer.isEmpty ? null : answer),
     );
     answer = '';
     await _tap(tester, find.byKey(const ValueKey('backup-pick-folder')));
@@ -310,7 +465,6 @@ void main() {
     answer = r'E:\copias';
     await _tap(tester, find.byKey(const ValueKey('backup-pick-folder')));
     expect(find.text(r'E:\copias'), findsOneWidget);
-    await _tap(tester, find.byKey(const ValueKey('backup-save')));
     final body = jsonDecode(log.singleWhere((r) => r.method == 'PUT').body) as Map<String, dynamic>;
     expect(body['destination'], r'E:\copias');
   });
@@ -319,7 +473,7 @@ void main() {
     await _pump(
       tester,
       _settings(),
-      home: (s) => BackupSettingsView(session: s, canBrowse: true, pickFolder: () async => throw StateError('boom')),
+      home: (s) => BackupSettingsView(session: s, canBrowse: true, pickFolder: (_) async => throw StateError('boom')),
     );
     await _tap(tester, find.byKey(const ValueKey('backup-pick-folder')));
     expect(find.textContaining('StateError'), findsNothing);

@@ -83,7 +83,14 @@ class BackupSettings {
   bool get waiting => runRequestedAt != null && (lastRunAt == null || runRequestedAt!.isAfter(lastRunAt!)) && !running;
 
   /// Body of the PUT: only what the admin edits.
-  Map<String, dynamic> toJson() => {'enabled': enabled, 'frequency': frequency, 'timeOfDay': timeOfDay, 'weekday': weekday, 'destination': destination, 'keep': keep};
+  Map<String, dynamic> toJson() => {
+    'enabled': enabled,
+    'frequency': frequency,
+    'timeOfDay': timeOfDay,
+    'weekday': weekday,
+    'destination': destination,
+    'keep': keep,
+  };
 
   bool get agentMissing => agentSeenAt == null || DateTime.now().difference(agentSeenAt!) > backupAgentStaleAfter;
 
@@ -97,8 +104,8 @@ class BackupSettingsView extends StatelessWidget {
 
   final Session session;
 
-  /// Opens the folder dialog; a null result means cancelled. Defaults to the system dialog (injectable for tests).
-  final Future<String?> Function()? pickFolder;
+  /// Opens the folder dialog at the given folder (when known); a null result means cancelled. Defaults to the system dialog (injectable for tests).
+  final Future<String?> Function(String? initialDirectory)? pickFolder;
 
   /// Whether the "Procurar" button shows. Defaults to Windows desktop only: on web and Android the chosen path
   /// would not be a path on the server computer.
@@ -116,7 +123,7 @@ class _BackupForm extends StatefulWidget {
 
   final Session session;
   final BackupSettings initial;
-  final Future<String?> Function()? pickFolder;
+  final Future<String?> Function(String? initialDirectory)? pickFolder;
   final bool? canBrowse;
 
   @override
@@ -138,6 +145,10 @@ class _BackupFormState extends State<_BackupForm> {
   bool _busy = false;
 
   Timer? _poll;
+
+  /// Slow refresh while nothing is running, so a view left open notices the agent and finished backups.
+  Timer? _idle;
+  bool _reloading = false;
   int _ticks = 0;
   int _waitTicks = 0;
   bool _polling = false;
@@ -148,9 +159,16 @@ class _BackupFormState extends State<_BackupForm> {
 
   Future<void> _browse() async {
     try {
-      final picked = await (widget.pickFolder ?? () => FilePicker.getDirectoryPath(dialogTitle: 'Escolha a pasta de destino do backup'))();
+      final typed = _destination.text.trim();
+      final start = typed.isNotEmpty ? typed : _saved.destination;
+      final picked = await (widget.pickFolder ?? (d) => FilePicker.getDirectoryPath(dialogTitle: 'Escolha a pasta de destino do backup', initialDirectory: d))(
+        start,
+      );
       if (picked == null || picked.trim().isEmpty || !mounted) return;
+      final wasDirty = _dirty();
       setState(() => _destination.text = picked.trim());
+      // A lone folder pick is saved at once, so it is not lost when the user goes straight to "Fazer backup agora".
+      if (!wasDirty) await _save(done: 'Pasta de destino salva.');
     } catch (e) {
       if (mounted) _tell(friendlyError(e));
     }
@@ -160,11 +178,13 @@ class _BackupFormState extends State<_BackupForm> {
   void initState() {
     super.initState();
     _syncPolling();
+    _startIdle();
   }
 
   @override
   void dispose() {
     _poll?.cancel();
+    _idle?.cancel();
     _destination.dispose();
     _keep.dispose();
     super.dispose();
@@ -174,6 +194,8 @@ class _BackupFormState extends State<_BackupForm> {
     if (_active && _poll == null) {
       _ticks = 0;
       _waitTicks = 0;
+      _idle?.cancel();
+      _idle = null;
       _poll = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     }
   }
@@ -181,6 +203,43 @@ class _BackupFormState extends State<_BackupForm> {
   void _stopPolling() {
     _poll?.cancel();
     _poll = null;
+    _startIdle();
+  }
+
+  void _startIdle() {
+    if (_poll != null || _idle != null) return;
+    _idle = Timer.periodic(const Duration(seconds: 10), (_) => _reload());
+  }
+
+  /// Silent reload: refreshes the status and, when the form has no unsaved edits, the editable fields too.
+  /// Errors are only logged; the last known state stays.
+  Future<void> _reload() async {
+    if (_reloading || _busy || _poll != null) return;
+    _reloading = true;
+    try {
+      final res = BackupSettings.fromJson(await widget.session.api.get('/api/admin/backup-settings') as Map<String, dynamic>);
+      if (!mounted || _busy) return;
+      final clean = !_dirty();
+      final wasActive = _active;
+      setState(() {
+        _status = res;
+        if (clean) {
+          _saved = res;
+          _enabled = res.enabled;
+          _frequency = res.frequency;
+          _time = res.timeOfDay;
+          _weekday = res.weekday;
+          _destination.text = res.destination ?? '';
+          _keep.text = '${res.keep}';
+        }
+      });
+      // Fast polling only starts on a transition: after it gave up on a stuck request it stays on the slow refresh.
+      if (!wasActive) _syncPolling();
+    } catch (e) {
+      debugPrint('backup reload failed: $e');
+    } finally {
+      _reloading = false;
+    }
   }
 
   Future<void> _tick() async {
@@ -215,7 +274,10 @@ class _BackupFormState extends State<_BackupForm> {
     final text = (res.lastRunMessage?.isNotEmpty ?? false) ? res.lastRunMessage! : (ok ? 'Backup concluído' : 'Backup falhou');
     final scheme = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text, style: ok ? null : TextStyle(color: scheme.onError)), backgroundColor: ok ? null : scheme.error),
+      SnackBar(
+        content: Text(text, style: ok ? null : TextStyle(color: scheme.onError)),
+        backgroundColor: ok ? null : scheme.error,
+      ),
     );
   }
 
@@ -243,34 +305,46 @@ class _BackupFormState extends State<_BackupForm> {
 
   void _tell(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
-  Future<void> _call(Future<dynamic> Function() send, String done, {bool isSave = false}) async {
+  Future<bool> _call(Future<dynamic> Function() send, String done, {bool isSave = false}) async {
+    var ok = false;
     setState(() => _busy = true);
     try {
       final res = BackupSettings.fromJson(await send() as Map<String, dynamic>);
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _status = res;
         if (isSave) _saved = res;
       });
       _syncPolling();
-      _tell(done);
+      if (done.isNotEmpty) _tell(done);
+      ok = true;
     } catch (e) {
       if (mounted) _tell(friendlyError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+    return ok;
   }
 
-  Future<void> _save() {
+  Future<bool> _save({String done = 'Configuração salva'}) {
     final keep = int.tryParse(_keep.text.trim());
     if (keep == null || keep < 1 || keep > 365) {
       _tell('Informe de 1 a 365 cópias para guardar.');
-      return Future.value();
+      return Future.value(false);
     }
-    return _call(() => widget.session.api.put('/api/admin/backup-settings', _edited().toJson()), 'Configuração salva', isSave: true);
+    return _call(() => widget.session.api.put('/api/admin/backup-settings', _edited().toJson()), done, isSave: true);
   }
 
-  Future<void> _runNow() => _call(() => widget.session.api.post('/api/admin/backup-settings/run-now', <String, dynamic>{}), 'Pedido enviado. O backup começa em instantes.');
+  /// Saves pending edits first (the run uses the stored plan), then asks for the backup.
+  Future<void> _runNow() async {
+    final savedFirst = _dirty();
+    if (savedFirst && !await _save(done: '')) return;
+    if (!mounted) return;
+    await _call(
+      () => widget.session.api.post('/api/admin/backup-settings/run-now', <String, dynamic>{}),
+      '${savedFirst ? 'Alterações salvas. ' : ''}Pedido enviado. O backup começa em instantes.',
+    );
+  }
 
   Future<void> _pickTime() async {
     final parts = _time.split(':');
@@ -291,7 +365,7 @@ class _BackupFormState extends State<_BackupForm> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (_agentLate) const _AgentWarning(),
-        _BackupStatusBlock(settings: _status),
+        _BackupStatusBlock(settings: _status, onRefresh: _reload),
         if (_active) _BackupProgressBar(settings: _status),
         const SizedBox(height: 16),
         SwitchListTile(
@@ -315,7 +389,12 @@ class _BackupFormState extends State<_BackupForm> {
             helperMaxLines: 4,
             border: const OutlineInputBorder(),
             suffixIcon: _canBrowse
-                ? IconButton(key: const ValueKey('backup-pick-folder'), tooltip: 'Procurar pasta', icon: const Icon(Icons.folder_open), onPressed: _busy ? null : _browse)
+                ? IconButton(
+                    key: const ValueKey('backup-pick-folder'),
+                    tooltip: 'Procurar pasta',
+                    icon: const Icon(Icons.folder_open),
+                    onPressed: _busy ? null : _browse,
+                  )
                 : null,
           ),
         ),
@@ -331,7 +410,12 @@ class _BackupFormState extends State<_BackupForm> {
           spacing: 12,
           runSpacing: 8,
           children: [
-            FilledButton.icon(key: const ValueKey('backup-save'), onPressed: _busy ? null : _save, icon: const Icon(Icons.save_outlined), label: const Text('Salvar')),
+            FilledButton.icon(
+              key: const ValueKey('backup-save'),
+              onPressed: _busy ? null : _save,
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('Salvar'),
+            ),
             Tooltip(
               message: _active ? 'Backup em andamento' : '',
               child: OutlinedButton.icon(
@@ -409,10 +493,16 @@ class _BackupProgressBar extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: LinearProgressIndicator(key: const ValueKey('backup-progress'), value: running ? p.percent / 100 : null)),
+                Expanded(
+                  child: LinearProgressIndicator(key: const ValueKey('backup-progress'), value: running ? p.percent / 100 : null),
+                ),
                 if (running) ...[
                   const SizedBox(width: 12),
-                  Text('${p.percent}%', key: const ValueKey('backup-progress-percent'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                  Text(
+                    '${p.percent}%',
+                    key: const ValueKey('backup-progress-percent'),
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                  ),
                 ],
               ],
             ),
@@ -458,9 +548,10 @@ class _AgentWarning extends StatelessWidget {
 }
 
 class _BackupStatusBlock extends StatelessWidget {
-  const _BackupStatusBlock({required this.settings});
+  const _BackupStatusBlock({required this.settings, required this.onRefresh});
 
   final BackupSettings settings;
+  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -484,6 +575,7 @@ class _BackupStatusBlock extends StatelessWidget {
                 Icon(icon, color: color),
                 const SizedBox(width: 10),
                 Expanded(child: Text(headline, style: theme.textTheme.titleSmall)),
+                IconButton(key: const ValueKey('backup-refresh'), tooltip: 'Atualizar', icon: const Icon(Icons.refresh), onPressed: onRefresh),
               ],
             ),
             if (s.lastRunMessage != null && s.lastRunMessage!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(s.lastRunMessage!)),
