@@ -8,6 +8,7 @@ import '../entities.dart';
 import '../session.dart';
 import '../widgets/alerts.dart';
 import '../widgets/dash.dart';
+import 'backup_alert.dart';
 import 'dashboard_data.dart';
 import 'orders.dart';
 import 'product_detail.dart';
@@ -306,6 +307,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late Future<ProductionDashboard> _production = fetchProduction(widget.session.api, legacyDays: legacyOverdueDays);
   late Future<CommercialDashboard> _commercial = fetchCommercial(widget.session.api);
   late Future<List<Object?>> _all = _combine();
+  late Future<BackupAlert?> _backup = fetchBackupAlert(widget.session);
   DateTime? _updated;
   final _focus = FocusNode();
   Timer? _timer;
@@ -372,6 +374,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _purchasing = fetchPurchasing(widget.session.api);
       _production = fetchProduction(widget.session.api, legacyDays: legacyOverdueDays);
       _commercial = fetchCommercial(widget.session.api);
+      _backup = fetchBackupAlert(widget.session);
       _all = _combine();
     });
     return _settle();
@@ -462,16 +465,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
       } else {
         final alerts = _alerts(snap.data!);
         content = alerts.isEmpty
-            ? const DashNotice(
-                icon: Icons.check_circle_outline,
-                title: 'Nada pendente',
-                subtitle: 'Nenhuma OF atrasada, entrega em atraso, aprovação ou bloqueio.',
+            ? FutureBuilder<BackupAlert?>(
+                future: _backup,
+                builder: (context, b) => b.data != null
+                    ? const SizedBox.shrink()
+                    : const DashNotice(
+                        icon: Icons.check_circle_outline,
+                        title: 'Nada pendente',
+                        subtitle: 'Nenhuma OF atrasada, entrega em atraso, aprovação ou bloqueio.',
+                      ),
               )
             : DashGrid(
                 items: [for (final a in alerts) GridItem(DashTile(icon: a.icon, label: a.label, value: '${a.count}', alert: !a.muted, onTap: a.onTap))],
               );
       }
-      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [header, content, const SizedBox(height: 16)]);
+      final backup = FutureBuilder<BackupAlert?>(
+        future: _backup,
+        builder: (context, b) => b.data == null
+            ? const SizedBox.shrink()
+            : Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: BackupAlertCard(alert: b.data!, session: widget.session),
+              ),
+      );
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [header, backup, content, const SizedBox(height: 16)]);
     },
   );
 
