@@ -155,7 +155,10 @@ class Session extends ChangeNotifier {
         expiresAt = exp;
         refreshExpiresAt = rExp;
         if (!accessValid && !await api.refresh()) await logout();
-        if (api.token != null) await _syncProfile();
+        if (api.token != null) {
+          await _syncProfile();
+          reportActivity(force: true);
+        }
       }
     } catch (_) {
       // Local storage is best effort; the in-memory value stays.
@@ -230,6 +233,7 @@ class Session extends ChangeNotifier {
       // Local storage is best effort; the in-memory value stays.
     }
     await _apply(r);
+    reportActivity(force: true);
   }
 
   /// Turns "stay signed in on this device" on or off for the running session; off removes the stored tokens now.
@@ -332,7 +336,20 @@ class Session extends ChangeNotifier {
 
   Future<void> setIdleLockMinutes(int minutes) {
     idleLockMinutes = minutes;
+    reportActivity(force: true);
     return _savePref('idleLockMinutes', minutes);
+  }
+
+  DateTime? _activitySent;
+
+  /// Tells the server the user is active (clicks and key presses, not background polling) so it can enforce the idle lock too,
+  /// not only this window. Sent at most once a minute; [force] also sends the current lock setting right away.
+  void reportActivity({bool force = false}) {
+    if (!loggedIn || (!force && idleLockMinutes <= 0)) return;
+    final now = DateTime.now();
+    if (!force && _activitySent != null && now.difference(_activitySent!) < const Duration(seconds: 60)) return;
+    _activitySent = now;
+    unawaited(api.post('/api/auth/activity', {'idleLockMinutes': idleLockMinutes}).then<void>((_) {}, onError: (_) {}));
   }
 
   /// Saves the display name and email on the server; empty text clears a field.

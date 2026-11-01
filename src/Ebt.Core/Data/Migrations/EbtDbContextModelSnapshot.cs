@@ -127,6 +127,14 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("failed_logins");
 
+                    b.Property<int>("IdleLockMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("idle_lock_minutes");
+
+                    b.Property<DateTimeOffset?>("LastActivityAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_activity_at");
+
                     b.Property<DateTimeOffset?>("LockedUntil")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("locked_until");

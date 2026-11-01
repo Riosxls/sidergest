@@ -292,4 +292,35 @@ public class AuthTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.OK, (await normal.GetAsync("/api/products")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await normal.GetAsync("/api/auth/me")).StatusCode);
     }
+    [Fact]
+    public async Task Idle_lock_is_enforced_by_the_server_until_the_client_reports_activity()
+    {
+        var admin = await api.AdminAsync();
+        var name = $"idle{Guid.NewGuid():N}"[..18];
+        await admin.Post("/api/users", new CreateUserRequest(name, "user-password-123", UserRole.Reader));
+        var login = await LoginFull(api, name, "user-password-123");
+        var c = api.Anonymous();
+        c.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", login.Token);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await c.PostAsJsonAsync("/api/auth/activity", new ActivityRequest(999))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await c.PostAsJsonAsync("/api/auth/activity", new ActivityRequest(15))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/products")).StatusCode);
+
+        // 20 minutes of silence with a 15 minute lock: tokens and refresh are refused
+        await using (var db = api.NewDb())
+            await db.Users.Where(u => u.Username == name).ExecuteUpdateAsync(s => s.SetProperty(u => u.LastActivityAt, DateTimeOffset.UtcNow.AddMinutes(-20)));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await c.GetAsync("/api/products")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await api.Anonymous().PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(login.RefreshToken))).StatusCode);
+
+        // signing in again counts as activity
+        var again = await LoginFull(api, name, "user-password-123");
+        c.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", again.Token);
+        Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/products")).StatusCode);
+
+        // a lock of 0 never expires
+        Assert.Equal(HttpStatusCode.NoContent, (await c.PostAsJsonAsync("/api/auth/activity", new ActivityRequest(0))).StatusCode);
+        await using (var db = api.NewDb())
+            await db.Users.Where(u => u.Username == name).ExecuteUpdateAsync(s => s.SetProperty(u => u.LastActivityAt, DateTimeOffset.UtcNow.AddDays(-3)));
+        Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/products")).StatusCode);
+    }
 }

@@ -43,7 +43,10 @@ class _IdleGuardState extends State<IdleGuard> {
     return false;
   }
 
-  void _touch() => _last = widget.now();
+  void _touch() {
+    _last = widget.now();
+    widget.session.reportActivity();
+  }
 
   void _check() {
     final s = widget.session;

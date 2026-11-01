@@ -272,4 +272,8 @@ public class AppUser
     public DateTimeOffset? LockedUntil { get; set; }
     public string? DisplayName { get; set; }
     public string? Email { get; set; }
+    /// <summary>Minutes without activity after which the server refuses this user's tokens; 0 never. Set by the client with its idle-lock preference.</summary>
+    public int IdleLockMinutes { get; set; }
+    /// <summary>Last user activity reported by a client (a click or key press, not background polling).</summary>
+    public DateTimeOffset? LastActivityAt { get; set; }
 }

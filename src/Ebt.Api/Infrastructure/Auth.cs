@@ -40,6 +40,12 @@ public class TokenService(JwtOptions options)
 {
     public const string VersionClaim = "tv";
 
+    /// <summary>Clients report activity about once a minute; this much lateness is not idleness.</summary>
+    public static readonly TimeSpan IdleSlack = TimeSpan.FromMinutes(2);
+
+    public static bool IsIdle(int idleLockMinutes, DateTimeOffset? lastActivity, DateTimeOffset now) =>
+        idleLockMinutes > 0 && lastActivity is { } last && now - last > TimeSpan.FromMinutes(idleLockMinutes) + IdleSlack;
+
     public TimeSpan ReuseGrace => TimeSpan.FromSeconds(Math.Max(0, options.RefreshReuseGraceSeconds));
 
     public static string HashRefresh(string token) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
@@ -83,8 +89,9 @@ public class TokenService(JwtOptions options)
             ctx.Fail("Invalid token");
             return;
         }
-        var user = await db.Users.AsNoTracking().Where(u => u.Id == id).Select(u => new { u.Active, u.TokenVersion }).FirstOrDefaultAsync(ctx.HttpContext.RequestAborted);
+        var user = await db.Users.AsNoTracking().Where(u => u.Id == id).Select(u => new { u.Active, u.TokenVersion, u.IdleLockMinutes, u.LastActivityAt }).FirstOrDefaultAsync(ctx.HttpContext.RequestAborted);
         if (user is null || !user.Active || user.TokenVersion != version) ctx.Fail("Token revoked");
+        else if (IsIdle(user.IdleLockMinutes, user.LastActivityAt, DateTimeOffset.UtcNow)) ctx.Fail("Idle session");
     }
 }
 
@@ -105,6 +112,7 @@ public record DeviceInfo(string? Device, string? UserAgent, string? Ip)
 public record LoginRequest(string? Username, string? Password, string? Device = null);
 public record SessionsRequest(string? RefreshToken);
 public record SessionDto(long Id, string? Device, string? UserAgent, string? Ip, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, bool Current);
+public record ActivityRequest(int IdleLockMinutes);
 public record ProfileRequest(string? DisplayName, string? Email);
 public record LoginResponse(string Token, DateTimeOffset ExpiresAt, string Username, UserRole Role, string[] Permissions, string RefreshToken, DateTimeOffset RefreshExpiresAt);
 public record RefreshRequest(string? RefreshToken);
@@ -163,6 +171,7 @@ public static class AuthEndpoints
             if (result == PasswordVerificationResult.SuccessRehashNeeded) user.PasswordHash = hasher.HashPassword(user, req.Password);
             user.FailedLogins = 0;
             user.LockedUntil = null;
+            user.LastActivityAt = now;
             await db.SaveChangesAsync(ct);
             var (token, expires) = tokens.Issue(user);
             log.LogInformation("User {User} logged in from {Ip}", user.Username, http.Connection.RemoteIpAddress);
@@ -188,7 +197,7 @@ public static class AuthEndpoints
                 logs.CreateLogger("Ebt.Auth").LogWarning("Refresh token reuse detected for {User}; all sessions revoked", user.Username);
                 return Results.Unauthorized();
             }
-            if (stored.ExpiresAt <= now || !user.Active) return Results.Unauthorized();
+            if (stored.ExpiresAt <= now || !user.Active || TokenService.IsIdle(user.IdleLockMinutes, user.LastActivityAt, now)) return Results.Unauthorized();
             // Claim the token atomically: two parallel refreshes of the same token must not both succeed, or rotation protects nothing.
             var claimed = await db.RefreshTokens.Where(r => r.Id == stored.Id && r.RevokedAt == null).ExecuteUpdateAsync(s => s.SetProperty(r => r.RevokedAt, now), ct);
             if (claimed == 0) return Results.Unauthorized();
@@ -221,6 +230,15 @@ public static class AuthEndpoints
             var user = int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id) ? await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, ct) : null;
             return Results.Ok(Me(principal, user));
         }).RequireAuthorization(Policies.Read);
+
+        // The client reports real activity (not background polling) so the server can enforce the idle lock the user chose.
+        auth.MapPost("/activity", async (ActivityRequest req, EbtDbContext db, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
+            if (req.IdleLockMinutes is < 0 or > 480) return Results.ValidationProblem(Crud.Errors().Require(false, "idleLockMinutes", "Between 0 and 480"));
+            await db.Users.Where(u => u.Id == id).ExecuteUpdateAsync(s => s.SetProperty(u => u.IdleLockMinutes, req.IdleLockMinutes).SetProperty(u => u.LastActivityAt, DateTimeOffset.UtcNow), ct);
+            return Results.NoContent();
+        }).RequireAuthorization(Policies.Read).RequireRateLimiting(Policies.AccountLimiter);
 
         auth.MapPut("/profile", async (ProfileRequest req, EbtDbContext db, ClaimsPrincipal principal, CancellationToken ct) =>
         {

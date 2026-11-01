@@ -436,6 +436,31 @@ void main() {
       expect(session.idleSignedOut, isTrue);
     });
 
+    testWidgets('a click tells the server, at most once a minute, and only when a lock is set', (tester) async {
+      final now = DateTime(2026, 11, 1, 9);
+      final posts = <String>[];
+      final client = MockClient((r) async {
+        if (r.url.path == '/api/auth/activity') posts.add(r.body);
+        return json({});
+      });
+      final session = Session(api: ApiClient(baseUrl: 'http://api.test', client: client, token: 'tok'))
+        ..expiresAt = DateTime.now().add(const Duration(hours: 1))
+        ..idleLockMinutes = 15;
+      await tester.pumpWidget(MaterialApp(home: IdleGuard(session: session, checkEvery: const Duration(seconds: 1), now: () => now, child: const SizedBox())));
+      await tester.tapAt(const Offset(10, 10));
+      await tester.tapAt(const Offset(12, 12));
+      await tester.pump();
+      expect(posts, ['{"idleLockMinutes":15}'], reason: 'the second click is within the minute');
+      session.idleLockMinutes = 0;
+      session.reportActivity();
+      await tester.pump();
+      expect(posts, hasLength(1), reason: 'no lock, nothing to report');
+      await session.setIdleLockMinutes(0);
+      await tester.pump();
+      expect(posts, hasLength(2), reason: 'changing the setting is sent at once');
+      expect(posts.last, '{"idleLockMinutes":0}');
+    });
+
     testWidgets('never means never', (tester) async {
       var now = DateTime(2026, 11, 1, 9);
       final session = Session(api: ApiClient(baseUrl: 'http://api.test', client: MockClient((r) async => json({})), token: 'tok'))..expiresAt = DateTime.now().add(const Duration(hours: 1));
