@@ -12,7 +12,7 @@ import 'package:http/testing.dart';
 
 http.Response _json(Object? body, [int status = 200]) => http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json; charset=utf-8'});
 
-Map<String, dynamic> _settings({Object? agentSeenAt = 'now', bool enabled = true, String frequency = 'Daily', Object? destination, bool? lastRunOk = true}) => {
+Map<String, dynamic> _settings({Object? agentSeenAt = 'now', bool enabled = true, String frequency = 'Daily', Object? destination = r'D:\backups', bool? lastRunOk = true}) => {
   'enabled': enabled,
   'frequency': frequency,
   'timeOfDay': '22:00',
@@ -37,6 +37,7 @@ Future<(Session, List<http.Request>)> _pump(
   Map<String, dynamic> initial, {
   Widget Function(Session)? home,
   int putStatus = 200,
+  String putErrorField = 'keep',
   bool settle = true,
 }) async {
   tester.view.physicalSize = const Size(1200, 1600);
@@ -56,7 +57,7 @@ Future<(Session, List<http.Request>)> _pump(
           'title': 'Dados inválidos',
           'status': putStatus,
           'errors': {
-            'keep': ['Valor inválido'],
+            putErrorField: [putErrorField == 'destination' ? 'Informe a pasta de destino.' : 'Valor inválido'],
           },
         }, putStatus);
       }
@@ -149,7 +150,7 @@ void main() {
   });
 
   testWidgets('picks the time, switches off, hourly hides the time and empty destination is null', (tester) async {
-    final (_, log) = await _pump(tester, _settings());
+    final (_, log) = await _pump(tester, _settings(destination: null));
     await _tap(tester, find.byKey(const ValueKey('backup-time')));
     await tester.tap(find.byIcon(Icons.keyboard_outlined));
     await tester.pumpAndSettle();
@@ -597,6 +598,84 @@ void main() {
       expect(find.text('Interromper'), findsOneWidget);
       expect(tester.widget<OutlinedButton>(cancelBtn()).onPressed, isNotNull);
       await _unmount(tester);
+    });
+  });
+
+  group('pasta de destino obrigatória', () {
+    const hint = 'Escolha a pasta de destino para poder fazer o backup.';
+    Finder runNow() => find.byKey(const ValueKey('backup-run-now'));
+    Finder dest() => find.byKey(const ValueKey('backup-destination'));
+
+    testWidgets('Fazer backup agora is disabled without a destination and enables when one is typed', (tester) async {
+      await _pump(tester, _settings(destination: null, enabled: false));
+      expect(tester.widget<OutlinedButton>(runNow()).onPressed, isNull);
+      expect(find.text(hint), findsOneWidget);
+      expect(find.byTooltip(hint), findsOneWidget);
+      expect(find.text('Pasta de destino da cópia (obrigatória)'), findsOneWidget);
+      await tester.enterText(dest(), '   ');
+      await tester.pump();
+      expect(tester.widget<OutlinedButton>(runNow()).onPressed, isNull);
+      await tester.enterText(dest(), r'E:\copias');
+      await tester.pump();
+      expect(tester.widget<OutlinedButton>(runNow()).onPressed, isNotNull);
+      expect(find.text(hint), findsNothing);
+      expect(find.text('Pasta de destino da cópia'), findsOneWidget);
+    });
+
+    testWidgets('picking a folder enables Fazer backup agora', (tester) async {
+      await _pump(
+        tester,
+        _settings(destination: null, enabled: false),
+        home: (s) => BackupSettingsView(session: s, canBrowse: true, pickFolder: (_) async => r'E:\copias'),
+      );
+      expect(tester.widget<OutlinedButton>(runNow()).onPressed, isNull);
+      await _tap(tester, find.byKey(const ValueKey('backup-pick-folder')));
+      expect(tester.widget<OutlinedButton>(runNow()).onPressed, isNotNull);
+    });
+
+    testWidgets('the automatic switch refuses to turn on without a destination', (tester) async {
+      await _pump(tester, _settings(destination: null, enabled: false));
+      await _tap(tester, find.byKey(const ValueKey('backup-enabled')));
+      expect(find.text('Escolha a pasta de destino antes de ligar o backup automático.'), findsOneWidget);
+      expect(tester.widget<SwitchListTile>(find.byKey(const ValueKey('backup-enabled'))).value, isFalse);
+      await tester.enterText(dest(), r'E:\copias');
+      await tester.pump();
+      await _tap(tester, find.byKey(const ValueKey('backup-enabled')));
+      expect(tester.widget<SwitchListTile>(find.byKey(const ValueKey('backup-enabled'))).value, isTrue);
+    });
+
+    testWidgets('Salvar with the switch on and the destination cleared shows the field error and does not PUT', (tester) async {
+      final (_, log) = await _pump(tester, _settings());
+      await tester.enterText(dest(), '');
+      await _tap(tester, find.byKey(const ValueKey('backup-save')));
+      expect(find.text('Informe a pasta de destino.'), findsOneWidget);
+      expect(log.where((r) => r.method == 'PUT'), isEmpty);
+      await tester.enterText(dest(), r'E:\copias');
+      await tester.pumpAndSettle();
+      expect(find.text('Informe a pasta de destino.'), findsNothing);
+      await _tap(tester, find.byKey(const ValueKey('backup-save')));
+      expect(log.where((r) => r.method == 'PUT'), hasLength(1));
+    });
+
+    testWidgets('turning the switch off clears the error and saves without destination', (tester) async {
+      final (_, log) = await _pump(tester, _settings());
+      await tester.enterText(dest(), '');
+      await _tap(tester, find.byKey(const ValueKey('backup-save')));
+      await _tap(tester, find.byKey(const ValueKey('backup-enabled')));
+      expect(find.text('Informe a pasta de destino.'), findsNothing);
+      await _tap(tester, find.byKey(const ValueKey('backup-save')));
+      final body = jsonDecode(log.singleWhere((r) => r.method == 'PUT').body) as Map<String, dynamic>;
+      expect(body['enabled'], isFalse);
+      expect(body['destination'], isNull);
+    });
+
+    testWidgets('a 400 destination error from the server is shown through the normal error path', (tester) async {
+      final (_, log) = await _pump(tester, _settings(), putStatus: 400, putErrorField: 'destination');
+      await tester.enterText(dest(), r'E:\copias');
+      await _tap(tester, find.byKey(const ValueKey('backup-save')));
+      expect(log.where((r) => r.method == 'PUT'), hasLength(1));
+      expect(find.textContaining('Informe a pasta de destino.'), findsOneWidget);
+      expect(find.byType(SnackBar), findsOneWidget);
     });
   });
 

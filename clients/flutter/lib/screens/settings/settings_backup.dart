@@ -168,6 +168,13 @@ class _BackupFormState extends State<_BackupForm> {
   late final _keep = TextEditingController(text: '${_saved.keep}');
   bool _busy = false;
 
+  /// Field error under the destination ("Salvar" with the automatic backup on and no folder).
+  String? _destError;
+
+  bool get _hasDestination => _destination.text.trim().isNotEmpty;
+
+  static const _destinationHint = 'Escolha a pasta de destino para poder fazer o backup.';
+
   Timer? _poll;
 
   /// Slow refresh while nothing is running, so a view left open notices the agent and finished backups.
@@ -360,6 +367,10 @@ class _BackupFormState extends State<_BackupForm> {
       _tell('Informe de 1 a 365 cópias para guardar.');
       return Future.value(false);
     }
+    if (_enabled && !_hasDestination) {
+      setState(() => _destError = 'Informe a pasta de destino.');
+      return Future.value(false);
+    }
     return _call(() => widget.session.api.put('/api/admin/backup-settings', _edited().toJson()), done, isSave: true);
   }
 
@@ -419,7 +430,16 @@ class _BackupFormState extends State<_BackupForm> {
           contentPadding: EdgeInsets.zero,
           title: const Text('Backup automático'),
           value: _enabled,
-          onChanged: (v) => setState(() => _enabled = v),
+          onChanged: (v) {
+            if (v && !_hasDestination) {
+              _tell('Escolha a pasta de destino antes de ligar o backup automático.');
+              return;
+            }
+            setState(() {
+              _enabled = v;
+              if (!v) _destError = null;
+            });
+          },
         ),
         const SizedBox(height: 8),
         _scheduleFields(),
@@ -427,10 +447,12 @@ class _BackupFormState extends State<_BackupForm> {
         TextField(
           key: const ValueKey('backup-destination'),
           controller: _destination,
+          onChanged: (_) => setState(() => _destError = null),
           decoration: InputDecoration(
-            labelText: 'Pasta ou unidade de destino da cópia',
+            labelText: _hasDestination ? 'Pasta de destino da cópia' : 'Pasta de destino da cópia (obrigatória)',
+            errorText: _destError,
             helperText:
-                'Ex.: D:\\backups\\metagest ou \\\\servidor\\backups. Vazio = só guarda no computador do servidor.'
+                'Ex.: D:\\backups\\metagest ou \\\\servidor\\backups.'
                 '${_canBrowse ? ' A pasta vale para este computador; ela precisa existir no computador do servidor.' : ''}',
             helperMaxLines: 4,
             border: const OutlineInputBorder(),
@@ -463,10 +485,10 @@ class _BackupFormState extends State<_BackupForm> {
               label: const Text('Salvar'),
             ),
             Tooltip(
-              message: _active ? 'Backup em andamento' : '',
+              message: _active ? 'Backup em andamento' : (_hasDestination ? '' : _destinationHint),
               child: OutlinedButton.icon(
                 key: const ValueKey('backup-run-now'),
-                onPressed: _busy || _active ? null : _runNow,
+                onPressed: _busy || _active || !_hasDestination ? null : _runNow,
                 icon: const Icon(Icons.backup_outlined),
                 label: Text(_active ? 'Backup em andamento' : 'Fazer backup agora'),
               ),
@@ -480,6 +502,15 @@ class _BackupFormState extends State<_BackupForm> {
               ),
           ],
         ),
+        if (!_hasDestination)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _destinationHint,
+              key: const ValueKey('backup-destination-hint'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+          ),
       ],
     ),
   );
