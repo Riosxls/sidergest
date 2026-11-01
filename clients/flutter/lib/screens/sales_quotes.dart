@@ -360,7 +360,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
           _maxDiscount = r['maxDiscountPercent'] as num?;
           _offListApproval = r['offListNeedsApproval'] == true;
         });
-      }, onError: (_) {});
+      }, onError: (Object e) => debugPrint('sales_quotes: price lookup failed: $e'));
       _refreshListPrices();
     }
   }
@@ -788,7 +788,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     _load();
     api.get('/api/sales/settings').then((r) {
       if (mounted) setState(() => _maxDiscount = (r as Map<String, dynamic>)['maxDiscountPercent'] as num?);
-    }, onError: (_) {});
+    }, onError: (Object e) => debugPrint('sales_quotes: sales settings lookup failed: $e'));
   }
 
   Map<String, dynamic>? _credit;

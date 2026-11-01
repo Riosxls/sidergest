@@ -338,7 +338,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<List<Object?>> _combine() =>
-      Future.wait<Object?>([_eng, _stock, _purchasing, _production, _commercial].map((f) => f.then<Object?>((v) => v, onError: (_) => null)));
+      Future.wait<Object?>([_eng, _stock, _purchasing, _production, _commercial].map((f) => f.then<Object?>((v) => v, onError: (Object e) {
+        debugPrint('dashboard: section failed: $e');
+        return null;
+      })));
 
   List<DashAlert> _alerts(List<Object?> d) => buildAlerts(
     context,

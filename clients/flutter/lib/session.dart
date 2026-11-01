@@ -359,7 +359,7 @@ class Session extends ChangeNotifier {
     final now = DateTime.now();
     if (!force && _activitySent != null && now.difference(_activitySent!) < const Duration(seconds: 60)) return;
     _activitySent = now;
-    unawaited(api.post('/api/auth/activity', {'idleLockMinutes': idleLockMinutes}).then<void>((_) {}, onError: (_) {}));
+    unawaited(api.post('/api/auth/activity', {'idleLockMinutes': idleLockMinutes}).then<void>((_) {}, onError: (Object e) => debugPrint('session: activity ping failed: $e')));
   }
 
   /// Saves the display name and email on the server; empty text clears a field.
@@ -398,7 +398,7 @@ class Session extends ChangeNotifier {
     final rt = api.refreshToken;
     if (rt != null) {
       // Best effort: revoke the refresh token server-side without blocking the UI.
-      unawaited(api.post('/api/auth/logout', {'refreshToken': rt}).then<void>((_) {}, onError: (_) {}));
+      unawaited(api.post('/api/auth/logout', {'refreshToken': rt}).then<void>((_) {}, onError: (Object e) => debugPrint('session: logout revoke failed: $e')));
     }
     api.token = null;
     api.refreshToken = null;

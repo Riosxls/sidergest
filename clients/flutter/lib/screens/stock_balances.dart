@@ -26,7 +26,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
     super.initState();
     widget.session.api.listAll('/api/stock-locations').then((l) {
       if (mounted) setState(() => _locations = {for (final x in l) '${x['id']}': '${x['code']} · ${x['name']}'});
-    }, onError: (_) {});
+    }, onError: (Object e) => debugPrint('stock_balances: locations lookup failed: $e'));
   }
 
   @override
