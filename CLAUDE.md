@@ -39,7 +39,7 @@ stop.bat [-Purge]      # stop; -Purge also deletes DB volume
 | API | http://localhost:8080 (Swagger at `/swagger`) |
 | Postgres (Docker) | `127.0.0.1:25432`, db/user `ebt`, password `ebt-dev-password` |
 | Flutter web | http://localhost:8081 |
-| Login | `admin` / `sidergest123` (created only when DB has no users) |
+| Login | `admin` / `sidergest123` (fresh DBs only: created when the DB has no users. On Italo's live DB the admin password and `EBT_JWT_KEY` were rotated on 2026-11-01; the current admin password is `EBT_ADMIN_PASSWORD` in `.env`) |
 
 If a port is taken, `start.ps1` picks the next free one. Override with `EBT_API_PORT`, `EBT_DB_PORT`, `EBT_WEB_PORT`. `compose.yaml` sets `Database__MigrateOnStartup=true`, so migrations apply on API start.
 

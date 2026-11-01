@@ -53,10 +53,19 @@ Check the login and a recent order before telling anyone the system is back. Tes
 
 Container logs rotate at 10 MB x 5 files per service. Read them with `docker compose logs --tail 200 api`.
 
-## Secrets to rotate before real use
+## Production checklist (before real use)
 
-- Admin password `sidergest123` (local mode) and the database password `ebt-dev-password` (volumes created before `.env` existed).
-- `EBT_JWT_KEY` (changing it signs everyone out).
+Rotating secrets on the development machine does not carry over: production gets its own `.env`. Do this on the production host.
+
+- [ ] `.env` from `.env.example` with fresh random values: `EBT_DB_PASSWORD`, `EBT_JWT_KEY` (at least 32 bytes, not a placeholder: the API refuses those), `EBT_ADMIN_PASSWORD`. Never reuse the development values (`sidergest123`, `ebt-dev-password`).
+- [ ] Admin password changed after first login (Configurações, or `POST /api/auth/password`); the bootstrap admin is only created when the database has no users.
+- [ ] `EBT_SWAGGER=false`.
+- [ ] TLS reverse proxy in front of the API; `EBT_BEHIND_PROXY=true`, `EBT_ALLOWED_HOSTS` set to the real host name, `EBT_CORS_ORIGIN` set to the real web origin. Clients built with an `https://` `API_URL`.
+- [ ] Database port stays bound to `127.0.0.1` (compose default); no firewall rule opens 25432 or 8080 to the network.
+- [ ] Backup plan set in the app (destination on another disk or share), agent task installed with `scripts\install-backup-agent.ps1`, one restore tested on a spare machine.
+- [ ] Docker Desktop starts with Windows (containers use `restart: unless-stopped`).
+- [ ] Fiscal: A1 certificate path and password only as environment variables (`Fiscal__Sefaz__*`), start in Homologation, leave emission disabled until a test NF is authorized.
+- [ ] Changing `EBT_JWT_KEY` later signs everyone out; changing `EBT_DB_PASSWORD` needs `ALTER USER ebt PASSWORD '...'` on the running database first, then the new `.env` value and an `api` recreate.
 
 ## Behind a reverse proxy
 
