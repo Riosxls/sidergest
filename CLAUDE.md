@@ -166,6 +166,7 @@ scripts/             start.ps1, stop.ps1
 - README.md has the user-facing quick start; this file is the engineering context.
 - Many Flutter and docs files are CRLF in the working copy; `dart format -l 160` on a whole old file produces noisy diffs. Format only what you wrote.
 - A stale app window shows old code: stop it and run `flutter run` again from `clients/flutter` on `main`. Release Android builds block cleartext HTTP; use HTTPS (debug builds allow it).
+- PowerShell scripts that contain accented text (`backup.ps1`, `backup-agent.ps1`) are saved as UTF-8 with BOM: Windows PowerShell 5.1 reads BOM-less files as ANSI and double-encodes the accents. Keep the BOM when editing them.
 
 ## graphify
 

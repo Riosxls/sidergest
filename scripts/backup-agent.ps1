@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$DryRun,
     [switch]$Once,
     [int]$PollSeconds = 4
@@ -9,6 +9,7 @@ param(
 # The API container cannot do this itself: it has no Docker access and no pg_dump. Schedule rules mirror
 # Ebt.Core/Maintenance/BackupSchedule.cs; keep the two in sync.
 $ErrorActionPreference = 'Stop'
+$OutputEncoding = New-Object System.Text.UTF8Encoding($false)   # text piped to docker exec psql must be UTF-8, or accents become "?"
 $Root = Split-Path -Parent $PSScriptRoot
 
 function Get-NextDue {

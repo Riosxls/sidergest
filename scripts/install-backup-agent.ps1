@@ -1,4 +1,4 @@
-param([switch]$Remove)
+﻿param([switch]$Remove)
 
 # Registers (or removes) the Windows scheduled task for scripts/backup-agent.ps1, for the current user.
 # The agent is a loop that checks the backup plan every few seconds, so "Fazer backup agora" in the app starts at once. The task starts it at
