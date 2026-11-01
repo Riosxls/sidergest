@@ -275,7 +275,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     );
     if (ok != true || !mounted) return;
     final r = await runAction(context, () => api.post('$base/release', {'useStock': useStock, if (overrideCredit) 'overrideCredit': true}), success: 'Pedido liberado para produção');
-    if (r is Map<String, dynamic>) setState(() => _o = r);
+    if (r is Map<String, dynamic> && mounted) setState(() => _o = r);
   }
 
   Future<void> _planDelivery() async {
@@ -353,7 +353,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     );
     if (r == null || !mounted) return;
     final o = await runAction(context, () => api.post('$base/cancel', {'reason': r.reason, 'cancelProduction': r.option}), success: 'Pedido cancelado');
-    if (o is Map<String, dynamic>) setState(() => _o = o);
+    if (o is Map<String, dynamic> && mounted) setState(() => _o = o);
   }
 
   Future<void> _closeBalance() async {
@@ -373,7 +373,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     );
     if (r == null || !mounted) return;
     final o = await runAction(context, () => api.post('$base/close-balance', {'reason': r.reason}), success: 'Saldo encerrado');
-    if (o is Map<String, dynamic>) setState(() => _o = o);
+    if (o is Map<String, dynamic> && mounted) setState(() => _o = o);
   }
 
   Future<void> _reschedule() async {
@@ -414,7 +414,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         builder: (_) => QuoteEditorScreen(session: s, quote: _o, asOrder: true),
       ),
     );
-    if (r != null) setState(() => _o = r);
+    if (r != null && mounted) setState(() => _o = r);
   }
 
   Future<void> _printCustomerPo() async {

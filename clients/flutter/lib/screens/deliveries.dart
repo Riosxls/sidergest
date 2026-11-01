@@ -220,7 +220,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
 
   Future<void> _emitInvoice() async {
     final r = await runAction(context, () => api.post('$base/emit-invoice', {}), success: 'NF emitida');
-    if (r != null && r['reference'] != null) setState(() => _d = r);
+    if (r != null && r['reference'] != null && mounted) setState(() => _d = r);
   }
 
   Future<void> _confirm() async {
@@ -234,7 +234,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       ],
       submit: (b) => api.post('$base/confirm', b),
     );
-    if (r != null && r['reference'] != null) setState(() => _d = r);
+    if (r != null && r['reference'] != null && mounted) setState(() => _d = r);
   }
 
   Future<void> _cancel() async {
@@ -248,7 +248,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
     );
     if (reason == null || !mounted) return;
     final r = await runAction(context, () => api.post('$base/cancel', {'reason': reason}), success: 'Entrega cancelada');
-    if (r is Map<String, dynamic>) setState(() => _d = r);
+    if (r is Map<String, dynamic> && mounted) setState(() => _d = r);
   }
 
   Widget _nextStep(Map<String, dynamic> d) => switch (d['status']) {

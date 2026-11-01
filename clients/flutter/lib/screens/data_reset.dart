@@ -102,6 +102,7 @@ class _DataResetDialogState extends State<_DataResetDialog> {
     });
     try {
       final r = await widget.session.api.post('/api/admin/data-reset/preview', _body) as Map<String, dynamic>;
+      if (!mounted) return;
       setState(() {
         _preview = [
           for (final t in (r['tables'] as List).cast<Map<String, dynamic>>())

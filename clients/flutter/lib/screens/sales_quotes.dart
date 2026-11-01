@@ -812,7 +812,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
 
   Future<void> _act(String action, {Map<String, dynamic> body = const {}, String? success}) async {
     final r = await runAction(context, () => api.post('$base/$action', body), success: success);
-    if (r is Map<String, dynamic>) setState(() => _q = r);
+    if (r is Map<String, dynamic> && mounted) setState(() => _q = r);
   }
 
   Future<void> _send() async {
@@ -1023,19 +1023,19 @@ class _QuoteScreenState extends State<QuoteScreen> {
     );
     if (text == null || !mounted) return;
     final r = await runAction(context, () => api.put('$base/request', {'text': text}));
-    if (r is Map<String, dynamic>) setState(() => _q = r);
+    if (r is Map<String, dynamic> && mounted) setState(() => _q = r);
   }
 
   Future<void> _attachRequest() async {
     final f = await pickRequestFile();
     if (f == null || !mounted) return;
     final r = await runAction(context, () => api.upload('$base/request-file', 'file', f.name, f.bytes), success: 'Arquivo anexado');
-    if (r is Map<String, dynamic>) setState(() => _q = r);
+    if (r is Map<String, dynamic> && mounted) setState(() => _q = r);
   }
 
   Future<void> _removeRequest() async {
     final r = await runAction(context, () => api.delete('$base/request-file'), success: 'Anexo removido');
-    if (r is Map<String, dynamic>) setState(() => _q = r);
+    if (r is Map<String, dynamic> && mounted) setState(() => _q = r);
   }
 
   Future<void> _printRequest() async {
@@ -1145,6 +1145,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ),
     );
     if (r != null) {
+      if (!mounted) return;
       setState(() => _q = r);
       await _load();
     }

@@ -147,7 +147,7 @@ class _CertificateScreenState extends State<CertificateScreen> {
         builder: (_) => CertificateEditorScreen(session: s, certificate: _c!),
       ),
     );
-    if (r != null) setState(() => _c = r);
+    if (r != null && mounted) setState(() => _c = r);
   }
 
   Future<void> _issue() async {
@@ -174,7 +174,7 @@ class _CertificateScreenState extends State<CertificateScreen> {
     );
     if (!ok || !mounted) return;
     final r = await runAction(context, () => api.post('$base/issue', {}), success: 'Certificado emitido');
-    if (r is Map<String, dynamic>) setState(() => _c = r);
+    if (r is Map<String, dynamic> && mounted) setState(() => _c = r);
   }
 
   Future<void> _link() async {
@@ -198,14 +198,14 @@ class _CertificateScreenState extends State<CertificateScreen> {
     );
     if (id == null || !mounted) return;
     final r = await runAction(context, () => api.post('$base/link-delivery', {'deliveryId': id}), success: 'Certificado vinculado à entrega');
-    if (r is Map<String, dynamic>) setState(() => _c = r);
+    if (r is Map<String, dynamic> && mounted) setState(() => _c = r);
   }
 
   Future<void> _cancel() async {
     final reason = await promptText(context, title: 'Cancelar ${_c!['reference']}', label: 'Motivo', required: true, confirmLabel: 'Cancelar certificado');
     if (reason == null || !mounted) return;
     final r = await runAction(context, () => api.post('$base/cancel', {'reason': reason}), success: 'Certificado cancelado');
-    if (r is Map<String, dynamic>) setState(() => _c = r);
+    if (r is Map<String, dynamic> && mounted) setState(() => _c = r);
   }
 
   Future<void> _delete() async {

@@ -128,7 +128,7 @@ class _OrderScreenState extends State<OrderScreen> {
       () => api.post('$base/$action', {'reason': reason}),
       success: action == 'cancel' ? 'Pedido cancelado' : 'Pedido encerrado',
     );
-    if (r != null) setState(() => _o = r as Map<String, dynamic>);
+    if (r != null && mounted) setState(() => _o = r as Map<String, dynamic>);
   }
 
   Future<void> _reschedule(Map<String, dynamic> line) async {
