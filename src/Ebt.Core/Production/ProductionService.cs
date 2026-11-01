@@ -39,7 +39,9 @@ public sealed partial class ProductionService(EbtDbContext db, StockService stoc
         return await InTransaction(async () =>
         {
             var sequence = i.Kind == ProductionOrderKind.Internal ? EbtDbContext.InternalOrderNumbers : EbtDbContext.ProductionOrderNumbers;
+            #pragma warning disable EF1003 // identifier sanitized by SqlIdentifier.Safe
             var number = await db.Database.SqlQueryRaw<int>("SELECT nextval('" + SqlIdentifier.Safe(sequence) + "')::int AS \"Value\"").SingleAsync(ct);
+            #pragma warning restore EF1003
             var order = new ProductionOrder
             {
                 Kind = i.Kind, Number = number, Reference = ReferenceFor(i.Kind, number), ProductId = product.Id, CustomerId = i.CustomerId, Quantity = i.Quantity,

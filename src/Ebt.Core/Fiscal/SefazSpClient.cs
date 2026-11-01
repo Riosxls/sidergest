@@ -24,7 +24,7 @@ public sealed class SefazOptions
     {
         if (string.IsNullOrWhiteSpace(CertificatePath) || !File.Exists(CertificatePath))
             throw new InvalidOperationException($"Fiscal:Sefaz:CertificatePath not found: '{CertificatePath}'");
-        var cert = new X509Certificate2(CertificatePath, CertificatePassword, X509KeyStorageFlags.EphemeralKeySet);
+        var cert = X509CertificateLoader.LoadPkcs12FromFile(CertificatePath, CertificatePassword, X509KeyStorageFlags.EphemeralKeySet);
         if (!cert.HasPrivateKey) throw new InvalidOperationException("The A1 certificate has no private key");
         if (cert.NotAfter < DateTime.Now) throw new InvalidOperationException($"The A1 certificate expired on {cert.NotAfter:dd/MM/yyyy}");
         return cert;

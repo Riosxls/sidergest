@@ -151,7 +151,9 @@ public sealed partial class SalesService(EbtDbContext db, StockService stock, Pr
         db.SalesEvents.Add(new SalesEvent { Kind = kind, RecordId = id, Action = action, FromStatus = from?.ToString(), ToStatus = to?.ToString(), Note = Clean(note), User = user, At = DateTimeOffset.UtcNow });
 
     private async Task<int> NextAsync(string sequence, CancellationToken ct) =>
+        #pragma warning disable EF1003 // identifier sanitized by SqlIdentifier.Safe
         await db.Database.SqlQueryRaw<int>("SELECT nextval('" + SqlIdentifier.Safe(sequence) + "')::int AS \"Value\"").SingleAsync(ct);
+        #pragma warning restore EF1003
 
     private async Task<Quote> LockQuoteAsync(int id, CancellationToken ct)
     {

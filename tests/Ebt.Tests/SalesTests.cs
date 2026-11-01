@@ -373,7 +373,7 @@ public class SalesTests(ApiFixture api)
         };
         var one = await (await admin.Post("/api/sales/certificates", new CertificateInput(first.Id, Title: title, Notes: "Certificado de origem do material nº 1127693\nMATERIAL RECOZIDO", Measures: measures, RawMaterialLot: "700090"))).Read<CertificateOut>();
         Assert.Equal(title, one.Title);
-        Assert.Empty((await (await admin.GetAsync("/api/sales/certificates/templates")).Read<List<CertificateTemplateOut>>()).Where(t => t.CustomerId == s.Customer.Id));
+        Assert.DoesNotContain(await (await admin.GetAsync("/api/sales/certificates/templates")).Read<List<CertificateTemplateOut>>(), t => t.CustomerId == s.Customer.Id);
         (await admin.Post($"/api/sales/certificates/{one.Id}/issue", new object())).EnsureSuccessStatusCode();
 
         var templates = (await (await admin.GetAsync($"/api/sales/certificates/templates?customerId={s.Customer.Id}")).Read<List<CertificateTemplateOut>>());

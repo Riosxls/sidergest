@@ -389,7 +389,10 @@ public sealed class ProductionImport : IImportStep
     {
         var max = await db.ProductionOrders.Where(o => o.Kind == kind).MaxAsync(o => (int?)o.Number, ct) ?? 0;
         var last = Math.Max(max, counter);
+        // Identifiers go through SqlIdentifier.Safe and the numbers are ints, so the concatenation is not injectable.
+        #pragma warning disable EF1003
         if (last > 0) await db.Database.ExecuteSqlRawAsync("SELECT setval('" + SqlIdentifier.Safe(sequence) + "', GREATEST(" + last + ", (SELECT last_value FROM " + SqlIdentifier.Safe(sequence) + ")))", ct);
+        #pragma warning restore EF1003
     }
 
     private static ProductionOrderStatus Status(string? s, ProductionOrderStatus fallback) => s?.Trim() switch

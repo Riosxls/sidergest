@@ -376,9 +376,14 @@ public sealed class PurchasingImport : IImportStep
 
     private async Task Advance(string sequence, string table, int counter, CancellationToken ct)
     {
+        #pragma warning disable EF1003 // identifier sanitized by SqlIdentifier.Safe
         var max = await db.Database.SqlQueryRaw<int>("SELECT COALESCE(MAX(number), 0) AS \"Value\" FROM " + SqlIdentifier.Safe(table)).SingleAsync(ct);
+        #pragma warning restore EF1003
         var last = Math.Max(max, counter);
+        // Identifiers go through SqlIdentifier.Safe and the numbers are ints, so the concatenation is not injectable.
+        #pragma warning disable EF1003
         if (last > 0) await db.Database.ExecuteSqlRawAsync("SELECT setval('" + SqlIdentifier.Safe(sequence) + "', GREATEST(" + last + ", (SELECT last_value FROM " + SqlIdentifier.Safe(sequence) + ")))", ct);
+        #pragma warning restore EF1003
     }
 
     private static bool Same(QuotationItem item, Material? m, string? code) =>

@@ -6,8 +6,6 @@
 
   <ItemGroup>
     <PackageReference Include="DbfDataReader" Version="0.9.0" />
-    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.14" />
-    <PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />
   </ItemGroup>
 
   <PropertyGroup>

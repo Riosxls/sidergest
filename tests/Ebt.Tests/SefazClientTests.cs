@@ -16,7 +16,7 @@ public class SefazClientTests
     {
         using var rsa = RSA.Create(2048);
         var req = new CertificateRequest("CN=EBT TESTE:11222333000181", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-        return new X509Certificate2(req.CreateSelfSigned(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now.AddDays(30)).Export(X509ContentType.Pfx), (string?)null, X509KeyStorageFlags.Exportable);
+        return X509CertificateLoader.LoadPkcs12(req.CreateSelfSigned(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now.AddDays(30)).Export(X509ContentType.Pfx), null, X509KeyStorageFlags.Exportable);
     }
 
     private sealed class Fake(Func<HttpRequestMessage, string, HttpResponseMessage> reply) : HttpMessageHandler
