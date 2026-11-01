@@ -48,8 +48,11 @@ const auditActions = {'Insert': 'Criado', 'Update': 'Alterado', 'Delete': 'Exclu
 
 const auditEntities = [
   'Customer', 'CustomerAddress', 'Supplier', 'SupplierAddress', 'Material', 'Product', 'AppUser', 'StockLocation', 'StockSettings', 'StockClosing',
-  'FiscalSettings', 'Cfop', 'TaxRule', 'MonthlyPrice', 'PaymentTerm', 'PriceListEntry', 'SalesSettings', 'ProductionSettings', 'SteelLot', 'SlitterJob',
+  'FiscalSettings', 'Cfop', 'TaxRule', 'MonthlyPrice', 'PaymentTerm', 'PriceListEntry', 'SalesSettings', 'ProductionSettings', 'PurchasingSettings', 'BackupSettings', 'SteelLot', 'SlitterJob',
 ];
+
+/// Portuguese names for audit entities that are not shown by their class name.
+const auditEntityLabels = {'PurchasingSettings': 'Parâmetros de Suprimentos', 'BackupSettings': 'Cópia de segurança'};
 
 const policyDescriptions = {
   'read': 'Consultar todos os cadastros e telas',

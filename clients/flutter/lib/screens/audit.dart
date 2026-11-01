@@ -29,7 +29,7 @@ class _AuditScreenState extends State<AuditScreen> {
     searchHint: 'Usuário',
     emptyText: 'Nenhum registro de auditoria ainda. Alterações em cadastros, parâmetros e usuários aparecem aqui.',
     filters: [
-      ChoiceFilter(label: 'Entidade', value: _entity, choices: {for (final e in auditEntities) e: e}, onChanged: (v) => setState(() => _entity = v)),
+      ChoiceFilter(label: 'Entidade', value: _entity, choices: {for (final e in auditEntities) e: auditEntityLabels[e] ?? e}, onChanged: (v) => setState(() => _entity = v)),
     ],
     columns: [
       ColumnSpec('Data/hora', (e) => fmtDate(e['at'])),

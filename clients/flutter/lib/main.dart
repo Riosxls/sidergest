@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'screens/login.dart';
 import 'screens/shell.dart';
 import 'session.dart';
+import 'widgets/app_text_scale.dart';
 import 'widgets/esc_back.dart';
 import 'widgets/idle_guard.dart';
 
@@ -46,9 +47,9 @@ class _EbtAppState extends State<EbtApp> {
           observer: _escObserver,
           child: IdleGuard(
           session: session,
-          child: MediaQuery.withClampedTextScaling(
-            minScaleFactor: session.textScale,
-            maxScaleFactor: session.textScale,
+          navigatorKey: _navigatorKey,
+          child: AppTextScale(
+            factor: session.textScale,
             child: MediaQuery(
               data: MediaQuery.of(context).copyWith(disableAnimations: session.reduceMotion || MediaQuery.of(context).disableAnimations),
               child: child!,
