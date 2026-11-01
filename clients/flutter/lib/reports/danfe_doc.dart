@@ -31,7 +31,7 @@ String _cep(String z) {
 
 const _line = PdfColors.black;
 
-pw.TextStyle _lbl() => pw.TextStyle(fontSize: 5.5, fontStyle: pw.FontStyle.italic, color: PdfColors.grey800);
+pw.TextStyle _lbl() => const pw.TextStyle(fontSize: 5.5, fontStyle: pw.FontStyle.italic, color: PdfColors.grey800);
 pw.TextStyle _val([double size = 8, bool bold = false]) => pw.TextStyle(fontSize: size, fontWeight: bold ? pw.FontWeight.bold : null);
 
 pw.Widget _cell(String label, String value, {int flex = 1, bool right = false, bool bold = false, double size = 8, PdfColor? fill}) => pw.Expanded(
@@ -54,7 +54,7 @@ pw.Widget _row(List<pw.Widget> cells, {double height = 24}) => pw.SizedBox(heigh
 
 pw.Widget _title(String t) => pw.Padding(
   padding: const pw.EdgeInsets.only(top: 4, bottom: 1),
-  child: pw.Text(t, style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+  child: pw.Text(t, style: const pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
 );
 
 Future<Uint8List> buildDanfePdf(Map<String, dynamic> d, Map<String, dynamic> issuer) async {
@@ -96,7 +96,7 @@ Future<Uint8List> buildDanfePdf(Map<String, dynamic> d, Map<String, dynamic> iss
           padding: const pw.EdgeInsets.symmetric(vertical: 3),
           margin: const pw.EdgeInsets.only(bottom: 3),
           color: cancelled ? PdfColors.red100 : PdfColors.amber100,
-          child: pw.Text(banner, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+          child: pw.Text(banner, style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
         ),
       pw.SizedBox(
         height: 92,
@@ -221,7 +221,7 @@ Future<Uint8List> buildDanfePdf(Map<String, dynamic> d, Map<String, dynamic> iss
     decoration: const pw.BoxDecoration(color: PdfColors.grey300),
     children: [
       for (final h in ['CÓDIGO', 'DESCRIÇÃO', 'NCM', 'CST', 'CFOP', 'UN', 'QTD.', 'V. UNIT.', 'V. TOTAL', 'BC ICMS', 'V. ICMS', 'V. IPI', 'ALÍQ. ICMS/IPI'])
-        pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Text(h, style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold))),
+        pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Text(h, style: const pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold))),
     ],
   );
   pw.Widget c(String t, {bool right = false}) => pw.Padding(

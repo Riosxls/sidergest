@@ -69,7 +69,7 @@ void main() {
       _host(
         SimpleTable(
           columns: [for (var i = 0; i < 8; i++) ColumnSpec('Coluna $i', (e) => 'valor bem comprido número ${e['n']}')],
-          rows: [
+          rows: const [
             {'n': 1},
           ],
         ),

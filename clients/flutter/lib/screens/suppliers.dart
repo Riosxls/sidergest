@@ -252,7 +252,7 @@ class _SupplierMaterialsState extends State<_SupplierMaterials> {
     path: '/api/suppliers/${widget.supplierId}/materials',
     searchable: false,
     fab: widget.session.canBuy
-        ? FloatingActionButton.extended(heroTag: 'new-sm', onPressed: () => _edit(), icon: const Icon(Icons.add), label: const Text('Vincular material'))
+        ? FloatingActionButton.extended(heroTag: 'new-sm', onPressed: _edit, icon: const Icon(Icons.add), label: const Text('Vincular material'))
         : null,
     columns: [
       col('Material', 'materialCode'),
@@ -263,6 +263,6 @@ class _SupplierMaterialsState extends State<_SupplierMaterials> {
       dateCol('Última compra', 'lastPurchaseDate'),
       col('Observações', 'notes'),
     ],
-    onTap: (e) => _edit(e),
+    onTap: _edit,
   );
 }

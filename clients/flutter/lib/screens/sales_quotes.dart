@@ -10,14 +10,14 @@ import '../entities.dart';
 import '../labels.dart';
 import '../reports/print_docs.dart';
 import '../session.dart';
-import '../workdays.dart';
-import '../widgets/discard_guard.dart';
 import '../widgets/actions.dart';
+import '../widgets/discard_guard.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/print_gate.dart';
 import '../widgets/print_panel.dart';
 import '../widgets/record_list.dart';
+import '../workdays.dart';
 import 'sales_common.dart';
 import 'viability.dart';
 
@@ -80,8 +80,8 @@ final orderLineFields = [
   const FieldSpec('thickness', 'Espessura (mm)', type: FieldType.decimal),
   const FieldSpec('length', 'Comprimento (mm)', type: FieldType.decimal),
   const FieldSpec('standard', 'Norma', hint: 'NBR 5599, DIN 2393…'),
-  FieldSpec('condition', 'Estado de entrega', type: FieldType.choice, choices: deliveryConditions),
-  FieldSpec('saleUnit', 'Unidade de venda', type: FieldType.choice, choices: saleUnits),
+  const FieldSpec('condition', 'Estado de entrega', type: FieldType.choice, choices: deliveryConditions),
+  const FieldSpec('saleUnit', 'Unidade de venda', type: FieldType.choice, choices: saleUnits),
   const FieldSpec('pieceWeightKg', 'Peso da peça (kg)', type: FieldType.decimal),
   const FieldSpec('materialNeedKg', 'Necessidade de MP (kg)', type: FieldType.decimal, hint: 'Vazio = calculada pela quantidade'),
   const FieldSpec('toleranceDiameter', 'Tolerância Ø (± mm)', type: FieldType.decimal),
@@ -267,7 +267,7 @@ class _QuotesScreenState extends State<QuotesScreen> {
       dateCol('Validade', 'validUntil'),
       dateCol('Criada', 'createdAt'),
       col('Criada por', 'createdBy'),
-      ColumnSpec('Alerta', quoteAlert),
+      const ColumnSpec('Alerta', quoteAlert),
     ],
     rowActions: (e) => widget.session.canSell
         ? [
@@ -1321,7 +1321,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         if (sell && !attached) secondary('quote-po-start-text', 'Escrever texto do pedido', Icons.edit_note, _setRequestText),
         if (sell && attached) primary('quote-po', 'Registrar pedido de compra', Icons.assignment_turned_in_outlined, _receivePo),
         if (sell) secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
-        if (sell) negative('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, () => _gaveUp()),
+        if (sell) negative('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, _gaveUp),
       ],
     );
   }

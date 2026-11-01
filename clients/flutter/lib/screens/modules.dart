@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 
 import '../api.dart';
 import '../entities.dart';
-import '../session.dart';
 import '../labels.dart';
+import '../session.dart';
 import '../widgets/dash.dart';
 import 'dashboard.dart';
 import 'dashboard_data.dart';
@@ -90,11 +90,11 @@ class _ModuleScreenState extends State<ModuleScreen> {
 
   Widget _content(Object data) {
     final items = switch (data) {
-      CommercialDashboard d => _commercial(d),
-      DashboardData d => _engineering(d),
-      StockDashboard d => _stock(d),
-      PurchasingDashboard d => _purchasing(d),
-      ProductionDashboard d => _production(d),
+      final CommercialDashboard d => _commercial(d),
+      final DashboardData d => _engineering(d),
+      final StockDashboard d => _stock(d),
+      final PurchasingDashboard d => _purchasing(d),
+      final ProductionDashboard d => _production(d),
       _ => <GridItem>[],
     };
     if (items.isEmpty) {

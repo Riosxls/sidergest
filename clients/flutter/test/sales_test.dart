@@ -8,7 +8,6 @@ import 'package:ebt_engenharia/screens/sales_pipeline.dart';
 import 'package:ebt_engenharia/screens/sales_quotes.dart';
 import 'package:ebt_engenharia/screens/shell.dart';
 import 'package:ebt_engenharia/session.dart';
-import 'role_permissions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +16,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'nav.dart';
+import 'role_permissions.dart';
 
 http.Response json(Object? body, [int status = 200]) => http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json; charset=utf-8'});
 

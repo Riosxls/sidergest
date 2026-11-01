@@ -232,7 +232,7 @@ class _RoutingTabState extends State<RoutingTab> {
     if (ops == null) return const Center(child: CircularProgressIndicator());
     return Scaffold(
       floatingActionButton: canWrite
-          ? FloatingActionButton.extended(onPressed: () => _editOp(), icon: const Icon(Icons.add), label: const Text('Operação'))
+          ? FloatingActionButton.extended(onPressed: _editOp, icon: const Icon(Icons.add), label: const Text('Operação'))
           : null,
       body: ops.isEmpty
           ? const Center(child: Text('Sem operações no roteiro'))

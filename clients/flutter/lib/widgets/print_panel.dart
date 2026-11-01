@@ -36,7 +36,7 @@ Future<Uint8List?> customerOrderPdf({required String? fileName, Uint8List? file,
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(36),
-        build: (_) => [pw.Text(title, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)), pw.SizedBox(height: 10), pw.Text(text!.trim(), style: const pw.TextStyle(fontSize: 11))],
+        build: (_) => [pw.Text(title, style: const pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)), pw.SizedBox(height: 10), pw.Text(text!.trim(), style: const pw.TextStyle(fontSize: 11))],
       ),
     );
     return doc.save();

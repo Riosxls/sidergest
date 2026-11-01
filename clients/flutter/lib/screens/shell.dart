@@ -8,18 +8,18 @@ import '../session.dart';
 import '../widgets/alerts.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/user_menu.dart';
+import 'audit.dart';
 import 'certificates.dart';
 import 'customers.dart';
 import 'dashboard.dart';
 import 'deliveries.dart';
 import 'entity_list.dart';
 import 'fiscal.dart';
-import 'modules.dart';
 import 'low_stock.dart';
+import 'modules.dart';
 import 'orders.dart';
-import 'product_detail.dart';
-import 'audit.dart';
 import 'permissions.dart';
+import 'product_detail.dart';
 import 'production_floor.dart';
 import 'production_orders.dart';
 import 'quick_actions.dart';
@@ -31,11 +31,11 @@ import 'sales_common.dart' show openQuote, openSalesOrder;
 import 'sales_orders.dart';
 import 'sales_pipeline.dart';
 import 'sales_quotes.dart';
+import 'steel.dart';
 import 'stock_balances.dart';
 import 'stock_closing.dart';
 import 'stock_documents.dart';
 import 'stock_lots.dart';
-import 'steel.dart';
 import 'suppliers.dart';
 import 'users.dart';
 import 'viability.dart';
@@ -343,7 +343,7 @@ class _ShellState extends State<Shell> {
     if (system.isNotEmpty) {
       children.add(const Divider());
       if (!rail) children.add(_groupLabel('Administração', theme));
-      children.addAll(system.map((i) => one(i)));
+      children.addAll(system.map(one));
     }
     return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
   }

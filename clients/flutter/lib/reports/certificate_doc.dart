@@ -204,7 +204,7 @@ Future<Uint8List> buildCertificatePdf(Map<String, dynamic> c) async {
                 angle: 0.6,
                 child: pw.Text(
                   cancelled ? 'CANCELADO' : 'RASCUNHO',
-                  style: pw.TextStyle(fontSize: 80, fontWeight: pw.FontWeight.bold, color: PdfColor(0.85, 0.85, 0.85, 0.6)),
+                  style: const pw.TextStyle(fontSize: 80, fontWeight: pw.FontWeight.bold, color: PdfColor(0.85, 0.85, 0.85, 0.6)),
                 ),
               ),
             ),

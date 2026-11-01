@@ -55,7 +55,7 @@ class ReportDoc {
       bold: pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-bold.ttf')),
     );
     final doc = pw.Document(title: title, theme: theme);
-    final bold = pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8);
+    const bold = pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8);
     const base = pw.TextStyle(fontSize: 8);
     final widths = <int, pw.TableColumnWidth>{for (var i = 0; i < headers.length; i++) i: pw.FlexColumnWidth((flex?[i] ?? 1).toDouble())};
     pw.Widget cell(String t, int i, pw.TextStyle s) => pw.Padding(
@@ -69,7 +69,7 @@ class ReportDoc {
         header: (_) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text(title, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+            pw.Text(title, style: const pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
             if (filters.isNotEmpty) pw.Text(filters.join('   |   '), style: const pw.TextStyle(fontSize: 8)),
             pw.SizedBox(height: 6),
           ],
