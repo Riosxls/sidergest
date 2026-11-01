@@ -267,11 +267,11 @@ class Session extends ChangeNotifier {
     try {
       final p = await SharedPreferences.getInstance();
       switch (value) {
-        case bool v:
+        case final bool v:
           await p.setBool(key, v);
-        case int v:
+        case final int v:
           await p.setInt(key, v);
-        case String v:
+        case final String v:
           await p.setString(key, v);
       }
     } catch (_) {}

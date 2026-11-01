@@ -54,7 +54,7 @@ ThemeData appTheme(Brightness brightness, {bool comfortable = false, bool highCo
     colorScheme: cs,
     visualDensity: comfortable ? VisualDensity.standard : VisualDensity.compact,
     pageTransitionsTheme: reduceMotion
-        ? PageTransitionsTheme(builders: {for (final p in TargetPlatform.values) p: _NoTransitions()})
+        ? PageTransitionsTheme(builders: {for (final p in TargetPlatform.values) p: const _NoTransitions()})
         : null,
     cardTheme: CardThemeData(
       color: cs.surfaceContainerHigh,
