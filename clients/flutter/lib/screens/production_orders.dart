@@ -668,6 +668,39 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
     if (r != null) unawaited(_load());
   }
 
+  /// Stock documents (issues and returns) of this order.
+  Widget _stockMovements() => Section(
+    title: 'Movimentações de estoque',
+    child: FutureView<dynamic>(
+      key: ValueKey('docs-$_version'),
+      future: docs,
+      builder: (context, docs) => SimpleTable(
+        columns: [
+          col('Nº', 'id'),
+          labelCol('Tipo', 'type', movementTypes),
+          dateCol('Data', 'date'),
+          col('Linhas', 'movementCount', numeric: true),
+          col('Usuário', 'createdBy'),
+          ColumnSpec('Estornado', (e) => e['reversed'] == true ? 'Sim' : ''),
+        ],
+        rows: (docs as List).cast<Map<String, dynamic>>(),
+        actions: (d) => [
+          IconButton(
+            tooltip: 'Abrir',
+            icon: const Icon(Icons.open_in_new, size: 20),
+            onPressed: () => Navigator.of(context)
+                .push(
+                  MaterialPageRoute(
+                    builder: (_) => DocumentScreen(session: s, id: d['id'] as int),
+                  ),
+                )
+                .then((_) => _load()),
+          ),
+        ],
+      ),
+    ),
+  );
+
   Widget _materials(Map<String, dynamic> o) {
     final lines = (o['materials'] as List).cast<Map<String, dynamic>>();
     final canIssue = s.canMoveProduction && running;
@@ -721,37 +754,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        Section(
-          title: 'Movimentações de estoque',
-          child: FutureView<dynamic>(
-            key: ValueKey('docs-$_version'),
-            future: docs,
-            builder: (context, docs) => SimpleTable(
-              columns: [
-                col('Nº', 'id'),
-                labelCol('Tipo', 'type', movementTypes),
-                dateCol('Data', 'date'),
-                col('Linhas', 'movementCount', numeric: true),
-                col('Usuário', 'createdBy'),
-                ColumnSpec('Estornado', (e) => e['reversed'] == true ? 'Sim' : ''),
-              ],
-              rows: (docs as List).cast<Map<String, dynamic>>(),
-              actions: (d) => [
-                IconButton(
-                  tooltip: 'Abrir',
-                  icon: const Icon(Icons.open_in_new, size: 20),
-                  onPressed: () => Navigator.of(context)
-                      .push(
-                        MaterialPageRoute(
-                          builder: (_) => DocumentScreen(session: s, id: d['id'] as int),
-                        ),
-                      )
-                      .then((_) => _load()),
-                ),
-              ],
-            ),
-          ),
-        ),
+        _stockMovements(),
       ],
     );
   }
