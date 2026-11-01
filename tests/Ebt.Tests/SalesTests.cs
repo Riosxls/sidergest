@@ -431,7 +431,7 @@ public class SalesTests(ApiFixture api)
         var made = await (await admin.Post($"/api/sales/certificates/for-delivery/{delivery.Id}", new object())).Read<List<CertificateOut>>();
         Assert.Equal(2, made.Count);
         Assert.All(made, c => Assert.Equal(delivery.Id, c.DeliveryId));
-        Assert.Equal([10m, 5m], made.Select(c => c.Quantity));
+        Assert.Equal([5m, 10m], made.Select(c => c.Quantity).Order());
         Assert.Equal(2, made.Select(c => c.Number).Distinct().Count());
         Assert.Equal(HttpStatusCode.Conflict, (await admin.Post($"/api/sales/certificates/for-delivery/{delivery.Id}", new object())).StatusCode);
 

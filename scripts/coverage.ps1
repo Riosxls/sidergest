@@ -3,7 +3,7 @@ param(
     [switch]$SkipBackend,
     [double]$BackendMin = 88,
     [double]$BackendBranchMin = 68,
-    [double]$FlutterMin = 71
+    [double]$FlutterMin = 75
 )
 
 # Line-coverage gate. Runs the test suites with coverage and fails when a total drops under its threshold.
@@ -71,8 +71,8 @@ if (-not $SkipFlutter) {
         Check 'flutter' $lh $lf $FlutterMin
     } else { $failed += 'flutter coverage report'; Write-Host 'No lcov.info found.' -ForegroundColor Red }
     Pop-Location
-    # flutter test rewrites these tracked plugin files on Windows; keep the tree clean.
-    git -C $Root checkout -- clients/flutter/windows 2>$null
+    # flutter test rewrites these three tracked plugin files on Windows; restore only them.
+    git -C $Root checkout -- clients/flutter/windows/flutter/generated_plugin_registrant.cc clients/flutter/windows/flutter/generated_plugin_registrant.h clients/flutter/windows/flutter/generated_plugins.cmake 2>$null
 }
 
 Write-Host ''
