@@ -12,14 +12,25 @@ powershell -File scripts\backup.ps1 -CopyTo \\server\ti  # also copy it to anoth
 - `scripts\start.ps1` takes a dump (`backups\ebt-pre-start-*.dump`) before it rebuilds or migrates, and stops if the dump fails.
 - The newest 14 dumps are kept (`-Keep` changes that). `backups\` and `*.dump` are gitignored: dumps hold real data.
 - A dump on the same disk is not a backup against disk failure. Use `-CopyTo` with an external drive or a share.
-- `scriptsackup.ps1` writes `backup-statusstatus.json` (count, newest file, time, size) after every run. The API container mounts only that folder read-only at `/backup-status` (`Backup__Directory`); admins see the newest dump in Configurações through `GET /api/admin/backup-status`. Recreate the `api` container once after pulling this change so the new mount exists, and run one backup so the file exists.
+- `scripts\backup.ps1` writes `backup-status\status.json` (count, newest file, time, size) after every run. The API container mounts only that folder read-only at `/backup-status` (`Backup__Directory`); admins see the newest dump in Configurações through `GET /api/admin/backup-status`.
 - Exposure: the API never sees the dumps (real data), only the status file. The endpoint never returns the folder path.
 
-### Nightly backup (Windows Task Scheduler)
+### Automatic backup (set in the app)
+
+Admins choose the schedule in **Configurações > Administração > Cópia de segurança > Configurar backup**: on/off, frequency (hourly, every 6 hours, daily, weekly), time of day, weekday, the folder, drive or share the copy goes to, and how many dumps to keep. "Fazer backup agora" asks for one right away.
+
+The API container cannot run `pg_dump` (no Docker access, read-only), so the plan is stored in the table `backup_settings` and a small agent on the server computer carries it out:
 
 ```
-schtasks /Create /SC DAILY /ST 22:00 /TN "MetaGest backup" /TR "powershell -NoProfile -File C:\Users\italo\Desktop\sidergest\scripts\backup.ps1 -Reason nightly -CopyTo D:\backups\metagest"
+powershell -File scripts\install-backup-agent.ps1            # once: registers the task "MetaGest backup agent" (every 5 minutes)
+powershell -File scripts\install-backup-agent.ps1 -Remove    # unregister
 ```
+
+- `scripts\backup-agent.ps1` reads the plan, runs `backup.ps1` when a backup is due (also `-CopyTo` the chosen destination), and writes the result and a heartbeat back. The app shows the last result, the next run and warns when the agent has not been seen for 15 minutes.
+- Daily and weekly times are local time of the server computer. A missed slot (computer off) runs at the next check.
+- The destination must be a full path (`D:\backups\metagest` or `\\server\share`); the app and the agent both refuse anything else. A destination that is not reachable shows as a failed run in the app.
+- The schedule rules live in `Ebt.Core/Maintenance/BackupSchedule.cs` and in `backup-agent.ps1`; change both together.
+- Without the agent task the app can save settings but nothing runs. A manual dump with an external copy still works: `powershell -File scripts\backup.ps1 -CopyTo <folder>`.
 
 ## Restore
 

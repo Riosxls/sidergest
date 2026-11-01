@@ -256,6 +256,81 @@ namespace Ebt.Core.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.BackupSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset?>("AgentSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("agent_seen_at");
+
+                    b.Property<string>("Destination")
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)")
+                        .HasColumnName("destination");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<int>("Frequency")
+                        .HasColumnType("integer")
+                        .HasColumnName("frequency");
+
+                    b.Property<int>("Keep")
+                        .HasColumnType("integer")
+                        .HasColumnName("keep");
+
+                    b.Property<DateTimeOffset?>("LastRunAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_run_at");
+
+                    b.Property<string>("LastRunMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("last_run_message");
+
+                    b.Property<bool?>("LastRunOk")
+                        .HasColumnType("boolean")
+                        .HasColumnName("last_run_ok");
+
+                    b.Property<DateTimeOffset?>("RunRequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("run_requested_at");
+
+                    b.Property<TimeOnly>("TimeOfDay")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("time_of_day");
+
+                    b.Property<int>("Weekday")
+                        .HasColumnType("integer")
+                        .HasColumnName("weekday");
+
+                    b.HasKey("Id")
+                        .HasName("pk_backup_settings");
+
+                    b.ToTable("backup_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_backup_settings_keep", "keep >= 1 AND keep <= 365");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Enabled = false,
+                            Frequency = 2,
+                            Keep = 14,
+                            TimeOfDay = new TimeOnly(22, 0, 0),
+                            Weekday = 0
+                        });
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.BomItem", b =>
                 {
                     b.Property<int>("Id")

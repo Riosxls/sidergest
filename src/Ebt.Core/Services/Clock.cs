@@ -10,6 +10,12 @@ public static class Clock
         if (!string.IsNullOrWhiteSpace(zoneId)) zone = Resolve(zoneId.Trim());
     }
 
+    /// <summary>The wall-clock time of an instant in the business zone.</summary>
+    public static DateTime ToLocal(DateTimeOffset at) => TimeZoneInfo.ConvertTime(at, zone).DateTime;
+
+    /// <summary>The instant of a business-zone wall-clock time.</summary>
+    public static DateTimeOffset FromLocal(DateTime local) => new(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), zone.GetUtcOffset(DateTime.SpecifyKind(local, DateTimeKind.Unspecified)));
+
     public static DateOnly Today() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, zone).DateTime);
 
     /// <summary>The calendar day of an instant in the business zone.</summary>
