@@ -1,5 +1,5 @@
 version: 2
-# Monthly, and no major-version bumps for .NET packages or base images: the projects target net8.0, so a
+# Monthly, and no major-version bumps for .NET packages or base images: the projects target net10.0, so a
 # major bump (EF Core 9, .NET 10 images, ...) is done on purpose together with a framework upgrade.
 updates:
   - package-ecosystem: nuget

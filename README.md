@@ -13,7 +13,7 @@ Prerequisites: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 | `start.bat` | DB + API (Docker) + Flutter Windows app |
 | `start.bat -Web` | same, app in Chrome at http://localhost:8081 (`-Device edge` for Edge) |
 | `start.bat -ApiOnly` | DB + API only |
-| `start.bat -NoDocker` | API via `dotnet run` against a local PostgreSQL 16 on 5432 or `EBT_DB_PORT` (needs .NET 8 SDK; creates role/db `ebt` via `psql` if missing) |
+| `start.bat -NoDocker` | API via `dotnet run` against a local PostgreSQL 16 on 5432 or `EBT_DB_PORT` (needs .NET 10 SDK; creates role/db `ebt` via `psql` if missing) |
 | `stop.bat` | stop API and containers, data kept |
 | `stop.bat -Purge` | also delete the database volume |
 
@@ -93,7 +93,7 @@ Files are recognised by their field prefix (E10*, F06*, X04* …), so names may 
 
 ## Run locally (dev)
 
-Needs .NET 8 SDK and Postgres 16 (or just `start.bat -NoDocker`).
+Needs .NET 10 SDK and Postgres 16 (or just `start.bat -NoDocker`).
 
 ```
 createuser -P ebt   # password: ebt-dev-password

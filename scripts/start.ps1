@@ -100,7 +100,7 @@ if (-not $NoDocker) {
             Write-Host "Docker not found, falling back to local mode (.NET + PostgreSQL on localhost:5432)." -ForegroundColor Yellow
             $NoDocker = $true
         } else {
-            Fail "Neither Docker nor the .NET SDK was found. Install Docker Desktop (https://www.docker.com/products/docker-desktop/) or .NET 8 SDK + PostgreSQL 16 (https://dotnet.microsoft.com/download/dotnet/8.0, https://www.postgresql.org/download/windows/)."
+            Fail "Neither Docker nor the .NET SDK was found. Install Docker Desktop (https://www.docker.com/products/docker-desktop/) or .NET 10 SDK + PostgreSQL 16 (https://dotnet.microsoft.com/download/dotnet/10.0, https://www.postgresql.org/download/windows/)."
         }
     } elseif (-not (Test-DockerRunning)) {
         Fail "Docker is installed but not running. Start Docker Desktop, wait until it says 'Engine running', then run this again. Or use -NoDocker with a local PostgreSQL."
@@ -152,9 +152,9 @@ if (-not $NoDocker) {
         Fail "API did not become healthy. Logs above."
     }
 } else {
-    if (-not (Has 'dotnet')) { Fail ".NET SDK not found. Install .NET 8 SDK: https://dotnet.microsoft.com/download/dotnet/8.0" }
+    if (-not (Has 'dotnet')) { Fail ".NET SDK not found. Install .NET 10 SDK: https://dotnet.microsoft.com/download/dotnet/10.0" }
     $sdks = & dotnet --list-sdks
-    if (-not ($sdks | Where-Object { [int]($_.Split('.')[0]) -ge 8 })) { Fail ".NET 8 SDK (or newer) not found. Installed: $($sdks -join ', '). Get it at https://dotnet.microsoft.com/download/dotnet/8.0" }
+    if (-not ($sdks | Where-Object { [int]($_.Split('.')[0]) -ge 10 })) { Fail ".NET 10 SDK (or newer) not found. Installed: $($sdks -join ', '). Get it at https://dotnet.microsoft.com/download/dotnet/10.0" }
     if (-not (Test-Port $DbPort)) {
         Fail "PostgreSQL is not reachable on localhost:$DbPort (set EBT_DB_PORT if it uses another port). Install PostgreSQL 16 (https://www.postgresql.org/download/windows/) and start its service, or install Docker Desktop and run without -NoDocker."
     }

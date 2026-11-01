@@ -296,6 +296,8 @@ public static class AuthEndpoints
         }
         if (password.Length < MinPasswordLength)
             throw new InvalidOperationException($"Bootstrap:AdminPassword must have at least {MinPasswordLength} characters.");
+        if (password == "sidergest123")
+            logger.LogWarning("Bootstrap admin created with the well-known development password; change it in Configurações before real use.");
         var admin = new AppUser { Username = username.Trim().ToLower(), PasswordHash = "", Role = UserRole.Admin };
         admin.PasswordHash = hasher.HashPassword(admin, password);
         db.Users.Add(admin);

@@ -12,7 +12,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 
 if (args.Contains("--healthcheck"))
 {
@@ -101,9 +101,8 @@ builder.Services.AddSwaggerGen(o =>
 {
     o.SwaggerDoc("v1", new OpenApiInfo { Title = "EBT ERP API", Version = "v1" });
     o.CustomSchemaIds(t => t.FullName!.Replace("+", "."));
-    var scheme = new OpenApiSecurityScheme { Type = SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT", Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } };
-    o.AddSecurityDefinition("Bearer", scheme);
-    o.AddSecurityRequirement(new OpenApiSecurityRequirement { [scheme] = [] });
+    o.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme { Type = SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT" });
+    o.AddSecurityRequirement(doc => new OpenApiSecurityRequirement { [new OpenApiSecuritySchemeReference("Bearer", doc)] = [] });
 });
 
 var app = builder.Build();
