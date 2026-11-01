@@ -60,7 +60,7 @@ Tests:
 - Backend: `dotnet test` (`tests/Ebt.Tests`, integration tests against real Postgres via `ApiFixture.cs`; also DBF import tests). The fixture needs a superuser connection in `EBT_TEST_PG`; with the Docker DB: `Host=localhost;Port=25432;Username=ebt;Password=<EBT_DB_PASSWORD from .env>`. It creates and drops its own database.
 - Everything: `powershell -File scripts\check.ps1` (build, backend tests, `flutter analyze`, `flutter test`; sets `EBT_TEST_PG` from `.env`). Run it before pushing, since CI is off.
 - Flutter: `cd clients\flutter; flutter test` (`clients/flutter/test`).
-- Coverage gate: `powershell -File scripts\coverage.ps1` runs both suites with coverage and fails under the minimums: backend lines 88% (measured 89.9%), backend branches 68% (70.0%), Flutter lines 75% (77.5%); EF migrations are excluded, `Ebt.DbfImport` is counted. Override with `-BackendMin`/`-BackendBranchMin`/`-FlutterMin`, skip with `-SkipBackend`/`-SkipFlutter`. `scripts\check.ps1 -Coverage` runs it in place of the plain test steps. Raise the minimums when coverage grows.
+- Coverage gate: `powershell -File scripts\coverage.ps1` runs both suites with coverage and fails under the minimums: backend lines 89% (measured 90.8%), backend branches 73% (75.4%), Flutter lines 86% (88.6%); EF migrations are excluded, `Ebt.DbfImport` is counted. Override with `-BackendMin`/`-BackendBranchMin`/`-FlutterMin`, skip with `-SkipBackend`/`-SkipFlutter`. `scripts\check.ps1 -Coverage` runs it in place of the plain test steps. Raise the minimums when coverage grows.
 
 ### Migrations
 

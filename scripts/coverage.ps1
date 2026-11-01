@@ -1,9 +1,9 @@
 param(
     [switch]$SkipFlutter,
     [switch]$SkipBackend,
-    [double]$BackendMin = 88,
-    [double]$BackendBranchMin = 68,
-    [double]$FlutterMin = 75
+    [double]$BackendMin = 89,
+    [double]$BackendBranchMin = 73,
+    [double]$FlutterMin = 86
 )
 
 # Line-coverage gate. Runs the test suites with coverage and fails when a total drops under its threshold.
