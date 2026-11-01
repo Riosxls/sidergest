@@ -40,24 +40,49 @@ flutter run -d windows --dart-define=API_URL=http://localhost:8080
 
 The first build takes a few minutes; the window opens on the login screen. `http://localhost:8080` itself is the API (it redirects to Swagger), not the app. Standalone exe: `flutter build windows --release --dart-define=API_URL=http://localhost:8080` → `build\windows\x64\runner\Release\ebt_engenharia.exe`.
 
-## Layout
+## Layout (MVC mapping)
+
+The code is layered and already follows MVC; see `ARCHITECTURE.md` for the request lifecycle and audit notes.
 
 ```
 Ebt.sln
 src/
-  Ebt.Core/          Entities, EbtDbContext, EF migrations, BomService, TubeWeight, Inventory/, Purchasing/, Production/
-  Ebt.Api/           Minimal API: auth (JWT), master data, products, routing, BOM
-    Endpoints/       MasterDataEndpoints.cs, ProductEndpoints.cs, InventoryEndpoints.cs, PurchasingEndpoints.cs, ProductionEndpoints.cs
-    Infrastructure/  Crud.cs (generic CRUD), Auth.cs, Errors.cs
-  Ebt.DbfImport/     CLI that migrates legacy DBF master data into Postgres
+  Ebt.Core/              MODEL: domain and data
+    Entities/              EF entities and enums (one file per module)
+    Data/                  EbtDbContext (partial, one file per module), EF migrations, audit interceptor
+    Sales/ Production/ Purchasing/ Inventory/ Fiscal/ Certificates/ Viability/ Maintenance/
+                           business services (SalesService, ProductionService, StockService, FiscalService...)
+    Services/              BomService, TubeWeight, WorkDays, Clock
+  Ebt.Api/               CONTROLLER: minimal API, composition root (Program.cs)
+    Endpoints/             one static class per module: routes, input binding, policy, call a service, return a DTO
+    Infrastructure/        Access.cs (permission matrix), Auth.cs, Crud.cs, Errors.cs, RowVersionFilter.cs
+  Ebt.DbfImport/         CLI that migrates legacy DBF data into Postgres
 tests/
-  Ebt.Tests/         Integration tests against real Postgres (API + DBF import)
+  Ebt.Tests/             integration tests against real Postgres (API + DBF import)
 clients/
-  flutter/           Flutter client (Windows, Android, Web), see its README
-Dockerfile           targets: api, dbf-import
-compose.yaml         db + api (+ dbf-import under the "tools" profile)
+  flutter/               VIEW: Flutter client (Windows, Android, Web)
+    lib/screens, widgets   UI
+    lib/reports            PDF documents
+    lib/api.dart, entities.dart, session.dart, labels.dart   HTTP client, DTOs, session state, pt-BR labels
+docs/OPERATIONS.md       backup, restore, nightly task
+Dockerfile               targets: api, dbf-import
+compose.yaml             db + api (+ dbf-import under the "tools" profile)
 ```
 
+## Knowledge graph (Graphify)
+
+`graphify-out/` holds a code knowledge graph (`graph.json`, `GRAPH_REPORT.md`, `graph.html`). It is generated output.
+
+```
+graphify update .                      # refresh after code changes (AST only, no API cost)
+graphify query "how is a quote converted to an order"
+graphify path "SalesService" "StockService"
+graphify explain "EbtDbContext"
+```
+
+Claude Code sessions can query the graph through MCP: `.claude/.mcp.json` starts `graphify-mcp graphify-out/graph.json` (installed with graphify; it is the same server as `python -m graphify.serve`).
+
+God nodes (most connected, from `GRAPH_REPORT.md`, 2026-10-30): `EbtDbContext` (247 edges), `Ebt.Core.Entities`, `SalesService`, `FiscalDocument`, `ProductionService`, `StockService`, `SalesOrder`, `QualityCertificate`, `Ebt.Core.Data`, `Material`. No import cycles. Changes to the top ones touch many modules; run the tests before merging.
 ## Run with Docker
 
 ```
