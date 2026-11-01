@@ -102,7 +102,7 @@ function Stop-Backup($Proc, [string]$Container, [datetime]$StartedAt, [string]$D
     try { Invoke-Sql $Container "select pg_terminate_backend(pid) from pg_stat_activity where application_name = 'pg_dump'" | Out-Null } catch { }
     & docker exec $Container sh -c 'rm -f /tmp/ebt-*.dump' 2>&1 | Out-Null
     $dir = Join-Path $Root 'backups'
-    Get-ChildItem $dir -Filter 'ebt-*.dump' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $StartedAt.AddSeconds(-2) } | ForEach-Object {
+    Get-ChildItem $dir -Filter 'ebt-*' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $StartedAt.AddSeconds(-2) } | ForEach-Object {
         if ($Destination) { Remove-Item (Join-Path $Destination $_.Name) -Force -ErrorAction SilentlyContinue }
         Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
     }
@@ -148,7 +148,8 @@ from backup_settings where id = 1
             $reason = if ($manual) { 'manual' } else { 'scheduled' }
             $quote = [string][char]34
             $args = @('-NoProfile', '-File', ($quote + (Join-Path $PSScriptRoot 'backup.ps1') + $quote), '-Quiet', '-Keep', $plan.Keep, '-Reason', $reason)
-            if ($plan.Destination) { $args += @('-CopyTo', ($quote + $plan.Destination + $quote)) }
+            # The destination goes through the environment, not the command line: a path ending in a backslash (D:\) would be mangled by quoting.
+            $env:METAGEST_BACKUP_COPYTO = $plan.Destination
             $outFile = Join-Path ([IO.Path]::GetTempPath()) 'metagest-backup-agent.out'
             $errFile = Join-Path ([IO.Path]::GetTempPath()) 'metagest-backup-agent.err'
             Remove-Item $outFile, $errFile -ErrorAction SilentlyContinue

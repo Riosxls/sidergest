@@ -2,19 +2,24 @@
     [int]$Keep = 14,
     [string]$CopyTo,
     [string]$Reason = 'manual',
-    [switch]$Quiet
+    [switch]$Quiet,
+    [string]$LocalDir   # tests only: keep the dumps here and leave the status files alone
 )
 
-# Dumps the Docker database to backups\ebt-<reason>-<timestamp>.dump (pg_dump custom format), keeps the newest $Keep dumps and
-# optionally copies the new one to another disk or share (-CopyTo). Exit code 0 only when the dump exists and is not empty.
+# Dumps the Docker database to backups\ebt-<reason>-<timestamp>.dump (pg_dump custom format), checks it, keeps the newest $Keep scheduled/manual
+# dumps and optionally copies the new one to another disk or share (-CopyTo, or the METAGEST_BACKUP_COPYTO environment variable, which the backup agent
+# uses so that a path ending in a backslash is never mangled by command-line quoting). Exit code 0 only when the dump exists, is readable by pg_restore,
+# matches its SHA-256 after leaving the container and, when copied, matches at the destination too.
 # While it runs it writes backup-status\progress.json (percent and stage); the API container mounts that folder read-only and the app shows a
 # progress bar from it. pg_dump reports no percentage, so the dump stage compares the growing file with the size of the previous dump.
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
-$Dir = Join-Path $Root 'backups'
+$Dir = if ($LocalDir) { $LocalDir } else { Join-Path $Root 'backups' }
 $StatusDir = Join-Path $Root 'backup-status'
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 New-Item -ItemType Directory -Force -Path $StatusDir | Out-Null
+if (-not $CopyTo) { $CopyTo = $env:METAGEST_BACKUP_COPYTO }
+if ($CopyTo) { $CopyTo = $CopyTo.Trim() }
 
 function Say([string]$Message) { if (-not $Quiet) { Write-Host $Message } }
 
@@ -29,6 +34,23 @@ function Set-Progress([int]$Percent, [string]$Stage, [bool]$Running = $true) {
         Set-Content -Path $tmp -Value $json -Encoding utf8
         Move-Item -Path $tmp -Destination (Join-Path $StatusDir 'progress.json') -Force
     } catch { }   # progress is a nicety: never fail the backup because of it
+}
+
+# Scheduled and manual dumps are rotated by count; safety dumps (pre-start, before-restore, before-rebuild, ...) are only removed when older than this.
+$SafetyDumpMaxAgeDays = 180
+$RotatedName = '^ebt-(scheduled|manual|nightly)-.*[.]dump$'
+
+function Remove-Dump([string]$Path) {
+    Remove-Item $Path -Force -ErrorAction SilentlyContinue
+    Remove-Item ($Path + '.sha256') -Force -ErrorAction SilentlyContinue
+}
+
+function Remove-OldDumps([string]$Folder, [string]$Label) {
+    $dumps = @(Get-ChildItem $Folder -Filter 'ebt-*.dump' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+    $rotated = @($dumps | Where-Object { $_.Name -match $RotatedName })
+    $rotated | Select-Object -Skip $Keep | ForEach-Object { Remove-Dump $_.FullName; Say "Removed old backup $($_.Name) $Label" }
+    $limit = (Get-Date).AddDays(-$SafetyDumpMaxAgeDays)
+    $dumps | Where-Object { $_.Name -notmatch $RotatedName -and $_.LastWriteTime -lt $limit } | ForEach-Object { Remove-Dump $_.FullName; Say "Removed old safety backup $($_.Name) $Label" }
 }
 
 Push-Location $Root
@@ -61,11 +83,17 @@ try {
             $size = 0
             try { $size = [long]((& docker exec $container stat -c %s $tmp 2>$null) | Select-Object -First 1) } catch { $size = 0 }
             $ratio = [math]::Min(1.0, $size / $expected)
-            Set-Progress ([int](3 + 82 * $ratio)) 'Gravando o banco de dados...'
+            Set-Progress ([int](3 + 78 * $ratio)) 'Gravando o banco de dados...'
         }
     }
     $dump.WaitForExit()
     if ($dump.ExitCode -ne 0) { throw 'pg_dump failed.' }
+
+    # The dump must be a readable archive, and its hash is taken inside the container so the copy out can be compared with it.
+    Set-Progress 82 'Verificando o arquivo...'
+    & docker exec $container sh -c "pg_restore -l $tmp > /dev/null"
+    if ($LASTEXITCODE -ne 0) { throw 'The dump is not a valid archive (pg_restore -l failed).' }
+    $remoteHash = ((& docker exec $container sha256sum $tmp) | Select-Object -First 1).Split(' ')[0].Trim().ToUpperInvariant()
 
     Set-Progress 86 'Copiando o arquivo...'
     & docker cp "${container}:$tmp" $file
@@ -74,29 +102,38 @@ try {
 
     Set-Progress 90 'Conferindo o arquivo...'
     if (-not (Test-Path $file) -or (Get-Item $file).Length -lt 1024) { throw "Backup file is missing or too small: $file" }
-    Say "Backup written: $file ($([math]::Round((Get-Item $file).Length / 1MB, 1)) MB)"
+    $hash = (Get-FileHash -Path $file -Algorithm SHA256).Hash.ToUpperInvariant()
+    if ($hash -ne $remoteHash) { throw 'The copied dump does not match the original (SHA-256 differs).' }
+    Set-Content -Path ($file + '.sha256') -Value "$hash  $(Split-Path $file -Leaf)" -Encoding ascii
+    Say "Backup written: $file ($([math]::Round((Get-Item $file).Length / 1MB, 1)) MB, SHA-256 verified)"
 
     if ($CopyTo) {
         Set-Progress 92 'Copiando para o destino...'
         New-Item -ItemType Directory -Force -Path $CopyTo | Out-Null
-        Copy-Item $file $CopyTo -Force
-        Say "Copied to $CopyTo"
+        $target = Join-Path $CopyTo (Split-Path $file -Leaf)
+        Copy-Item $file $target -Force
+        Copy-Item ($file + '.sha256') ($target + '.sha256') -Force
+        if ((Get-FileHash -Path $target -Algorithm SHA256).Hash.ToUpperInvariant() -ne $hash) {
+            Remove-Dump $target
+            throw "The copy at the destination does not match the dump (SHA-256 differs): $CopyTo"
+        }
+        Say "Copied to $CopyTo (verified)"
     }
 
-    Set-Progress 97 'Limpando cópias antigas...'
-    Get-ChildItem $Dir -Filter 'ebt-*.dump' | Sort-Object LastWriteTime -Descending | Select-Object -Skip $Keep | ForEach-Object {
-        Remove-Item $_.FullName -Force
-        Say "Removed old backup $($_.Name)"
-    }
+    Set-Progress 96 'Limpando cópias antigas...'
+    Remove-OldDumps $Dir ''
+    if ($CopyTo) { Remove-OldDumps $CopyTo '(destination)' }
+
     # The API container mounts only backup-status (never the dumps), so it can report the last backup without being able to read the data.
     $all = @(Get-ChildItem $Dir -Filter 'ebt-*.dump' | Sort-Object LastWriteTime -Descending)
-    $status = [ordered]@{ count = $all.Count; lastBackupAt = $null; lastBackupFile = $null; lastBackupSizeBytes = $null }
+    $status = [ordered]@{ count = $all.Count; lastBackupAt = $null; lastBackupFile = $null; lastBackupSizeBytes = $null; lastBackupSha256 = $null }
     if ($all.Count -gt 0) {
         $status.lastBackupAt = $all[0].LastWriteTimeUtc.ToString('o')
         $status.lastBackupFile = $all[0].Name
         $status.lastBackupSizeBytes = $all[0].Length
+        if ($all[0].Name -eq (Split-Path $file -Leaf)) { $status.lastBackupSha256 = $hash }
     }
-    $status | ConvertTo-Json | Set-Content -Path $statusFile -Encoding utf8
+    if (-not $LocalDir) { $status | ConvertTo-Json | Set-Content -Path $statusFile -Encoding utf8 }
     Set-Progress 100 'Concluído' $false
     exit 0
 } catch {
