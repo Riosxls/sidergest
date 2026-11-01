@@ -7,6 +7,7 @@ import '../labels.dart';
 import '../session.dart';
 import '../widgets/record_list.dart';
 
+/// Audit trail list: who changed what and when.
 class AuditScreen extends StatefulWidget {
   const AuditScreen({super.key, required this.session});
 
@@ -43,6 +44,7 @@ class _AuditScreenState extends State<AuditScreen> {
 
 String _show(Object? v) => v == null ? '—' : (v is String ? v : (v is num || v is bool ? '$v' : jsonEncode(v)));
 
+/// Shows the details of one audit entry.
 class AuditDetailDialog extends StatelessWidget {
   const AuditDetailDialog({super.key, required this.entry});
 

@@ -9,6 +9,7 @@ import 'production_orders.dart';
 import 'requisitions.dart';
 import 'sales_quotes.dart';
 
+/// A shortcut shown on the Painel and in the command palette.
 class QuickAction {
   const QuickAction(this.icon, this.label, this.run);
 

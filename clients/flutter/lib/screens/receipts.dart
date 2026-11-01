@@ -12,6 +12,7 @@ import '../widgets/record_list.dart';
 import 'orders.dart';
 import 'stock_documents.dart';
 
+/// Goods receipts list.
 class ReceiptsView extends StatefulWidget {
   const ReceiptsView({super.key, required this.session, this.query = const {}, this.allowNew = false});
 
@@ -59,6 +60,7 @@ class _ReceiptsViewState extends State<ReceiptsView> {
   );
 }
 
+/// Goods receipt detail.
 class ReceiptScreen extends StatelessWidget {
   const ReceiptScreen({super.key, required this.session, required this.id});
 
@@ -141,6 +143,7 @@ class _OpenLine {
   }
 }
 
+/// Form to receive goods into stock, optionally for one supplier.
 class ReceiveScreen extends StatefulWidget {
   const ReceiveScreen({super.key, required this.session, this.supplierId, this.supplierName});
 

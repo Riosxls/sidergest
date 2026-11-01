@@ -161,6 +161,7 @@ String quoteAlert(Map<String, dynamic> e) {
   return '';
 }
 
+/// Quotes (Orçamentos) list.
 class QuotesScreen extends StatefulWidget {
   const QuotesScreen({super.key, required this.session});
 
@@ -285,6 +286,7 @@ class _QuotesScreenState extends State<QuotesScreen> {
   );
 }
 
+/// Editor for a quote or, with `asOrder`, a sales order: customer, prazo, lines and totals.
 class QuoteEditorScreen extends StatefulWidget {
   const QuoteEditorScreen({super.key, required this.session, this.quote, this.asOrder = false});
 
@@ -762,6 +764,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
   }
 }
 
+/// Quote detail: outcomes (approve, revise, decline), purchase order step, conversion to order and printing.
 class QuoteScreen extends StatefulWidget {
   const QuoteScreen({super.key, required this.session, required this.id});
 

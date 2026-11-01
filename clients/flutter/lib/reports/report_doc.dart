@@ -9,8 +9,10 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
+/// Visual kind of a row in a printed report.
 enum ReportRowKind { normal, group, subtotal, total, section }
 
+/// One row of a printed report built by `report_doc.dart`.
 class ReportRow {
   const ReportRow(this.cells, [this.kind = ReportRowKind.normal]);
 

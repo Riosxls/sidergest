@@ -9,6 +9,7 @@ import 'settings_widgets.dart';
 /// Backups older than this are flagged: the nightly task should have run since.
 const staleBackupAfter = Duration(hours: 36);
 
+/// Shows the age of the latest database backup (admin).
 class BackupStatus {
   BackupStatus(Map<String, dynamic> j)
     : configured = j['configured'] == true,
@@ -26,6 +27,7 @@ class BackupStatus {
   bool get stale => lastBackupAt == null || DateTime.now().difference(lastBackupAt!) > staleBackupAfter;
 }
 
+/// Administration section of the settings dialog (admin only).
 class AdminSection extends StatelessWidget {
   const AdminSection({super.key, required this.session, required this.open});
 

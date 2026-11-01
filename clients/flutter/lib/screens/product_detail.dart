@@ -7,6 +7,7 @@ import '../session.dart';
 import '../widgets/entity_form.dart';
 import 'where_used.dart';
 
+/// Product detail with tabs for data, routing, BOM explosion and revisions.
 class ProductDetailScreen extends StatefulWidget {
   const ProductDetailScreen({super.key, required this.session, required this.productId});
 
@@ -146,6 +147,7 @@ class _Summary extends StatelessWidget {
   }
 }
 
+/// Product routing (operations) tab.
 class RoutingTab extends StatefulWidget {
   const RoutingTab({super.key, required this.session, required this.productId, required this.onChanged});
 
@@ -297,6 +299,7 @@ class _RoutingTabState extends State<RoutingTab> {
   }
 }
 
+/// BOM explosion tab.
 class ExplosionTab extends StatefulWidget {
   const ExplosionTab({super.key, required this.api, required this.productId});
 
@@ -451,6 +454,7 @@ class _ExplosionTabState extends State<ExplosionTab> {
   }
 }
 
+/// Product revision history tab.
 class RevisionsTab extends StatefulWidget {
   const RevisionsTab({super.key, required this.session, required this.productId, required this.onChanged});
 

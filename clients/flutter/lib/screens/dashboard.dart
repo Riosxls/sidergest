@@ -16,6 +16,7 @@ import 'quick_actions.dart';
 
 typedef Navigate = void Function(String id, [String? filter]);
 
+/// Static description of a module card on the Painel (section, icon and blurb).
 class ModuleInfo {
   const ModuleInfo(this.section, this.icon, this.blurb);
 
@@ -52,6 +53,7 @@ final dashboardCounted = [products, materials, machines, standardOperations, wor
 /// Overdue items older than this are treated as legacy backlog: shown, but not counted as a fresh alarm.
 const legacyOverdueDays = 30;
 
+/// One alert shown on the Painel and in the bell, with the screen it opens.
 class DashAlert {
   const DashAlert(this.module, this.icon, this.label, this.count, this.navId, this.filter, this.onTap, {this.muted = false});
 
@@ -285,6 +287,7 @@ List<DashAlert> buildAlerts(
 
 String hhmm(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
+/// Painel: module cards with badges, alerts and quick actions; each module loads its numbers independently.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, required this.session, this.onNavigate});
 
@@ -594,6 +597,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
+/// Card of one module on the Painel.
 class ModuleCard extends StatelessWidget {
   const ModuleCard({super.key, required this.module, required this.lines, required this.loading, required this.attention, this.onTap});
 

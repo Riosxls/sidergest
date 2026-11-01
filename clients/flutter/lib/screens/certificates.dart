@@ -54,6 +54,7 @@ Future<bool> newCertificate(BuildContext context, Session session, Map<String, d
   return true;
 }
 
+/// List of quality certificates with filters.
 class CertificatesScreen extends StatefulWidget {
   const CertificatesScreen({super.key, required this.session});
 
@@ -104,6 +105,7 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
   );
 }
 
+/// View of one certificate with issue, cancel and print actions.
 class CertificateScreen extends StatefulWidget {
   const CertificateScreen({super.key, required this.session, required this.id});
 
@@ -382,6 +384,7 @@ class _CertificateScreenState extends State<CertificateScreen> {
   }
 }
 
+/// Editor for a draft certificate: header, specification table, found values and observations.
 class CertificateEditorScreen extends StatefulWidget {
   const CertificateEditorScreen({super.key, required this.session, required this.certificate});
 

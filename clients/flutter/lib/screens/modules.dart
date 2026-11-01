@@ -11,6 +11,7 @@ import '../widgets/dash.dart';
 import 'dashboard.dart';
 import 'dashboard_data.dart';
 
+/// A navigation entry inside a [ModuleScreen].
 class ModuleLink {
   const ModuleLink(this.id, this.icon, this.title);
 
@@ -19,6 +20,7 @@ class ModuleLink {
   final String title;
 }
 
+/// Landing page of a module listing its screens.
 class ModuleScreen extends StatefulWidget {
   const ModuleScreen({super.key, required this.session, required this.module, required this.links, this.onNavigate});
 

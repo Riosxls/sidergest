@@ -71,6 +71,7 @@ Future<void> newProductionOrder(BuildContext context, Session session, {VoidCall
   await openProductionOrder(context, session, o['id'] as int);
 }
 
+/// List of production orders (OF).
 class ProductionOrdersScreen extends StatefulWidget {
   const ProductionOrdersScreen({super.key, required this.session, this.initialStatus});
 
@@ -129,6 +130,7 @@ class _ProductionOrdersScreenState extends State<ProductionOrdersScreen> {
   }
 }
 
+/// Production order detail: operations, materials, shop-floor reporting and process editing before release.
 class ProductionOrderScreen extends StatefulWidget {
   const ProductionOrderScreen({super.key, required this.session, required this.id});
 

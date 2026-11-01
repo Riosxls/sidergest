@@ -90,6 +90,7 @@ final _shippingFields = [
       ),
 ];
 
+/// Customer list with search and creation.
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({super.key, required this.session});
 
@@ -160,6 +161,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   );
 }
 
+/// Customer detail: company data, addresses, default prazo and credit limit.
 class CustomerScreen extends StatefulWidget {
   const CustomerScreen({super.key, required this.session, required this.customer});
 

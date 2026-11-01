@@ -20,6 +20,7 @@ import 'orders.dart';
 import 'sales_common.dart';
 import 'stock_documents.dart';
 
+/// List of deliveries (Entregas).
 class DeliveriesScreen extends StatefulWidget {
   const DeliveriesScreen({super.key, required this.session});
 
@@ -61,6 +62,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
   );
 }
 
+/// Delivery detail: items, shipment confirmation (with the certificate rule), NF emission and printing.
 class DeliveryScreen extends StatefulWidget {
   const DeliveryScreen({super.key, required this.session, required this.id});
 

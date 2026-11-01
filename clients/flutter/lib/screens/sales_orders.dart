@@ -23,6 +23,7 @@ import 'sales_quotes.dart';
 
 num _n(Object? v) => v is num ? v : 0;
 
+/// Sales orders (Pedidos de venda) list.
 class SalesOrdersScreen extends StatefulWidget {
   const SalesOrdersScreen({super.key, required this.session});
 
@@ -128,6 +129,7 @@ String _standard(Object? spec) {
   return [spec['standard'], if (spec['condition'] != null) deliveryConditions[spec['condition']]].whereType<Object>().join(' · ');
 }
 
+/// Sales order detail: items, deliveries, production and change/cancel actions.
 class SalesOrderScreen extends StatefulWidget {
   const SalesOrderScreen({super.key, required this.session, required this.id});
 

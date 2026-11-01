@@ -20,6 +20,7 @@ Future<void> openFiscalDocument(BuildContext context, Session session, int id) =
   ),
 );
 
+/// List of fiscal documents (NF-e).
 class FiscalDocumentsScreen extends StatefulWidget {
   const FiscalDocumentsScreen({super.key, required this.session});
 
@@ -85,6 +86,7 @@ class _FiscalDocumentsScreenState extends State<FiscalDocumentsScreen> {
   );
 }
 
+/// Detail of one fiscal document and its actions.
 class FiscalDocumentScreen extends StatefulWidget {
   const FiscalDocumentScreen({super.key, required this.session, required this.id});
 

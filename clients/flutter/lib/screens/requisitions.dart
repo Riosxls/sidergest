@@ -38,6 +38,7 @@ Future<void> newRequisition(BuildContext context, Session session, {VoidCallback
   if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Requisição nº ${r['number']} criada')));
 }
 
+/// Purchase requisitions list.
 class RequisitionsScreen extends StatefulWidget {
   const RequisitionsScreen({super.key, required this.session, this.initialStatus});
 

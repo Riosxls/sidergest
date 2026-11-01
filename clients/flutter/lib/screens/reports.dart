@@ -174,6 +174,7 @@ double _n(Object? v) => (v as num?)?.toDouble() ?? 0;
 // Relatório de Consumo de Material Vendido (Consolidado)
 // ---------------------------------------------------------------------------
 
+/// Report of material consumption.
 class MaterialConsumptionScreen extends StatefulWidget {
   const MaterialConsumptionScreen({super.key, required this.session});
 
@@ -347,6 +348,7 @@ class _MaterialConsumptionScreenState extends State<MaterialConsumptionScreen> {
 // Resumo do Faturamento Consolidado no Período
 // ---------------------------------------------------------------------------
 
+/// Report of billing totals.
 class BillingSummaryScreen extends StatefulWidget {
   const BillingSummaryScreen({super.key, required this.session});
 

@@ -32,6 +32,7 @@ Future<void> newPurchaseOrder(BuildContext context, Session session, {VoidCallba
   );
 }
 
+/// Purchase orders list (Suprimentos).
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key, required this.session, this.supplierId});
 
@@ -88,6 +89,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 }
 
+/// Purchase order detail.
 class OrderScreen extends StatefulWidget {
   const OrderScreen({super.key, required this.session, required this.id});
 
@@ -266,6 +268,7 @@ num lineTotal(Map<String, dynamic> l) {
   return n(l['quantity']) * n(l['unitPrice']) * (1 - n(l['discountPercent']) / 100) * (1 + n(l['ipiPercent']) / 100);
 }
 
+/// Editor for a purchase order.
 class OrderEditorScreen extends StatefulWidget {
   const OrderEditorScreen({super.key, required this.session});
 
@@ -407,6 +410,7 @@ Map<String, dynamic> zeroPercentsLine(Map<String, dynamic> b) => {
   for (final k in ['discountPercent', 'icmsPercent', 'ipiPercent']) k: b[k] ?? 0,
 };
 
+/// Overdue purchase orders, optionally limited to one supplier.
 class OverdueScreen extends StatelessWidget {
   const OverdueScreen({super.key, required this.session, this.supplierId});
 

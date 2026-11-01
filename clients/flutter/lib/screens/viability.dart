@@ -62,6 +62,7 @@ Future<Map<String, dynamic>?> newFeasibility(BuildContext context, Session sessi
   );
 }
 
+/// Feasibility analyses (viabilidade) list.
 class ViabilityScreen extends StatefulWidget {
   const ViabilityScreen({super.key, required this.session, this.initialStatus});
 
@@ -113,6 +114,7 @@ class _ViabilityScreenState extends State<ViabilityScreen> {
   );
 }
 
+/// Feasibility analysis detail.
 class FeasibilityScreen extends StatefulWidget {
   const FeasibilityScreen({super.key, required this.session, required this.id});
 

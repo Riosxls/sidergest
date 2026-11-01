@@ -11,6 +11,7 @@ import '../widgets/record_list.dart';
 
 const _minPassword = 10;
 
+/// User administration (admin).
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key, required this.session});
 

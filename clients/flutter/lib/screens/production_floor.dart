@@ -69,6 +69,7 @@ Future<void> newReport(BuildContext context, Session s) async {
   await showReportForm(context, s, order, op);
 }
 
+/// Production reports list, optionally limited to one order.
 class ReportsView extends StatefulWidget {
   const ReportsView({super.key, required this.session, this.order, this.onChanged});
 
@@ -175,6 +176,7 @@ class _ReportsViewState extends State<ReportsView> {
   }
 }
 
+/// Screen wrapper around [ReportsView].
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({super.key, required this.session});
 
@@ -184,6 +186,7 @@ class ReportsScreen extends StatelessWidget {
   Widget build(BuildContext context) => ReportsView(session: session);
 }
 
+/// Outside-processing shipments list, optionally limited to one order.
 class ShipmentsView extends StatefulWidget {
   const ShipmentsView({super.key, required this.session, this.orderId, this.onChanged});
 
@@ -269,6 +272,7 @@ class _ShipmentsViewState extends State<ShipmentsView> {
   );
 }
 
+/// Outside-processing (industrialização) overview with late items.
 class OutsideProcessingScreen extends StatelessWidget {
   const OutsideProcessingScreen({super.key, required this.session});
 
@@ -307,6 +311,7 @@ Future<void> showScheduleResult(BuildContext context, List<Map<String, dynamic>>
   );
 }
 
+/// PCP planning screen.
 class PlanningScreen extends StatefulWidget {
   const PlanningScreen({super.key, required this.session});
 

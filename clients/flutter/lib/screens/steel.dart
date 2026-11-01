@@ -86,6 +86,7 @@ Map<String, dynamic> _jobInitial(Map<String, dynamic> j) => {
   '_labels': {'lotId': '${j['lotCode']}', 'processorId': '${j['processorName']}'},
 };
 
+/// Steel control (Controle de aço): lots, jobs and usages.
 class SteelScreen extends StatefulWidget {
   const SteelScreen({super.key, required this.session});
 
@@ -237,6 +238,7 @@ class _SteelScreenState extends State<SteelScreen> {
   }
 }
 
+/// Steel lot detail.
 class SteelLotScreen extends StatefulWidget {
   const SteelLotScreen({super.key, required this.session, required this.id});
 

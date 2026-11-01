@@ -4,6 +4,7 @@ import '../../api.dart';
 import '../../session.dart';
 import 'settings_widgets.dart';
 
+/// One signed-in device (refresh-token session) of the current user.
 class DeviceInfo {
   DeviceInfo(Map<String, dynamic> j)
     : id = (j['id'] as num).toInt(),

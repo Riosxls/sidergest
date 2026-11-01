@@ -16,6 +16,7 @@ int? parsePeriod(String s) {
 
 int nextPeriod(int p) => p % 100 == 12 ? (p ~/ 100 + 1) * 100 + 1 : p + 1;
 
+/// Stock period closing screen.
 class ClosingScreen extends StatefulWidget {
   const ClosingScreen({super.key, required this.session});
 
@@ -190,6 +191,7 @@ class _ClosingScreenState extends State<ClosingScreen> {
   }
 }
 
+/// Stock settings screen.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.session});
 

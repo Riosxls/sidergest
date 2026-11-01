@@ -40,6 +40,7 @@ import 'suppliers.dart';
 import 'users.dart';
 import 'viability.dart';
 
+/// An entry of the sidebar navigation of the [Shell].
 class NavItem {
   const NavItem(this.id, this.icon, this.title, this.section, this.build, {this.admin = false});
 
@@ -119,6 +120,7 @@ List<({String id, String label})> homeScreenChoices(Session s) => [
     if (!i.admin || s.isAdmin) (id: i.id, label: i.section.isEmpty ? i.title : (i.section == hiddenSection ? 'Visão geral de ${i.title}' : '${i.section}: ${i.title}')),
 ];
 
+/// Main frame after sign-in: sidebar, module routing and the avatar menu.
 class Shell extends StatefulWidget {
   const Shell({super.key, required this.session});
 

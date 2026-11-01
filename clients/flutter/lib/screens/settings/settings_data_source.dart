@@ -32,6 +32,7 @@ enum DataSourceKind {
   final String label;
 }
 
+/// Admin view to flag records as Manual, Imported or Test.
 class DataSourceView extends StatefulWidget {
   const DataSourceView({super.key, required this.session});
 

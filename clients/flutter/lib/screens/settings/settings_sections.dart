@@ -11,6 +11,7 @@ import 'settings_devices.dart';
 import 'settings_shortcuts.dart';
 import 'settings_widgets.dart';
 
+/// Settings section: theme, density and text size.
 class AppearanceSection extends StatelessWidget {
   const AppearanceSection({super.key, required this.session});
 
@@ -92,6 +93,7 @@ class AppearanceSection extends StatelessWidget {
   );
 }
 
+/// General settings section.
 class GeneralSection extends StatelessWidget {
   const GeneralSection({super.key, required this.session, required this.open});
 
@@ -162,6 +164,7 @@ class GeneralSection extends StatelessWidget {
   }
 }
 
+/// Settings section: print preferences.
 class PrintSection extends StatefulWidget {
   const PrintSection({super.key, required this.session});
 
@@ -226,6 +229,7 @@ class _PrintSectionState extends State<PrintSection> {
   }
 }
 
+/// Settings section: profile, password and devices.
 class AccountSection extends StatefulWidget {
   const AccountSection({super.key, required this.session, required this.open, required this.onSignOut});
 
@@ -366,6 +370,7 @@ class _AccountSectionState extends State<AccountSection> {
   }
 }
 
+/// Settings section: data reset (admin).
 class DataSection extends StatelessWidget {
   const DataSection({super.key, required this.session});
 
@@ -423,6 +428,7 @@ class ServerAbout {
   final bool? databaseOk;
 }
 
+/// Settings section: app and server version.
 class AboutSection extends StatelessWidget {
   const AboutSection({super.key, required this.session});
 

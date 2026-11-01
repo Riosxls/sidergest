@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../api.dart';
 import '../session.dart';
 
+/// Sign-in form; stores the session and optionally remembers it.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.session});
 

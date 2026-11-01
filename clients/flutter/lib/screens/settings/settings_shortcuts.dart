@@ -12,6 +12,7 @@ const shortcutList = <(String keys, String what)>[
   ('Tab', 'Vai para o próximo campo; Shift + Tab volta ao anterior'),
 ];
 
+/// Lists the keyboard shortcuts.
 class ShortcutsView extends StatelessWidget {
   const ShortcutsView({super.key});
 

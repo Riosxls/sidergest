@@ -13,6 +13,7 @@ Future<void> main() async {
   runApp(EbtApp(session: session));
 }
 
+/// Root widget: wires the session, theme and the login/shell navigation.
 class EbtApp extends StatelessWidget {
   const EbtApp({super.key, required this.session});
 

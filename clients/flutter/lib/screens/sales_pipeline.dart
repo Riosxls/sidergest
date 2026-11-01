@@ -40,6 +40,7 @@ const _stageIcons = {
 
 const _moves = {'quote': 'sent', 'sent': 'accepted', 'accepted': 'po', 'po': 'order', 'order': 'production', 'certificate': 'ready'};
 
+/// The 8-step sales pipeline (Orçamento to Entrega).
 class SalesPipelineScreen extends StatefulWidget {
   const SalesPipelineScreen({super.key, required this.session});
 

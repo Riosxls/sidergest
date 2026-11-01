@@ -5,6 +5,7 @@ import '../labels.dart';
 import '../session.dart';
 import '../widgets/page_column.dart';
 
+/// Read-only matrix of what each role can do; mirrors `Access.cs` on the server.
 class PermissionsScreen extends StatefulWidget {
   const PermissionsScreen({super.key, required this.session});
 

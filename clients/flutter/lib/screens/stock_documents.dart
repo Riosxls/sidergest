@@ -17,6 +17,7 @@ const productLookup = LookupSpec('/api/products');
 const locationLookup = LookupSpec('/api/stock-locations');
 const supplierLookup = LookupSpec('/api/suppliers');
 
+/// Stock documents list.
 class DocumentsScreen extends StatefulWidget {
   const DocumentsScreen({super.key, required this.session});
 
@@ -77,6 +78,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   }
 }
 
+/// Stock document detail.
 class DocumentScreen extends StatefulWidget {
   const DocumentScreen({super.key, required this.session, required this.id});
 
@@ -207,6 +209,7 @@ List<FieldSpec> stockLineFields(String type) => [
   ],
 ];
 
+/// Form to post a stock document of a given type.
 class StockPostScreen extends StatefulWidget {
   const StockPostScreen({super.key, required this.session, this.type = 'Issue'});
 

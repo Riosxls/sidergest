@@ -10,6 +10,7 @@ import '../widgets/entity_form.dart';
 import '../widgets/record_list.dart';
 import 'orders.dart';
 
+/// Purchasing quotations list.
 class QuotationsScreen extends StatefulWidget {
   const QuotationsScreen({super.key, required this.session});
 
@@ -63,6 +64,7 @@ class _QuotationsScreenState extends State<QuotationsScreen> {
   );
 }
 
+/// Dialog that starts a purchasing quotation.
 class NewQuotationDialog extends StatefulWidget {
   const NewQuotationDialog({super.key, required this.api});
 
@@ -203,6 +205,7 @@ Map<String, dynamic> zeroPercents(Map<String, dynamic> b) => {
   for (final k in ['discountPercent', 'icmsPercent', 'ipiPercent']) k: b[k] ?? 0,
 };
 
+/// Purchasing quotation detail.
 class QuotationScreen extends StatefulWidget {
   const QuotationScreen({super.key, required this.session, required this.id});
 

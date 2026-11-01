@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+/// Kinds of input a form field can use in [EntitySpec] forms.
 enum FieldType { text, integer, decimal, boolean, choice, lookup, date, time }
 
+/// Describes a remote lookup endpoint used by lookup form fields.
 class LookupSpec {
   const LookupSpec(this.path, {this.fill = const {}, this.query = const {}, this.fetchById = true});
 
@@ -20,6 +22,7 @@ class LookupSpec {
   }
 }
 
+/// One editable field of an [EntitySpec] form: key, label, type and validation hints.
 class FieldSpec {
   const FieldSpec(
     this.key,
@@ -54,6 +57,7 @@ class FieldSpec {
   final bool obscure;
 }
 
+/// One column of a record list or table: header, value reader and alignment.
 class ColumnSpec {
   const ColumnSpec(this.label, this.value, {this.numeric = false});
 
@@ -62,6 +66,7 @@ class ColumnSpec {
   final bool numeric;
 }
 
+/// Declarative description of a CRUD entity (endpoint, columns and form fields) rendered by the generic list and form widgets.
 class EntitySpec {
   const EntitySpec({
     required this.title,

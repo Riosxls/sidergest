@@ -40,6 +40,7 @@ class LateOrders {
   final List<Map<String, dynamic>> items;
 }
 
+/// Numbers the Painel shows for Estoque.
 class StockDashboard {
   StockDashboard({
     required this.quarantine,
@@ -70,6 +71,7 @@ class StockDashboard {
   final int locations;
 }
 
+/// Numbers the Painel shows for Suprimentos.
 class PurchasingDashboard {
   PurchasingDashboard({
     required this.pendingApproval,
@@ -98,6 +100,7 @@ class PurchasingDashboard {
   }
 }
 
+/// Numbers the Painel shows for PCP.
 class ProductionDashboard {
   ProductionDashboard({
     required this.openTotal,
@@ -127,6 +130,7 @@ class ProductionDashboard {
   }
 }
 
+/// Numbers the Painel shows for Vendas.
 class CommercialDashboard {
   CommercialDashboard({required this.kpis, required this.stages, required this.feasibilityInReview});
 

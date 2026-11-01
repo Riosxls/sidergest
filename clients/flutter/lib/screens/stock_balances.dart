@@ -7,6 +7,7 @@ import '../widgets/record_list.dart';
 import 'stock_documents.dart';
 import 'stock_lots.dart';
 
+/// Stock balances.
 class BalancesScreen extends StatefulWidget {
   const BalancesScreen({super.key, required this.session});
 
@@ -69,6 +70,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
   }
 }
 
+/// Stock detail of one item.
 class ItemStockScreen extends StatelessWidget {
   const ItemStockScreen({super.key, required this.session, this.materialId, this.productId, required this.title});
 

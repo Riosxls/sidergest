@@ -5,6 +5,7 @@ import '../entities.dart';
 import '../session.dart';
 import 'product_detail.dart';
 
+/// Shows where an item is used in BOMs.
 class WhereUsedView extends StatefulWidget {
   const WhereUsedView({super.key, required this.session, required this.path});
 
@@ -57,6 +58,7 @@ class _WhereUsedViewState extends State<WhereUsedView> {
   }
 }
 
+/// Screen wrapper around [WhereUsedView].
 class WhereUsedScreen extends StatelessWidget {
   const WhereUsedScreen({super.key, required this.session, required this.path, required this.title});
 

@@ -10,6 +10,7 @@ import '../widgets/entity_form.dart';
 import 'product_detail.dart';
 import 'where_used.dart';
 
+/// Generic list/detail screen driven by an [EntitySpec] for simple master data.
 class EntityListScreen extends StatefulWidget {
   const EntityListScreen({super.key, required this.session, required this.spec});
 

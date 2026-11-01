@@ -147,6 +147,7 @@ Future<void> openDelivery(BuildContext context, Session session, int id) => Navi
   ),
 );
 
+/// Lays a main and a side column in a row on wide screens and stacks them on narrow ones.
 class SideBySide extends StatelessWidget {
   const SideBySide({super.key, required this.main, required this.side});
 

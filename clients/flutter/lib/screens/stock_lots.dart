@@ -9,6 +9,7 @@ import '../widgets/entity_form.dart';
 import '../widgets/record_list.dart';
 import 'stock_documents.dart';
 
+/// Stock lots list.
 class LotsView extends StatefulWidget {
   const LotsView({super.key, required this.session, this.query = const {}, this.initialStatus});
 
@@ -109,6 +110,7 @@ const reservationFields = [
   FieldSpec('neededOn', 'Necessário em', type: FieldType.date),
 ];
 
+/// Stock reservations list filtered by a query.
 class ReservationsView extends StatefulWidget {
   const ReservationsView({super.key, required this.session, this.query = const {}});
 

@@ -9,6 +9,7 @@ import 'orders.dart';
 import 'receipts.dart';
 import 'stock_documents.dart';
 
+/// Suppliers list.
 class SuppliersScreen extends StatefulWidget {
   const SuppliersScreen({super.key, required this.session});
 
@@ -50,6 +51,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   );
 }
 
+/// Supplier detail.
 class SupplierScreen extends StatefulWidget {
   const SupplierScreen({super.key, required this.session, required this.supplier});
 
@@ -112,6 +114,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
   }
 }
 
+/// Delivery performance of one supplier.
 class PerformanceView extends StatefulWidget {
   const PerformanceView({super.key, required this.session, required this.supplierId});
 
