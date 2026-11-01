@@ -941,4 +941,171 @@ public class SalesTests(ApiFixture api)
         var noHeader = await sales.Put($"/api/sales/quotes/{quote.Id}", Quote(s, 16m));
         Assert.Equal(HttpStatusCode.OK, noHeader.StatusCode);
     }
+
+    private static async Task AssertStatus(HttpStatusCode expected, Task<HttpResponseMessage> call) => Assert.Equal(expected, (await call).StatusCode);
+
+    [Fact]
+    public async Task Quote_and_order_input_validation()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var other = await (await admin.Post("/api/customers", new CustomerIn("Outro " + Code("C"), null, null, ConsumerType.Normal))).Read<CustomerOut>();
+        var unpriced = await (await admin.Post("/api/products", Tube(Code("U")))).Read<ProductOut>();
+        QuoteInput Q(IReadOnlyList<SalesLineInput>? lines = null, int? customer = null, int? address = null, int? term = null, int? validity = null) =>
+            new(customer ?? s.Customer.Id, lines ?? [new SalesLineInput(s.Tube.Id, 5m)], address ?? s.Address.Id, term ?? s.Term.Id, FreightTerms.Cif, validity, "Edilto", "compras@cliente.com");
+        SalesLineInput L(int? product = null, decimal qty = 5m, decimal? price = null, decimal? ipi = null, decimal? icms = null, int? lead = null) =>
+            new(product ?? s.Tube.Id, qty, price, ipi, icms, lead);
+
+        const string q = "/api/sales/quotes";
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(q, Q(lines: [])));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(q, Q(lines: [L(product: 999_999)])));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(q, Q(lines: [L(qty: 0m)])));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(q, Q(lines: [L(price: -1m)])));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(q, Q(lines: [L(ipi: 101m)])));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(q, Q(lines: [L(icms: -1m)])));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(q, Q(lines: [L(lead: -1)])));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(q, Q(lines: [L(product: unpriced.Id)])));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(q, Q(customer: 999_999)));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(q, Q(term: 999_999)));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(q, Q(validity: 0)));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(q, Q(customer: other.Id)));   // address of another customer
+
+        // quote state machine
+        var quote = await (await admin.Post(q, Q())).Read<QuoteOut>();
+        await AssertStatus(HttpStatusCode.Conflict, Act(admin, quote.Id, "approve"));
+        await AssertStatus(HttpStatusCode.Conflict, Act(admin, quote.Id, "reject-approval", new QuoteActionIn("nota")));
+        await AssertStatus(HttpStatusCode.Conflict, Act(admin, quote.Id, "decline", new QuoteActionIn("nota")));
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{q}/{quote.Id}/revise", new QuoteActionIn("nota")));
+        await AssertStatus(HttpStatusCode.NotFound, Act(admin, 999_999, "send"));
+        await AssertStatus(HttpStatusCode.NotFound, admin.DeleteAsync($"{q}/999999"));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Put($"{q}/{quote.Id}", Q(validity: 0)));
+        quote = await (await Act(admin, quote.Id, "send")).Read<QuoteOut>();
+        await AssertStatus(HttpStatusCode.Conflict, admin.Put($"{q}/{quote.Id}", Q()));
+        await AssertStatus(HttpStatusCode.Conflict, Act(admin, quote.Id, "send"));
+        if (quote.Status == QuoteStatus.PendingApproval)
+        {
+            await AssertStatus(HttpStatusCode.BadRequest, Act(admin, quote.Id, "reject-approval"));
+            quote = await (await Act(admin, quote.Id, "reject-approval", new QuoteActionIn("preço fora da política"))).Read<QuoteOut>();
+            Assert.Equal(QuoteStatus.Draft, quote.Status);
+            quote = await (await Act(admin, quote.Id, "send")).Read<QuoteOut>();
+            quote = await (await Act(admin, quote.Id, "approve")).Read<QuoteOut>();
+            quote = await (await Act(admin, quote.Id, "send")).Read<QuoteOut>();
+        }
+        Assert.Equal(QuoteStatus.Sent, quote.Status);
+        await AssertStatus(HttpStatusCode.BadRequest, Act(admin, quote.Id, "decline"));
+        await AssertStatus(HttpStatusCode.BadRequest, Act(admin, quote.Id, "decline", new QuoteActionIn("preço alto", LostReason: (LostReason)999)));
+        await AssertStatus(HttpStatusCode.BadRequest, Act(admin, quote.Id, "cancel"));
+        await AssertStatus(HttpStatusCode.Conflict, Act(admin, quote.Id, "reopen"));
+        quote = await (await Act(admin, quote.Id, "accept")).Read<QuoteOut>();
+        await AssertStatus(HttpStatusCode.Conflict, Act(admin, quote.Id, "purchase-order", new QuoteActionIn(CustomerPo: "PO-X")));
+        (await admin.Put($"{q}/{quote.Id}/request", new QuoteRequestIn("Pedido de compra PO-X"))).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.BadRequest, Act(admin, quote.Id, "purchase-order",
+            new QuoteActionIn(CustomerPo: "PO-X", DeliveryDates: [new QuoteLineDate(quote.Lines[0].Id, Today.AddDays(-2))])));
+        await AssertStatus(HttpStatusCode.BadRequest, Act(admin, quote.Id, "purchase-order",
+            new QuoteActionIn(CustomerPo: "PO-X", DeliveryDates: [new QuoteLineDate(999_999, Today.AddDays(5))])));
+        await AssertStatus(HttpStatusCode.Conflict, admin.DeleteAsync($"{q}/{quote.Id}"));
+
+        // orders
+        const string o = "/api/sales/orders";
+        SalesOrderIn O(int? customer = null, int? address = null, List<SalesLineInput>? lines = null) =>
+            new(customer ?? s.Customer.Id, address ?? s.Address.Id, lines ?? [new SalesLineInput(s.Tube.Id, 5m)], "PO-V", s.Term.Id);
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(o, O(lines: [])));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(o, O(address: 999_999)));
+        var order = await (await admin.Post(o, O())).Read<SalesOrderOut>();
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Put($"{o}/{order.Id}", O(customer: other.Id)));
+        await AssertStatus(HttpStatusCode.NotFound, admin.Put($"{o}/999999", O()));
+        await AssertStatus(HttpStatusCode.NotFound, admin.Post($"{o}/999999/release", new SalesReleaseIn()));
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{o}/{order.Id}/reschedule", new RescheduleInput(CustomerPo: "X")));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post($"{o}/{order.Id}/cancel", new OrderCancelIn(" ")));
+        (await admin.Post($"{o}/{order.Id}/release", new SalesReleaseIn())).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{o}/{order.Id}/release", new SalesReleaseIn()));
+        await AssertStatus(HttpStatusCode.Conflict, admin.Put($"{o}/{order.Id}", O()));
+
+        // reschedule: unknown line, missing reason for a date change, no-op
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post($"{o}/{order.Id}/reschedule", new RescheduleInput("atraso", Lines: [new RescheduleLine(999_999, Today)])));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post($"{o}/{order.Id}/reschedule", new RescheduleInput(Lines: [new RescheduleLine(order.Lines[0].Id, Today.AddDays(90))])));
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{o}/{order.Id}/reschedule", new RescheduleInput()));
+        // balance: nothing shipped yet means nothing to close; a reason is needed
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post($"{o}/{order.Id}/close-balance", new SalesReasonIn(" ")));
+
+        // deliveries
+        const string d = "/api/sales/deliveries";
+        string dl(int id) => $"{o}/{id}/deliveries";
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(dl(order.Id), new DeliveryInput(Today, AddressId: 999_999)));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(dl(order.Id), new DeliveryInput(Today, Lines: [new DeliveryLineInput(999_999, 1m)])));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(dl(order.Id), new DeliveryInput(Today, Lines: [new DeliveryLineInput(order.Lines[0].Id, 0m)])));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(dl(order.Id), new DeliveryInput(Today, Lines: [new DeliveryLineInput(order.Lines[0].Id, 1m), new DeliveryLineInput(order.Lines[0].Id, 1m)])));
+        var delivery = await (await admin.Post(dl(order.Id), new DeliveryInput(Today))).Read<DeliveryOut>();
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{d}/{delivery.Id}/confirm", new ConfirmDeliveryIn()));
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{d}/{delivery.Id}/emit-invoice", new EmitInvoiceInput()));
+        await AssertStatus(HttpStatusCode.NotFound, admin.Post($"{d}/999999/ship", new ShipInput(Today, WithoutCertificate: true)));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post($"{d}/{delivery.Id}/cancel", new SalesReasonIn(" ")));
+        (await admin.Post($"{d}/{delivery.Id}/cancel", new SalesReasonIn("cliente adiou"))).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{d}/{delivery.Id}/cancel", new SalesReasonIn("de novo")));
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{d}/{delivery.Id}/ship", new ShipInput(Today, WithoutCertificate: true)));
+
+        // the whole order delivered: nothing left to plan; cancelling an order with a shipped delivery is refused
+        var full = await (await admin.Post(dl(order.Id), new DeliveryInput(Today))).Read<DeliveryOut>();
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post(dl(order.Id), new DeliveryInput(Today)));
+        (await admin.Post($"{d}/{full.Id}/ship", new ShipInput(Today, WithoutCertificate: true))).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{o}/{order.Id}/cancel", new OrderCancelIn("tarde demais")));
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{o}/{order.Id}/close-balance", new SalesReasonIn("nada a encerrar")));
+    }
+
+    [Fact]
+    public async Task Certificate_errors_waiver_and_delivery_drafts()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var order = await ReleasedOrder(admin, s, 10m);
+        var multi = await (await admin.Post("/api/sales/orders", new SalesOrderIn(s.Customer.Id, s.Address.Id, [new SalesLineInput(s.Tube.Id, 5m), new SalesLineInput(s.Other.Id, 5m)], "PO-2", s.Term.Id))).Read<SalesOrderOut>();
+        const string url = "/api/sales/certificates";
+
+        await AssertStatus(HttpStatusCode.NotFound, admin.Post(url, new CertificateInput(999_999)));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(url, new CertificateInput(multi.Id)));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(url, new CertificateInput(order.Id, OrderLineId: multi.Lines[0].Id)));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(url, new CertificateInput(order.Id, DeliveryId: 999_999)));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(url, new CertificateInput(order.Id, Quantity: 0m)));
+        var forLine = await (await admin.Post(url, new CertificateInput(multi.Id, OrderLineId: multi.Lines[1].Id))).Read<CertificateOut>();
+        Assert.Equal(multi.Lines[1].Id, forLine.OrderLineId);
+
+        var cert = await (await admin.Post(url, new CertificateInput(order.Id, Unit: "pc"))).Read<CertificateOut>();
+        Assert.Equal("PC", cert.Unit);
+        await AssertStatus(HttpStatusCode.NotFound, admin.GetAsync($"{url}/999999"));
+        await AssertStatus(HttpStatusCode.NotFound, admin.Put($"{url}/999999", new CertificateInput(order.Id)));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Put($"{url}/{cert.Id}", new CertificateInput(order.Id, Quantity: 0m)));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post($"{url}/{cert.Id}/link-delivery", new CertificateLinkIn(999_999)));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post($"{url}/{cert.Id}/cancel", new CertificateReasonIn(" ")));
+        await AssertStatus(HttpStatusCode.NotFound, admin.Post($"{url}/999999/cancel", new CertificateReasonIn("x")));
+        await AssertStatus(HttpStatusCode.NotFound, admin.DeleteAsync($"{url}/999999"));
+
+        // an issued certificate cannot be deleted or issued twice; cancelling freezes it
+        var measures = cert.Measures.Select(m => new CertificateMeasureInput(m.Kind, m.Name, m.Specified, "1")).ToList();
+        (await admin.Put($"{url}/{cert.Id}", new CertificateInput(order.Id, Measures: measures))).EnsureSuccessStatusCode();
+        (await admin.Post($"{url}/{cert.Id}/issue", new object())).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{url}/{cert.Id}/issue", new object()));
+        await AssertStatus(HttpStatusCode.Conflict, admin.DeleteAsync($"{url}/{cert.Id}"));
+        (await admin.Post($"{url}/{cert.Id}/cancel", new CertificateReasonIn("Emitido para o pedido errado"))).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{url}/{cert.Id}/cancel", new CertificateReasonIn("de novo")));
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{url}/{cert.Id}/link-delivery", new CertificateLinkIn(null)));
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{url}/{cert.Id}/issue", new object()));
+        await AssertStatus(HttpStatusCode.Conflict, admin.Put($"{url}/{cert.Id}", new CertificateInput(order.Id)));
+
+        // drafts per delivery: unknown and cancelled deliveries are refused, a second call finds nothing left to draft
+        await AssertStatus(HttpStatusCode.NotFound, admin.Post($"{url}/for-delivery/999999", new object()));
+        var gone = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
+        (await admin.Post($"/api/sales/deliveries/{gone.Id}/cancel", new SalesReasonIn("planejamento errado"))).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{url}/for-delivery/{gone.Id}", new object()));
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post(url, new CertificateInput(order.Id, DeliveryId: gone.Id)));
+        var planned = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
+        (await admin.Post($"{url}/for-delivery/{planned.Id}", new object())).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"{url}/for-delivery/{planned.Id}", new object()));
+
+        // templates and waiver
+        await AssertStatus(HttpStatusCode.NotFound, admin.Put($"{url}/templates/999999", new TemplateIn("T", null, null, [])));
+        await AssertStatus(HttpStatusCode.NotFound, admin.DeleteAsync($"{url}/templates/999999"));
+        await AssertStatus(HttpStatusCode.NotFound, admin.Post("/api/sales/orders/999999/certificate-waiver", new CertificateWaiverIn(true)));
+        (await admin.Post($"/api/sales/orders/{order.Id}/certificate-waiver", new CertificateWaiverIn(true))).EnsureSuccessStatusCode();
+        (await admin.Post($"/api/sales/orders/{order.Id}/certificate-waiver", new CertificateWaiverIn(false))).EnsureSuccessStatusCode();
+    }
 }
