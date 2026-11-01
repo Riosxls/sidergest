@@ -15,7 +15,7 @@ public class BackupSettingsTests(ApiFixture api)
     private static readonly char Bs = '\u005c';
 
     private static BackupSettingsInput Valid(string? destination = null, string frequency = "Daily") =>
-        new(true, frequency, "22:30", 3, destination, 10);
+        new(true, frequency, "22:30", 3, destination ?? ("C:" + Bs + "backups"), 10);
 
     [Fact]
     public async Task Settings_are_admin_only()
@@ -60,13 +60,13 @@ public class BackupSettingsTests(ApiFixture api)
     }
 
     [Fact]
-    public async Task Run_now_records_the_request_and_clearing_the_destination_is_allowed()
+    public async Task Run_now_records_the_request()
     {
         var admin = await api.AdminAsync();
         (await admin.PutAsJsonAsync(Url, Valid(null))).EnsureSuccessStatusCode();
         var s = await (await admin.PostAsync(Url + "/run-now", null)).Read<BackupSettingsDto>();
         Assert.NotNull(s.RunRequestedAt);
-        Assert.Null(s.Destination);
+        Assert.NotNull(s.Destination);
         Assert.InRange((DateTimeOffset.UtcNow - s.RunRequestedAt!.Value).TotalMinutes, -1, 1);
     }
 
@@ -211,6 +211,7 @@ public class BackupSettingsTests(ApiFixture api)
         try
         {
             var admin = await AdminWithProgressDir(dir);
+            (await admin.PutAsJsonAsync(Url, Valid())).EnsureSuccessStatusCode();
             var asked = await (await admin.PostAsync(Url + "/run-now", null)).Read<BackupSettingsDto>();
             Assert.NotNull(asked.RunRequestedAt);
             var s = await (await admin.PostAsync(Url + "/cancel", null)).Read<BackupSettingsDto>();
@@ -234,5 +235,23 @@ public class BackupSettingsTests(ApiFixture api)
             Assert.Equal(before!.CancelRequestedAt, s.CancelRequestedAt);
         }
         finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public async Task A_destination_is_required_to_turn_on_automatic_backup_or_to_run_now()
+    {
+        var admin = await api.AdminAsync();
+        var noFolder = new BackupSettingsInput(true, "Daily", "22:00", 0, null, 14);
+        var res = await admin.PutAsJsonAsync(Url, noFolder);
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+        Assert.Contains("\"destination\"", await res.Content.ReadAsStringAsync());
+
+        // Off and without a folder is a valid plan, but then no backup can be started.
+        (await admin.PutAsJsonAsync(Url, noFolder with { Enabled = false })).EnsureSuccessStatusCode();
+        var run = await admin.PostAsync(Url + "/run-now", null);
+        Assert.Equal(HttpStatusCode.BadRequest, run.StatusCode);
+        Assert.Contains("\"destination\"", await run.Content.ReadAsStringAsync());
+        var s = await admin.GetFromJsonAsync<BackupSettingsDto>(Url, ApiFixture.Json);
+        Assert.Null(s!.Destination);
     }
 }

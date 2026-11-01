@@ -56,6 +56,17 @@ function Get-Instant($Value) {
     return [DateTimeOffset]::FromUnixTimeSeconds([long]$Value)
 }
 
+# Appends to backup-status/agent.log (kept under 200 KB) so a dead agent leaves a reason behind. Never throws.
+function Write-AgentLog([string]$Text) {
+    try {
+        $dir = Join-Path $Root 'backup-status'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $path = Join-Path $dir 'agent.log'
+        if ((Test-Path $path) -and (Get-Item $path).Length -gt 200KB) { Move-Item $path ($path + '.old') -Force }
+        Add-Content -Path $path -Value ("{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $PID, $Text) -Encoding utf8
+    } catch { }
+}
+
 # Writes progress.json the way backup.ps1 does, for the stages only the agent knows about (stopping, stopped).
 function Write-AgentProgress([string]$Stage, [bool]$Running) {
     try {
@@ -129,7 +140,9 @@ from backup_settings where id = 1
         if ($DryRun) { Write-Host "Backup due ($(if ($manual) { 'manual' } else { 'scheduled' }))."; return }
 
         $ok = $false
-        if (-not (Test-Destination $plan.Destination)) {
+        if (-not $plan.Destination) {
+            $message = 'Defina a pasta de destino do backup.'
+        } elseif (-not (Test-Destination $plan.Destination)) {
             $message = 'Destino inválido: use um caminho completo como D:\backups ou \\servidor\pasta.'
         } else {
             $reason = if ($manual) { 'manual' } else { 'scheduled' }
@@ -140,6 +153,7 @@ from backup_settings where id = 1
             $errFile = Join-Path ([IO.Path]::GetTempPath()) 'metagest-backup-agent.err'
             Remove-Item $outFile, $errFile -ErrorAction SilentlyContinue
             $startedAt = Get-Date
+            Write-AgentLog "backup start ($reason)"
             $startedEpoch = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
             $proc = Start-Process -FilePath 'powershell.exe' -ArgumentList $args -PassThru -WindowStyle Hidden -RedirectStandardOutput $outFile -RedirectStandardError $errFile
             $null = $proc.Handle   # keeps the handle so ExitCode is available after it exits
@@ -159,6 +173,7 @@ from backup_settings where id = 1
             }
         }
         # Keep the message plain so it can sit inside a SQL literal.
+        Write-AgentLog "backup end ok=${ok}: $message"
         $safe = ($message -replace '[^\p{L}\p{N} .,:;_()/\\-]', '?')
         if ($safe.Length -gt 480) { $safe = $safe.Substring(0, 480) }
         Invoke-Sql $container "update backup_settings set last_run_at = now(), last_run_ok = $(if ($ok) { 'true' } else { 'false' }), last_run_message = '$($safe -replace "'", "''")' where id = 1" | Out-Null
@@ -172,11 +187,12 @@ if ($MyInvocation.InvocationName -ne '.') {
     $mutex = New-Object Threading.Mutex($false, 'Global\MetaGestBackupAgent')
     if (-not $mutex.WaitOne(0)) { exit 0 }   # a previous run is still dumping
     $script:Container = $null
+    Write-AgentLog "agent started"
     $script:LastBeat = [datetime]::MinValue
     try {
         do {
-            try { Invoke-Agent } catch { $script:Container = $null; Write-Host "BACKUP AGENT: $($_.Exception.Message)" -ForegroundColor Red }
+            try { Invoke-Agent } catch { $script:Container = $null; Write-AgentLog "error: $($_.Exception.Message)" }
             if (-not $Once -and -not $DryRun) { Start-Sleep -Seconds $PollSeconds }
         } while (-not $Once -and -not $DryRun)
-    } finally { $mutex.ReleaseMutex() }
+    } catch { Write-AgentLog "FATAL: $($_.Exception.Message)"; exit 1 } finally { Write-AgentLog "agent exiting"; $mutex.ReleaseMutex() }
 }

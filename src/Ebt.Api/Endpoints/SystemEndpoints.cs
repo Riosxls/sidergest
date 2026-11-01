@@ -113,6 +113,7 @@ public static class SystemEndpoints
                 .Require(TimeOnly.TryParseExact(i.TimeOfDay, "HH:mm", out _), "timeOfDay", "Use HH:mm, for example 22:00")
                 .Require(i.Weekday is >= 0 and <= 6, "weekday", "Between 0 (Sunday) and 6 (Saturday)")
                 .Require(i.Keep is >= 1 and <= 365, "keep", "Between 1 and 365");
+            if (i.Enabled && string.IsNullOrWhiteSpace(i.Destination)) errors.Require(false, "destination", "Choose the destination folder before turning on automatic backup");
             if (BackupSchedule.DestinationError(i.Destination) is { } why) errors.Require(false, "destination", why);
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             var s = await LoadBackupSettings(db, ct);
@@ -141,6 +142,7 @@ public static class SystemEndpoints
         backup.MapPost("/run-now", async (EbtDbContext db, IConfiguration config, CancellationToken ct) =>
         {
             var s = await LoadBackupSettings(db, ct);
+            if (string.IsNullOrWhiteSpace(s.Destination)) return Results.ValidationProblem(Errors().Require(false, "destination", "Choose the destination folder before running a backup"));
             s.RunRequestedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
             return Results.Ok(BackupSettingsDto.From(s, ScanProgress(config["Backup:Directory"])));
