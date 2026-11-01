@@ -15,15 +15,24 @@ const backupAgentStaleAfter = Duration(minutes: 15);
 
 /// Live progress of a running backup (`progress` in `/api/admin/backup-settings`).
 class BackupProgress {
-  const BackupProgress({this.running = false, this.percent = 0, this.stage});
+  const BackupProgress({this.running = false, this.percent = 0, this.stage, this.startedAt});
 
-  factory BackupProgress.fromJson(Map<String, dynamic> j) =>
-      BackupProgress(running: j['running'] == true, percent: ((j['percent'] as num?)?.toInt() ?? 0).clamp(0, 100), stage: j['stage'] as String?);
+  factory BackupProgress.fromJson(Map<String, dynamic> j) => BackupProgress(
+    running: j['running'] == true,
+    percent: ((j['percent'] as num?)?.toInt() ?? 0).clamp(0, 100),
+    stage: j['stage'] as String?,
+    startedAt: j['startedAt'] == null ? null : DateTime.tryParse('${j['startedAt']}')?.toLocal(),
+  );
 
   final bool running;
   final int percent;
   final String? stage;
+  final DateTime? startedAt;
 }
+
+/// Stage text the agent reports while it stops a run, and the message it leaves when the run was cancelled.
+const backupCancellingStage = 'Cancelando...';
+const backupCancelledMessage = 'Backup cancelado.';
 
 /// Backup schedule as stored by the server (`/api/admin/backup-settings`).
 class BackupSettings {
@@ -41,6 +50,7 @@ class BackupSettings {
     this.agentSeenAt,
     this.nextRunAt,
     this.progress,
+    this.cancelRequestedAt,
   });
 
   factory BackupSettings.fromJson(Map<String, dynamic> j) {
@@ -60,6 +70,7 @@ class BackupSettings {
       agentSeenAt: when('agentSeenAt'),
       nextRunAt: when('nextRunAt'),
       progress: j['progress'] is Map<String, dynamic> ? BackupProgress.fromJson(j['progress'] as Map<String, dynamic>) : null,
+      cancelRequestedAt: when('cancelRequestedAt'),
     );
   }
 
@@ -76,8 +87,21 @@ class BackupSettings {
   final DateTime? agentSeenAt;
   final DateTime? nextRunAt;
   final BackupProgress? progress;
+  final DateTime? cancelRequestedAt;
 
   bool get running => progress?.running ?? false;
+
+  /// A stop was asked for the current run and the agent has not finished stopping it.
+  bool get cancelling {
+    if (progress?.stage == backupCancellingStage) return true;
+    final asked = cancelRequestedAt;
+    if (asked == null) return false;
+    final since = progress?.startedAt ?? runRequestedAt;
+    return since == null || asked.isAfter(since);
+  }
+
+  /// The last run ended because someone interrupted it (not a failure).
+  bool get cancelled => lastRunOk == false && lastRunMessage == backupCancelledMessage;
 
   /// A "backup now" request the host agent has not picked up yet.
   bool get waiting => runRequestedAt != null && (lastRunAt == null || runRequestedAt!.isAfter(lastRunAt!)) && !running;
@@ -270,6 +294,10 @@ class _BackupFormState extends State<_BackupForm> {
   }
 
   void _tellResult(BackupSettings res) {
+    if (res.cancelled) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Backup interrompido.')));
+      return;
+    }
     final ok = res.lastRunOk != false;
     final text = (res.lastRunMessage?.isNotEmpty ?? false) ? res.lastRunMessage! : (ok ? 'Backup concluído' : 'Backup falhou');
     final scheme = Theme.of(context).colorScheme;
@@ -344,6 +372,24 @@ class _BackupFormState extends State<_BackupForm> {
       () => widget.session.api.post('/api/admin/backup-settings/run-now', <String, dynamic>{}),
       '${savedFirst ? 'Alterações salvas. ' : ''}Pedido enviado. O backup começa em instantes.',
     );
+  }
+
+  Future<void> _cancel() async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Interromper o backup?'),
+        content: const Text('O backup em andamento será cancelado e o arquivo parcial descartado.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Continuar')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Interromper')),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    final ok = await _call(() => widget.session.api.post('/api/admin/backup-settings/cancel', <String, dynamic>{}), 'Interrompendo o backup...');
+    // A request that had not started is dropped at once: nothing is left to poll for.
+    if (ok && mounted && !_active && _poll != null) _stopPolling();
   }
 
   Future<void> _pickTime() async {
@@ -425,6 +471,13 @@ class _BackupFormState extends State<_BackupForm> {
                 label: Text(_active ? 'Backup em andamento' : 'Fazer backup agora'),
               ),
             ),
+            if (_active)
+              OutlinedButton.icon(
+                key: const ValueKey('backup-cancel'),
+                onPressed: _busy || _status.cancelling ? null : _cancel,
+                icon: const Icon(Icons.stop_circle_outlined),
+                label: Text(_status.cancelling ? 'Interrompendo...' : 'Interromper'),
+              ),
           ],
         ),
       ],
@@ -559,6 +612,8 @@ class _BackupStatusBlock extends StatelessWidget {
     final s = settings;
     final (IconData icon, Color color, String headline) = s.lastRunAt == null
         ? (Icons.info_outline, theme.colorScheme.onSurfaceVariant, 'Nenhum backup automático executado ainda')
+        : s.cancelled
+        ? (Icons.info_outline, theme.colorScheme.onSurfaceVariant, 'Interrompido em ${formatMoment(s.lastRunAt!)}')
         : s.lastRunOk == false
         ? (Icons.error_outline, theme.colorScheme.error, 'Último backup falhou em ${formatMoment(s.lastRunAt!)}')
         : (Icons.check_circle_outline, theme.colorScheme.primary, 'Último backup deu certo em ${formatMoment(s.lastRunAt!)}');

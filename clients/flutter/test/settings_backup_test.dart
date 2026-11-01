@@ -30,6 +30,7 @@ Map<String, dynamic> _settings({Object? agentSeenAt = 'now', bool enabled = true
 /// When set, GET answers with this instead of the stored settings (lets a test move the server state).
 Map<String, dynamic>? _live;
 bool _failGet = false;
+bool _failCancel = false;
 
 Future<(Session, List<http.Request>)> _pump(
   WidgetTester tester,
@@ -45,6 +46,7 @@ Future<(Session, List<http.Request>)> _pump(
   var current = initial;
   _live = null;
   _failGet = false;
+  _failCancel = false;
   final client = MockClient((r) async {
     log.add(r);
     if (r.url.path == '/api/admin/backup-status') return _json({'configured': false, 'count': 0});
@@ -62,6 +64,13 @@ Future<(Session, List<http.Request>)> _pump(
       return _json(current);
     }
     if (r.url.path == '/api/admin/backup-settings/run-now') return _json({...current, 'runRequestedAt': DateTime.now().toUtc().toIso8601String()});
+    if (r.url.path == '/api/admin/backup-settings/cancel') {
+      if (_failCancel) return _json({'title': 'Sem permissão'}, 500);
+      final asked = DateTime.now().toUtc().add(const Duration(seconds: 1)).toIso8601String();
+      current = {...(_live ?? current), 'cancelRequestedAt': asked, 'progress': _progress(30, backupCancellingStage)};
+      _live = current;
+      return _json(current);
+    }
     if (_failGet && r.method == 'GET') return _json({'title': 'Erro'}, 500);
     return _json(_live ?? current);
   });
@@ -479,6 +488,118 @@ void main() {
     expect(find.textContaining('StateError'), findsNothing);
     expect(find.byType(SnackBar), findsOneWidget);
   });
+  group('Interromper', () {
+    Map<String, dynamic> running() => {
+      ..._settings(),
+      'runRequestedAt': DateTime.now().toUtc().toIso8601String(),
+      'progress': _progress(30, 'Copiando o banco'),
+    };
+
+    Finder cancelBtn() => find.byKey(const ValueKey('backup-cancel'));
+    int cancels(List<http.Request> log) => log.where((r) => r.method == 'POST' && r.url.path.endsWith('/backup-settings/cancel')).length;
+
+    testWidgets('is shown while waiting and while running, hidden when idle', (tester) async {
+      await _pump(tester, _settings());
+      expect(cancelBtn(), findsNothing);
+      await _unmount(tester);
+      await _pump(tester, {..._settings(), 'runRequestedAt': DateTime.now().toUtc().toIso8601String()}, settle: false);
+      expect(cancelBtn(), findsOneWidget);
+      expect(find.text('Interromper'), findsOneWidget);
+      expect(find.byIcon(Icons.stop_circle_outlined), findsOneWidget);
+      await _unmount(tester);
+      await _pump(tester, running(), settle: false);
+      expect(cancelBtn(), findsOneWidget);
+      expect(tester.widget<OutlinedButton>(cancelBtn()).onPressed, isNotNull);
+      await _unmount(tester);
+    });
+
+    testWidgets('Continuar in the dialog does not post', (tester) async {
+      final (_, log) = await _pump(tester, running(), settle: false);
+      await tester.tap(cancelBtn());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Interromper o backup?'), findsOneWidget);
+      expect(find.text('O backup em andamento será cancelado e o arquivo parcial descartado.'), findsOneWidget);
+      await tester.tap(find.text('Continuar'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Interromper o backup?'), findsNothing);
+      expect(cancels(log), 0);
+      await _unmount(tester);
+    });
+
+    testWidgets('confirming posts once, tells it, and disables the button', (tester) async {
+      final (_, log) = await _pump(tester, running(), settle: false);
+      await tester.tap(cancelBtn());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Interromper')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
+      expect(cancels(log), 1);
+      expect(find.text('Interrompendo o backup...'), findsOneWidget);
+      expect(find.text('Interrompendo...'), findsOneWidget);
+      expect(tester.widget<OutlinedButton>(cancelBtn()).onPressed, isNull);
+      // polling keeps going while the agent stops the run
+      final before = log.where((r) => r.method == 'GET').length;
+      await tester.pump(const Duration(seconds: 1));
+      expect(log.where((r) => r.method == 'GET').length, before + 1);
+      expect(cancels(log), 1);
+      await _unmount(tester);
+    });
+
+    testWidgets('a finished cancellation shows the neutral snackbar and the neutral last-run block', (tester) async {
+      await _pump(tester, running(), settle: false);
+      _live = {
+        ..._settings(lastRunOk: false),
+        'lastRunAt': DateTime.now().toUtc().add(const Duration(seconds: 5)).toIso8601String(),
+        'lastRunMessage': 'Backup cancelado.',
+        'progress': _progress(0, 'Cancelado', running: false),
+      };
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      final bar = tester.widget<SnackBar>(find.byType(SnackBar));
+      expect((bar.content as Text).data, 'Backup interrompido.');
+      expect(bar.backgroundColor, isNull);
+      expect(find.textContaining('Interrompido em'), findsOneWidget);
+      expect(find.textContaining('Último backup falhou'), findsNothing);
+      expect(cancelBtn(), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('a stale cancel request from an earlier run does not disable the button', (tester) async {
+      final started = DateTime.now().toUtc().toIso8601String();
+      final old = DateTime.now().toUtc().subtract(const Duration(hours: 1)).toIso8601String();
+      await _pump(tester, {
+        ...running(),
+        'cancelRequestedAt': old,
+        'progress': {..._progress(30, 'Copiando o banco'), 'startedAt': started},
+      }, settle: false);
+      expect(tester.widget<OutlinedButton>(cancelBtn()).onPressed, isNotNull);
+      expect(find.text('Interromper'), findsOneWidget);
+      await _unmount(tester);
+    });
+
+    testWidgets('a failed post shows the error and keeps the button', (tester) async {
+      final (_, log) = await _pump(tester, running(), settle: false);
+      _failCancel = true;
+      await tester.tap(cancelBtn());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Interromper')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
+      expect(cancels(log), 1);
+      expect(find.text('Interrompendo o backup...'), findsNothing);
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.text('Interromper'), findsOneWidget);
+      expect(tester.widget<OutlinedButton>(cancelBtn()).onPressed, isNotNull);
+      await _unmount(tester);
+    });
+  });
+
   testWidgets('Administração links to the view', (tester) async {
     await _pump(
       tester,
