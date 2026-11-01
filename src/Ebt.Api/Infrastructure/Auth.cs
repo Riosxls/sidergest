@@ -18,6 +18,7 @@ public static class Policies
     public const string Admin = "admin";
     public const string Stock = "stock";
     public const string LoginLimiter = "login";
+    public const string AccountLimiter = "account";
 }
 
 public class JwtOptions
@@ -243,7 +244,7 @@ public static class AuthEndpoints
         }).RequireAuthorization(Policies.Read);
 
         // Signs every other device out at once: bumping the token version also kills their access tokens; this device gets fresh tokens.
-        auth.MapPost("/sessions/revoke-others", async (SessionsRequest req, EbtDbContext db, TokenService tokens, ClaimsPrincipal principal, CancellationToken ct) =>
+        auth.MapPost("/sessions/revoke-others", async (SessionsRequest req, EbtDbContext db, TokenService tokens, ILoggerFactory logs, ClaimsPrincipal principal, CancellationToken ct) =>
         {
             if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
             var user = await db.Users.FindAsync([id], ct);
@@ -252,13 +253,17 @@ public static class AuthEndpoints
             var hash = string.IsNullOrWhiteSpace(req.RefreshToken) ? null : TokenService.HashRefresh(req.RefreshToken.Trim());
             var current = hash is null ? null : await db.RefreshTokens.AsNoTracking().FirstOrDefaultAsync(r => r.UserId == id && r.TokenHash == hash && r.RevokedAt == null && r.ExpiresAt > now, ct);
             if (current is null) return Results.ValidationProblem(Crud.Errors().Require(false, "refreshToken", "Not an active session of this user"));
+            // One transaction: a failure after the delete must not leave the user with no session at all.
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
             user.TokenVersion++;
             await db.RefreshTokens.Where(r => r.UserId == id).ExecuteDeleteAsync(ct);
             await db.SaveChangesAsync(ct);
             var (token, expires) = tokens.Issue(user);
             var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct, new DeviceInfo(current.Device, current.UserAgent, current.Ip));
+            await tx.CommitAsync(ct);
+            logs.CreateLogger("Ebt.Auth").LogInformation("{User} signed out all other devices", user.Username);
             return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires));
-        }).RequireAuthorization(Policies.Read).RequireRateLimiting(Policies.LoginLimiter);
+        }).RequireAuthorization(Policies.Read).RequireRateLimiting(Policies.AccountLimiter);
 
         // Own password: needs the current one, signs every other session out and returns fresh tokens for this one.
         auth.MapPost("/password", async (ChangePasswordRequest req, EbtDbContext db, TokenService tokens, IPasswordHasher<AppUser> hasher, ILoggerFactory logs, ClaimsPrincipal principal, CancellationToken ct) =>

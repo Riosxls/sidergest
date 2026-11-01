@@ -81,6 +81,9 @@ builder.Services.AddRateLimiter(o =>
     var perMinute = builder.Configuration.GetValue("RateLimit:LoginPerMinute", 10);
     o.AddPolicy(Policies.LoginLimiter, ctx => RateLimitPartition.GetFixedWindowLimiter(ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = perMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    // Signed-in account actions get their own bucket so repeated clicks cannot lock the login page of the same IP.
+    o.AddPolicy(Policies.AccountLimiter, ctx => RateLimitPartition.GetFixedWindowLimiter(ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = perMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 if (builder.Configuration.GetValue("Proxy:Trusted", false))
     builder.Services.Configure<ForwardedHeadersOptions>(o =>

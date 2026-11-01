@@ -110,9 +110,9 @@ public class AccountSystemTests(ApiFixture api)
     }
 
     [Fact]
-    public async Task About_reports_version_runtime_and_database()
+    public async Task About_reports_version_runtime_and_database_to_admins()
     {
-        var c = await api.UserAsync(UserRole.Reader);
+        var c = await api.AdminAsync();
         var about = await c.GetFromJsonAsync<JsonElement>("/api/system/about");
         Assert.False(string.IsNullOrWhiteSpace(about.GetProperty("version").GetString()));
         Assert.DoesNotContain('+', about.GetProperty("version").GetString()!);
@@ -186,5 +186,67 @@ public class AccountSystemTests(ApiFixture api)
     {
         Assert.False(SystemEndpoints.ScanBackups(null).Configured);
         Assert.False(SystemEndpoints.ScanBackups(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Configured);
+    }
+
+    [Fact]
+    public async Task About_gives_environment_details_to_admins_only()
+    {
+        var admin = await (await (await api.AdminAsync()).GetAsync("/api/system/about")).Read<JsonElement>();
+        Assert.True(admin.GetProperty("databaseOk").GetBoolean());
+        Assert.NotEqual(JsonValueKind.Null, admin.GetProperty("environment").ValueKind);
+        Assert.NotEqual(JsonValueKind.Null, admin.GetProperty("lastMigration").ValueKind);
+
+        var reader = await (await (await api.UserAsync(UserRole.Reader)).GetAsync("/api/system/about")).Read<JsonElement>();
+        Assert.True(reader.GetProperty("databaseOk").GetBoolean());
+        Assert.False(string.IsNullOrEmpty(reader.GetProperty("version").GetString()));
+        Assert.Equal(JsonValueKind.Null, reader.GetProperty("environment").ValueKind);
+        Assert.Equal(JsonValueKind.Null, reader.GetProperty("runtime").ValueKind);
+        Assert.Equal(JsonValueKind.Null, reader.GetProperty("lastMigration").ValueKind);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await api.Anonymous().GetAsync("/api/system/about")).StatusCode);
+    }
+
+    [Fact]
+    public void Backup_status_never_reveals_the_server_folder()
+    {
+        var dir = Directory.CreateTempSubdirectory("ebt-backups-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "ebt-nightly-20261031-220000.dump"), "x");
+            Assert.Null(SystemEndpoints.ScanBackups(dir).Directory);
+            Assert.Null(SystemEndpoints.ScanBackups(Path.Combine(dir, "missing")).Directory);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Theory]
+    [InlineData(UserRole.Reader)]
+    [InlineData(UserRole.Stock)]
+    [InlineData(UserRole.Sales)]
+    public async Task Every_signed_in_role_manages_its_own_account_but_anonymous_cannot(UserRole role)
+    {
+        var c = await api.UserAsync(role);
+        Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/auth/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await c.PutAsJsonAsync("/api/auth/profile", new ProfileRequest("Fulano", "f@x.com"))).StatusCode);
+        // A refresh token that is not this user's is refused on both session routes.
+        Assert.Equal(HttpStatusCode.BadRequest, (await c.Post("/api/auth/sessions/revoke-others", new SessionsRequest("not-a-token"))).StatusCode);
+
+        var anon = api.Anonymous();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.GetAsync("/api/auth/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.Post("/api/auth/sessions", new SessionsRequest("x"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.Post("/api/auth/sessions/revoke-others", new SessionsRequest("x"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Revoke_others_with_a_foreign_refresh_token_changes_nothing()
+    {
+        var user = await NewUser();
+        var (pc, pcLogin) = await Device(user, "Balcao");
+        var (_, phoneLogin) = await Device(user, "Celular");
+        var (stranger, strangerLogin) = await Device(await NewUser(), "Outro");
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await stranger.Post("/api/auth/sessions/revoke-others", new SessionsRequest(pcLogin.RefreshToken))).StatusCode);
+        Assert.Equal(2, (await Sessions(pc, pcLogin.RefreshToken)).Count);
+        Assert.Equal(HttpStatusCode.OK, (await api.Anonymous().PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(phoneLogin.RefreshToken))).StatusCode);
+        Assert.NotNull(strangerLogin.RefreshToken);
     }
 }

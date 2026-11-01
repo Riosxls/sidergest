@@ -108,6 +108,8 @@ if (-not $NoDocker) {
 }
 
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
+# The API container mounts backups read-only; create it here so Docker does not create it as root.
+New-Item -ItemType Directory -Force -Path (Join-Path $Root 'backups') | Out-Null
 
 function New-Secret([int]$Bytes = 32) {
     $b = New-Object byte[] $Bytes
