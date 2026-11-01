@@ -60,6 +60,8 @@ class _IdleGuardState extends State<IdleGuard> {
     behavior: HitTestBehavior.translucent,
     onPointerDown: (_) => _touch(),
     onPointerMove: (_) => _touch(),
+    onPointerHover: (_) => _touch(),
+    onPointerPanZoomUpdate: (_) => _touch(),
     onPointerSignal: (_) => _touch(),
     child: widget.child,
   );
