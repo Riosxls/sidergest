@@ -577,6 +577,71 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
     );
   }
 
+  Widget _tableTitle(String title, String kind, ColorScheme scheme, int total, int done) => Row(
+    children: [
+      Icon(_kindIcons[kind], size: 20, color: scheme.primary),
+      const SizedBox(width: 8),
+      Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium)),
+      if (total > 0)
+        Chip(
+          visualDensity: VisualDensity.compact,
+          side: BorderSide.none,
+          backgroundColor: done == total ? scheme.primaryContainer : scheme.surfaceContainerHighest,
+          label: Text('$done de $total encontrados', style: Theme.of(context).textTheme.labelSmall),
+        ),
+    ],
+  );
+
+  Widget _tableHeaders(List<String> headers, ColorScheme scheme, TextStyle? label) => Row(
+    children: [
+      SizedBox(width: 92, child: Text(headers[0], style: label)),
+      Expanded(child: Text(headers[1], style: label)),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(headers[2], style: label?.copyWith(color: scheme.primary)),
+      ),
+      const SizedBox(width: 40),
+    ],
+  );
+
+  Widget _tableRow(String kind, int i, ColorScheme scheme) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 92,
+          child: Text(
+            '${_measures[i]['name']}',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Expanded(
+          child: TextField(key: ValueKey('spec-$kind-${_measures[i]['name']}'), controller: _spec[i], decoration: _cell(scheme, found: false)),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: TextField(
+            key: ValueKey('found-$kind-${_measures[i]['name']}'),
+            controller: _found[i],
+            onChanged: (_) => setState(() {}),
+            decoration: _cell(scheme, found: true),
+          ),
+        ),
+        SizedBox(
+          width: 40,
+          child: IconButton(
+            key: ValueKey('row-del-$kind-${_measures[i]['name']}'),
+            tooltip: 'Remover linha',
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.close, size: 18, color: scheme.onSurfaceVariant),
+            onPressed: () => _removeRow(i),
+          ),
+        ),
+      ],
+    ),
+  );
+
   Widget _table(String title, String kind, List<String> headers) {
     final scheme = Theme.of(context).colorScheme;
     final label = Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600);
@@ -591,76 +656,16 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Icon(_kindIcons[kind], size: 20, color: scheme.primary),
-                const SizedBox(width: 8),
-                Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium)),
-                if (idx.isNotEmpty)
-                  Chip(
-                    visualDensity: VisualDensity.compact,
-                    side: BorderSide.none,
-                    backgroundColor: done == idx.length ? scheme.primaryContainer : scheme.surfaceContainerHighest,
-                    label: Text('$done de ${idx.length} encontrados', style: Theme.of(context).textTheme.labelSmall),
-                  ),
-              ],
-            ),
+            _tableTitle(title, kind, scheme, idx.length, done),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                SizedBox(width: 92, child: Text(headers[0], style: label)),
-                Expanded(child: Text(headers[1], style: label)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(headers[2], style: label?.copyWith(color: scheme.primary)),
-                ),
-                const SizedBox(width: 40),
-              ],
-            ),
+            _tableHeaders(headers, scheme, label),
             const SizedBox(height: 4),
             if (idx.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Text('Nenhuma linha.', style: label),
               ),
-            for (final i in idx)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 92,
-                      child: Text(
-                        '${_measures[i]['name']}',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Expanded(
-                      child: TextField(key: ValueKey('spec-$kind-${_measures[i]['name']}'), controller: _spec[i], decoration: _cell(scheme, found: false)),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        key: ValueKey('found-$kind-${_measures[i]['name']}'),
-                        controller: _found[i],
-                        onChanged: (_) => setState(() {}),
-                        decoration: _cell(scheme, found: true),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 40,
-                      child: IconButton(
-                        key: ValueKey('row-del-$kind-${_measures[i]['name']}'),
-                        tooltip: 'Remover linha',
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(Icons.close, size: 18, color: scheme.onSurfaceVariant),
-                        onPressed: () => _removeRow(i),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            for (final i in idx) _tableRow(kind, i, scheme),
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
@@ -714,6 +719,85 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
     );
   }
 
+  Widget _certificateSection() => Section(
+    title: 'Dados do certificado',
+    child: Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        _text('issueDate', 'Data *', width: 150, hint: 'dd/mm/aaaa'),
+        _text('customerPo', 'Nº do pedido do cliente', width: 200),
+        _text('invoiceNumber', 'NF', width: 140, hint: 'Vazio = NF da entrega'),
+        _text('quantity', 'Quantidade *', width: 140, number: true),
+        _text('unit', 'Unidade', width: 90),
+        SizedBox(
+          width: 300,
+          child: DropdownButtonFormField<int?>(
+            key: const ValueKey('cert-delivery'),
+            initialValue: _deliveries.any((d) => d['id'] == _deliveryId) ? _deliveryId : null,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Entrega', border: OutlineInputBorder(), isDense: true),
+            items: [
+              const DropdownMenuItem<int?>(value: null, child: Text('Sem entrega')),
+              for (final d in _deliveries)
+                DropdownMenuItem<int?>(
+                  value: d['id'] as int,
+                  child: Text('${d['reference']} · ${fmtDay(d['plannedDate'])}${d['invoiceNumber'] == null ? '' : ' · NF ${d['invoiceNumber']}'}'),
+                ),
+            ],
+            onChanged: (v) => setState(() => _deliveryId = v),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _productSection() => Section(
+    title: 'Produto',
+    child: Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        _text('description', 'Descrição *', width: 360),
+        _text('customerPartNumber', 'Código do cliente', width: 200),
+        _text('customerPartDescription', 'Descrição do cliente', width: 300),
+        _text('rawMaterialLot', 'Lote MP', width: 180),
+        _text('hardness', 'Dureza', width: 160, hint: 'ex.: 66 HRB'),
+        _text('finish', 'Acabamento superficial', width: 420),
+        _text('approvedBy', 'Aprovação / visto (nome)', width: 240),
+        SizedBox(
+          width: 420,
+          child: DropdownButtonFormField<String>(
+            key: const ValueKey('cert-title'),
+            initialValue: _title ?? '',
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Título do certificado', border: OutlineInputBorder(), isDense: true),
+            items: [
+              for (final t in {..._titles, ?_title})
+                DropdownMenuItem(
+                  value: t,
+                  child: Text(t.isEmpty ? 'Padrão · CERTIFICADO DE QUALIDADE' : t, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: (v) => setState(() => _title = (v == null || v.isEmpty) ? null : v),
+          ),
+        ),
+        _text('notes', 'Observações', width: 700, lines: 3),
+        SizedBox(
+          width: 700,
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final (n, s) in _noteSnippets.indexed)
+                ActionChip(key: ValueKey('note-snippet-$n'), label: Text(s.$1), onPressed: () => _addNote(s.$2)),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
@@ -742,84 +826,9 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
               ),
-            Section(
-              title: 'Dados do certificado',
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  _text('issueDate', 'Data *', width: 150, hint: 'dd/mm/aaaa'),
-                  _text('customerPo', 'Nº do pedido do cliente', width: 200),
-                  _text('invoiceNumber', 'NF', width: 140, hint: 'Vazio = NF da entrega'),
-                  _text('quantity', 'Quantidade *', width: 140, number: true),
-                  _text('unit', 'Unidade', width: 90),
-                  SizedBox(
-                    width: 300,
-                    child: DropdownButtonFormField<int?>(
-                      key: const ValueKey('cert-delivery'),
-                      initialValue: _deliveries.any((d) => d['id'] == _deliveryId) ? _deliveryId : null,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Entrega', border: OutlineInputBorder(), isDense: true),
-                      items: [
-                        const DropdownMenuItem<int?>(value: null, child: Text('Sem entrega')),
-                        for (final d in _deliveries)
-                          DropdownMenuItem<int?>(
-                            value: d['id'] as int,
-                            child: Text('${d['reference']} · ${fmtDay(d['plannedDate'])}${d['invoiceNumber'] == null ? '' : ' · NF ${d['invoiceNumber']}'}'),
-                          ),
-                      ],
-                      onChanged: (v) => setState(() => _deliveryId = v),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _certificateSection(),
             gap,
-            Section(
-              title: 'Produto',
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  _text('description', 'Descrição *', width: 360),
-                  _text('customerPartNumber', 'Código do cliente', width: 200),
-                  _text('customerPartDescription', 'Descrição do cliente', width: 300),
-                  _text('rawMaterialLot', 'Lote MP', width: 180),
-                  _text('hardness', 'Dureza', width: 160, hint: 'ex.: 66 HRB'),
-                  _text('finish', 'Acabamento superficial', width: 420),
-                  _text('approvedBy', 'Aprovação / visto (nome)', width: 240),
-                  SizedBox(
-                    width: 420,
-                    child: DropdownButtonFormField<String>(
-                      key: const ValueKey('cert-title'),
-                      initialValue: _title ?? '',
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Título do certificado', border: OutlineInputBorder(), isDense: true),
-                      items: [
-                        for (final t in {..._titles, ?_title})
-                          DropdownMenuItem(
-                            value: t,
-                            child: Text(t.isEmpty ? 'Padrão · CERTIFICADO DE QUALIDADE' : t, overflow: TextOverflow.ellipsis),
-                          ),
-                      ],
-                      onChanged: (v) => setState(() => _title = (v == null || v.isEmpty) ? null : v),
-                    ),
-                  ),
-                  _text('notes', 'Observações', width: 700, lines: 3),
-                  SizedBox(
-                    width: 700,
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        for (final (n, s) in _noteSnippets.indexed)
-                          ActionChip(key: ValueKey('note-snippet-$n'), label: Text(s.$1), onPressed: () => _addNote(s.$2)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _productSection(),
             gap,
             _banner(context),
             gap,
@@ -908,6 +917,43 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
 
   static const _kinds = {'Chemical': 'Química', 'Dimensional': 'Dimensional', 'Mechanical': 'Mecânico'};
 
+  Widget _templateCard(Map<String, dynamic> t) => Card(
+    child: ExpansionTile(
+      key: ValueKey('template-${t['id']}'),
+      title: Text('${t['customerName']} · ${t['productCode']}'),
+      subtitle: Text('${t['productDescription']} · aprendido do certificado ${t['learnedFrom']}'),
+      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (t['title'] != null) Text('Título: ${t['title']}'),
+        if (t['notes'] != null) Text('Observações: ${t['notes']}'),
+        const SizedBox(height: 8),
+        for (final m in (t['measures'] as List).cast<Map<String, dynamic>>()) Text('${_kinds[m['kind']] ?? m['kind']} · ${m['name']}: ${m['specified'] ?? '-'}'),
+        if (widget.session.canCertificate)
+          Align(
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton.icon(
+                  key: ValueKey('template-edit-${t['id']}'),
+                  onPressed: () => _edit(t),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Editar modelo'),
+                ),
+                TextButton.icon(
+                  key: ValueKey('template-forget-${t['id']}'),
+                  onPressed: () => _forget(t),
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Esquecer modelo'),
+                ),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final items = _items;
@@ -958,44 +1004,7 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
                     padding: const EdgeInsets.all(24),
                     child: Center(child: Text(items.isEmpty ? 'Nenhum modelo ainda. Emita um certificado e o modelo aparece aqui.' : 'Nada encontrado.')),
                   ),
-                for (final t in shown)
-                  Card(
-                    child: ExpansionTile(
-                      key: ValueKey('template-${t['id']}'),
-                      title: Text('${t['customerName']} · ${t['productCode']}'),
-                      subtitle: Text('${t['productDescription']} · aprendido do certificado ${t['learnedFrom']}'),
-                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                      expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (t['title'] != null) Text('Título: ${t['title']}'),
-                        if (t['notes'] != null) Text('Observações: ${t['notes']}'),
-                        const SizedBox(height: 8),
-                        for (final m in (t['measures'] as List).cast<Map<String, dynamic>>())
-                          Text('${_kinds[m['kind']] ?? m['kind']} · ${m['name']}: ${m['specified'] ?? '-'}'),
-                        if (widget.session.canCertificate)
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                TextButton.icon(
-                                  key: ValueKey('template-edit-${t['id']}'),
-                                  onPressed: () => _edit(t),
-                                  icon: const Icon(Icons.edit_outlined),
-                                  label: const Text('Editar modelo'),
-                                ),
-                                TextButton.icon(
-                                  key: ValueKey('template-forget-${t['id']}'),
-                                  onPressed: () => _forget(t),
-                                  icon: const Icon(Icons.delete_outline),
-                                  label: const Text('Esquecer modelo'),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
+                for (final t in shown) _templateCard(t),
               ],
             ),
     );
@@ -1078,6 +1087,41 @@ class _TemplateEditorState extends State<_TemplateEditor> {
     }
   }
 
+  Widget _rowEditor(int i, _TemplateRow r, InputDecoration dec) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 140,
+          child: DropdownButtonFormField<String>(
+            initialValue: r.kind,
+            isExpanded: true,
+            decoration: dec,
+            items: [for (final e in _kinds.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+            onChanged: (v) => setState(() => r.kind = v ?? r.kind),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: TextField(
+            key: ValueKey('template-name-$i'),
+            controller: r.name,
+            decoration: dec.copyWith(labelText: 'Nome'),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: TextField(
+            key: ValueKey('template-spec-$i'),
+            controller: r.specified,
+            decoration: dec.copyWith(labelText: 'Especificado'),
+          ),
+        ),
+        IconButton(tooltip: 'Remover', icon: const Icon(Icons.close), onPressed: () => setState(() => _rows.removeAt(i))),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     const dec = InputDecoration(border: OutlineInputBorder(), isDense: true);
@@ -1119,41 +1163,7 @@ class _TemplateEditorState extends State<_TemplateEditor> {
                   ),
                 ],
               ),
-              for (final (i, r) in _rows.indexed)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 140,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: r.kind,
-                          isExpanded: true,
-                          decoration: dec,
-                          items: [for (final e in _kinds.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-                          onChanged: (v) => setState(() => r.kind = v ?? r.kind),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          key: ValueKey('template-name-$i'),
-                          controller: r.name,
-                          decoration: dec.copyWith(labelText: 'Nome'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          key: ValueKey('template-spec-$i'),
-                          controller: r.specified,
-                          decoration: dec.copyWith(labelText: 'Especificado'),
-                        ),
-                      ),
-                      IconButton(tooltip: 'Remover', icon: const Icon(Icons.close), onPressed: () => setState(() => _rows.removeAt(i))),
-                    ],
-                  ),
-                ),
+              for (final (i, r) in _rows.indexed) _rowEditor(i, r, dec),
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
