@@ -130,6 +130,7 @@ public partial class StockService(EbtDbContext db)
     {
         if (quantity <= 0) throw StockException.Invalid("Must be greater than zero", "quantity");
         if (string.IsNullOrWhiteSpace(reference)) throw StockException.Invalid("Required", "reference");
+        if ((item.MaterialId is null) == (item.ProductId is null)) throw StockException.Invalid("Give either materialId or productId", "materialId");
         return await InTransaction(async () =>
         {
             settings = await SettingsAsync(ct);

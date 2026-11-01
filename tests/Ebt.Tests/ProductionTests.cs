@@ -431,4 +431,148 @@ public class ProductionTests(ApiFixture api)
         Assert.Equal(3, results.Count(r => r == HttpStatusCode.Conflict));
         Assert.Equal(90m, (await Get(c, order.Id)).Operations.Single(o => o.Sequence == 10).Good);
     }
+
+    private static async Task AssertStatus(HttpStatusCode expected, Task<HttpResponseMessage> call) => Assert.Equal(expected, (await call).StatusCode);
+
+    [Fact]
+    public async Task Order_creation_update_and_lifecycle_errors()
+    {
+        var c = await api.AdminAsync();
+        var s = await Arrange(c);
+        var due = Today.AddDays(30);
+
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/orders", new ProductionOrderIn(s.Product.Id, 0m, due)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/orders", new ProductionOrderIn(s.Product.Id, 1m, due, Bales: -1)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/orders", new ProductionOrderIn(999_999, 1m, due)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/orders", new ProductionOrderIn(s.Product.Id, 1m, due, CustomerId: 999_999)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/orders", new ProductionOrderIn(s.Product.Id, 1m, due, ParentOrderId: 999_999)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/orders", new ProductionOrderIn(s.Product.Id, 1m, due, PreviousOrderId: 999_999)));
+
+        var parent = await Create(c, s.Product.Id, 10m);
+        var child = await Create(c, s.Product.Id, 5m, parent: parent.Id);
+        await AssertStatus(HttpStatusCode.Conflict, c.DeleteAsync($"/api/production/orders/{parent.Id}"));
+        await AssertStatus(HttpStatusCode.NotFound, c.DeleteAsync("/api/production/orders/999999"));
+        await AssertStatus(HttpStatusCode.NotFound, c.Put("/api/production/orders/999999", new OrderUpdateIn(1m, due, null, null, null)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Put($"/api/production/orders/{parent.Id}", new OrderUpdateIn(0m, due, null, null, null)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Put($"/api/production/orders/{parent.Id}", new OrderUpdateIn(10m, due, 999_999, null, null)));
+        var updated = await (await c.Put($"/api/production/orders/{parent.Id}", new OrderUpdateIn(12m, due.AddDays(1), null, 2, "obs"))).Read<ProductionOrderOut>();
+        Assert.Equal(12m, updated.Quantity);
+
+        // transitions out of order
+        await AssertStatus(HttpStatusCode.Conflict, Transition(c, child.Id, "stop", "motivo"));
+        await AssertStatus(HttpStatusCode.Conflict, Transition(c, child.Id, "resume"));
+        await AssertStatus(HttpStatusCode.Conflict, Transition(c, child.Id, "finish"));
+        await AssertStatus(HttpStatusCode.Conflict, Transition(c, child.Id, "reopen"));
+
+        (await c.Post($"/api/production/orders/{parent.Id}/release", new ReleaseIn(true))).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.Conflict, c.Post($"/api/production/orders/{parent.Id}/release", new ReleaseIn(true)));
+        await AssertStatus(HttpStatusCode.Conflict, c.DeleteAsync($"/api/production/orders/{parent.Id}"));
+        await AssertStatus(HttpStatusCode.Conflict, c.Post($"/api/production/orders/{parent.Id}/refresh-structure", new { }));
+        await AssertStatus(HttpStatusCode.Conflict, c.Put($"/api/production/orders/{parent.Id}", new OrderUpdateIn(20m, due, null, null, null)));
+        await AssertStatus(HttpStatusCode.BadRequest, Transition(c, parent.Id, "stop", " "));
+        (await Transition(c, parent.Id, "stop", "falta de matéria-prima")).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.Conflict, Transition(c, parent.Id, "stop", "de novo"));
+        await AssertStatus(HttpStatusCode.Conflict, Transition(c, parent.Id, "finish"));
+        (await Transition(c, parent.Id, "resume")).EnsureSuccessStatusCode();
+        (await Transition(c, parent.Id, "finish")).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.Conflict, c.Put($"/api/production/orders/{parent.Id}", new OrderUpdateIn(12m, due, null, null, null)));
+        await AssertStatus(HttpStatusCode.Conflict, c.Post("/api/production/orders", new ProductionOrderIn(s.Product.Id, 1m, due, ParentOrderId: parent.Id)));
+        (await Transition(c, parent.Id, "reopen")).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.NotFound, Transition(c, 999_999, "stop", "x"));
+
+        // a child cannot be released while its parent is no longer open
+        (await Transition(c, parent.Id, "finish")).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.Conflict, c.Post($"/api/production/orders/{child.Id}/release", new ReleaseIn(true)));
+
+        // without force, a missing material blocks the release and nothing is reserved
+        var s2 = await Arrange(c, materialStock: 0m, componentStock: 0m);
+        var short1 = await Create(c, s2.Product.Id, 10m);
+        var blocked = await c.Post($"/api/production/orders/{short1.Id}/release", new ReleaseIn(false));
+        Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+        Assert.Contains("Missing material", await blocked.Content.ReadAsStringAsync());
+        Assert.Equal(ProductionOrderStatus.Created, (await Get(c, short1.Id)).Status);
+        await AssertStatus(HttpStatusCode.NotFound, c.Post("/api/production/orders/999999/refresh-structure", new { }));
+    }
+
+    [Fact]
+    public async Task Issue_receipt_and_report_validation_errors()
+    {
+        var c = await api.AdminAsync();
+        var s = await Arrange(c);
+        var order = await Create(c, s.Product.Id, 40m);
+        var issueUrl = $"/api/production/orders/{order.Id}/issues";
+
+        // before release nothing can be issued, received or reported
+        await AssertStatus(HttpStatusCode.Conflict, c.Post(issueUrl, new IssueInput(Today, s.Store.Id)));
+        await AssertStatus(HttpStatusCode.Conflict, c.Post($"/api/production/orders/{order.Id}/receipts", new FinishedGoodsInput(Today, 1m, s.Finished.Id)));
+        await AssertStatus(HttpStatusCode.Conflict, Report(c, order.Id, 10, 1));
+        await AssertStatus(HttpStatusCode.Conflict, c.Post($"/api/production/orders/{order.Id}/material-returns", new IssueInput(Today, s.Store.Id, [new IssueLineInput(1, 1m)])));
+
+        (await c.Post($"/api/production/orders/{order.Id}/release", new ReleaseIn(true))).EnsureSuccessStatusCode();
+        var line = (await Get(c, order.Id)).Materials.First(m => m.MaterialId == s.Material.Id);
+
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post(issueUrl, new IssueInput(Today, s.Store.Id, [new IssueLineInput(line.Id, 0m)])));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post(issueUrl, new IssueInput(Today, s.Store.Id, [new IssueLineInput(999_999, 1m)])));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post(issueUrl, new IssueInput(Today, 999_999)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post($"/api/production/orders/{order.Id}/material-returns", new IssueInput(Today, s.Store.Id)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post($"/api/production/orders/{order.Id}/material-returns", new IssueInput(Today, s.Store.Id, [new IssueLineInput(line.Id, 0m)])));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post($"/api/production/orders/{order.Id}/material-returns", new IssueInput(Today, s.Store.Id, [new IssueLineInput(999_999, 1m)])));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post($"/api/production/orders/{order.Id}/receipts", new FinishedGoodsInput(Today, 0m, s.Finished.Id)));
+        await AssertStatus(HttpStatusCode.NotFound, c.Post("/api/production/orders/999999/issues", new IssueInput(Today, s.Store.Id)));
+
+        // everything issued: a second full issue has nothing left
+        (await c.Post(issueUrl, new IssueInput(Today, s.Store.Id))).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.Conflict, c.Post(issueUrl, new IssueInput(Today, s.Store.Id)));
+
+        // shop-floor report validation
+        ReportInput R(decimal good = 1m, decimal scrap = 0m, int seq = 10, int? shift = null, int? employee = null, int? machine = null, decimal? hours = 1m, decimal? down = null, int? downReason = null) =>
+            new(order.Id, seq, Today, good, scrap, null, shift, employee, machine, Hours: hours, DowntimeHours: down, DowntimeOccurrenceId: downReason);
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/reports", R(good: -1m)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/reports", R(good: 0m, scrap: -1m)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/reports", R(good: 0m)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/reports", R(good: 0m, down: 1m)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/reports", R(hours: -1m)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/reports", R(seq: 999)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/reports", R(shift: 999_999)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/reports", R(employee: 999_999)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/reports", R(machine: 999_999)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/production/reports", R(good: 0m, down: 1m, downReason: 999_999)));
+        await AssertStatus(HttpStatusCode.NotFound, c.DeleteAsync("/api/production/reports/999999"));
+        await AssertStatus(HttpStatusCode.NotFound, c.Post("/api/production/reports", R() with { OrderId = 999_999 }));
+
+        // once the order is finished neither reports nor receipts are accepted
+        var ok = await (await Report(c, order.Id, 10, 5)).Read<ProductionReportOut>();
+        (await Transition(c, order.Id, "finish")).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.Conflict, c.DeleteAsync($"/api/production/reports/{ok.Id}"));
+        await AssertStatus(HttpStatusCode.Conflict, Report(c, order.Id, 10, 1));
+        await AssertStatus(HttpStatusCode.Conflict, c.Post(issueUrl, new IssueInput(Today, s.Store.Id)));
+    }
+
+    [Fact]
+    public async Task Outsourcing_and_process_editing_errors()
+    {
+        var c = await api.AdminAsync();
+        var s = await Arrange(c);
+        var supplier = await (await c.Post("/api/suppliers", new SupplierIn("Terceiro " + Code("T"), null, null, null))).Read<SupplierOut>();
+        var order = await Create(c, s.Product.Id, 100m);
+        var url = $"/api/production/orders/{order.Id}";
+
+        await AssertStatus(HttpStatusCode.BadRequest, c.Put($"{url}/operations/10/outsource", new OutsourceInput(999_999, 3)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Put($"{url}/operations/10/outsource", new OutsourceInput(supplier.Id, -1)));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Put($"{url}/operations/999/outsource", new OutsourceInput(supplier.Id, 3)));
+        (await c.Put($"{url}/operations/10/outsource", new OutsourceInput(supplier.Id, 3))).EnsureSuccessStatusCode();
+
+        // process editing: empty list, materials attached to a dropped operation, and a valid rewrite
+        await AssertStatus(HttpStatusCode.BadRequest, c.Put($"{url}/process", new ProcessIn([])));
+        await AssertStatus(HttpStatusCode.BadRequest, c.Put($"{url}/process", new ProcessIn(null)));
+        await AssertStatus(HttpStatusCode.Conflict, c.Put($"{url}/process", new ProcessIn([new ProcessLine(20, "Montagem", null, null, null)])));
+        (await c.Put($"{url}/process", new ProcessIn([new ProcessLine(10, "Corte", null, null, null), new ProcessLine(20, "Montagem", null, null, null), new ProcessLine(null, "Inspeção", "±0,1", "10", "20")]))).EnsureSuccessStatusCode();
+        Assert.Equal(3, (await Get(c, order.Id)).Operations.Count);
+
+        (await c.Post($"{url}/release", new ReleaseIn(true))).EnsureSuccessStatusCode();
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post($"{url}/operations/10/outside-shipments", new OutsideSendInput(Today, 0m, null, null)));
+        await AssertStatus(HttpStatusCode.NotFound, c.Post("/api/production/outside-shipments/999999/returns", new OutsideReturnInput(Today, 1m, 0m, 1m, null, null, null)));
+        await AssertStatus(HttpStatusCode.NotFound, c.GetAsync("/api/production/outside-shipments/999999"));
+        await AssertStatus(HttpStatusCode.NotFound, c.Post("/api/production/orders/999999/operations/10/outside-shipments", new OutsideSendInput(Today, 1m, null, null)));
+    }
 }
