@@ -224,3 +224,14 @@ const revisionReasons = {
   'Other': 'Cliente pediu: outra alteração',
   'OurCorrection': 'Correção nossa (erro ou ajuste interno)',
 };
+
+/// Backup frequencies (API values) as shown to the admin.
+const backupFrequencyLabels = <String, String>{
+  'Hourly': 'A cada hora',
+  'Every6Hours': 'A cada 6 horas',
+  'Daily': 'Todo dia',
+  'Weekly': 'Toda semana',
+};
+
+/// Weekday names indexed like the API (0 = Sunday).
+const weekdayNames = <String>['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];

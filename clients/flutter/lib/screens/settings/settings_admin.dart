@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../session.dart';
 import '../data_reset.dart';
 import '../legacy_cleanup.dart';
+import 'settings_backup.dart';
 import 'settings_data_source.dart';
 import 'settings_widgets.dart';
 
@@ -90,6 +91,16 @@ class AdminSection extends StatelessWidget {
                   ),
                 );
               },
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                key: const ValueKey('settings-open-backup'),
+                onPressed: () => open('Cópia de segurança', (_) => BackupSettingsView(session: session)),
+                icon: const Icon(Icons.settings_backup_restore),
+                label: const Text('Configurar backup…'),
+              ),
             ),
           ],
         ),
