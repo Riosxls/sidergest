@@ -23,6 +23,8 @@ public class BackupSettings
     public int Keep { get; set; } = 14;
     /// <summary>Set by "Fazer backup agora"; the agent runs as soon as this is newer than <see cref="LastRunAt"/>.</summary>
     public DateTimeOffset? RunRequestedAt { get; set; }
+    /// <summary>Set by "Interromper"; the agent stops the running backup when this is newer than the start of the run.</summary>
+    public DateTimeOffset? CancelRequestedAt { get; set; }
     public DateTimeOffset? LastRunAt { get; set; }
     public bool? LastRunOk { get; set; }
     public string? LastRunMessage { get; set; }

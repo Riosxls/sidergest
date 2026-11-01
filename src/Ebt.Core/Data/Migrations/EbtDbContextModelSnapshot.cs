@@ -269,6 +269,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("agent_seen_at");
 
+                    b.Property<DateTimeOffset?>("CancelRequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancel_requested_at");
+
                     b.Property<string>("Destination")
                         .HasMaxLength(260)
                         .HasColumnType("character varying(260)")

@@ -56,6 +56,48 @@ function Get-Instant($Value) {
     return [DateTimeOffset]::FromUnixTimeSeconds([long]$Value)
 }
 
+# Writes progress.json the way backup.ps1 does, for the stages only the agent knows about (stopping, stopped).
+function Write-AgentProgress([string]$Stage, [bool]$Running) {
+    try {
+        $dir = Join-Path $Root 'backup-status'
+        $path = Join-Path $dir 'progress.json'
+        $percent = 0; $started = [DateTimeOffset]::UtcNow.ToString('o')
+        if (Test-Path $path) {
+            $old = Get-Content $path -Raw | ConvertFrom-Json
+            $percent = [int]$old.percent
+            if ($old.startedAt) { $started = [string]$old.startedAt }
+        }
+        $json = [ordered]@{ running = $Running; percent = $percent; stage = $Stage; startedAt = $started; updatedAt = [DateTimeOffset]::UtcNow.ToString('o') } | ConvertTo-Json
+        $tmp = Join-Path $dir 'progress.json.tmp'
+        Set-Content -Path $tmp -Value $json -Encoding utf8
+        Move-Item -Path $tmp -Destination $path -Force
+    } catch { }
+}
+
+# True when the app asked to stop this run: "Interromper" set cancel_requested_at after the run began, or (for a manual run) the request was withdrawn.
+function Test-CancelRequested([string]$Container, [double]$StartedEpoch, [bool]$Manual) {
+    try {
+        $epoch = $StartedEpoch.ToString([Globalization.CultureInfo]::InvariantCulture)
+        $row = Invoke-Sql $Container "select (cancel_requested_at is not null and cancel_requested_at > to_timestamp($epoch)), (run_requested_at is null) from backup_settings where id = 1"
+        $f = ($row | Select-Object -First 1) -split '\|'
+        return ($f[0] -eq 't') -or ($Manual -and $f[1] -eq 't')
+    } catch { return $false }
+}
+
+# Stops a running backup: kills backup.ps1 and its children, ends pg_dump inside the container, removes the partial files of this run.
+function Stop-Backup($Proc, [string]$Container, [datetime]$StartedAt, [string]$Destination) {
+    Write-AgentProgress 'Cancelando...' $true
+    & taskkill /PID $Proc.Id /T /F 2>&1 | Out-Null
+    try { Invoke-Sql $Container "select pg_terminate_backend(pid) from pg_stat_activity where application_name = 'pg_dump'" | Out-Null } catch { }
+    & docker exec $Container sh -c 'rm -f /tmp/ebt-*.dump' 2>&1 | Out-Null
+    $dir = Join-Path $Root 'backups'
+    Get-ChildItem $dir -Filter 'ebt-*.dump' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $StartedAt.AddSeconds(-2) } | ForEach-Object {
+        if ($Destination) { Remove-Item (Join-Path $Destination $_.Name) -Force -ErrorAction SilentlyContinue }
+        Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+    }
+    Write-AgentProgress 'Cancelado' $false
+}
+
 function Invoke-Agent {
     Push-Location $Root
     try {
@@ -90,11 +132,31 @@ from backup_settings where id = 1
         if (-not (Test-Destination $plan.Destination)) {
             $message = 'Destino inválido: use um caminho completo como D:\backups ou \\servidor\pasta.'
         } else {
-            $args = @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'backup.ps1'), '-Quiet', '-Keep', $plan.Keep, '-Reason', $(if ($manual) { 'manual' } else { 'scheduled' }))
-            if ($plan.Destination) { $args += @('-CopyTo', $plan.Destination) }
-            $output = (& powershell @args 2>&1 | Out-String).Trim()
-            $ok = $LASTEXITCODE -eq 0
-            $message = if ($ok) { if ($plan.Destination) { 'Backup feito e copiado.' } else { 'Backup feito (sem cópia externa).' } } else { $output }
+            $reason = if ($manual) { 'manual' } else { 'scheduled' }
+            $quote = [string][char]34
+            $args = @('-NoProfile', '-File', ($quote + (Join-Path $PSScriptRoot 'backup.ps1') + $quote), '-Quiet', '-Keep', $plan.Keep, '-Reason', $reason)
+            if ($plan.Destination) { $args += @('-CopyTo', ($quote + $plan.Destination + $quote)) }
+            $outFile = Join-Path ([IO.Path]::GetTempPath()) 'metagest-backup-agent.out'
+            $errFile = Join-Path ([IO.Path]::GetTempPath()) 'metagest-backup-agent.err'
+            Remove-Item $outFile, $errFile -ErrorAction SilentlyContinue
+            $startedAt = Get-Date
+            $startedEpoch = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
+            $proc = Start-Process -FilePath 'powershell.exe' -ArgumentList $args -PassThru -WindowStyle Hidden -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+            $null = $proc.Handle   # keeps the handle so ExitCode is available after it exits
+            $cancelled = $false
+            while (-not $proc.HasExited) {
+                Start-Sleep -Seconds 1
+                if (Test-CancelRequested $container $startedEpoch ([bool]$manual)) { $cancelled = $true; break }
+            }
+            if ($cancelled) {
+                Stop-Backup $proc $container $startedAt $plan.Destination
+                $message = 'Backup cancelado.'
+            } else {
+                $proc.WaitForExit()
+                $ok = $proc.ExitCode -eq 0
+                $output = ((Get-Content $outFile, $errFile -Raw -ErrorAction SilentlyContinue) -join ' ').Trim()
+                $message = if ($ok) { if ($plan.Destination) { 'Backup feito e copiado.' } else { 'Backup feito (sem cópia externa).' } } else { $output }
+            }
         }
         # Keep the message plain so it can sit inside a SQL literal.
         $safe = ($message -replace '[^\p{L}\p{N} .,:;_()/\\-]', '?')

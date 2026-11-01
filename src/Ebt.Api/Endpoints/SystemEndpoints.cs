@@ -18,10 +18,10 @@ public record BackupSettingsInput(bool Enabled, string? Frequency, string? TimeO
 
 /// <summary>The backup plan plus what the agent on the server computer reported back.</summary>
 public record BackupSettingsDto(bool Enabled, string Frequency, string TimeOfDay, int Weekday, string? Destination, int Keep,
-    DateTimeOffset? RunRequestedAt, DateTimeOffset? LastRunAt, bool? LastRunOk, string? LastRunMessage, DateTimeOffset? AgentSeenAt, DateTimeOffset? NextRunAt, SystemEndpoints.BackupProgress? Progress)
+    DateTimeOffset? RunRequestedAt, DateTimeOffset? CancelRequestedAt, DateTimeOffset? LastRunAt, bool? LastRunOk, string? LastRunMessage, DateTimeOffset? AgentSeenAt, DateTimeOffset? NextRunAt, SystemEndpoints.BackupProgress? Progress)
 {
     public static BackupSettingsDto From(BackupSettings s, SystemEndpoints.BackupProgress? progress) => new(s.Enabled, s.Frequency.ToString(), s.TimeOfDay.ToString("HH:mm"), (int)s.Weekday, s.Destination, s.Keep,
-        s.RunRequestedAt, s.LastRunAt, s.LastRunOk, s.LastRunMessage, s.AgentSeenAt, BackupSchedule.NextRun(s, DateTimeOffset.UtcNow), progress);
+        s.RunRequestedAt, s.CancelRequestedAt, s.LastRunAt, s.LastRunOk, s.LastRunMessage, s.AgentSeenAt, BackupSchedule.NextRun(s, DateTimeOffset.UtcNow), progress);
 }
 public static class SystemEndpoints
 {
@@ -124,6 +124,19 @@ public static class SystemEndpoints
             s.Keep = i.Keep;
             await db.SaveChangesAsync(ct);
             return Results.Ok(BackupSettingsDto.From(s, ScanProgress(config["Backup:Directory"])));
+        });
+        backup.MapPost("/cancel", async (EbtDbContext db, IConfiguration config, CancellationToken ct) =>
+        {
+            var s = await LoadBackupSettings(db, ct);
+            var progress = ScanProgress(config["Backup:Directory"]);
+            var waiting = s.RunRequestedAt is not null && (s.LastRunAt is null || s.RunRequestedAt > s.LastRunAt);
+            if (progress is { Running: true } || waiting)
+            {
+                s.CancelRequestedAt = DateTimeOffset.UtcNow;
+                if (waiting) s.RunRequestedAt = null; // not started yet: drop the request; a run that just started sees this and stops
+                await db.SaveChangesAsync(ct);
+            }
+            return Results.Ok(BackupSettingsDto.From(s, progress));
         });
         backup.MapPost("/run-now", async (EbtDbContext db, IConfiguration config, CancellationToken ct) =>
         {

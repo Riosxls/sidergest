@@ -171,4 +171,68 @@ public class BackupSettingsTests(ApiFixture api)
         }
         finally { Directory.Delete(dir, true); }
     }
+
+    private async Task<HttpClient> AdminWithProgressDir(string dir)
+    {
+        var host = api.Anonymous(new Dictionary<string, string> { ["Backup:Directory"] = dir });
+        var login = await (await host.PostAsJsonAsync("/api/auth/login", new LoginRequest(ApiFixture.AdminUser, ApiFixture.AdminPassword))).Read<LoginResponse>();
+        host.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", login.Token);
+        return host;
+    }
+
+    [Fact]
+    public async Task Cancel_is_admin_only()
+    {
+        var reader = await api.UserAsync(UserRole.Reader);
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.PostAsync(Url + "/cancel", null)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Cancel_of_a_running_backup_flags_it_and_keeps_the_request()
+    {
+        var dir = Directory.CreateTempSubdirectory("ebt-cancel-").FullName;
+        try
+        {
+            var admin = await AdminWithProgressDir(dir);
+            (await admin.PutAsJsonAsync(Url, Valid(null))).EnsureSuccessStatusCode();
+            await admin.PostAsync(Url + "/run-now", null);
+            File.WriteAllText(Path.Combine(dir, "progress.json"), ProgressJson(true, 20, DateTimeOffset.UtcNow));
+            var s = await (await admin.PostAsync(Url + "/cancel", null)).Read<BackupSettingsDto>();
+            Assert.NotNull(s.CancelRequestedAt);
+            Assert.True(s.Progress!.Running);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public async Task Cancel_of_a_waiting_request_drops_it()
+    {
+        var dir = Directory.CreateTempSubdirectory("ebt-cancel-").FullName;
+        try
+        {
+            var admin = await AdminWithProgressDir(dir);
+            var asked = await (await admin.PostAsync(Url + "/run-now", null)).Read<BackupSettingsDto>();
+            Assert.NotNull(asked.RunRequestedAt);
+            var s = await (await admin.PostAsync(Url + "/cancel", null)).Read<BackupSettingsDto>();
+            Assert.Null(s.RunRequestedAt);
+            Assert.NotNull(s.CancelRequestedAt);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public async Task Cancel_with_nothing_to_stop_changes_nothing()
+    {
+        var dir = Directory.CreateTempSubdirectory("ebt-cancel-").FullName;
+        try
+        {
+            var admin = await AdminWithProgressDir(dir);
+            await admin.PostAsync(Url + "/cancel", null); // other tests leave a request waiting; this drops it so nothing is left to stop
+            var before = await admin.GetFromJsonAsync<BackupSettingsDto>(Url, ApiFixture.Json);
+            File.WriteAllText(Path.Combine(dir, "progress.json"), ProgressJson(false, 100, DateTimeOffset.UtcNow));
+            var s = await (await admin.PostAsync(Url + "/cancel", null)).Read<BackupSettingsDto>();
+            Assert.Equal(before!.CancelRequestedAt, s.CancelRequestedAt);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
 }
