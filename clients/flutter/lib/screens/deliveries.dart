@@ -333,131 +333,21 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
     final (step, failed) = deliveryPath(d['status']);
     return SideBySide(
       main: [
-        RecordHeader(
-          icon: Icons.local_shipping_outlined,
-          kind: 'Entrega',
-          title: '${d['reference']}',
-          badge: StatusBadge(deliveryStatuses[d['status']] ?? '${d['status']}', tone: deliveryTone(d['status'])),
-          fields: [
-            ('Cliente', '${d['customerName']}'),
-            ('Pedido', '${d['orderReference']}'),
-            ('Data programada', fmtDay(d['plannedDate'])),
-            ('Volumes', fmt(d['packages'])),
-            ('Peso bruto (kg)', fmt(d['grossWeightKg'])),
-            ('NF', fmt(d['invoiceNumber'])),
-            ('Nº do lote', fmt(d['lotNumber'])),
-            ('Valor faturado', d['invoicedValue'] == null ? '' : fmtMoney(d['invoicedValue'])),
-            ('Valor s/ IPI', fmtMoney(d['valueExIpi'])),
-            ('Saldo do pedido (kg)', fmt(d['balanceKg'])),
-            ('Saldo do pedido (R\$)', fmtMoney(d['balanceValue'])),
-          ],
-        ),
+        _header(d),
         gap,
         StagePath(steps: flowSteps, current: step, failedLabel: failed),
         gap,
         _nextStep(d),
         gap,
-        Section(
-          title: 'Itens',
-          actions: [
-            TextButton.icon(
-              onPressed: () => openSalesOrder(context, s, d['orderId'] as int).then((_) => _load()),
-              icon: const Icon(Icons.receipt_long_outlined),
-              label: const Text('Ver pedido'),
-            ),
-            if (d['stockDocumentId'] != null)
-              TextButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => DocumentScreen(session: s, id: d['stockDocumentId'] as int),
-                  ),
-                ),
-                icon: const Icon(Icons.swap_horiz),
-                label: const Text('Movimento de estoque'),
-              ),
-          ],
-          child: SimpleTable(
-            columns: [
-              col('Item', 'sequence'),
-              col('Produto', 'productCode'),
-              col('Descrição', 'description'),
-              ColumnSpec('Quantidade', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
-              col('Volumes', 'packages', numeric: true),
-            ],
-            rows: (d['lines'] as List).cast<Map<String, dynamic>>(),
-          ),
-        ),
+        _itemsSection(d),
         gap,
-        Section(
-          title: 'Certificados de qualidade (${_certs.length})',
-          actions: [
-            if (s.canCertificate && ['Planned', 'Shipped'].contains(d['status']) && _missingCertificates(d) > 0)
-              FilledButton.tonalIcon(
-                key: const ValueKey('delivery-all-certificates'),
-                onPressed: _createAllCertificates,
-                icon: const Icon(Icons.playlist_add),
-                label: Text(_missingCertificates(d) == 1 ? 'Gerar certificado do item' : 'Gerar ${_missingCertificates(d)} certificados'),
-              ),
-            if (s.canCertificate && ['Planned', 'Shipped'].contains(d['status']))
-              OutlinedButton.icon(
-                key: const ValueKey('delivery-new-certificate'),
-                onPressed: () async {
-                  final order = await api.get('/api/sales/orders/${d['orderId']}') as Map<String, dynamic>;
-                  if (mounted && await newCertificate(context, s, order, deliveryId: d['id'] as int)) unawaited(_load());
-                },
-                icon: const Icon(Icons.add),
-                label: const Text('Emitir certificado'),
-              ),
-          ],
-          child: SimpleTable(
-            columns: [
-              col('Certificado', 'reference'),
-              dateCol('Data', 'issueDate'),
-              labelCol('Situação', 'status', certificateStatuses),
-              col('Produto', 'description'),
-              ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
-            ],
-            rows: _certs,
-            actions: (c) => [
-              IconButton(
-                tooltip: 'Abrir',
-                icon: const Icon(Icons.open_in_new, size: 20),
-                onPressed: () => openCertificate(context, s, c['id'] as int).then((_) => _load()),
-              ),
-            ],
-          ),
-        ),
+        _certsSection(d),
         if (_nf != null) ...[
           gap,
-          Section(
-            title: 'Nota fiscal eletrônica',
-            actions: [
-              TextButton.icon(
-                key: const ValueKey('delivery-open-nf'),
-                onPressed: () => openFiscalDocument(context, s, _nf!['id'] as int).then((_) => _load()),
-                icon: const Icon(Icons.description_outlined),
-                label: const Text('Abrir NF'),
-              ),
-            ],
-            child: InfoGrid([
-              ('Número', '${_nf!['number']} · série ${_nf!['series']}'),
-              ('CFOP', fmt(_nf!['cfopCode'])),
-              ('Valor', fmtMoney(_nf!['invoiceTotal'])),
-              ('Chave', fmt(_nf!['accessKey'])),
-              ('Autorização', _nf!['simulated'] == true ? 'SIMULADA (sem valor fiscal)' : 'SEFAZ'),
-            ]),
-          ),
+          _nfSection(),
         ],
         gap,
-        Section(
-          title: 'Detalhes',
-          child: InfoGrid([
-            ('Local de entrega', fmt(d['addressText'])),
-            ('Observações', fmt(d['notes'])),
-            ('Criada', '${fmt(d['createdBy'])} · ${fmtDate(d['createdAt'])}'),
-            ('Expedida', d['shippedAt'] == null ? '' : '${fmt(d['shippedBy'])} · ${fmtDate(d['shippedAt'])}'),
-          ]),
-        ),
+        _detailsSection(d),
       ],
       side: [
         Section(
@@ -465,6 +355,136 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
           child: TimelineView(entries: timeline(d['history'] as List)),
         ),
       ],
+    );
+  }
+
+  Widget _header(Map<String, dynamic> d) {
+    return RecordHeader(
+      icon: Icons.local_shipping_outlined,
+      kind: 'Entrega',
+      title: '${d['reference']}',
+      badge: StatusBadge(deliveryStatuses[d['status']] ?? '${d['status']}', tone: deliveryTone(d['status'])),
+      fields: [
+        ('Cliente', '${d['customerName']}'),
+        ('Pedido', '${d['orderReference']}'),
+        ('Data programada', fmtDay(d['plannedDate'])),
+        ('Volumes', fmt(d['packages'])),
+        ('Peso bruto (kg)', fmt(d['grossWeightKg'])),
+        ('NF', fmt(d['invoiceNumber'])),
+        ('Nº do lote', fmt(d['lotNumber'])),
+        ('Valor faturado', d['invoicedValue'] == null ? '' : fmtMoney(d['invoicedValue'])),
+        ('Valor s/ IPI', fmtMoney(d['valueExIpi'])),
+        ('Saldo do pedido (kg)', fmt(d['balanceKg'])),
+        ('Saldo do pedido (R\$)', fmtMoney(d['balanceValue'])),
+      ],
+    );
+  }
+
+  Widget _itemsSection(Map<String, dynamic> d) {
+    return Section(
+      title: 'Itens',
+      actions: [
+        TextButton.icon(
+          onPressed: () => openSalesOrder(context, s, d['orderId'] as int).then((_) => _load()),
+          icon: const Icon(Icons.receipt_long_outlined),
+          label: const Text('Ver pedido'),
+        ),
+        if (d['stockDocumentId'] != null)
+          TextButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => DocumentScreen(session: s, id: d['stockDocumentId'] as int),
+              ),
+            ),
+            icon: const Icon(Icons.swap_horiz),
+            label: const Text('Movimento de estoque'),
+          ),
+      ],
+      child: SimpleTable(
+        columns: [
+          col('Item', 'sequence'),
+          col('Produto', 'productCode'),
+          col('Descrição', 'description'),
+          ColumnSpec('Quantidade', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
+          col('Volumes', 'packages', numeric: true),
+        ],
+        rows: (d['lines'] as List).cast<Map<String, dynamic>>(),
+      ),
+    );
+  }
+
+  Widget _certsSection(Map<String, dynamic> d) {
+    return Section(
+      title: 'Certificados de qualidade (${_certs.length})',
+      actions: [
+        if (s.canCertificate && ['Planned', 'Shipped'].contains(d['status']) && _missingCertificates(d) > 0)
+          FilledButton.tonalIcon(
+            key: const ValueKey('delivery-all-certificates'),
+            onPressed: _createAllCertificates,
+            icon: const Icon(Icons.playlist_add),
+            label: Text(_missingCertificates(d) == 1 ? 'Gerar certificado do item' : 'Gerar ${_missingCertificates(d)} certificados'),
+          ),
+        if (s.canCertificate && ['Planned', 'Shipped'].contains(d['status']))
+          OutlinedButton.icon(
+            key: const ValueKey('delivery-new-certificate'),
+            onPressed: () async {
+              final order = await api.get('/api/sales/orders/${d['orderId']}') as Map<String, dynamic>;
+              if (mounted && await newCertificate(context, s, order, deliveryId: d['id'] as int)) unawaited(_load());
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Emitir certificado'),
+          ),
+      ],
+      child: SimpleTable(
+        columns: [
+          col('Certificado', 'reference'),
+          dateCol('Data', 'issueDate'),
+          labelCol('Situação', 'status', certificateStatuses),
+          col('Produto', 'description'),
+          ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
+        ],
+        rows: _certs,
+        actions: (c) => [
+          IconButton(
+            tooltip: 'Abrir',
+            icon: const Icon(Icons.open_in_new, size: 20),
+            onPressed: () => openCertificate(context, s, c['id'] as int).then((_) => _load()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _nfSection() {
+    return Section(
+        title: 'Nota fiscal eletrônica',
+        actions: [
+          TextButton.icon(
+            key: const ValueKey('delivery-open-nf'),
+            onPressed: () => openFiscalDocument(context, s, _nf!['id'] as int).then((_) => _load()),
+            icon: const Icon(Icons.description_outlined),
+            label: const Text('Abrir NF'),
+          ),
+        ],
+        child: InfoGrid([
+          ('Número', '${_nf!['number']} · série ${_nf!['series']}'),
+          ('CFOP', fmt(_nf!['cfopCode'])),
+          ('Valor', fmtMoney(_nf!['invoiceTotal'])),
+          ('Chave', fmt(_nf!['accessKey'])),
+          ('Autorização', _nf!['simulated'] == true ? 'SIMULADA (sem valor fiscal)' : 'SEFAZ'),
+        ]),
+      );
+  }
+
+  Widget _detailsSection(Map<String, dynamic> d) {
+    return Section(
+      title: 'Detalhes',
+      child: InfoGrid([
+        ('Local de entrega', fmt(d['addressText'])),
+        ('Observações', fmt(d['notes'])),
+        ('Criada', '${fmt(d['createdBy'])} · ${fmtDate(d['createdAt'])}'),
+        ('Expedida', d['shippedAt'] == null ? '' : '${fmt(d['shippedBy'])} · ${fmtDate(d['shippedAt'])}'),
+      ]),
     );
   }
 }
