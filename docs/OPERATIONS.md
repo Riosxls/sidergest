@@ -60,9 +60,10 @@ Container logs rotate at 10 MB x 5 files per service. Read them with `docker com
 
 Rotating secrets on the development machine does not carry over: production gets its own `.env`. Do this on the production host.
 
-- [ ] `.env` from `.env.example` with fresh random values: `EBT_DB_PASSWORD`, `EBT_JWT_KEY` (at least 32 bytes, not a placeholder: the API refuses those), `EBT_ADMIN_PASSWORD`. Never reuse the development values (`sidergest123`, `ebt-dev-password`).
+- [ ] `.env` from `.env.example` with fresh random values: `EBT_DB_PASSWORD`, `EBT_JWT_KEY` (at least 32 bytes, not a placeholder: the API refuses those), `EBT_ADMIN_PASSWORD`. Never reuse the development values (`sidergest123`, `ebt-dev-password`): outside Development the API refuses to create the bootstrap admin with `sidergest123`, and user/password changes reject it (and a password equal to the username).
 - [ ] Admin password changed after first login (Configurações, or `POST /api/auth/password`); the bootstrap admin is only created when the database has no users.
 - [ ] `EBT_SWAGGER=false`.
+- [ ] `EBT_MAX_IDLE_MINUTES` set to the longest idle lock the company accepts (for example `30`; 0..480, default 0 = no cap). The server enforces the idle lock itself: users pick their own time in Configurações, but with a cap "never" and anything longer become the cap. Changing it needs an `api` recreate.
 - [ ] TLS reverse proxy in front of the API; `EBT_BEHIND_PROXY=true`, `EBT_ALLOWED_HOSTS` set to the real host name, `EBT_CORS_ORIGIN` set to the real web origin. Clients built with an `https://` `API_URL`.
 - [ ] Database port stays bound to `127.0.0.1` (compose default); no firewall rule opens 25432 or 8080 to the network.
 - [ ] Backup plan set in the app (destination on another disk or share), agent task installed with `scripts\install-backup-agent.ps1`, one restore tested on a spare machine.

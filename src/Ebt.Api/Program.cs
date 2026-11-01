@@ -31,6 +31,8 @@ if (Encoding.UTF8.GetByteCount(jwt.SigningKey) < 32)
 if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing")
     && (jwt.SigningKey.Contains("change-me", StringComparison.OrdinalIgnoreCase) || jwt.SigningKey.Contains("dev-only", StringComparison.OrdinalIgnoreCase)))
     throw new InvalidOperationException("Jwt:SigningKey is a placeholder value; set a real random secret (Jwt__SigningKey / EBT_JWT_KEY).");
+if (builder.Configuration.GetValue("Security:MaxIdleMinutes", 0) is < 0 or > TokenService.MaxIdleMinutesLimit)
+    throw new InvalidOperationException("Security:MaxIdleMinutes must be between 0 and 480.");
 Ebt.Core.Services.Clock.Configure(builder.Configuration["Clock:TimeZone"]);
 
 builder.Services.AddHttpContextAccessor();
@@ -136,7 +138,8 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<EbtDbContext>();
     if (app.Configuration.GetValue("Database:MigrateOnStartup", false)) await db.Database.MigrateAsync();
-    await AuthEndpoints.EnsureBootstrapAdminAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher<AppUser>>(), app.Configuration, app.Logger);
+    await AuthEndpoints.EnsureBootstrapAdminAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher<AppUser>>(), app.Configuration, app.Logger,
+        allowDefaultPassword: app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"));
 }
 
 app.MapGet("/", (IConfiguration c, IWebHostEnvironment e) => Results.Redirect(c.GetValue("Swagger:Enabled", e.IsDevelopment()) ? "/swagger" : "/health")).AllowAnonymous().ExcludeFromDescription();

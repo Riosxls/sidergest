@@ -95,7 +95,7 @@ public static class FiscalEndpoints
     {
         var g = app.MapGroup("/api/fiscal/settings").WithTags("Fiscal");
         g.MapGet("/", async (FiscalService svc, CancellationToken ct) => ToDto(await svc.SettingsAsync(ct))).RequireAuthorization(Policies.Read);
-        g.MapPut("/", async (FiscalSettingsDto i, EbtDbContext db, FiscalService svc, CancellationToken ct) =>
+        g.MapPut("/", async (FiscalSettingsDto i, EbtDbContext db, FiscalService svc, System.Security.Claims.ClaimsPrincipal principal, CancellationToken ct) =>
         {
             var uf = i.Uf?.Trim().ToUpperInvariant() ?? "";
             var maxNumber = await db.FiscalDocuments.Where(d => d.Series == i.Series).Select(d => (int?)d.Number).MaxAsync(ct) ?? 0;
@@ -115,6 +115,7 @@ public static class FiscalEndpoints
             }
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             var s = await svc.SettingsAsync(ct);
+            var oldNumber = s.NextNumber;
             s.Enabled = i.Enabled;
             s.Environment = i.Environment;
             s.CompanyName = Clean(i.CompanyName);
@@ -134,6 +135,13 @@ public static class FiscalEndpoints
             s.Series = i.Series;
             s.NextNumber = i.NextNumber;
             s.CancelWindowHours = i.CancelWindowHours;
+            // NextNumber is hidden from the generic diff (it advances with every NF), so a manual change is logged explicitly.
+            if (oldNumber != i.NextNumber)
+                db.AuditLog.Add(new AuditEntry
+                {
+                    At = DateTimeOffset.UtcNow, User = principal.Identity?.Name, Entity = nameof(FiscalSettings), EntityId = s.Id.ToString(), Action = "Update",
+                    Changes = System.Text.Json.JsonSerializer.Serialize(new { NextNumber = new { from = oldNumber, to = i.NextNumber } })
+                });
             await db.SaveChangesAsync(ct);
             return Results.Ok(ToDto(s));
         }).RequireAuthorization(Policies.Admin);

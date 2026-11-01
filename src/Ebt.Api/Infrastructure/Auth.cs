@@ -43,6 +43,14 @@ public class TokenService(JwtOptions options)
     /// <summary>Clients report activity about once a minute; this much lateness is not idleness.</summary>
     public static readonly TimeSpan IdleSlack = TimeSpan.FromMinutes(2);
 
+    public const int MaxIdleMinutesLimit = 480;
+
+    /// <summary>The cap the admin set (Security:MaxIdleMinutes); 0 = no cap.</summary>
+    public static int MaxIdle(IConfiguration config) => Math.Clamp(config.GetValue("Security:MaxIdleMinutes", 0), 0, MaxIdleMinutesLimit);
+
+    /// <summary>The user's choice, except that with a cap "never" (0) and anything above the cap become the cap.</summary>
+    public static int EffectiveIdle(int userMinutes, int cap) => cap > 0 && (userMinutes <= 0 || userMinutes > cap) ? cap : userMinutes;
+
     public static bool IsIdle(int idleLockMinutes, DateTimeOffset? lastActivity, DateTimeOffset now) =>
         idleLockMinutes > 0 && lastActivity is { } last && now - last > TimeSpan.FromMinutes(idleLockMinutes) + IdleSlack;
 
@@ -89,9 +97,10 @@ public class TokenService(JwtOptions options)
             ctx.Fail("Invalid token");
             return;
         }
+        var cap = MaxIdle(ctx.HttpContext.RequestServices.GetRequiredService<IConfiguration>());
         var user = await db.Users.AsNoTracking().Where(u => u.Id == id).Select(u => new { u.Active, u.TokenVersion, u.IdleLockMinutes, u.LastActivityAt }).FirstOrDefaultAsync(ctx.HttpContext.RequestAborted);
         if (user is null || !user.Active || user.TokenVersion != version) ctx.Fail("Token revoked");
-        else if (IsIdle(user.IdleLockMinutes, user.LastActivityAt, DateTimeOffset.UtcNow)) ctx.Fail("Idle session");
+        else if (IsIdle(EffectiveIdle(user.IdleLockMinutes, cap), user.LastActivityAt, DateTimeOffset.UtcNow)) ctx.Fail("Idle session");
     }
 }
 
@@ -112,9 +121,9 @@ public record DeviceInfo(string? Device, string? UserAgent, string? Ip)
 public record LoginRequest(string? Username, string? Password, string? Device = null);
 public record SessionsRequest(string? RefreshToken);
 public record SessionDto(long Id, string? Device, string? UserAgent, string? Ip, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, bool Current);
-public record ActivityRequest(int IdleLockMinutes);
+public record IdleLockRequest(int Minutes);
 public record ProfileRequest(string? DisplayName, string? Email);
-public record LoginResponse(string Token, DateTimeOffset ExpiresAt, string Username, UserRole Role, string[] Permissions, string RefreshToken, DateTimeOffset RefreshExpiresAt);
+public record LoginResponse(string Token, DateTimeOffset ExpiresAt, string Username, UserRole Role, string[] Permissions, string RefreshToken, DateTimeOffset RefreshExpiresAt, int IdleLockMinutes = 0, int MaxIdleMinutes = 0);
 public record RefreshRequest(string? RefreshToken);
 public record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
 public record UserDto(int Id, string Username, UserRole Role, bool Active, bool Locked = false, string? DisplayName = null, string? Email = null);
@@ -131,13 +140,19 @@ public static class AuthEndpoints
     private static readonly string DummyHash = Hasher.HashPassword(Dummy, "dummy-password-for-timing");
 
 
+    public const string DefaultPassword = "sidergest123";
+    public const string TooEasyMessage = "Password too easy to guess";
+
+    private static bool TooEasy(string? password, string? username) =>
+        password is not null && (password == DefaultPassword || (username is not null && string.Equals(password, username, StringComparison.OrdinalIgnoreCase)));
+
     public static bool VerifyPassword(AppUser user, string password) => Hasher.VerifyHashedPassword(user, user.PasswordHash, password) != PasswordVerificationResult.Failed;
 
     public static void MapAuth(this WebApplication app)
     {
         var auth = app.MapGroup("/api/auth").WithTags("Auth");
 
-        auth.MapPost("/login", async (LoginRequest req, EbtDbContext db, TokenService tokens, IPasswordHasher<AppUser> hasher, ILoggerFactory logs, HttpContext http, CancellationToken ct) =>
+        auth.MapPost("/login", async (LoginRequest req, EbtDbContext db, TokenService tokens, IPasswordHasher<AppUser> hasher, ILoggerFactory logs, HttpContext http, IConfiguration config, CancellationToken ct) =>
         {
             var log = logs.CreateLogger("Ebt.Auth");
             if (!Crud.Has(req.Username) || string.IsNullOrEmpty(req.Password)) return Results.Unauthorized();
@@ -176,10 +191,10 @@ public static class AuthEndpoints
             var (token, expires) = tokens.Issue(user);
             log.LogInformation("User {User} logged in from {Ip}", user.Username, http.Connection.RemoteIpAddress);
             var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct, DeviceInfo.From(req.Device, http));
-            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires));
+            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires, TokenService.EffectiveIdle(user.IdleLockMinutes, TokenService.MaxIdle(config)), TokenService.MaxIdle(config)));
         }).AllowAnonymous().RequireRateLimiting(Policies.LoginLimiter);
 
-        auth.MapPost("/refresh", async (RefreshRequest req, EbtDbContext db, TokenService tokens, ILoggerFactory logs, CancellationToken ct) =>
+        auth.MapPost("/refresh", async (RefreshRequest req, EbtDbContext db, TokenService tokens, ILoggerFactory logs, IConfiguration config, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(req.RefreshToken)) return Results.Unauthorized();
             var hash = TokenService.HashRefresh(req.RefreshToken.Trim());
@@ -197,13 +212,13 @@ public static class AuthEndpoints
                 logs.CreateLogger("Ebt.Auth").LogWarning("Refresh token reuse detected for {User}; all sessions revoked", user.Username);
                 return Results.Unauthorized();
             }
-            if (stored.ExpiresAt <= now || !user.Active || TokenService.IsIdle(user.IdleLockMinutes, user.LastActivityAt, now)) return Results.Unauthorized();
+            if (stored.ExpiresAt <= now || !user.Active || TokenService.IsIdle(TokenService.EffectiveIdle(user.IdleLockMinutes, TokenService.MaxIdle(config)), user.LastActivityAt, now)) return Results.Unauthorized();
             // Claim the token atomically: two parallel refreshes of the same token must not both succeed, or rotation protects nothing.
             var claimed = await db.RefreshTokens.Where(r => r.Id == stored.Id && r.RevokedAt == null).ExecuteUpdateAsync(s => s.SetProperty(r => r.RevokedAt, now), ct);
             if (claimed == 0) return Results.Unauthorized();
             var (token, expires) = tokens.Issue(user);
             var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct, new DeviceInfo(stored.Device, stored.UserAgent, stored.Ip));
-            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires));
+            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires, TokenService.EffectiveIdle(user.IdleLockMinutes, TokenService.MaxIdle(config)), TokenService.MaxIdle(config)));
         }).AllowAnonymous().RequireRateLimiting(Policies.LoginLimiter);
 
         auth.MapPost("/logout", async (RefreshRequest req, EbtDbContext db, CancellationToken ct) =>
@@ -216,31 +231,42 @@ public static class AuthEndpoints
             return Results.NoContent();
         }).AllowAnonymous().RequireRateLimiting(Policies.LoginLimiter);
 
-        static object Me(ClaimsPrincipal principal, AppUser? user) => new
+        static object Me(ClaimsPrincipal principal, AppUser? user, IConfiguration config) => new
         {
             username = principal.Identity!.Name,
             role = principal.FindFirstValue(ClaimTypes.Role),
             permissions = Enum.TryParse<UserRole>(principal.FindFirstValue(ClaimTypes.Role), out var r) ? Access.PoliciesFor(r) : [Policies.Read],
             displayName = user?.DisplayName,
-            email = user?.Email
+            email = user?.Email,
+            idleLockMinutes = TokenService.EffectiveIdle(user?.IdleLockMinutes ?? 0, TokenService.MaxIdle(config)),
+            maxIdleMinutes = TokenService.MaxIdle(config)
         };
 
-        auth.MapGet("/me", async (EbtDbContext db, ClaimsPrincipal principal, CancellationToken ct) =>
+        auth.MapGet("/me", async (EbtDbContext db, IConfiguration config, ClaimsPrincipal principal, CancellationToken ct) =>
         {
             var user = int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id) ? await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, ct) : null;
-            return Results.Ok(Me(principal, user));
+            return Results.Ok(Me(principal, user, config));
         }).RequireAuthorization(Policies.Read);
 
-        // The client reports real activity (not background polling) so the server can enforce the idle lock the user chose.
-        auth.MapPost("/activity", async (ActivityRequest req, EbtDbContext db, ClaimsPrincipal principal, CancellationToken ct) =>
+        // The client reports real activity (not background polling). Only the time is recorded: the limit is server-side (PUT /idle-lock, Security:MaxIdleMinutes);
+        // a body from older clients is accepted and ignored, so one device cannot change the lock of another.
+        auth.MapPost("/activity", async (EbtDbContext db, ClaimsPrincipal principal, CancellationToken ct) =>
         {
             if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
-            if (req.IdleLockMinutes is < 0 or > 480) return Results.ValidationProblem(Crud.Errors().Require(false, "idleLockMinutes", "Between 0 and 480"));
-            await db.Users.Where(u => u.Id == id).ExecuteUpdateAsync(s => s.SetProperty(u => u.IdleLockMinutes, req.IdleLockMinutes).SetProperty(u => u.LastActivityAt, DateTimeOffset.UtcNow), ct);
+            await db.Users.Where(u => u.Id == id).ExecuteUpdateAsync(s => s.SetProperty(u => u.LastActivityAt, DateTimeOffset.UtcNow), ct);
             return Results.NoContent();
         }).RequireAuthorization(Policies.Read).RequireRateLimiting(Policies.AccountLimiter);
 
-        auth.MapPut("/profile", async (ProfileRequest req, EbtDbContext db, ClaimsPrincipal principal, CancellationToken ct) =>
+        auth.MapPut("/idle-lock", async (IdleLockRequest req, EbtDbContext db, IConfiguration config, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
+            if (req.Minutes is < 0 or > TokenService.MaxIdleMinutesLimit) return Results.ValidationProblem(Crud.Errors().Require(false, "minutes", "Between 0 and 480"));
+            var cap = TokenService.MaxIdle(config);
+            await db.Users.Where(u => u.Id == id).ExecuteUpdateAsync(s => s.SetProperty(u => u.IdleLockMinutes, req.Minutes).SetProperty(u => u.LastActivityAt, DateTimeOffset.UtcNow), ct);
+            return Results.Ok(new { idleLockMinutes = TokenService.EffectiveIdle(req.Minutes, cap), maxIdleMinutes = cap });
+        }).RequireAuthorization(Policies.Read).RequireRateLimiting(Policies.AccountLimiter);
+
+        auth.MapPut("/profile", async (ProfileRequest req, EbtDbContext db, IConfiguration config, ClaimsPrincipal principal, CancellationToken ct) =>
         {
             if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
             var user = await db.Users.FindAsync([id], ct);
@@ -261,7 +287,7 @@ public static class AuthEndpoints
                 Changes = JsonSerializer.Serialize(new { profile = true, displayName = name, email })
             });
             await db.SaveChangesAsync(ct);
-            return Results.Ok(Me(principal, user));
+            return Results.Ok(Me(principal, user, config));
         }).RequireAuthorization(Policies.Read);
 
         // Devices: each login chain keeps one active refresh row (rotation replaces it), so the rows are the user's signed-in devices.
@@ -283,7 +309,7 @@ public static class AuthEndpoints
         }).RequireAuthorization(Policies.Read);
 
         // Signs every other device out at once: bumping the token version also kills their access tokens; this device gets fresh tokens.
-        auth.MapPost("/sessions/revoke-others", async (SessionsRequest req, EbtDbContext db, TokenService tokens, ILoggerFactory logs, ClaimsPrincipal principal, CancellationToken ct) =>
+        auth.MapPost("/sessions/revoke-others", async (SessionsRequest req, EbtDbContext db, TokenService tokens, ILoggerFactory logs, IConfiguration config, ClaimsPrincipal principal, CancellationToken ct) =>
         {
             if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
             var user = await db.Users.FindAsync([id], ct);
@@ -301,11 +327,11 @@ public static class AuthEndpoints
             var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct, new DeviceInfo(current.Device, current.UserAgent, current.Ip));
             await tx.CommitAsync(ct);
             logs.CreateLogger("Ebt.Auth").LogInformation("{User} signed out all other devices", user.Username);
-            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires));
+            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires, TokenService.EffectiveIdle(user.IdleLockMinutes, TokenService.MaxIdle(config)), TokenService.MaxIdle(config)));
         }).RequireAuthorization(Policies.Read).RequireRateLimiting(Policies.AccountLimiter);
 
         // Own password: needs the current one, signs every other session out and returns fresh tokens for this one.
-        auth.MapPost("/password", async (ChangePasswordRequest req, EbtDbContext db, TokenService tokens, IPasswordHasher<AppUser> hasher, ILoggerFactory logs, ClaimsPrincipal principal, CancellationToken ct) =>
+        auth.MapPost("/password", async (ChangePasswordRequest req, EbtDbContext db, TokenService tokens, IPasswordHasher<AppUser> hasher, ILoggerFactory logs, IConfiguration config, ClaimsPrincipal principal, CancellationToken ct) =>
         {
             if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
             var user = await db.Users.FindAsync([id], ct);
@@ -325,7 +351,8 @@ public static class AuthEndpoints
             }
             var errors = Crud.Errors()
                 .Require((req.NewPassword ?? "").Length >= MinPasswordLength, "newPassword", $"At least {MinPasswordLength} characters")
-                .Require(req.NewPassword != req.CurrentPassword, "newPassword", "Must differ from the current password");
+                .Require(req.NewPassword != req.CurrentPassword, "newPassword", "Must differ from the current password")
+                .Require(!TooEasy(req.NewPassword, user.Username), "newPassword", TooEasyMessage);
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             user.PasswordHash = hasher.HashPassword(user, req.NewPassword!);
             user.FailedLogins = 0;
@@ -336,7 +363,7 @@ public static class AuthEndpoints
             logs.CreateLogger("Ebt.Auth").LogInformation("User {User} changed their own password; other sessions revoked", user.Username);
             var (token, expires) = tokens.Issue(user);
             var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct);
-            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires));
+            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires, TokenService.EffectiveIdle(user.IdleLockMinutes, TokenService.MaxIdle(config)), TokenService.MaxIdle(config)));
         }).RequireAuthorization(Policies.Read).RequireRateLimiting(Policies.LoginLimiter);
 
         var users = app.MapGroup("/api/users").WithTags("Users").RequireAuthorization(Policies.Admin);
@@ -348,7 +375,8 @@ public static class AuthEndpoints
         {
             var errors = Crud.Errors()
                 .Require(Crud.Has(req.Username), "username", "Required")
-                .Require((req.Password ?? "").Length >= MinPasswordLength, "password", $"At least {MinPasswordLength} characters");
+                .Require((req.Password ?? "").Length >= MinPasswordLength, "password", $"At least {MinPasswordLength} characters")
+                .Require(!TooEasy(req.Password, req.Username?.Trim()), "password", TooEasyMessage);
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             var user = new AppUser { Username = req.Username.Trim().ToLower(), PasswordHash = "", Role = req.Role };
             user.PasswordHash = hasher.HashPassword(user, req.Password!);
@@ -363,6 +391,7 @@ public static class AuthEndpoints
             if (user is null) return Results.NotFound();
             if (req.Password is not null && req.Password.Length < MinPasswordLength)
                 return Results.ValidationProblem(Crud.Errors().Require(false, "password", $"At least {MinPasswordLength} characters"));
+            if (TooEasy(req.Password, user.Username)) return Results.ValidationProblem(Crud.Errors().Require(false, "password", TooEasyMessage));
             var staysAdmin = req.Role == UserRole.Admin && req.Active;
             if (user.Role == UserRole.Admin && user.Active && !staysAdmin
                 && !await db.Users.AnyAsync(u => u.Id != id && u.Role == UserRole.Admin && u.Active, ct))
@@ -401,7 +430,7 @@ public static class AuthEndpoints
         })).WithTags("Users").RequireAuthorization(Policies.Admin);
     }
 
-    public static async Task EnsureBootstrapAdminAsync(EbtDbContext db, IPasswordHasher<AppUser> hasher, IConfiguration config, ILogger logger)
+    public static async Task EnsureBootstrapAdminAsync(EbtDbContext db, IPasswordHasher<AppUser> hasher, IConfiguration config, ILogger logger, bool allowDefaultPassword = true)
     {
         if (await db.Users.AnyAsync()) return;
         var username = config["Bootstrap:AdminUser"];
@@ -413,7 +442,9 @@ public static class AuthEndpoints
         }
         if (password.Length < MinPasswordLength)
             throw new InvalidOperationException($"Bootstrap:AdminPassword must have at least {MinPasswordLength} characters.");
-        if (password == "sidergest123")
+        if (password == DefaultPassword && !allowDefaultPassword)
+            throw new InvalidOperationException("Bootstrap:AdminPassword is the well-known default password; set a real one (EBT_ADMIN_PASSWORD) outside Development.");
+        if (password == DefaultPassword)
             logger.LogWarning("Bootstrap admin created with the well-known development password; change it in Configurações before real use.");
         var admin = new AppUser { Username = username.Trim().ToLower(), PasswordHash = "", Role = UserRole.Admin };
         admin.PasswordHash = hasher.HashPassword(admin, password);

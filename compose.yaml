@@ -44,6 +44,7 @@ services:
       AllowedHosts: ${EBT_ALLOWED_HOSTS:-localhost}
       Proxy__Trusted: ${EBT_BEHIND_PROXY:-false}
       Backup__Directory: /backup-status
+      Security__MaxIdleMinutes: ${EBT_MAX_IDLE_MINUTES:-0}
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]

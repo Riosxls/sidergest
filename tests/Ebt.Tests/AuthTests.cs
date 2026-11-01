@@ -302,8 +302,9 @@ public class AuthTests(ApiFixture api)
         var c = api.Anonymous();
         c.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", login.Token);
 
-        Assert.Equal(HttpStatusCode.BadRequest, (await c.PostAsJsonAsync("/api/auth/activity", new ActivityRequest(999))).StatusCode);
-        Assert.Equal(HttpStatusCode.NoContent, (await c.PostAsJsonAsync("/api/auth/activity", new ActivityRequest(15))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await c.PutAsJsonAsync("/api/auth/idle-lock", new { minutes = 999 })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await c.PutAsJsonAsync("/api/auth/idle-lock", new { minutes = 15 })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await c.PostAsync("/api/auth/activity", null)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/products")).StatusCode);
 
         // 20 minutes of silence with a 15 minute lock: tokens and refresh are refused
@@ -318,7 +319,7 @@ public class AuthTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/products")).StatusCode);
 
         // a lock of 0 never expires
-        Assert.Equal(HttpStatusCode.NoContent, (await c.PostAsJsonAsync("/api/auth/activity", new ActivityRequest(0))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await c.PutAsJsonAsync("/api/auth/idle-lock", new { minutes = 0 })).StatusCode);
         await using (var db = api.NewDb())
             await db.Users.Where(u => u.Username == name).ExecuteUpdateAsync(s => s.SetProperty(u => u.LastActivityAt, DateTimeOffset.UtcNow.AddDays(-3)));
         Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/products")).StatusCode);

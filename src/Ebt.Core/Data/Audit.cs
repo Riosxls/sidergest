@@ -35,13 +35,13 @@ public sealed class AuditInterceptor(ICurrentUser user) : SaveChangesInterceptor
         typeof(Customer), typeof(CustomerAddress), typeof(Supplier), typeof(SupplierAddress), typeof(Material), typeof(Product),
         typeof(AppUser), typeof(StockLocation), typeof(StockSettings), typeof(StockClosing),
         typeof(FiscalSettings), typeof(FiscalInutilization), typeof(Cfop), typeof(TaxRule), typeof(MonthlyPrice), typeof(PaymentTerm), typeof(PriceListEntry),
-        typeof(SalesSettings), typeof(ProductionSettings), typeof(BackupSettings), typeof(SteelLot), typeof(SlitterJob),
+        typeof(SalesSettings), typeof(ProductionSettings), typeof(BackupSettings), typeof(PurchasingSettings), typeof(SteelLot), typeof(SlitterJob),
         // Engineering and shop-floor master data: a changed routing or BOM changes what gets built.
         typeof(BomItem), typeof(RoutingOperation), typeof(ProductCustomer), typeof(WorkCenter), typeof(Machine), typeof(Tool),
         typeof(Shift), typeof(Employee), typeof(Holiday)
     ];
 
-    private static readonly HashSet<string> Hidden = ["PasswordHash", "TokenVersion", "FailedLogins", "LockedUntil", "xmin", "NextNumber"];
+    private static readonly HashSet<string> Hidden = ["PasswordHash", "TokenVersion", "FailedLogins", "LockedUntil", "xmin", "NextNumber", "LastActivityAt"];
     private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never };
 
     private readonly List<(EntityEntry Entry, Dictionary<string, object?> Values)> pendingInserts = [];
