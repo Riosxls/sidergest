@@ -505,6 +505,187 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
 
   InputDecoration _dec(String label, {String? hint}) => InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder(), isDense: true);
 
+  /// Customer, delivery, terms and notes fields; an order shows its PO and billing fields, a quote its contact and validity.
+  Widget _conditionsSection({required bool wide, required double w}) => Section(
+    title: 'Cliente e condições',
+    child: Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        SizedBox(
+          width: w,
+          child: LookupField(
+            key: const ValueKey('quote-customer'),
+            api: api,
+            spec: const LookupSpec('/api/customers'),
+            label: 'Cliente *',
+            value: _customerId,
+            initialDisplay: widget.quote?['customerName'] as String?,
+            enabled: widget.quote == null || !widget.asOrder, // an order keeps its customer; a draft quote can change it
+            onChanged: (id, _) {
+              setState(() {
+                _customerId = id;
+                _addresses = [];
+                _addressId = null;
+                _listPrices.clear();
+              });
+              if (id != null) {
+                _loadAddresses(id);
+                _applyDefaultTerm(id);
+                if (!widget.asOrder) _refreshListPrices();
+              }
+            },
+          ),
+        ),
+        SizedBox(
+          width: wide ? 460 : w,
+          child: DropdownButtonFormField<int?>(
+            initialValue: _addresses.any((a) => a['id'] == _addressId) ? _addressId : null,
+            key: ValueKey('addr-${_addresses.length}-$_addressId'),
+            isExpanded: true,
+            decoration: _dec('Local de entrega', hint: _customerId == null ? 'Escolha o cliente' : 'Sem endereço cadastrado'),
+            items: [
+              for (final a in _addresses)
+                DropdownMenuItem(
+                  value: a['id'] as int,
+                  child: Text(
+                    [a['street'], a['number'], a['city'], a['uf']].where((x) => x != null && '$x'.isNotEmpty).join(', '),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (v) => setState(() => _addressId = v),
+          ),
+        ),
+        SizedBox(
+          width: w,
+          child: _customTerm != null && _termId == null
+              ? InputDecorator(
+                  key: const ValueKey('quote-custom-term'),
+                  decoration: InputDecoration(
+                    labelText: 'Prazo * (personalizado)',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: IconButton(
+                      tooltip: 'Escolher outro prazo',
+                      icon: const Icon(Icons.clear),
+                      onPressed: () => setState(() => _customTerm = null),
+                    ),
+                  ),
+                  child: Text(_customTerm!, overflow: TextOverflow.ellipsis),
+                )
+              : LookupField(
+                  key: ValueKey('quote-term-$_termId'),
+                  api: api,
+                  spec: const LookupSpec('/api/sales/payment-terms'),
+                  label: 'Prazo *',
+                  value: _termId,
+                  initialDisplay: _termName ?? widget.quote?['paymentTermName'] as String?,
+                  onChanged: (id, _) => setState(() {
+                    _termId = id;
+                    _termName = null;
+                    if (id != null) _customTerm = null;
+                  }),
+                  onCustom: (text) => setState(() {
+                    _termId = null;
+                    _customTerm = text;
+                  }),
+                ),
+        ),
+        SizedBox(
+          width: w,
+          child: DropdownButtonFormField<String>(
+            initialValue: _freight,
+            isExpanded: true,
+            decoration: _dec('Frete'),
+            items: [for (final e in freightTerms.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+            onChanged: (v) => setState(() => _freight = v ?? 'Cif'),
+          ),
+        ),
+        if (widget.asOrder) ...[
+          SizedBox(
+            width: w,
+            child: TextField(controller: _po, decoration: _dec('Pedido de compra do cliente')),
+          ),
+          SizedBox(
+            width: w,
+            child: DropdownButtonFormField<String>(
+              key: const ValueKey('order-bill-to'),
+              initialValue: _billTo,
+              decoration: _dec('Faturar para'),
+              items: [for (final e in billToLabels.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+              onChanged: (v) => setState(() => _billTo = v ?? 'Ebt'),
+            ),
+          ),
+          SizedBox(
+            width: w,
+            child: DropdownButtonFormField<String>(
+              key: const ValueKey('order-origin'),
+              initialValue: _origin,
+              decoration: _dec('Origem do pedido'),
+              items: [for (final e in orderOrigins.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+              onChanged: (v) => setState(() => _origin = v ?? 'Email'),
+            ),
+          ),
+          SizedBox(
+            width: w,
+            child: TextField(key: const ValueKey('order-salesperson'), controller: _salesperson, decoration: _dec('Responsável de vendas')),
+          ),
+        ],
+        if (!widget.asOrder) ...[
+          SizedBox(
+            width: wide ? 170 : w,
+            child: TextField(
+              controller: _validity,
+              keyboardType: TextInputType.number,
+              decoration: _dec('Validade (dias)', hint: 'padrão'),
+            ),
+          ),
+          SizedBox(
+            width: w,
+            child: TextField(controller: _contact, decoration: _dec('Contato (A/C)')),
+          ),
+          SizedBox(
+            width: w,
+            child: TextField(key: const ValueKey('quote-email'), controller: _email, decoration: _dec('E-mail do contato')),
+          ),
+          SizedBox(
+            width: w,
+            child: TextField(
+              controller: _ref,
+              decoration: _dec('Referência do cliente', hint: 'nº da RFQ/cotação dele'),
+            ),
+          ),
+          SizedBox(
+            width: wide ? 612 : w,
+            child: TextField(
+              controller: _conditions,
+              maxLines: 3,
+              minLines: 1,
+              decoration: _dec('Condições gerais', hint: 'Vazio = padrão dos parâmetros'),
+            ),
+          ),
+        ],
+        SizedBox(
+          width: wide ? 612 : w,
+          child: TextField(controller: _notes, maxLines: 3, minLines: 1, decoration: _dec('Observações')),
+        ),
+      ],
+    ),
+  );
+
+  /// Right aligned estimate under the lines: products, IPI and ICMS parts plus the total used in lists and the PDF.
+  Widget _estimateFooter(({num products, num ipi, num icms}) parts, num estimate) => Padding(
+    padding: const EdgeInsets.all(8),
+    child: Text(
+      'Itens com preço informado: produtos ${fmtMoney(parts.products)} · IPI ${fmtMoney(parts.ipi)} · ICMS ${fmtMoney(parts.icms)} · estimativa com ICMS ${fmtMoney(estimate)}\n'
+      'O total nas listas e no PDF é produtos + IPI: ${fmtMoney(parts.products + parts.ipi)}',
+      key: const ValueKey('quote-estimate'),
+      textAlign: TextAlign.right,
+      style: Theme.of(context).textTheme.titleSmall,
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 700;
@@ -531,173 +712,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Section(
-              title: 'Cliente e condições',
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  SizedBox(
-                    width: w,
-                    child: LookupField(
-                      key: const ValueKey('quote-customer'),
-                      api: api,
-                      spec: const LookupSpec('/api/customers'),
-                      label: 'Cliente *',
-                      value: _customerId,
-                      initialDisplay: widget.quote?['customerName'] as String?,
-                      enabled: widget.quote == null || !widget.asOrder, // an order keeps its customer; a draft quote can change it
-                      onChanged: (id, _) {
-                        setState(() {
-                          _customerId = id;
-                          _addresses = [];
-                          _addressId = null;
-                          _listPrices.clear();
-                        });
-                        if (id != null) {
-                          _loadAddresses(id);
-                          _applyDefaultTerm(id);
-                          if (!widget.asOrder) _refreshListPrices();
-                        }
-                      },
-                    ),
-                  ),
-                  SizedBox(
-                    width: wide ? 460 : w,
-                    child: DropdownButtonFormField<int?>(
-                      initialValue: _addresses.any((a) => a['id'] == _addressId) ? _addressId : null,
-                      key: ValueKey('addr-${_addresses.length}-$_addressId'),
-                      isExpanded: true,
-                      decoration: _dec('Local de entrega', hint: _customerId == null ? 'Escolha o cliente' : 'Sem endereço cadastrado'),
-                      items: [
-                        for (final a in _addresses)
-                          DropdownMenuItem(
-                            value: a['id'] as int,
-                            child: Text(
-                              [a['street'], a['number'], a['city'], a['uf']].where((x) => x != null && '$x'.isNotEmpty).join(', '),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                      onChanged: (v) => setState(() => _addressId = v),
-                    ),
-                  ),
-                  SizedBox(
-                    width: w,
-                    child: _customTerm != null && _termId == null
-                        ? InputDecorator(
-                            key: const ValueKey('quote-custom-term'),
-                            decoration: InputDecoration(
-                              labelText: 'Prazo * (personalizado)',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                              suffixIcon: IconButton(
-                                tooltip: 'Escolher outro prazo',
-                                icon: const Icon(Icons.clear),
-                                onPressed: () => setState(() => _customTerm = null),
-                              ),
-                            ),
-                            child: Text(_customTerm!, overflow: TextOverflow.ellipsis),
-                          )
-                        : LookupField(
-                            key: ValueKey('quote-term-$_termId'),
-                            api: api,
-                            spec: const LookupSpec('/api/sales/payment-terms'),
-                            label: 'Prazo *',
-                            value: _termId,
-                            initialDisplay: _termName ?? widget.quote?['paymentTermName'] as String?,
-                            onChanged: (id, _) => setState(() {
-                              _termId = id;
-                              _termName = null;
-                              if (id != null) _customTerm = null;
-                            }),
-                            onCustom: (text) => setState(() {
-                              _termId = null;
-                              _customTerm = text;
-                            }),
-                          ),
-                  ),
-                  SizedBox(
-                    width: w,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _freight,
-                      isExpanded: true,
-                      decoration: _dec('Frete'),
-                      items: [for (final e in freightTerms.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-                      onChanged: (v) => setState(() => _freight = v ?? 'Cif'),
-                    ),
-                  ),
-                  if (widget.asOrder) ...[
-                    SizedBox(
-                      width: w,
-                      child: TextField(controller: _po, decoration: _dec('Pedido de compra do cliente')),
-                    ),
-                    SizedBox(
-                      width: w,
-                      child: DropdownButtonFormField<String>(
-                        key: const ValueKey('order-bill-to'),
-                        initialValue: _billTo,
-                        decoration: _dec('Faturar para'),
-                        items: [for (final e in billToLabels.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-                        onChanged: (v) => setState(() => _billTo = v ?? 'Ebt'),
-                      ),
-                    ),
-                    SizedBox(
-                      width: w,
-                      child: DropdownButtonFormField<String>(
-                        key: const ValueKey('order-origin'),
-                        initialValue: _origin,
-                        decoration: _dec('Origem do pedido'),
-                        items: [for (final e in orderOrigins.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-                        onChanged: (v) => setState(() => _origin = v ?? 'Email'),
-                      ),
-                    ),
-                    SizedBox(
-                      width: w,
-                      child: TextField(key: const ValueKey('order-salesperson'), controller: _salesperson, decoration: _dec('Responsável de vendas')),
-                    ),
-                  ],
-                  if (!widget.asOrder) ...[
-                    SizedBox(
-                      width: wide ? 170 : w,
-                      child: TextField(
-                        controller: _validity,
-                        keyboardType: TextInputType.number,
-                        decoration: _dec('Validade (dias)', hint: 'padrão'),
-                      ),
-                    ),
-                    SizedBox(
-                      width: w,
-                      child: TextField(controller: _contact, decoration: _dec('Contato (A/C)')),
-                    ),
-                    SizedBox(
-                      width: w,
-                      child: TextField(key: const ValueKey('quote-email'), controller: _email, decoration: _dec('E-mail do contato')),
-                    ),
-                    SizedBox(
-                      width: w,
-                      child: TextField(
-                        controller: _ref,
-                        decoration: _dec('Referência do cliente', hint: 'nº da RFQ/cotação dele'),
-                      ),
-                    ),
-                    SizedBox(
-                      width: wide ? 612 : w,
-                      child: TextField(
-                        controller: _conditions,
-                        maxLines: 3,
-                        minLines: 1,
-                        decoration: _dec('Condições gerais', hint: 'Vazio = padrão dos parâmetros'),
-                      ),
-                    ),
-                  ],
-                  SizedBox(
-                    width: wide ? 612 : w,
-                    child: TextField(controller: _notes, maxLines: 3, minLines: 1, decoration: _dec('Observações')),
-                  ),
-                ],
-              ),
-            ),
+            _conditionsSection(wide: wide, w: w),
             gap,
             LinesEditor(
               api: api,
@@ -716,16 +731,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
               columns: widget.asOrder ? orderLineColumns : salesLineColumns,
             ),
             _approvalBanner(),
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Text(
-                'Itens com preço informado: produtos ${fmtMoney(parts.products)} · IPI ${fmtMoney(parts.ipi)} · ICMS ${fmtMoney(parts.icms)} · estimativa com ICMS ${fmtMoney(estimate)}\n'
-                'O total nas listas e no PDF é produtos + IPI: ${fmtMoney(parts.products + parts.ipi)}',
-                key: const ValueKey('quote-estimate'),
-                textAlign: TextAlign.right,
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-            ),
+            _estimateFooter(parts, estimate),
             if (_message != null) Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ],
         ),
