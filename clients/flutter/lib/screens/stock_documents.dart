@@ -125,41 +125,42 @@ class _DocumentScreenState extends State<DocumentScreen> {
               ? Center(child: Text(friendlyError(snap.error!)))
               : d == null
               ? const Center(child: CircularProgressIndicator())
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Section(
-                      title: 'Documento',
-                      child: InfoGrid([
-                        ('Data', fmtDay(d['date'])),
-                        ('Referência', fmt(d['reference'])),
-                        ('Fornecedor', fmt(d['supplierName'])),
-                        ('Lançado por', '${d['createdBy']} · ${fmtDate(d['createdAt'])}'),
-                        ('Situação', d['reversed'] == true ? 'Estornado' : (d['reversalOfId'] != null ? 'Estorno do nº ${d['reversalOfId']}' : 'Ativo')),
-                        ('Observações', fmt(d['notes'])),
-                      ]),
-                    ),
-                    const SizedBox(height: 12),
-                    Section(
-                      title: 'Movimentos',
-                      child: SimpleTable(
-                        columns: [
-                          col('Item', 'itemCode'),
-                          labelCol('Tipo', 'type', movementTypes),
-                          col('Local', 'locationCode'),
-                          col('Lote', 'lotCode'),
-                          col('Quantidade', 'quantity', numeric: true),
-                          ColumnSpec('Custo unit.', (e) => fmtNum(e['unitCost'], 4), numeric: true),
-                          col('ICMS %', 'icmsRate', numeric: true),
-                          col('Reserva', 'reservationId'),
-                        ],
-                        rows: (d['movements'] as List).cast<Map<String, dynamic>>(),
-                      ),
-                    ),
-                  ],
-                ),
+              : ListView(padding: const EdgeInsets.all(16), children: [_documentSection(d), const SizedBox(height: 12), _movementsSection(d)]),
         );
       },
+    );
+  }
+
+  Widget _documentSection(Map<String, dynamic> d) {
+    return Section(
+      title: 'Documento',
+      child: InfoGrid([
+        ('Data', fmtDay(d['date'])),
+        ('Referência', fmt(d['reference'])),
+        ('Fornecedor', fmt(d['supplierName'])),
+        ('Lançado por', '${d['createdBy']} · ${fmtDate(d['createdAt'])}'),
+        ('Situação', d['reversed'] == true ? 'Estornado' : (d['reversalOfId'] != null ? 'Estorno do nº ${d['reversalOfId']}' : 'Ativo')),
+        ('Observações', fmt(d['notes'])),
+      ]),
+    );
+  }
+
+  Widget _movementsSection(Map<String, dynamic> d) {
+    return Section(
+      title: 'Movimentos',
+      child: SimpleTable(
+        columns: [
+          col('Item', 'itemCode'),
+          labelCol('Tipo', 'type', movementTypes),
+          col('Local', 'locationCode'),
+          col('Lote', 'lotCode'),
+          col('Quantidade', 'quantity', numeric: true),
+          ColumnSpec('Custo unit.', (e) => fmtNum(e['unitCost'], 4), numeric: true),
+          col('ICMS %', 'icmsRate', numeric: true),
+          col('Reserva', 'reservationId'),
+        ],
+        rows: (d['movements'] as List).cast<Map<String, dynamic>>(),
+      ),
     );
   }
 }
