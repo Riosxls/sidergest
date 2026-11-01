@@ -55,9 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String _message(ApiException e) {
     if (e.status == 401) {
-      return _failures >= 3
-          ? 'Usuário ou senha inválidos. Depois de várias tentativas o acesso é bloqueado por 15 minutos.'
-          : 'Usuário ou senha inválidos';
+      return _failures >= 3 ? 'Usuário ou senha inválidos. Depois de várias tentativas o acesso é bloqueado por 15 minutos.' : 'Usuário ou senha inválidos';
     }
     if (e.status == 429) return 'Muitas tentativas seguidas. Aguarde um minuto e tente de novo.';
     return e.message;
@@ -119,51 +117,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: const InputDecoration(labelText: 'Usuário', prefixIcon: Icon(Icons.person_outline), border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    key: const ValueKey('login-password'),
-                    controller: _password,
-                    focusNode: _passwordFocus,
-                    autofocus: widget.session.lastUser.isNotEmpty,
-                    obscureText: !_showPassword,
-                    autofillHints: const [AutofillHints.password],
-                    textInputAction: TextInputAction.done,
-                    onChanged: (_) => _clearError(),
-                    decoration: InputDecoration(
-                      labelText: 'Senha',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        key: const ValueKey('login-toggle-password'),
-                        tooltip: _showPassword ? 'Ocultar senha' : 'Mostrar senha',
-                        icon: Icon(_showPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                        onPressed: () => setState(() => _showPassword = !_showPassword),
-                      ),
-                    ),
-                    onSubmitted: (_) => _submit(),
-                  ),
-                  if (_capsLock)
-                    Padding(
-                      key: const ValueKey('login-caps-lock'),
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Row(
-                        children: [
-                          Icon(Icons.keyboard_capslock, size: 16, color: cs.tertiary),
-                          const SizedBox(width: 6),
-                          Text('Caps Lock está ligado', style: theme.textTheme.bodySmall?.copyWith(color: cs.tertiary)),
-                        ],
-                      ),
-                    ),
+                  _passwordField(),
+                  if (_capsLock) _capsLockHint(theme, cs),
                   const SizedBox(height: 4),
-                  CheckboxListTile(
-                    key: const ValueKey('login-remember'),
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    dense: true,
-                    value: _remember,
-                    onChanged: (v) => setState(() => _remember = v ?? true),
-                    title: const Text('Lembrar de mim neste dispositivo'),
-                    subtitle: _remember ? null : const Text('A sessão termina ao fechar o aplicativo'),
-                  ),
+                  _rememberTile(),
                   if (_showServer) ...[
                     const SizedBox(height: 8),
                     TextField(
@@ -173,37 +130,102 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: const InputDecoration(labelText: 'Servidor da API', prefixIcon: Icon(Icons.dns_outlined), border: OutlineInputBorder()),
                     ),
                   ],
-                  if (_error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Semantics(
-                        liveRegion: true,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.error_outline, size: 18, color: cs.error),
-                            const SizedBox(width: 6),
-                            Expanded(child: Text(_error!, style: TextStyle(color: cs.error))),
-                          ],
-                        ),
-                      ),
-                    ),
+                  if (_error != null) _errorRow(cs),
                   const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: _busy ? null : _submit,
-                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                    child: _busy ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Entrar'),
-                  ),
-                  TextButton(
-                    onPressed: () => setState(() => _showServer = !_showServer),
-                    child: Text(_showServer ? 'Ocultar servidor' : 'Servidor: ${_url.text}', overflow: TextOverflow.ellipsis),
-                  ),
+                  _submitButton(),
+                  _serverToggle(),
                 ],
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _passwordField() {
+    return TextField(
+      key: const ValueKey('login-password'),
+      controller: _password,
+      focusNode: _passwordFocus,
+      autofocus: widget.session.lastUser.isNotEmpty,
+      obscureText: !_showPassword,
+      autofillHints: const [AutofillHints.password],
+      textInputAction: TextInputAction.done,
+      onChanged: (_) => _clearError(),
+      decoration: InputDecoration(
+        labelText: 'Senha',
+        prefixIcon: const Icon(Icons.lock_outline),
+        border: const OutlineInputBorder(),
+        suffixIcon: IconButton(
+          key: const ValueKey('login-toggle-password'),
+          tooltip: _showPassword ? 'Ocultar senha' : 'Mostrar senha',
+          icon: Icon(_showPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+          onPressed: () => setState(() => _showPassword = !_showPassword),
+        ),
+      ),
+      onSubmitted: (_) => _submit(),
+    );
+  }
+
+  Widget _capsLockHint(ThemeData theme, ColorScheme cs) {
+    return Padding(
+      key: const ValueKey('login-caps-lock'),
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Icon(Icons.keyboard_capslock, size: 16, color: cs.tertiary),
+          const SizedBox(width: 6),
+          Text('Caps Lock está ligado', style: theme.textTheme.bodySmall?.copyWith(color: cs.tertiary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _rememberTile() {
+    return CheckboxListTile(
+      key: const ValueKey('login-remember'),
+      contentPadding: EdgeInsets.zero,
+      controlAffinity: ListTileControlAffinity.leading,
+      dense: true,
+      value: _remember,
+      onChanged: (v) => setState(() => _remember = v ?? true),
+      title: const Text('Lembrar de mim neste dispositivo'),
+      subtitle: _remember ? null : const Text('A sessão termina ao fechar o aplicativo'),
+    );
+  }
+
+  Widget _errorRow(ColorScheme cs) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Semantics(
+        liveRegion: true,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error_outline, size: 18, color: cs.error),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(_error!, style: TextStyle(color: cs.error)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _submitButton() {
+    return FilledButton(
+      onPressed: _busy ? null : _submit,
+      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+      child: _busy ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Entrar'),
+    );
+  }
+
+  Widget _serverToggle() {
+    return TextButton(
+      onPressed: () => setState(() => _showServer = !_showServer),
+      child: Text(_showServer ? 'Ocultar servidor' : 'Servidor: ${_url.text}', overflow: TextOverflow.ellipsis),
     );
   }
 }
