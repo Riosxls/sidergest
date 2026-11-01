@@ -82,7 +82,7 @@ graphify explain "EbtDbContext"
 
 Claude Code sessions can query the graph through MCP: `.claude/.mcp.json` starts `graphify-mcp graphify-out/graph.json` (installed with graphify; it is the same server as `python -m graphify.serve`).
 
-God nodes (most connected, from `GRAPH_REPORT.md`, 2026-11-01): `EbtDbContext` (267 edges), `Ebt.Core.Entities` (90), `SalesService` (82), `FiscalDocument` (70), `ProductionService` (70), `StockService` (65), `SalesOrder` (62), `QualityCertificate` (59), `Ebt.Core.Data` (57). Changes to the top ones touch many modules; run the tests before merging.
+God nodes (most connected, from `GRAPH_REPORT.md`, 2026-11-01): `EbtDbContext` (274 edges), `Ebt.Core.Entities` (102), `SalesService` (86), `ProductionService` (74), `FiscalDocument` (70), `Ebt.Core.Data` (66), `StockService` (65), `SalesOrder` (62), `QualityCertificate` (59). Edge counts do not drop when a service is split into partial files (the graph merges partials into one class); they show reach, not file size. Changes to the top ones touch many modules; run the tests before merging.
 ## Run with Docker
 
 ```
