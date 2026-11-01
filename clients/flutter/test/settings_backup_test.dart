@@ -148,6 +148,37 @@ void main() {
     expect(find.byKey(const ValueKey('backup-agent-warning')), findsOneWidget);
   });
 
+  testWidgets('folder picker button is hidden on the test platform and shown when forced', (tester) async {
+    await _pump(tester, _settings());
+    expect(find.byKey(const ValueKey('backup-pick-folder')), findsNothing);
+    expect(find.textContaining('precisa existir no computador do servidor'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    await _pump(tester, _settings(), home: (s) => BackupSettingsView(session: s, canBrowse: true));
+    expect(find.byKey(const ValueKey('backup-pick-folder')), findsOneWidget);
+    expect(find.byTooltip('Procurar pasta'), findsOneWidget);
+    expect(find.textContaining('precisa existir no computador do servidor'), findsOneWidget);
+  });
+
+  testWidgets('picked folder fills the field and is saved; cancelled picker changes nothing', (tester) async {
+    var answer = r'E:\copias';
+    final (_, log) = await _pump(tester, _settings(destination: r'D:\backups'), home: (s) => BackupSettingsView(session: s, canBrowse: true, pickFolder: () async => answer.isEmpty ? null : answer));
+    answer = '';
+    await _tap(tester, find.byKey(const ValueKey('backup-pick-folder')));
+    expect(find.text(r'D:\backups'), findsOneWidget);
+    answer = r'E:\copias';
+    await _tap(tester, find.byKey(const ValueKey('backup-pick-folder')));
+    expect(find.text(r'E:\copias'), findsOneWidget);
+    await _tap(tester, find.byKey(const ValueKey('backup-save')));
+    final body = jsonDecode(log.singleWhere((r) => r.method == 'PUT').body) as Map<String, dynamic>;
+    expect(body['destination'], r'E:\copias');
+  });
+
+  testWidgets('a picker failure is shown as a friendly message', (tester) async {
+    await _pump(tester, _settings(), home: (s) => BackupSettingsView(session: s, canBrowse: true, pickFolder: () async => throw StateError('boom')));
+    await _tap(tester, find.byKey(const ValueKey('backup-pick-folder')));
+    expect(find.textContaining('StateError'), findsNothing);
+    expect(find.byType(SnackBar), findsOneWidget);
+  });
   testWidgets('Administração links to the view', (tester) async {
     await _pump(tester, _settings(), home: (s) => AdminSection(session: s, open: (title, builder) => Navigator.of(tester.element(find.byType(Scaffold).first)).push(MaterialPageRoute<void>(builder: (c) => Scaffold(body: SingleChildScrollView(child: builder(c))))),));
     await _tap(tester, find.byKey(const ValueKey('settings-open-backup')));

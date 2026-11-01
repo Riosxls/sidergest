@@ -1,3 +1,5 @@
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../api.dart';
@@ -66,22 +68,31 @@ class BackupSettings {
 
 /// Admin view to configure the automatic database backup.
 class BackupSettingsView extends StatelessWidget {
-  const BackupSettingsView({super.key, required this.session});
+  const BackupSettingsView({super.key, required this.session, this.pickFolder, this.canBrowse});
 
   final Session session;
+
+  /// Opens the folder dialog; a null result means cancelled. Defaults to the system dialog (injectable for tests).
+  final Future<String?> Function()? pickFolder;
+
+  /// Whether the "Procurar" button shows. Defaults to Windows desktop only: on web and Android the chosen path
+  /// would not be a path on the server computer.
+  final bool? canBrowse;
 
   @override
   Widget build(BuildContext context) => LoadView<BackupSettings>(
     load: () async => BackupSettings.fromJson(await session.api.get('/api/admin/backup-settings') as Map<String, dynamic>),
-    builder: (context, data, reload) => _BackupForm(session: session, initial: data),
+    builder: (context, data, reload) => _BackupForm(session: session, initial: data, pickFolder: pickFolder, canBrowse: canBrowse),
   );
 }
 
 class _BackupForm extends StatefulWidget {
-  const _BackupForm({required this.session, required this.initial});
+  const _BackupForm({required this.session, required this.initial, this.pickFolder, this.canBrowse});
 
   final Session session;
   final BackupSettings initial;
+  final Future<String?> Function()? pickFolder;
+  final bool? canBrowse;
 
   @override
   State<_BackupForm> createState() => _BackupFormState();
@@ -100,6 +111,18 @@ class _BackupFormState extends State<_BackupForm> {
   late final _destination = TextEditingController(text: _saved.destination ?? '');
   late final _keep = TextEditingController(text: '${_saved.keep}');
   bool _busy = false;
+
+  bool get _canBrowse => widget.canBrowse ?? (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows);
+
+  Future<void> _browse() async {
+    try {
+      final picked = await (widget.pickFolder ?? () => FilePicker.getDirectoryPath(dialogTitle: 'Escolha a pasta de destino do backup'))();
+      if (picked == null || picked.trim().isEmpty || !mounted) return;
+      setState(() => _destination.text = picked.trim());
+    } catch (e) {
+      if (mounted) _tell(friendlyError(e));
+    }
+  }
 
   @override
   void dispose() {
@@ -191,11 +214,16 @@ class _BackupFormState extends State<_BackupForm> {
         TextField(
           key: const ValueKey('backup-destination'),
           controller: _destination,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Pasta ou unidade de destino da cópia',
-            helperText: 'Ex.: D:\\backups\\metagest ou \\\\servidor\\backups. Vazio = só guarda no computador do servidor.',
-            helperMaxLines: 3,
-            border: OutlineInputBorder(),
+            helperText:
+                'Ex.: D:\\backups\\metagest ou \\\\servidor\\backups. Vazio = só guarda no computador do servidor.'
+                '${_canBrowse ? ' A pasta vale para este computador; ela precisa existir no computador do servidor.' : ''}',
+            helperMaxLines: 4,
+            border: const OutlineInputBorder(),
+            suffixIcon: _canBrowse
+                ? IconButton(key: const ValueKey('backup-pick-folder'), tooltip: 'Procurar pasta', icon: const Icon(Icons.folder_open), onPressed: _busy ? null : _browse)
+                : null,
           ),
         ),
         const SizedBox(height: 16),
