@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +12,18 @@ import 'settings_widgets.dart';
 
 /// The agent on the server computer must have called in within this time, or the schedule is not being run.
 const backupAgentStaleAfter = Duration(minutes: 15);
+
+/// Live progress of a running backup (`progress` in `/api/admin/backup-settings`).
+class BackupProgress {
+  const BackupProgress({this.running = false, this.percent = 0, this.stage});
+
+  factory BackupProgress.fromJson(Map<String, dynamic> j) =>
+      BackupProgress(running: j['running'] == true, percent: ((j['percent'] as num?)?.toInt() ?? 0).clamp(0, 100), stage: j['stage'] as String?);
+
+  final bool running;
+  final int percent;
+  final String? stage;
+}
 
 /// Backup schedule as stored by the server (`/api/admin/backup-settings`).
 class BackupSettings {
@@ -26,6 +40,7 @@ class BackupSettings {
     this.lastRunMessage,
     this.agentSeenAt,
     this.nextRunAt,
+    this.progress,
   });
 
   factory BackupSettings.fromJson(Map<String, dynamic> j) {
@@ -44,6 +59,7 @@ class BackupSettings {
       lastRunMessage: j['lastRunMessage'] as String?,
       agentSeenAt: when('agentSeenAt'),
       nextRunAt: when('nextRunAt'),
+      progress: j['progress'] is Map<String, dynamic> ? BackupProgress.fromJson(j['progress'] as Map<String, dynamic>) : null,
     );
   }
 
@@ -59,11 +75,20 @@ class BackupSettings {
   final String? lastRunMessage;
   final DateTime? agentSeenAt;
   final DateTime? nextRunAt;
+  final BackupProgress? progress;
+
+  bool get running => progress?.running ?? false;
+
+  /// A "backup now" request the host agent has not picked up yet.
+  bool get waiting => runRequestedAt != null && (lastRunAt == null || runRequestedAt!.isAfter(lastRunAt!)) && !running;
 
   /// Body of the PUT: only what the admin edits.
   Map<String, dynamic> toJson() => {'enabled': enabled, 'frequency': frequency, 'timeOfDay': timeOfDay, 'weekday': weekday, 'destination': destination, 'keep': keep};
 
   bool get agentMissing => agentSeenAt == null || DateTime.now().difference(agentSeenAt!) > backupAgentStaleAfter;
+
+  /// The agent did not call in during the last 2 minutes (it polls every few seconds).
+  bool get agentSilent => agentSeenAt == null || DateTime.now().difference(agentSeenAt!) > const Duration(minutes: 2);
 }
 
 /// Admin view to configure the automatic database backup.
@@ -112,6 +137,13 @@ class _BackupFormState extends State<_BackupForm> {
   late final _keep = TextEditingController(text: '${_saved.keep}');
   bool _busy = false;
 
+  Timer? _poll;
+  int _ticks = 0;
+  int _waitTicks = 0;
+  bool _polling = false;
+
+  bool get _active => _status.waiting || _status.running;
+
   bool get _canBrowse => widget.canBrowse ?? (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows);
 
   Future<void> _browse() async {
@@ -125,11 +157,70 @@ class _BackupFormState extends State<_BackupForm> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _syncPolling();
+  }
+
+  @override
   void dispose() {
+    _poll?.cancel();
     _destination.dispose();
     _keep.dispose();
     super.dispose();
   }
+
+  void _syncPolling() {
+    if (_active && _poll == null) {
+      _ticks = 0;
+      _waitTicks = 0;
+      _poll = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    }
+  }
+
+  void _stopPolling() {
+    _poll?.cancel();
+    _poll = null;
+  }
+
+  Future<void> _tick() async {
+    if (_polling) return;
+    _polling = true;
+    try {
+      if (++_ticks > 600) {
+        _stopPolling();
+        if (mounted) setState(() {});
+        return;
+      }
+      final res = BackupSettings.fromJson(await widget.session.api.get('/api/admin/backup-settings') as Map<String, dynamic>);
+      if (!mounted) return;
+      final wasActive = _active;
+      setState(() {
+        _status = res;
+        _waitTicks = res.waiting ? _waitTicks + 1 : 0;
+      });
+      if (wasActive && !_active) {
+        _stopPolling();
+        _tellResult(res);
+      }
+    } catch (e) {
+      debugPrint('backup poll failed: $e');
+    } finally {
+      _polling = false;
+    }
+  }
+
+  void _tellResult(BackupSettings res) {
+    final ok = res.lastRunOk != false;
+    final text = (res.lastRunMessage?.isNotEmpty ?? false) ? res.lastRunMessage! : (ok ? 'Backup concluído' : 'Backup falhou');
+    final scheme = Theme.of(context).colorScheme;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(text, style: ok ? null : TextStyle(color: scheme.onError)), backgroundColor: ok ? null : scheme.error),
+    );
+  }
+
+  /// The agent had over a minute to react and has not called in lately.
+  bool get _agentLate => _status.agentMissing || (_waitTicks > 60 && _status.agentSilent);
 
   BackupSettings _edited() => BackupSettings(
     enabled: _enabled,
@@ -161,6 +252,7 @@ class _BackupFormState extends State<_BackupForm> {
         _status = res;
         if (isSave) _saved = res;
       });
+      _syncPolling();
       _tell(done);
     } catch (e) {
       if (mounted) _tell(friendlyError(e));
@@ -178,7 +270,7 @@ class _BackupFormState extends State<_BackupForm> {
     return _call(() => widget.session.api.put('/api/admin/backup-settings', _edited().toJson()), 'Configuração salva', isSave: true);
   }
 
-  Future<void> _runNow() => _call(() => widget.session.api.post('/api/admin/backup-settings/run-now', <String, dynamic>{}), 'Pedido enviado. O backup começa em até 5 minutos.');
+  Future<void> _runNow() => _call(() => widget.session.api.post('/api/admin/backup-settings/run-now', <String, dynamic>{}), 'Pedido enviado. O backup começa em instantes.');
 
   Future<void> _pickTime() async {
     final parts = _time.split(':');
@@ -198,8 +290,9 @@ class _BackupFormState extends State<_BackupForm> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_status.agentMissing) const _AgentWarning(),
+        if (_agentLate) const _AgentWarning(),
         _BackupStatusBlock(settings: _status),
+        if (_active) _BackupProgressBar(settings: _status),
         const SizedBox(height: 16),
         SwitchListTile(
           key: const ValueKey('backup-enabled'),
@@ -239,7 +332,15 @@ class _BackupFormState extends State<_BackupForm> {
           runSpacing: 8,
           children: [
             FilledButton.icon(key: const ValueKey('backup-save'), onPressed: _busy ? null : _save, icon: const Icon(Icons.save_outlined), label: const Text('Salvar')),
-            OutlinedButton.icon(key: const ValueKey('backup-run-now'), onPressed: _busy ? null : _runNow, icon: const Icon(Icons.backup_outlined), label: const Text('Fazer backup agora')),
+            Tooltip(
+              message: _active ? 'Backup em andamento' : '',
+              child: OutlinedButton.icon(
+                key: const ValueKey('backup-run-now'),
+                onPressed: _busy || _active ? null : _runNow,
+                icon: const Icon(Icons.backup_outlined),
+                label: Text(_active ? 'Backup em andamento' : 'Fazer backup agora'),
+              ),
+            ),
           ],
         ),
       ],
@@ -287,6 +388,44 @@ class _BackupFormState extends State<_BackupForm> {
         ),
     ],
   );
+}
+
+class _BackupProgressBar extends StatelessWidget {
+  const _BackupProgressBar({required this.settings});
+
+  final BackupSettings settings;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final p = settings.progress;
+    final running = settings.running && p != null;
+    return Semantics(
+      label: 'Progresso do backup',
+      child: Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: LinearProgressIndicator(key: const ValueKey('backup-progress'), value: running ? p.percent / 100 : null)),
+                if (running) ...[
+                  const SizedBox(width: 12),
+                  Text('${p.percent}%', key: const ValueKey('backup-progress-percent'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                ],
+              ],
+            ),
+            const SizedBox(height: 4),
+            if (!running)
+              Text('Aguardando o programa de backup…', style: theme.textTheme.bodySmall)
+            else if (p.stage != null && p.stage!.isNotEmpty)
+              Text(p.stage!, style: theme.textTheme.bodySmall),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _AgentWarning extends StatelessWidget {
@@ -350,7 +489,7 @@ class _BackupStatusBlock extends StatelessWidget {
             if (s.lastRunMessage != null && s.lastRunMessage!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(s.lastRunMessage!)),
             const SizedBox(height: 6),
             Text(s.enabled && s.nextRunAt != null ? 'Próximo: ${formatMoment(s.nextRunAt!)}' : 'Próximo: nenhum agendado', style: theme.textTheme.bodySmall),
-            if (s.runRequestedAt != null) Text('Pedido de backup agora aguardando: ${formatMoment(s.runRequestedAt!)}', style: theme.textTheme.bodySmall),
+            if (s.waiting) Text('Pedido de backup agora aguardando: ${formatMoment(s.runRequestedAt!)}', style: theme.textTheme.bodySmall),
           ],
         ),
       ),

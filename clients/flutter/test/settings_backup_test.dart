@@ -27,35 +27,60 @@ Map<String, dynamic> _settings({Object? agentSeenAt = 'now', bool enabled = true
   'nextRunAt': DateTime.now().toUtc().add(const Duration(hours: 5)).toIso8601String(),
 };
 
-Future<(Session, List<http.Request>)> _pump(WidgetTester tester, Map<String, dynamic> initial, {Widget Function(Session)? home, int putStatus = 200}) async {
+/// When set, GET answers with this instead of the stored settings (lets a test move the server state).
+Map<String, dynamic>? _live;
+bool _failGet = false;
+
+Future<(Session, List<http.Request>)> _pump(WidgetTester tester, Map<String, dynamic> initial, {Widget Function(Session)? home, int putStatus = 200, bool settle = true}) async {
   tester.view.physicalSize = const Size(1200, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final log = <http.Request>[];
   var current = initial;
+  _live = null;
+  _failGet = false;
   final client = MockClient((r) async {
     log.add(r);
     if (r.url.path == '/api/admin/backup-status') return _json({'configured': false, 'count': 0});
     if (r.url.path == '/api/admin/backup-settings' && r.method == 'PUT') {
-      if (putStatus != 200) return _json({'title': 'Dados inválidos', 'status': putStatus, 'errors': {'keep': ['Valor inválido']}}, putStatus);
+      if (putStatus != 200) {
+        return _json({
+          'title': 'Dados inválidos',
+          'status': putStatus,
+          'errors': {
+            'keep': ['Valor inválido'],
+          },
+        }, putStatus);
+      }
       current = {...current, ...jsonDecode(r.body) as Map<String, dynamic>};
       return _json(current);
     }
     if (r.url.path == '/api/admin/backup-settings/run-now') return _json({...current, 'runRequestedAt': DateTime.now().toUtc().toIso8601String()});
-    return _json(current);
+    if (_failGet && r.method == 'GET') return _json({'title': 'Erro'}, 500);
+    return _json(_live ?? current);
   });
-  final session = Session(api: ApiClient(baseUrl: 'http://api.test', client: client, token: 'tok'))
-    ..username = 'ana'
-    ..role = 'Admin';
+  final session =
+      Session(
+          api: ApiClient(baseUrl: 'http://api.test', client: client, token: 'tok'),
+        )
+        ..username = 'ana'
+        ..role = 'Admin';
   await tester.pumpWidget(
     MaterialApp(
       locale: const Locale('pt', 'BR'),
       supportedLocales: const [Locale('pt', 'BR')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      home: Scaffold(body: SingleChildScrollView(child: home?.call(session) ?? BackupSettingsView(session: session))),
+      home: Scaffold(
+        body: SingleChildScrollView(child: home?.call(session) ?? BackupSettingsView(session: session)),
+      ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+    await tester.pump();
+  }
   return (session, log);
 }
 
@@ -64,6 +89,19 @@ Future<void> _tap(WidgetTester tester, Finder f) async {
   await tester.pumpAndSettle();
   await tester.tap(f);
   await tester.pumpAndSettle();
+}
+
+Map<String, dynamic> _progress(int percent, String? stage, {bool running = true}) => {
+  'running': running,
+  'percent': percent,
+  'stage': stage,
+  'startedAt': null,
+  'updatedAt': null,
+};
+
+Future<void> _unmount(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox());
+  await tester.pump();
 }
 
 void main() {
@@ -132,10 +170,110 @@ void main() {
 
   testWidgets('Fazer backup agora posts run-now and says when it starts', (tester) async {
     final (_, log) = await _pump(tester, _settings());
-    await _tap(tester, find.byKey(const ValueKey('backup-run-now')));
+    await tester.tap(find.byKey(const ValueKey('backup-run-now')));
+    await tester.pump();
+    await tester.pump();
     expect(log.where((r) => r.method == 'POST' && r.url.path == '/api/admin/backup-settings/run-now'), hasLength(1));
-    expect(find.text('Pedido enviado. O backup começa em até 5 minutos.'), findsOneWidget);
+    expect(find.text('Pedido enviado. O backup começa em instantes.'), findsOneWidget);
     expect(find.textContaining('Pedido de backup agora aguardando'), findsOneWidget);
+    expect(find.text('Aguardando o programa de backup…'), findsOneWidget);
+    final bar = tester.widget<LinearProgressIndicator>(find.byKey(const ValueKey('backup-progress')));
+    expect(bar.value, isNull);
+    expect(find.text('Backup em andamento'), findsOneWidget);
+    expect(tester.widget<OutlinedButton>(find.byKey(const ValueKey('backup-run-now'))).onPressed, isNull);
+    final before = log.where((r) => r.method == 'GET').length;
+    await tester.pump(const Duration(seconds: 1));
+    expect(log.where((r) => r.method == 'GET').length, before + 1);
+    await _unmount(tester);
+  });
+
+  testWidgets('shows the percentage and the stage while the backup runs, then the result', (tester) async {
+    final requested = DateTime.now().toUtc().toIso8601String();
+    await _pump(tester, {..._settings(), 'runRequestedAt': requested}, settle: false);
+    expect(find.text('Aguardando o programa de backup…'), findsOneWidget);
+    _live = {..._settings(), 'runRequestedAt': requested, 'progress': _progress(42, 'Copiando o banco')};
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.text('42%'), findsOneWidget);
+    expect(find.text('Copiando o banco'), findsOneWidget);
+    expect(find.text('Aguardando o programa de backup…'), findsNothing);
+    expect(tester.widget<LinearProgressIndicator>(find.byKey(const ValueKey('backup-progress'))).value, 0.42);
+    expect(tester.widget<OutlinedButton>(find.byKey(const ValueKey('backup-run-now'))).onPressed, isNull);
+    expect(find.byWidgetPredicate((w) => w is Semantics && w.properties.label == 'Progresso do backup'), findsOneWidget);
+
+    final done = DateTime.now().toUtc().add(const Duration(seconds: 3)).toIso8601String();
+    _live = {
+      ..._settings(),
+      'runRequestedAt': requested,
+      'lastRunAt': done,
+      'lastRunMessage': 'Cópia ebt-9.dump criada',
+      'progress': _progress(100, null, running: false),
+    };
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('backup-progress')), findsNothing);
+    expect(find.text('Cópia ebt-9.dump criada'), findsWidgets);
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(tester.widget<OutlinedButton>(find.byKey(const ValueKey('backup-run-now'))).onPressed, isNotNull);
+    await _unmount(tester);
+  });
+
+  testWidgets('a failed run shows the failure message and keeps polling quiet on errors', (tester) async {
+    final requested = DateTime.now().toUtc().toIso8601String();
+    await _pump(tester, {..._settings(), 'progress': _progress(10, 'Iniciando')}, settle: false);
+    expect(find.text('10%'), findsOneWidget);
+    _live = {
+      ..._settings(lastRunOk: false),
+      'runRequestedAt': requested,
+      'lastRunAt': DateTime.now().toUtc().add(const Duration(seconds: 5)).toIso8601String(),
+      'lastRunMessage': 'Disco cheio',
+    };
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.text('Disco cheio'), findsWidgets);
+    expect(find.byKey(const ValueKey('backup-progress')), findsNothing);
+    expect(find.textContaining('Último backup falhou'), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('warns when the agent stays silent for over a minute while waiting', (tester) async {
+    final requested = DateTime.now().toUtc().toIso8601String();
+    final seen = DateTime.now().toUtc().subtract(const Duration(minutes: 5)).toIso8601String();
+    await _pump(tester, {..._settings(agentSeenAt: seen), 'runRequestedAt': requested}, settle: false);
+    expect(find.byKey(const ValueKey('backup-agent-warning')), findsNothing);
+    for (var i = 0; i < 62; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(find.byKey(const ValueKey('backup-agent-warning')), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('polling gives up after ten minutes and the timer dies with the view', (tester) async {
+    final requested = DateTime.now().toUtc().toIso8601String();
+    final (_, log) = await _pump(tester, {..._settings(), 'runRequestedAt': requested}, settle: false);
+    for (var i = 0; i < 610; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    final gets = log.where((r) => r.method == 'GET').length;
+    await tester.pump(const Duration(seconds: 5));
+    expect(log.where((r) => r.method == 'GET').length, gets);
+    await _unmount(tester);
+  });
+
+  testWidgets('a poll error does not stop the polling or show a message', (tester) async {
+    final requested = DateTime.now().toUtc().toIso8601String();
+    await _pump(tester, {..._settings(), 'runRequestedAt': requested}, settle: false);
+    _failGet = true;
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.byType(SnackBar), findsNothing);
+    expect(find.byKey(const ValueKey('backup-progress')), findsOneWidget);
+    _failGet = false;
+    _live = {..._settings(), 'runRequestedAt': requested, 'progress': _progress(7, null)};
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.text('7%'), findsOneWidget);
+    await _unmount(tester);
   });
 
   testWidgets('warns when the agent never called in or is late; failed run is flagged', (tester) async {
@@ -161,7 +299,11 @@ void main() {
 
   testWidgets('picked folder fills the field and is saved; cancelled picker changes nothing', (tester) async {
     var answer = r'E:\copias';
-    final (_, log) = await _pump(tester, _settings(destination: r'D:\backups'), home: (s) => BackupSettingsView(session: s, canBrowse: true, pickFolder: () async => answer.isEmpty ? null : answer));
+    final (_, log) = await _pump(
+      tester,
+      _settings(destination: r'D:\backups'),
+      home: (s) => BackupSettingsView(session: s, canBrowse: true, pickFolder: () async => answer.isEmpty ? null : answer),
+    );
     answer = '';
     await _tap(tester, find.byKey(const ValueKey('backup-pick-folder')));
     expect(find.text(r'D:\backups'), findsOneWidget);
@@ -174,13 +316,28 @@ void main() {
   });
 
   testWidgets('a picker failure is shown as a friendly message', (tester) async {
-    await _pump(tester, _settings(), home: (s) => BackupSettingsView(session: s, canBrowse: true, pickFolder: () async => throw StateError('boom')));
+    await _pump(
+      tester,
+      _settings(),
+      home: (s) => BackupSettingsView(session: s, canBrowse: true, pickFolder: () async => throw StateError('boom')),
+    );
     await _tap(tester, find.byKey(const ValueKey('backup-pick-folder')));
     expect(find.textContaining('StateError'), findsNothing);
     expect(find.byType(SnackBar), findsOneWidget);
   });
   testWidgets('Administração links to the view', (tester) async {
-    await _pump(tester, _settings(), home: (s) => AdminSection(session: s, open: (title, builder) => Navigator.of(tester.element(find.byType(Scaffold).first)).push(MaterialPageRoute<void>(builder: (c) => Scaffold(body: SingleChildScrollView(child: builder(c))))),));
+    await _pump(
+      tester,
+      _settings(),
+      home: (s) => AdminSection(
+        session: s,
+        open: (title, builder) => Navigator.of(tester.element(find.byType(Scaffold).first)).push(
+          MaterialPageRoute<void>(
+            builder: (c) => Scaffold(body: SingleChildScrollView(child: builder(c))),
+          ),
+        ),
+      ),
+    );
     await _tap(tester, find.byKey(const ValueKey('settings-open-backup')));
     expect(find.byType(BackupSettingsView), findsOneWidget);
   });
