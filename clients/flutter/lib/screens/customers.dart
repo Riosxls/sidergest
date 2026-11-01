@@ -315,7 +315,9 @@ class _CustomerAddressesState extends State<_CustomerAddresses> {
 
   Future<dynamic> _fetch() => widget.session.api.get(_path);
 
-  void _reload() => setState(() => _future = _fetch());
+  void _reload() => setState(() {
+    _future = _fetch();
+  });
 
   Future<void> _edit([Map<String, dynamic>? current]) async {
     final s = widget.session;

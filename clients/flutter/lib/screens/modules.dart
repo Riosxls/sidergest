@@ -76,7 +76,9 @@ class _ModuleScreenState extends State<ModuleScreen> {
   }
 
   Future<void> _refresh() {
-    setState(() => _data = _fetch());
+    setState(() {
+      _data = _fetch();
+    });
     return _settle();
   }
 
