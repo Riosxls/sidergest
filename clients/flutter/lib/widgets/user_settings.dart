@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../api.dart';
-import '../screens/data_reset.dart';
-import '../screens/legacy_cleanup.dart';
 import '../session.dart';
 import 'command_palette.dart';
 import 'record_list.dart';
-
-/// Personal preferences of the signed-in user on this device (not the system parameters under Parâmetros).
-Future<void> showUserSettings(BuildContext context, Session session) => showDialog<void>(context: context, builder: (_) => _UserSettings(session: session));
 
 /// Minimum length the server enforces for passwords.
 const minPasswordLength = 10;
@@ -19,130 +14,6 @@ Future<void> clearLocalCache(Session session) async {
   NameCache.clear();
   session.api.clearVersions();
   await RecentStore.clear();
-}
-
-class _UserSettings extends StatelessWidget {
-  const _UserSettings({required this.session});
-
-  final Session session;
-
-  Future<void> _clearCache(BuildContext context) async {
-    await clearLocalCache(session);
-    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cache do aplicativo limpo')));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    Widget title(String text) => Padding(
-      padding: const EdgeInsets.only(top: 20, bottom: 8),
-      child: Text(text, style: theme.textTheme.titleSmall),
-    );
-    return AlertDialog(
-      title: const Text('Configurações'),
-      content: SizedBox(
-        width: 480,
-        child: ListenableBuilder(
-          listenable: session,
-          builder: (context, _) => SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Aparência', style: theme.textTheme.titleSmall),
-                const SizedBox(height: 8),
-                SegmentedButton<ThemeMode>(
-                  key: const ValueKey('settings-theme'),
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.brightness_auto_outlined), label: Text('Sistema')),
-                    ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode_outlined), label: Text('Claro')),
-                    ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode_outlined), label: Text('Escuro')),
-                  ],
-                  selected: {session.themeMode},
-                  onSelectionChanged: (s) => session.setThemeMode(s.first),
-                ),
-                const SizedBox(height: 12),
-                SegmentedButton<bool>(
-                  key: const ValueKey('settings-density'),
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: false, icon: Icon(Icons.density_small), label: Text('Compacto')),
-                    ButtonSegment(value: true, icon: Icon(Icons.density_medium), label: Text('Confortável')),
-                  ],
-                  selected: {session.comfortable},
-                  onSelectionChanged: (s) => session.setComfortable(s.first),
-                ),
-                const SizedBox(height: 12),
-                SegmentedButton<double>(
-                  key: const ValueKey('settings-text-size'),
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: 1.0, label: Text('Texto normal')),
-                    ButtonSegment(value: 1.15, label: Text('Grande')),
-                    ButtonSegment(value: 1.3, label: Text('Maior')),
-                  ],
-                  selected: {session.textScale},
-                  onSelectionChanged: (s) => session.setTextScale(s.first),
-                ),
-                title('Sessão'),
-                SwitchListTile(
-                  key: const ValueKey('settings-remember'),
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Manter conectado neste dispositivo'),
-                  subtitle: Text(session.remember ? 'Você continua conectado ao reabrir o aplicativo' : 'A sessão termina ao fechar o aplicativo'),
-                  value: session.remember,
-                  onChanged: session.setRemember,
-                ),
-                OutlinedButton.icon(
-                  key: const ValueKey('settings-change-password'),
-                  onPressed: () => showChangePassword(context, session),
-                  icon: const Icon(Icons.password_outlined),
-                  label: const Text('Alterar minha senha…'),
-                ),
-                title('Dados do aplicativo'),
-                const Text('Limpa os nomes e as buscas recentes guardados neste dispositivo. Seus dados no servidor e o login não mudam.'),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  key: const ValueKey('settings-clear-cache'),
-                  onPressed: () => _clearCache(context),
-                  icon: const Icon(Icons.cleaning_services_outlined),
-                  label: const Text('Limpar cache do aplicativo'),
-                ),
-                title('Servidor'),
-                SelectableText(session.baseUrl),
-                if (session.isAdmin) ...[
-                  title('Administração'),
-                  const Text('Ordens de fabricação do sistema antigo: preenche o processo das que estão vazias e cancela as vencidas que nunca andaram.'),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    key: const ValueKey('open-legacy-cleanup'),
-                    onPressed: () => showLegacyCleanupDialog(context, session),
-                    icon: const Icon(Icons.auto_fix_high_outlined),
-                    label: const Text('Limpeza do legado…'),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Apaga orçamentos, pedidos, entregas, ordens de fabricação e outros registros do dia a dia para recomeçar do zero. '
-                    'Produtos, materiais, clientes, fornecedores, ferramentas e preços ficam como estão.',
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    key: const ValueKey('open-data-reset'),
-                    style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),
-                    onPressed: () => showDataResetDialog(context, session),
-                    icon: const Icon(Icons.delete_sweep_outlined),
-                    label: const Text('Limpar dados de movimento…'),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fechar'))],
-    );
-  }
 }
 
 Future<void> showChangePassword(BuildContext context, Session session) => showDialog<void>(context: context, builder: (_) => _ChangePassword(session: session));

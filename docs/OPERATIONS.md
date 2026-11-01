@@ -12,6 +12,7 @@ powershell -File scripts\backup.ps1 -CopyTo \\server\ti  # also copy it to anoth
 - `scripts\start.ps1` takes a dump (`backups\ebt-pre-start-*.dump`) before it rebuilds or migrates, and stops if the dump fails.
 - The newest 14 dumps are kept (`-Keep` changes that). `backups\` and `*.dump` are gitignored: dumps hold real data.
 - A dump on the same disk is not a backup against disk failure. Use `-CopyTo` with an external drive or a share.
+- The API container mounts `backups` read-only at `/backups` (`Backup__Directory`); admins see the newest dump in Configurações through `GET /api/admin/backup-status`. Recreate the `api` container once after pulling this change so the mount exists.
 
 ### Nightly backup (Windows Task Scheduler)
 

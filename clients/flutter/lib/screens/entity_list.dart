@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
+import '../prefs.dart';
 import '../session.dart';
 import '../widgets/entity_form.dart';
 import 'product_detail.dart';
@@ -20,7 +21,7 @@ class EntityListScreen extends StatefulWidget {
 }
 
 class _EntityListScreenState extends State<EntityListScreen> {
-  static const pageSize = 50;
+  static int get pageSize => AppPrefs.rowsPerPage;
   PageResult? _page;
   String? _error;
   bool _loading = false;

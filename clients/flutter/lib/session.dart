@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
+import 'prefs.dart';
 import 'widgets/alerts.dart';
 
 const defaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://localhost:8080');
@@ -41,6 +42,49 @@ class Session extends ChangeNotifier {
 
   /// Username offered on the login screen (kept only while "remember" is on).
   String lastUser = '';
+
+  /// Screen opened after sign-in (a nav item id).
+  String homeScreen = 'dashboard';
+
+  /// Minutes between automatic Painel refreshes; 0 turns it off.
+  int dashboardRefreshMinutes = 2;
+
+  /// Rows per page in lists (see [AppPrefs.rowsPerPage]).
+  int rowsPerPage = 50;
+
+  bool reduceMotion = false;
+  bool highContrast = false;
+
+  /// Ask to print or download a paper before a step ends (see `printGate`).
+  bool printPrompts = true;
+
+  /// Sign out after this many idle minutes; 0 never.
+  int idleLockMinutes = 0;
+
+  /// Set when the idle lock signed the user out, so the login screen can say why. Cleared by the next login.
+  bool idleSignedOut = false;
+
+  /// Shown instead of the username when set (kept on the server).
+  String? displayName;
+  String? email;
+
+  static const dashboardRefreshChoices = [0, 2, 5, 10];
+  static const idleLockChoices = [0, 15, 30, 60];
+
+  /// Name this device gives itself on the server's list of connected devices.
+  static String get deviceLabel {
+    final os = switch (defaultTargetPlatform) {
+      TargetPlatform.windows => 'Windows',
+      TargetPlatform.android => 'Android',
+      TargetPlatform.macOS => 'macOS',
+      TargetPlatform.linux => 'Linux',
+      TargetPlatform.iOS => 'iOS',
+      TargetPlatform.fuchsia => 'Fuchsia',
+    };
+    return kIsWeb ? 'Navegador' : os;
+  }
+
+  String get shownName => (displayName?.trim().isNotEmpty ?? false) ? displayName!.trim() : (username ?? '');
 
   bool get loggedIn => api.token != null && ((expiresAt?.isAfter(DateTime.now()) ?? true) || _refreshValid);
   bool get canWrite => permissions.contains('write');
@@ -79,6 +123,18 @@ class Session extends ChangeNotifier {
       lastUser = p.getString('lastUser') ?? '';
       comfortable = p.getBool('comfortable') ?? false;
       textScale = (p.getDouble('textScale') ?? 1).clamp(1.0, 1.5);
+      homeScreen = p.getString('homeScreen') ?? 'dashboard';
+      final refresh = p.getInt('dashboardRefreshMinutes') ?? 2;
+      dashboardRefreshMinutes = dashboardRefreshChoices.contains(refresh) ? refresh : 2;
+      final rows = p.getInt('rowsPerPage') ?? 50;
+      rowsPerPage = AppPrefs.rowsPerPageChoices.contains(rows) ? rows : 50;
+      reduceMotion = p.getBool('reduceMotion') ?? false;
+      highContrast = p.getBool('highContrast') ?? false;
+      printPrompts = p.getBool('printPrompts') ?? true;
+      final idle = p.getInt('idleLockMinutes') ?? 0;
+      idleLockMinutes = idleLockChoices.contains(idle) ? idle : 0;
+      AppPrefs.rowsPerPage = rowsPerPage;
+      AppPrefs.printPrompts = printPrompts;
     } catch (_) {}
     try {
       final v = await _storage.readAll();
@@ -109,6 +165,8 @@ class Session extends ChangeNotifier {
       final me = await api.get('/api/auth/me') as Map<String, dynamic>;
       role = me['role'] as String? ?? role;
       if (me['permissions'] is List) permissions = (me['permissions'] as List).cast<String>().toSet();
+      displayName = me['displayName'] as String?;
+      email = me['email'] as String?;
       if (remember) await _storage.write(key: 'permissions', value: jsonEncode(permissions.toList()));
     } catch (_) {}
   }
@@ -146,7 +204,8 @@ class Session extends ChangeNotifier {
     api.baseUrl = url.trim();
     api.token = null;
     api.refreshToken = null;
-    final r = await api.post('/api/auth/login', {'username': user, 'password': password}) as Map<String, dynamic>;
+    final r = await api.post('/api/auth/login', {'username': user, 'password': password, 'device': deviceLabel}) as Map<String, dynamic>;
+    idleSignedOut = false;
     this.remember = remember;
     lastUser = remember ? user.trim() : '';
     try {
@@ -201,6 +260,72 @@ class Session extends ChangeNotifier {
     try {
       await (await SharedPreferences.getInstance()).setDouble('textScale', value);
     } catch (_) {}
+  }
+
+  Future<void> _savePref(String key, Object value) async {
+    notifyListeners();
+    try {
+      final p = await SharedPreferences.getInstance();
+      switch (value) {
+        case bool v:
+          await p.setBool(key, v);
+        case int v:
+          await p.setInt(key, v);
+        case String v:
+          await p.setString(key, v);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> setHomeScreen(String id) {
+    homeScreen = id;
+    return _savePref('homeScreen', id);
+  }
+
+  Future<void> setDashboardRefreshMinutes(int minutes) {
+    dashboardRefreshMinutes = minutes;
+    return _savePref('dashboardRefreshMinutes', minutes);
+  }
+
+  Future<void> setRowsPerPage(int rows) {
+    rowsPerPage = rows;
+    AppPrefs.rowsPerPage = rows;
+    return _savePref('rowsPerPage', rows);
+  }
+
+  Future<void> setReduceMotion(bool value) {
+    reduceMotion = value;
+    return _savePref('reduceMotion', value);
+  }
+
+  Future<void> setHighContrast(bool value) {
+    highContrast = value;
+    return _savePref('highContrast', value);
+  }
+
+  Future<void> setPrintPrompts(bool value) {
+    printPrompts = value;
+    AppPrefs.printPrompts = value;
+    return _savePref('printPrompts', value);
+  }
+
+  Future<void> setIdleLockMinutes(int minutes) {
+    idleLockMinutes = minutes;
+    return _savePref('idleLockMinutes', minutes);
+  }
+
+  /// Saves the display name and email on the server; empty text clears a field.
+  Future<void> saveProfile({String? displayName, String? email}) async {
+    final r = await api.put('/api/auth/profile', {'displayName': displayName, 'email': email}) as Map<String, dynamic>;
+    this.displayName = r['displayName'] as String?;
+    this.email = r['email'] as String?;
+    notifyListeners();
+  }
+
+  /// Signs every other device out; this one keeps working with fresh tokens.
+  Future<void> revokeOtherSessions() async {
+    final r = await api.post('/api/auth/sessions/revoke-others', {'refreshToken': api.refreshToken}) as Map<String, dynamic>;
+    await _apply(r);
   }
 
   /// Changes the signed-in user's own password. The server signs every other session out and returns fresh tokens for this one.

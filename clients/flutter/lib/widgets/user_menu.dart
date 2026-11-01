@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../screens/settings/settings_dialog.dart';
 import '../session.dart';
-import 'user_settings.dart';
 
 class UserMenu extends StatelessWidget {
   const UserMenu({super.key, required this.session});
@@ -9,31 +9,8 @@ class UserMenu extends StatelessWidget {
   final Session session;
 
   String get _initials {
-    final name = (session.username ?? '?').trim();
+    final name = session.shownName.trim();
     return name.isEmpty ? '?' : name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
-  }
-
-  void _profile(BuildContext context) => showDialog<void>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Perfil'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Usuário: ${session.username ?? ''}'),
-          Text('Perfil de acesso: ${session.role ?? ''}'),
-          Text('Servidor: ${session.baseUrl}'),
-          if (session.expiresAt != null) Text('Sessão válida até ${_fmt(session.expiresAt!.toLocal())}'),
-        ],
-      ),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fechar'))],
-    ),
-  );
-
-  static String _fmt(DateTime t) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(t.day)}/${two(t.month)}/${t.year} ${two(t.hour)}:${two(t.minute)}';
   }
 
   @override
@@ -45,7 +22,7 @@ class UserMenu extends StatelessWidget {
       onSelected: (v) {
         switch (v) {
           case 'profile':
-            _profile(context);
+            showUserSettings(context, session, section: 'account');
           case 'settings':
             showUserSettings(context, session);
           case 'logout':
@@ -58,7 +35,7 @@ class UserMenu extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(session.username ?? '', style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.onSurface)),
+              Text(session.shownName, style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.onSurface)),
               Text(session.role ?? '', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ],
           ),

@@ -37,12 +37,12 @@ public class TokenService(JwtOptions options)
     public static string HashRefresh(string token) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
 
     /// <summary>Creates, stores and returns a new opaque refresh token for the user (only its hash is persisted).</summary>
-    public async Task<(string Token, DateTimeOffset ExpiresAt)> NewRefreshAsync(AppUser user, EbtDbContext db, CancellationToken ct)
+    public async Task<(string Token, DateTimeOffset ExpiresAt)> NewRefreshAsync(AppUser user, EbtDbContext db, CancellationToken ct, DeviceInfo? device = null)
     {
         var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         var now = DateTimeOffset.UtcNow;
         var expires = now.AddDays(options.RefreshDays);
-        db.RefreshTokens.Add(new RefreshToken { UserId = user.Id, TokenHash = HashRefresh(token), CreatedAt = now, ExpiresAt = expires });
+        db.RefreshTokens.Add(new RefreshToken { UserId = user.Id, TokenHash = HashRefresh(token), CreatedAt = now, ExpiresAt = expires, Device = device?.Device, UserAgent = device?.UserAgent, Ip = device?.Ip });
         await db.RefreshTokens.Where(r => r.UserId == user.Id && r.ExpiresAt < now).ExecuteDeleteAsync(ct);
         await db.SaveChangesAsync(ct);
         return (token, expires);
@@ -80,11 +80,23 @@ public class TokenService(JwtOptions options)
     }
 }
 
-public record LoginRequest(string? Username, string? Password);
+public record DeviceInfo(string? Device, string? UserAgent, string? Ip)
+{
+    public static DeviceInfo From(string? device, HttpContext http)
+    {
+        static string? Cut(string? s, int max) => string.IsNullOrWhiteSpace(s) ? null : s.Trim()[..Math.Min(max, s.Trim().Length)];
+        return new(Cut(device, 120), Cut(http.Request.Headers.UserAgent.ToString(), 200), Cut(http.Connection.RemoteIpAddress?.ToString(), 45));
+    }
+}
+
+public record LoginRequest(string? Username, string? Password, string? Device = null);
+public record SessionsRequest(string? RefreshToken);
+public record SessionDto(long Id, string? Device, string? UserAgent, string? Ip, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, bool Current);
+public record ProfileRequest(string? DisplayName, string? Email);
 public record LoginResponse(string Token, DateTimeOffset ExpiresAt, string Username, UserRole Role, string[] Permissions, string RefreshToken, DateTimeOffset RefreshExpiresAt);
 public record RefreshRequest(string? RefreshToken);
 public record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
-public record UserDto(int Id, string Username, UserRole Role, bool Active, bool Locked = false);
+public record UserDto(int Id, string Username, UserRole Role, bool Active, bool Locked = false, string? DisplayName = null, string? Email = null);
 public record CreateUserRequest(string Username, string Password, UserRole Role);
 public record UpdateUserRequest(UserRole Role, bool Active, string? Password);
 
@@ -141,7 +153,7 @@ public static class AuthEndpoints
             await db.SaveChangesAsync(ct);
             var (token, expires) = tokens.Issue(user);
             log.LogInformation("User {User} logged in from {Ip}", user.Username, http.Connection.RemoteIpAddress);
-            var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct);
+            var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct, DeviceInfo.From(req.Device, http));
             return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires));
         }).AllowAnonymous().RequireRateLimiting(Policies.LoginLimiter);
 
@@ -166,7 +178,7 @@ public static class AuthEndpoints
             var claimed = await db.RefreshTokens.Where(r => r.Id == stored.Id && r.RevokedAt == null).ExecuteUpdateAsync(s => s.SetProperty(r => r.RevokedAt, now), ct);
             if (claimed == 0) return Results.Unauthorized();
             var (token, expires) = tokens.Issue(user);
-            var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct);
+            var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct, new DeviceInfo(stored.Device, stored.UserAgent, stored.Ip));
             return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires));
         }).AllowAnonymous().RequireRateLimiting(Policies.LoginLimiter);
 
@@ -180,12 +192,73 @@ public static class AuthEndpoints
             return Results.NoContent();
         }).AllowAnonymous().RequireRateLimiting(Policies.LoginLimiter);
 
-        auth.MapGet("/me", (ClaimsPrincipal principal) => Results.Ok(new
+        static object Me(ClaimsPrincipal principal, AppUser? user) => new
         {
             username = principal.Identity!.Name,
             role = principal.FindFirstValue(ClaimTypes.Role),
-            permissions = Enum.TryParse<UserRole>(principal.FindFirstValue(ClaimTypes.Role), out var r) ? Access.PoliciesFor(r) : [Policies.Read]
-        })).RequireAuthorization(Policies.Read);
+            permissions = Enum.TryParse<UserRole>(principal.FindFirstValue(ClaimTypes.Role), out var r) ? Access.PoliciesFor(r) : [Policies.Read],
+            displayName = user?.DisplayName,
+            email = user?.Email
+        };
+
+        auth.MapGet("/me", async (EbtDbContext db, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            var user = int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id) ? await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, ct) : null;
+            return Results.Ok(Me(principal, user));
+        }).RequireAuthorization(Policies.Read);
+
+        auth.MapPut("/profile", async (ProfileRequest req, EbtDbContext db, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
+            var user = await db.Users.FindAsync([id], ct);
+            if (user is null || !user.Active) return Results.Unauthorized();
+            var name = string.IsNullOrWhiteSpace(req.DisplayName) ? null : req.DisplayName.Trim();
+            var email = string.IsNullOrWhiteSpace(req.Email) ? null : req.Email.Trim();
+            var errors = Crud.Errors()
+                .Require(name is null || name.Length <= 120, "displayName", "At most 120 characters")
+                .Require(email is null || (email.Length <= 200 && email.Contains('@') && !email.Any(char.IsWhiteSpace)), "email", "Invalid email");
+            if (errors.Count > 0) return Results.ValidationProblem(errors);
+            user.DisplayName = name;
+            user.Email = email;
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(Me(principal, user));
+        }).RequireAuthorization(Policies.Read);
+
+        // Devices: each login chain keeps one active refresh row (rotation replaces it), so the rows are the user's signed-in devices.
+        auth.MapPost("/sessions", async (SessionsRequest req, EbtDbContext db, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
+            var now = DateTimeOffset.UtcNow;
+            var mine = string.IsNullOrWhiteSpace(req.RefreshToken) ? null : TokenService.HashRefresh(req.RefreshToken.Trim());
+            var rows = await db.RefreshTokens.AsNoTracking().Where(r => r.UserId == id && r.RevokedAt == null && r.ExpiresAt > now).OrderByDescending(r => r.CreatedAt).ToListAsync(ct);
+            return Results.Ok(rows.Select(r => new SessionDto(r.Id, r.Device, r.UserAgent, r.Ip, r.CreatedAt, r.ExpiresAt, mine != null && r.TokenHash == mine)));
+        }).RequireAuthorization(Policies.Read);
+
+        // The other device keeps working until its access token expires (up to ExpiresMinutes); it cannot refresh any more.
+        auth.MapDelete("/sessions/{id:long}", async (long id, EbtDbContext db, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var uid)) return Results.Unauthorized();
+            var removed = await db.RefreshTokens.Where(r => r.Id == id && r.UserId == uid).ExecuteDeleteAsync(ct);
+            return removed == 0 ? Results.NotFound() : Results.NoContent();
+        }).RequireAuthorization(Policies.Read);
+
+        // Signs every other device out at once: bumping the token version also kills their access tokens; this device gets fresh tokens.
+        auth.MapPost("/sessions/revoke-others", async (SessionsRequest req, EbtDbContext db, TokenService tokens, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
+            var user = await db.Users.FindAsync([id], ct);
+            if (user is null || !user.Active) return Results.Unauthorized();
+            var now = DateTimeOffset.UtcNow;
+            var hash = string.IsNullOrWhiteSpace(req.RefreshToken) ? null : TokenService.HashRefresh(req.RefreshToken.Trim());
+            var current = hash is null ? null : await db.RefreshTokens.AsNoTracking().FirstOrDefaultAsync(r => r.UserId == id && r.TokenHash == hash && r.RevokedAt == null && r.ExpiresAt > now, ct);
+            if (current is null) return Results.ValidationProblem(Crud.Errors().Require(false, "refreshToken", "Not an active session of this user"));
+            user.TokenVersion++;
+            await db.RefreshTokens.Where(r => r.UserId == id).ExecuteDeleteAsync(ct);
+            await db.SaveChangesAsync(ct);
+            var (token, expires) = tokens.Issue(user);
+            var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct, new DeviceInfo(current.Device, current.UserAgent, current.Ip));
+            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires));
+        }).RequireAuthorization(Policies.Read).RequireRateLimiting(Policies.LoginLimiter);
 
         // Own password: needs the current one, signs every other session out and returns fresh tokens for this one.
         auth.MapPost("/password", async (ChangePasswordRequest req, EbtDbContext db, TokenService tokens, IPasswordHasher<AppUser> hasher, ILoggerFactory logs, ClaimsPrincipal principal, CancellationToken ct) =>
@@ -225,7 +298,7 @@ public static class AuthEndpoints
         var users = app.MapGroup("/api/users").WithTags("Users").RequireAuthorization(Policies.Admin);
 
         users.MapGet("/", async (EbtDbContext db, CancellationToken ct) =>
-            await db.Users.AsNoTracking().OrderBy(u => u.Username).Select(u => new UserDto(u.Id, u.Username, u.Role, u.Active, u.LockedUntil != null && u.LockedUntil > DateTimeOffset.UtcNow)).ToListAsync(ct));
+            await db.Users.AsNoTracking().OrderBy(u => u.Username).Select(u => new UserDto(u.Id, u.Username, u.Role, u.Active, u.LockedUntil != null && u.LockedUntil > DateTimeOffset.UtcNow, u.DisplayName, u.Email)).ToListAsync(ct));
 
         users.MapPost("/", async (CreateUserRequest req, EbtDbContext db, IPasswordHasher<AppUser> hasher, CancellationToken ct) =>
         {

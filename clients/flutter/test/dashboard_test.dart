@@ -299,8 +299,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Perfil'));
     await tester.pumpAndSettle();
-    expect(find.text('Usuário: ana'), findsOneWidget);
-    await tester.tap(find.text('Fechar'));
+    expect(find.byKey(const ValueKey('settings-profile-name')), findsOneWidget, reason: 'Perfil opens the account section of Configurações');
+    await tester.tap(find.byKey(const ValueKey('settings-close')));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Conta'));
     await tester.pumpAndSettle();
@@ -313,13 +313,19 @@ void main() {
     final p = await SharedPreferences.getInstance();
     expect(p.getString('themeMode'), 'dark');
 
+    await tester.tap(find.byKey(const ValueKey('settings-nav-account')));
+    await tester.pumpAndSettle();
     expect(session.remember, isTrue);
     await tester.tap(find.byKey(const ValueKey('settings-remember')));
     await tester.pumpAndSettle();
     expect(session.remember, isFalse);
     expect(p.getBool('rememberLogin'), isFalse);
     expect(find.text('A sessão termina ao fechar o aplicativo'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('settings-nav-admin')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('open-data-reset')), findsOneWidget, reason: 'admins clear movement data from Configurações');
+    await tester.ensureVisible(find.byKey(const ValueKey('open-data-reset')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('open-data-reset')));
     await tester.pumpAndSettle();
     expect(find.text('Limpar dados de movimento'), findsOneWidget);
@@ -331,7 +337,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Configurações'));
     await tester.pumpAndSettle();
-    expect(find.text('Aparência'), findsOneWidget);
+    expect(find.text('Aparência'), findsWidgets);
+    expect(find.byKey(const ValueKey('settings-nav-admin')), findsNothing, reason: 'the Administração section is for admins');
     expect(find.byKey(const ValueKey('open-data-reset')), findsNothing);
   });
 

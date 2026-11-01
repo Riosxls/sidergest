@@ -141,6 +141,7 @@ app.MapGet("/health", async (EbtDbContext db) => await db.Database.CanConnectAsy
 app.MapAuth();
 app.MapAudit();
 app.MapMaintenance();
+app.MapSystem();
 app.MapMasterData();
 app.MapProducts();
 app.MapInventory();

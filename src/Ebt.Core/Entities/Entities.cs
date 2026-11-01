@@ -270,4 +270,6 @@ public class AppUser
     public int TokenVersion { get; set; }
     public int FailedLogins { get; set; }
     public DateTimeOffset? LockedUntil { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Email { get; set; }
 }

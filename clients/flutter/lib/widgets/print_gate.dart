@@ -4,6 +4,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../prefs.dart';
+
 /// Remembers, on this computer, which papers were already printed or downloaded (or deliberately skipped), so the flow only asks once.
 class PrintLog {
   static const _key = 'printed-docs';
@@ -14,6 +16,22 @@ class PrintLog {
     } catch (_) {
       return false;
     }
+  }
+
+  /// How many papers this computer remembers as handled.
+  static Future<int> count() async {
+    try {
+      return ((await SharedPreferences.getInstance()).getStringList(_key) ?? const []).length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Forgets everything, so the flow asks about each paper again.
+  static Future<void> clear() async {
+    try {
+      await (await SharedPreferences.getInstance()).remove(_key);
+    } catch (_) {}
   }
 
   static Future<void> mark(String? doc) async {
@@ -52,7 +70,7 @@ Future<bool> printGate(
   Future<void> Function()? onDownload,
   String continueLabel = 'Ignorar e continuar',
 }) async {
-  if (await PrintLog.isDone(doneKey)) return true;
+  if (!AppPrefs.printPrompts || await PrintLog.isDone(doneKey)) return true;
   if (!context.mounted) return false;
   final choice = await showDialog<String>(
     context: context,

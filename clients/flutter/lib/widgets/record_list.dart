@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
+import '../prefs.dart';
 
 /// One entry of a [RecordList] row menu; the list reloads after [run].
 class RowAction {
@@ -33,7 +34,7 @@ class RecordList extends StatefulWidget {
     this.rowColor,
     this.rowActions,
     this.emptyText = 'Nenhum registro',
-    this.pageSize = 50,
+    this.pageSize,
     this.filtersActive = false,
     this.onClearFilters,
     this.emptyAction,
@@ -55,7 +56,8 @@ class RecordList extends StatefulWidget {
   /// Per-row ⋮ menu (e.g. quick cancel); an empty list hides the menu for that row.
   final List<RowAction> Function(Map<String, dynamic> e)? rowActions;
   final String emptyText;
-  final int pageSize;
+  /// Rows per page; null follows the personal setting ([AppPrefs.rowsPerPage]).
+  final int? pageSize;
 
   /// True while a screen filter narrows the list; the empty state then offers to clear it.
   final bool filtersActive;
@@ -144,7 +146,7 @@ class RecordListState extends State<RecordList> {
     final r = ++_request;
     setState(() => _loading = true);
     try {
-      final raw = await widget.api.get(widget.path, {...widget.query, widget.searchParam: _q, 'skip': _skip, 'take': widget.pageSize});
+      final raw = await widget.api.get(widget.path, {...widget.query, widget.searchParam: _q, 'skip': _skip, 'take': widget.pageSize ?? AppPrefs.rowsPerPage});
       final page = raw is List ? PageResult(raw.cast<Map<String, dynamic>>(), raw.length, 0, raw.length) : PageResult.fromJson(raw as Map<String, dynamic>);
       if (widget.enrich != null) await widget.enrich!(page.items);
       if (mounted && r == _request) {
@@ -413,7 +415,7 @@ class RecordListState extends State<RecordList> {
               onPressed: _skip == 0
                   ? null
                   : () {
-                      _skip = (_skip - widget.pageSize).clamp(0, page.total);
+                      _skip = (_skip - (widget.pageSize ?? AppPrefs.rowsPerPage)).clamp(0, page.total);
                       reload();
                     },
               icon: const Icon(Icons.chevron_left),
@@ -423,7 +425,7 @@ class RecordListState extends State<RecordList> {
               onPressed: to >= page.total
                   ? null
                   : () {
-                      _skip += widget.pageSize;
+                      _skip += widget.pageSize ?? AppPrefs.rowsPerPage;
                       reload();
                     },
               icon: const Icon(Icons.chevron_right),

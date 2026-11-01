@@ -314,11 +314,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) _focus.requestFocus();
     });
     _settle();
-    _timer = Timer.periodic(const Duration(minutes: 2), (_) => _refresh());
+    widget.session.addListener(_armTimer);
+    _armTimer();
+  }
+
+  int _armedMinutes = -1;
+
+  /// Starts (or stops) the automatic refresh when the personal setting changes.
+  void _armTimer() {
+    final minutes = widget.session.dashboardRefreshMinutes;
+    if (minutes == _armedMinutes) return;
+    _armedMinutes = minutes;
+    _timer?.cancel();
+    _timer = minutes > 0 ? Timer.periodic(Duration(minutes: minutes), (_) => _refresh()) : null;
   }
 
   @override
   void dispose() {
+    widget.session.removeListener(_armTimer);
     _timer?.cancel();
     _focus.dispose();
     super.dispose();

@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'screens/login.dart';
 import 'screens/shell.dart';
 import 'session.dart';
+import 'widgets/idle_guard.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,9 +25,19 @@ class EbtApp extends StatelessWidget {
       builder: (_, _) => MaterialApp(
         title: 'MetaGest',
         debugShowCheckedModeBanner: false,
-        theme: appTheme(Brightness.light, comfortable: session.comfortable),
-        darkTheme: appTheme(Brightness.dark, comfortable: session.comfortable),
-        builder: (context, child) => MediaQuery.withClampedTextScaling(minScaleFactor: session.textScale, maxScaleFactor: session.textScale, child: child!),
+        theme: appTheme(Brightness.light, comfortable: session.comfortable, highContrast: session.highContrast, reduceMotion: session.reduceMotion),
+        darkTheme: appTheme(Brightness.dark, comfortable: session.comfortable, highContrast: session.highContrast, reduceMotion: session.reduceMotion),
+        builder: (context, child) => IdleGuard(
+          session: session,
+          child: MediaQuery.withClampedTextScaling(
+            minScaleFactor: session.textScale,
+            maxScaleFactor: session.textScale,
+            child: MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: session.reduceMotion || MediaQuery.of(context).disableAnimations),
+              child: child!,
+            ),
+          ),
+        ),
         themeMode: session.themeMode,
         locale: const Locale('pt', 'BR'),
         supportedLocales: const [Locale('pt', 'BR')],
@@ -37,11 +48,14 @@ class EbtApp extends StatelessWidget {
   }
 }
 
-ThemeData appTheme(Brightness brightness, {bool comfortable = false}) {
-  final cs = ColorScheme.fromSeed(seedColor: const Color(0xFF1F5F99), brightness: brightness);
+ThemeData appTheme(Brightness brightness, {bool comfortable = false, bool highContrast = false, bool reduceMotion = false}) {
+  final cs = ColorScheme.fromSeed(seedColor: const Color(0xFF1F5F99), brightness: brightness, contrastLevel: highContrast ? 1.0 : 0.0);
   return ThemeData(
     colorScheme: cs,
     visualDensity: comfortable ? VisualDensity.standard : VisualDensity.compact,
+    pageTransitionsTheme: reduceMotion
+        ? PageTransitionsTheme(builders: {for (final p in TargetPlatform.values) p: _NoTransitions()})
+        : null,
     cardTheme: CardThemeData(
       color: cs.surfaceContainerHigh,
       elevation: 0,
@@ -51,4 +65,11 @@ ThemeData appTheme(Brightness brightness, {bool comfortable = false}) {
       ),
     ),
   );
+}
+
+class _NoTransitions extends PageTransitionsBuilder {
+  const _NoTransitions();
+
+  @override
+  Widget buildTransitions<T>(PageRoute<T> route, BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) => child;
 }

@@ -132,11 +132,16 @@ public partial class EbtDbContext(DbContextOptions<EbtDbContext> options) : DbCo
         {
             e.ToTable("users");
             e.HasIndex(x => x.Username).IsUnique();
+            e.Property(x => x.DisplayName).HasMaxLength(120);
+            e.Property(x => x.Email).HasMaxLength(200);
         });
         b.Entity<RefreshToken>(e =>
         {
             e.ToTable("refresh_tokens");
             e.Property(x => x.TokenHash).HasMaxLength(64);
+            e.Property(x => x.Device).HasMaxLength(120);
+            e.Property(x => x.UserAgent).HasMaxLength(200);
+            e.Property(x => x.Ip).HasMaxLength(45);
             e.HasIndex(x => x.TokenHash).IsUnique();
             e.HasIndex(x => x.UserId);
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);

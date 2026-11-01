@@ -113,6 +113,12 @@ List<NavItem> _screens() => [
   NavItem('audit', Icons.history, 'Auditoria', 'Sistema', (s, f, go) => AuditScreen(session: s), admin: true),
 ];
 
+/// Screens a user may pick as the one that opens after sign-in, with the label shown in the setting.
+List<({String id, String label})> homeScreenChoices(Session s) => [
+  for (final i in navItems())
+    if (!i.admin || s.isAdmin) (id: i.id, label: i.section.isEmpty ? i.title : (i.section == hiddenSection ? 'Visão geral de ${i.title}' : '${i.section}: ${i.title}')),
+];
+
 class Shell extends StatefulWidget {
   const Shell({super.key, required this.session});
 
@@ -134,6 +140,7 @@ class _ShellState extends State<Shell> {
   @override
   void initState() {
     super.initState();
+    if (_items.any((i) => i.id == widget.session.homeScreen)) _current = widget.session.homeScreen;
     _restorePrefs();
     HardwareKeyboard.instance.addHandler(_onKey);
   }

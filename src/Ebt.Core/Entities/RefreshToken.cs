@@ -10,4 +10,8 @@ public class RefreshToken
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? RevokedAt { get; set; }
+    /// <summary>Label the client sent at login (for example the computer name), shown in the user's device list.</summary>
+    public string? Device { get; set; }
+    public string? UserAgent { get; set; }
+    public string? Ip { get; set; }
 }

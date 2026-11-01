@@ -18,7 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   late final _user = TextEditingController(text: widget.session.lastUser);
   final _password = TextEditingController();
   final _passwordFocus = FocusNode();
-  String? _error;
+  late String? _error = widget.session.idleSignedOut ? 'Você foi desconectado por inatividade. Entre de novo.' : null;
   bool _busy = false;
   bool _showServer = false;
   bool _showPassword = false;
