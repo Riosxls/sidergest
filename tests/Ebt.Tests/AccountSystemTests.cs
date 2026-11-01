@@ -226,7 +226,7 @@ public class AccountSystemTests(ApiFixture api)
     {
         var c = await api.UserAsync(role);
         Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/auth/me")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await c.PutAsJsonAsync("/api/auth/profile", new ProfileRequest("Fulano", "f@x.com"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await c.PutAsJsonAsync("/api/auth/profile", new ProfileRequest("Fulano", $"f{Guid.NewGuid():N}"[..12] + "@x.com"))).StatusCode);
         // A refresh token that is not this user's is refused on both session routes.
         Assert.Equal(HttpStatusCode.BadRequest, (await c.Post("/api/auth/sessions/revoke-others", new SessionsRequest("not-a-token"))).StatusCode);
 
@@ -248,5 +248,30 @@ public class AccountSystemTests(ApiFixture api)
         Assert.Equal(2, (await Sessions(pc, pcLogin.RefreshToken)).Count);
         Assert.Equal(HttpStatusCode.OK, (await api.Anonymous().PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(phoneLogin.RefreshToken))).StatusCode);
         Assert.NotNull(strangerLogin.RefreshToken);
+    }
+
+    [Fact]
+    public async Task Device_names_lose_control_characters()
+    {
+        var user = await NewUser();
+        var (pc, login) = await Device(user, "Bal\ncao\u0007 \r\n");
+        var list = await Sessions(pc, login.RefreshToken);
+        Assert.Equal("Balcao", list.Single().Device);
+        var (_, blank) = await Device(user, "\n\t ");
+        Assert.Null((await Sessions(pc, login.RefreshToken)).Single(s => s.Id != list.Single().Id).Device);
+        Assert.NotNull(blank.RefreshToken);
+    }
+
+    [Fact]
+    public async Task Profile_email_must_be_well_formed_and_not_used_by_another_user()
+    {
+        var a = await api.UserAsync(UserRole.Reader);
+        var b = await api.UserAsync(UserRole.Stock);
+        var email = $"dup{Guid.NewGuid():N}"[..16] + "@ebt.com.br";
+        Assert.Equal(HttpStatusCode.OK, (await a.Put("/api/auth/profile", new ProfileRequest("A", email))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await a.Put("/api/auth/profile", new ProfileRequest("A", email))).StatusCode); // own email is fine
+        Assert.Equal(HttpStatusCode.BadRequest, (await b.Put("/api/auth/profile", new ProfileRequest("B", email.ToUpperInvariant()))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await b.Put("/api/auth/profile", new ProfileRequest("B", "Nome <x@y.com>"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await b.Put("/api/auth/profile", new ProfileRequest("B", "x@"))).StatusCode);
     }
 }

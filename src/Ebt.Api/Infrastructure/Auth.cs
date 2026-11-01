@@ -1,7 +1,9 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Net.Mail;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -85,7 +87,12 @@ public record DeviceInfo(string? Device, string? UserAgent, string? Ip)
 {
     public static DeviceInfo From(string? device, HttpContext http)
     {
-        static string? Cut(string? s, int max) => string.IsNullOrWhiteSpace(s) ? null : s.Trim()[..Math.Min(max, s.Trim().Length)];
+        // Client-controlled text: drop control characters (log injection, broken layouts) before trimming and cutting.
+        static string? Cut(string? s, int max)
+        {
+            var clean = s is null ? "" : new string(s.Where(c => !char.IsControl(c)).ToArray()).Trim();
+            return clean.Length == 0 ? null : clean[..Math.Min(max, clean.Length)];
+        }
         return new(Cut(device, 120), Cut(http.Request.Headers.UserAgent.ToString(), 200), Cut(http.Connection.RemoteIpAddress?.ToString(), 45));
     }
 }
@@ -217,10 +224,17 @@ public static class AuthEndpoints
             var email = string.IsNullOrWhiteSpace(req.Email) ? null : req.Email.Trim();
             var errors = Crud.Errors()
                 .Require(name is null || name.Length <= 120, "displayName", "At most 120 characters")
-                .Require(email is null || (email.Length <= 200 && email.Contains('@') && !email.Any(char.IsWhiteSpace)), "email", "Invalid email");
+                .Require(email is null || (email.Length <= 200 && MailAddress.TryCreate(email, out var parsed) && parsed.Address == email), "email", "Invalid email");
+            if (errors.Count == 0 && email is not null && await db.Users.AnyAsync(u => u.Id != id && u.Email != null && u.Email.ToLower() == email.ToLower(), ct))
+                errors.Require(false, "email", "Email already used by another user");
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             user.DisplayName = name;
             user.Email = email;
+            db.AuditLog.Add(new AuditEntry
+            {
+                At = DateTimeOffset.UtcNow, User = user.Username, Entity = "User", EntityId = id.ToString(), Action = "Update",
+                Changes = JsonSerializer.Serialize(new { profile = true, displayName = name, email })
+            });
             await db.SaveChangesAsync(ct);
             return Results.Ok(Me(principal, user));
         }).RequireAuthorization(Policies.Read);
