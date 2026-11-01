@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../session.dart';
+import '../../widgets/discard_guard.dart';
 import 'settings_admin.dart';
 import 'settings_sections.dart';
 import 'settings_widgets.dart';
@@ -56,6 +57,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
   String? _selected;
   final _subs = <_SubView>[];
 
+  /// Views inside the window (the backup form) register their unsaved-edit check here; every way out goes through [_guard].
+  final _dirty = DirtyRegistry();
+
   List<_Section> get _visible => [
     for (final s in _sections)
       if (s.id != 'admin' || widget.session.isAdmin) s,
@@ -67,10 +71,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
     _selected = _visible.any((s) => s.id == widget.section) ? widget.section : null;
   }
 
-  void _select(String id) => setState(() {
-    _selected = id;
-    _subs.clear();
+  Future<void> _guard(VoidCallback action) => _dirty.guard(context, () {
+    if (mounted) action();
   });
+
+  void _select(String id) => _guard(() {
+    setState(() {
+      _selected = id;
+      _subs.clear();
+    });
+  });
+
+  void _subBack() => _guard(() => setState(_subs.removeLast));
+
+  void _close() => _guard(() => Navigator.pop(context));
 
   void _open(String title, WidgetBuilder builder) => setState(() => _subs.add(_SubView(title, builder)));
 
@@ -86,42 +100,47 @@ class _SettingsDialogState extends State<SettingsDialog> {
     final height = (screen.height - 48).clamp(320.0, 760.0);
     final wide = width >= _wideFrom;
     final selected = wide ? (_selected ?? 'appearance') : _selected;
-    return PopScope(
-      canPop: _subs.isEmpty && (wide || _selected == null),
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        setState(() {
-          if (_subs.isNotEmpty) {
-            _subs.removeLast();
-          } else {
-            _selected = null;
-          }
-        });
-      },
-      child: Dialog(
-        insetPadding: const EdgeInsets.all(24),
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(
-          width: width,
-          height: height,
-          child: ListenableBuilder(
-            listenable: widget.session,
-            builder: (context, _) => Column(
-              children: [
-                _header(context, wide, selected),
-                const Divider(height: 1),
-                Expanded(
-                  child: wide
-                      ? Row(
-                          children: [
-                            SizedBox(width: 220, child: _nav(selected)),
-                            const VerticalDivider(width: 1),
-                            Expanded(child: _content(context, selected)),
-                          ],
-                        )
-                      : (selected == null ? _nav(null) : _content(context, selected)),
-                ),
-              ],
+    return DirtyScope(
+      registry: _dirty,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _guard(() {
+            if (_subs.isNotEmpty) {
+              setState(_subs.removeLast);
+            } else if (!wide && _selected != null) {
+              setState(() => _selected = null);
+            } else {
+              Navigator.pop(context);
+            }
+          });
+        },
+        child: Dialog(
+          insetPadding: const EdgeInsets.all(24),
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: ListenableBuilder(
+              listenable: widget.session,
+              builder: (context, _) => Column(
+                children: [
+                  _header(context, wide, selected),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: wide
+                        ? Row(
+                            children: [
+                              SizedBox(width: 220, child: _nav(selected)),
+                              const VerticalDivider(width: 1),
+                              Expanded(child: _content(context, selected)),
+                            ],
+                          )
+                        : (selected == null ? _nav(null) : _content(context, selected)),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -140,11 +159,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
             IconButton(
               key: const ValueKey('settings-back-to-menu'),
               tooltip: 'Voltar às configurações',
-              onPressed: () => setState(() => _selected = null),
+              onPressed: () => _guard(() => setState(() => _selected = null)),
               icon: const Icon(Icons.arrow_back),
             ),
           Expanded(child: Text('Configurações', style: theme.textTheme.titleLarge)),
-          IconButton(key: const ValueKey('settings-close'), tooltip: 'Fechar', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+          IconButton(key: const ValueKey('settings-close'), tooltip: 'Fechar', onPressed: _close, icon: const Icon(Icons.close)),
         ],
       ),
     );
@@ -182,12 +201,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
           child: Row(
             children: [
               if (sub != null)
-                IconButton(
-                  key: const ValueKey('settings-sub-back'),
-                  tooltip: 'Voltar',
-                  onPressed: () => setState(_subs.removeLast),
-                  icon: const Icon(Icons.arrow_back),
-                )
+                IconButton(key: const ValueKey('settings-sub-back'), tooltip: 'Voltar', onPressed: _subBack, icon: const Icon(Icons.arrow_back))
               else
                 const SizedBox(width: 8),
               Expanded(

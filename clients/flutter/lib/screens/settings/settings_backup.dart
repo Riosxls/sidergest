@@ -416,7 +416,7 @@ class _BackupFormState extends State<_BackupForm> {
   }
 
   @override
-  Widget build(BuildContext context) => DiscardGuard(
+  Widget build(BuildContext context) => DirtyReporter(
     isDirty: _dirty,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
