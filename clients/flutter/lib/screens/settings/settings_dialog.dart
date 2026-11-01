@@ -7,8 +7,10 @@ import 'settings_widgets.dart';
 
 /// Personal preferences of the signed-in user on this device (not the system parameters under Parâmetros).
 /// [section] opens a specific section, for example `'account'`.
-Future<void> showUserSettings(BuildContext context, Session session, {String? section}) =>
-    showDialog<void>(context: context, builder: (_) => SettingsDialog(session: session, section: section));
+Future<void> showUserSettings(BuildContext context, Session session, {String? section}) => showDialog<void>(
+  context: context,
+  builder: (_) => SettingsDialog(session: session, section: section),
+);
 
 class _Section {
   const _Section(this.id, this.icon, this.label, this.build);
@@ -84,30 +86,43 @@ class _SettingsDialogState extends State<SettingsDialog> {
     final height = (screen.height - 48).clamp(320.0, 760.0);
     final wide = width >= _wideFrom;
     final selected = wide ? (_selected ?? 'appearance') : _selected;
-    return Dialog(
-      insetPadding: const EdgeInsets.all(24),
-      clipBehavior: Clip.antiAlias,
-      child: SizedBox(
-        width: width,
-        height: height,
-        child: ListenableBuilder(
-          listenable: widget.session,
-          builder: (context, _) => Column(
-            children: [
-              _header(context, wide, selected),
-              const Divider(height: 1),
-              Expanded(
-                child: wide
-                    ? Row(
-                        children: [
-                          SizedBox(width: 220, child: _nav(selected)),
-                          const VerticalDivider(width: 1),
-                          Expanded(child: _content(context, selected)),
-                        ],
-                      )
-                    : (selected == null ? _nav(null) : _content(context, selected)),
-              ),
-            ],
+    return PopScope(
+      canPop: _subs.isEmpty && (wide || _selected == null),
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        setState(() {
+          if (_subs.isNotEmpty) {
+            _subs.removeLast();
+          } else {
+            _selected = null;
+          }
+        });
+      },
+      child: Dialog(
+        insetPadding: const EdgeInsets.all(24),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: width,
+          height: height,
+          child: ListenableBuilder(
+            listenable: widget.session,
+            builder: (context, _) => Column(
+              children: [
+                _header(context, wide, selected),
+                const Divider(height: 1),
+                Expanded(
+                  child: wide
+                      ? Row(
+                          children: [
+                            SizedBox(width: 220, child: _nav(selected)),
+                            const VerticalDivider(width: 1),
+                            Expanded(child: _content(context, selected)),
+                          ],
+                        )
+                      : (selected == null ? _nav(null) : _content(context, selected)),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -121,7 +136,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
       padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
       child: Row(
         children: [
-          if (canGoBack) IconButton(key: const ValueKey('settings-back-to-menu'), tooltip: 'Voltar às configurações', onPressed: () => setState(() => _selected = null), icon: const Icon(Icons.arrow_back)),
+          if (canGoBack)
+            IconButton(
+              key: const ValueKey('settings-back-to-menu'),
+              tooltip: 'Voltar às configurações',
+              onPressed: () => setState(() => _selected = null),
+              icon: const Icon(Icons.arrow_back),
+            ),
           Expanded(child: Text('Configurações', style: theme.textTheme.titleLarge)),
           IconButton(key: const ValueKey('settings-close'), tooltip: 'Fechar', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
         ],
@@ -160,7 +181,15 @@ class _SettingsDialogState extends State<SettingsDialog> {
           padding: const EdgeInsets.fromLTRB(16, 16, 24, 0),
           child: Row(
             children: [
-              if (sub != null) IconButton(key: const ValueKey('settings-sub-back'), tooltip: 'Voltar', onPressed: () => setState(_subs.removeLast), icon: const Icon(Icons.arrow_back)) else const SizedBox(width: 8),
+              if (sub != null)
+                IconButton(
+                  key: const ValueKey('settings-sub-back'),
+                  tooltip: 'Voltar',
+                  onPressed: () => setState(_subs.removeLast),
+                  icon: const Icon(Icons.arrow_back),
+                )
+              else
+                const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   sub == null ? section.label : sub.title,

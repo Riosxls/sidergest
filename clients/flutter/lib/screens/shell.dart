@@ -156,9 +156,25 @@ class _ShellState extends State<Shell> {
   bool _paletteOpen = false;
 
   bool _onKey(KeyEvent e) {
+    if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) return _onEsc();
     if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.keyK || !HardwareKeyboard.instance.isControlPressed) return false;
     if (_paletteOpen || !(ModalRoute.of(context)?.isCurrent ?? false)) return false;
     _openPalette();
+    return true;
+  }
+
+  /// Esc: leave a text field first, then return from a module screen to the Painel.
+  bool _onEsc() {
+    final k = HardwareKeyboard.instance;
+    if (k.isControlPressed || k.isAltPressed || k.isShiftPressed || k.isMetaPressed) return false;
+    if (_paletteOpen || !mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return false;
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus?.context?.findAncestorWidgetOfExactType<EditableText>() != null) {
+      focus!.unfocus();
+      return true;
+    }
+    if (_current == 'dashboard') return false;
+    _go('dashboard');
     return true;
   }
 

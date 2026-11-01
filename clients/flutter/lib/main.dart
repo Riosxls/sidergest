@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'screens/login.dart';
 import 'screens/shell.dart';
 import 'session.dart';
+import 'widgets/esc_back.dart';
 import 'widgets/idle_guard.dart';
 
 Future<void> main() async {
@@ -14,10 +15,20 @@ Future<void> main() async {
 }
 
 /// Root widget: wires the session, theme and the login/shell navigation.
-class EbtApp extends StatelessWidget {
+class EbtApp extends StatefulWidget {
   const EbtApp({super.key, required this.session});
 
   final Session session;
+
+  @override
+  State<EbtApp> createState() => _EbtAppState();
+}
+
+class _EbtAppState extends State<EbtApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  final _escObserver = EscRouteObserver();
+
+  Session get session => widget.session;
 
   @override
   Widget build(BuildContext context) {
@@ -25,10 +36,15 @@ class EbtApp extends StatelessWidget {
       listenable: session,
       builder: (_, _) => MaterialApp(
         title: 'MetaGest',
+        navigatorKey: _navigatorKey,
+        navigatorObservers: [_escObserver],
         debugShowCheckedModeBanner: false,
         theme: appTheme(Brightness.light, comfortable: session.comfortable, highContrast: session.highContrast, reduceMotion: session.reduceMotion),
         darkTheme: appTheme(Brightness.dark, comfortable: session.comfortable, highContrast: session.highContrast, reduceMotion: session.reduceMotion),
-        builder: (context, child) => IdleGuard(
+        builder: (context, child) => EscBack(
+          navigatorKey: _navigatorKey,
+          observer: _escObserver,
+          child: IdleGuard(
           session: session,
           child: MediaQuery.withClampedTextScaling(
             minScaleFactor: session.textScale,
@@ -38,6 +54,7 @@ class EbtApp extends StatelessWidget {
               child: child!,
             ),
           ),
+        ),
         ),
         themeMode: session.themeMode,
         locale: const Locale('pt', 'BR'),

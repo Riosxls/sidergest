@@ -106,6 +106,7 @@ scripts/             start.ps1, stop.ps1
 - Lists use `RecordList` (empty state with clear-filters, retry, sortable columns); wire `filtersActive`/`onClearFilters` when a screen adds filters. Settings dialog: `widgets/user_settings.dart` (opened from the avatar menu), data reset dialog: `screens/data_reset.dart`.
 - Screens in `lib/screens/` (e.g. `sales_pipeline.dart`, `sales_quotes.dart`, `sales_orders.dart`, `production_orders.dart`, `deliveries.dart`, `certificates.dart`, `customers.dart`, `reports.dart`, `dashboard.dart`, `fiscal.dart`, `shell.dart`). Reusable widgets in `lib/widgets/` (`entity_form`, `record_list`, `pipeline`, `discard_guard`, `command_palette`...).
 - Unsaved-edit guard: forms confirm before discard (`discard_guard.dart`).
+- Esc goes back or cancels: `EscBack` (main.dart) pops pushed pages, Shell returns to the Painel, the settings dialog closes sub-views first; popups and dialogs use Flutter's default.
 - All PDF output goes through `lib/reports/`: `print_docs.dart` (quote, sales order, OF, delivery, viabilidade, controle de aço...), `certificate_doc.dart`, `nf_doc.dart`, `report_doc.dart`.
 
 ## Sales flow
