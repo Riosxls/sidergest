@@ -2,7 +2,8 @@ param(
     [switch]$SkipFlutter,
     [switch]$SkipBackend,
     [double]$BackendMin = 88,
-    [double]$FlutterMin = 65
+    [double]$BackendBranchMin = 68,
+    [double]$FlutterMin = 71
 )
 
 # Line-coverage gate. Runs the test suites with coverage and fails when a total drops under its threshold.
@@ -14,7 +15,7 @@ $failed = @()
 
 function Check([string]$Name, [double]$Covered, [double]$Total, [double]$Min) {
     $pct = if ($Total -gt 0) { 100.0 * $Covered / $Total } else { 0 }
-    $line = '{0}: {1:N1}% lines ({2}/{3}), minimum {4}%' -f $Name, $pct, $Covered, $Total, $Min
+    $line = '{0}: {1:N1}% ({2}/{3}), minimum {4}%' -f $Name, $pct, $Covered, $Total, $Min
     if ($pct -lt $Min) { $script:failed += $Name; Write-Host "FAILED $line" -ForegroundColor Red }
     else { Write-Host "ok $line" -ForegroundColor Green }
 }
@@ -28,6 +29,10 @@ if (-not $SkipBackend) {
             $env:EBT_TEST_PG = "Host=localhost;Port=$port;Username=ebt;Password=$pw"
         }
     }
+    if (-not $env:EBT_TEST_PG) {
+        Write-Host 'EBT_TEST_PG is not set and no .env was found in the repo root. Set EBT_TEST_PG (superuser connection string) and retry.' -ForegroundColor Red
+        exit 1
+    }
     $out = Join-Path ([IO.Path]::GetTempPath()) "metagest-cov-$([guid]::NewGuid().ToString('N'))"
     Write-Host '==> backend coverage' -ForegroundColor Cyan
     Push-Location $Root
@@ -37,12 +42,16 @@ if (-not $SkipBackend) {
     $file = Get-ChildItem $out -Recurse -Filter coverage.cobertura.xml -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($file) {
         [xml]$xml = Get-Content $file.FullName
-        $cov = 0; $all = 0
+        $cov = 0; $all = 0; $bcov = 0; $ball = 0
         foreach ($cls in $xml.coverage.packages.package.classes.class) {
             if ($cls.filename -match 'Migrations') { continue }
-            foreach ($l in $cls.lines.line) { $all++; if ([int]$l.hits -gt 0) { $cov++ } }
+            foreach ($l in $cls.lines.line) {
+                $all++; if ([int]$l.hits -gt 0) { $cov++ }
+                if ($l.'condition-coverage' -match '\((\d+)/(\d+)\)') { $bcov += [int]$Matches[1]; $ball += [int]$Matches[2] }
+            }
         }
         Check 'backend' $cov $all $BackendMin
+        Check 'backend branches' $bcov $ball $BackendBranchMin
     } else { $failed += 'backend coverage report'; Write-Host 'No cobertura report found.' -ForegroundColor Red }
     Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
 }

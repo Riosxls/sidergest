@@ -1,6 +1,7 @@
 param(
     [switch]$SkipFlutter,
-    [switch]$SkipBackend
+    [switch]$SkipBackend,
+    [switch]$Coverage
 )
 
 # Local gate while GitHub CI is off: build, backend tests, Flutter analyze and tests. Run it before every push.
@@ -26,15 +27,20 @@ if (-not $SkipBackend) {
     }
     Push-Location $Root
     Run 'dotnet build' { dotnet build Ebt.sln --nologo -v q }
-    Run 'dotnet test' { dotnet test Ebt.sln --nologo --no-build }
+    if (-not $Coverage) { Run 'dotnet test' { dotnet test Ebt.sln --nologo --no-build } }
     Pop-Location
 }
 
 if (-not $SkipFlutter) {
     Push-Location (Join-Path $Root 'clients/flutter')
     Run 'flutter analyze' { flutter analyze }
-    Run 'flutter test' { flutter test }
+    if (-not $Coverage) { Run 'flutter test' { flutter test } }
     Pop-Location
+}
+
+if ($Coverage) {
+    # Replaces the plain test runs above: same tests, plus the line-coverage thresholds.
+    Run 'coverage thresholds' { & (Join-Path $PSScriptRoot 'coverage.ps1') -SkipBackend:$SkipBackend -SkipFlutter:$SkipFlutter }
 }
 
 Write-Host ""

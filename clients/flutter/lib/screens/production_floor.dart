@@ -328,7 +328,9 @@ class _PlanningScreenState extends State<PlanningScreen> {
     return s.api.get('/api/production/load', {'from': isoDate(from), 'to': isoDate(from.add(Duration(days: _weeks * 7 - 1))), 'groupBy': _groupBy});
   }
 
-  void _reload() => setState(() => _load = _fetch());
+  void _reload() => setState(() {
+    _load = _fetch();
+  });
 
   Future<void> _scheduleAll() async {
     if (!await confirm(context, 'Reprogramar todas as OFs abertas a partir de hoje?') || !mounted) return;
