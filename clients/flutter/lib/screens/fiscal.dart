@@ -234,6 +234,95 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
       ],
     );
   }
+
+  Widget _header(Map<String, dynamic> d) {
+    return RecordHeader(
+      icon: Icons.description_outlined,
+      kind: fiscalKinds['${d['kind']}'] ?? '${d['kind']}',
+      title: 'NF ${d['number']} · série ${d['series']}',
+      badge: StatusBadge(
+        fiscalStatuses[d['status']] ?? '${d['status']}',
+        tone: switch (d['status']) {
+          'Authorized' => Tone.success,
+          'Pending' => Tone.warning,
+          _ => Tone.danger,
+        },
+      ),
+      fields: [
+        ('Destinatário', '${d['recipientName']}'),
+        ('CNPJ/CPF', '${d['recipientDocument']}'),
+        ('CFOP', '${d['cfopCode']}'),
+        ('Emissão', fmtDate(d['issuedAt'])),
+        ('Valor da nota', fmtMoney(d['invoiceTotal'])),
+        if (d['deliveryReference'] != null) ('Entrega', '${d['deliveryReference']}'),
+      ],
+    );
+  }
+
+  Widget _statusNote(Map<String, dynamic> d) {
+    return NextStepCard(
+      title: switch (d['status']) {
+        'Pending' => 'Aguardando resposta da SEFAZ',
+        'Rejected' => 'NF rejeitada: número perdido',
+        _ => 'Observação',
+      },
+      message: d['status'] == 'Pending'
+          ? 'A resposta da SEFAZ não chegou. Use "Conciliar com a SEFAZ" para consultar a chave antes de emitir de novo. ${fmt(d['statusMessage'])}'
+          : d['status'] == 'Rejected'
+          ? '${fmt(d['statusMessage'])} Se o número não será reaproveitado, use "Inutilizar numeração" na lista de notas.'
+          : fmt(d['statusMessage']),
+      tone: d['status'] == 'Rejected' ? Tone.danger : Tone.warning,
+    );
+  }
+
+  Widget _itemsSection(Map<String, dynamic> d) {
+    return Section(
+      title: 'Itens',
+      child: SimpleTable(
+        columns: [
+          col('Item', 'sequence'),
+          col('Código', 'code'),
+          col('Descrição', 'description'),
+          col('NCM', 'ncm'),
+          ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
+          ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
+          moneyCol('Total', 'total'),
+          ColumnSpec('ICMS', (e) => '${e['icmsCst']} · ${fmtMoney(e['icmsValue'])}', numeric: true),
+          ColumnSpec('IPI', (e) => '${e['ipiCst']} · ${fmtMoney(e['ipiValue'])}', numeric: true),
+        ],
+        rows: (d['lines'] as List).cast<Map<String, dynamic>>(),
+      ),
+    );
+  }
+
+  Widget _totalsSection(Map<String, dynamic> d) {
+    return Section(
+      title: 'Totais',
+      child: InfoGrid([
+        ('Produtos', fmtMoney(d['productsTotal'])),
+        ('Frete', fmtMoney(d['freightTotal'])),
+        ('Base ICMS', fmtMoney(d['icmsBase'])),
+        ('ICMS', fmtMoney(d['icmsTotal'])),
+        ('IPI', fmtMoney(d['ipiTotal'])),
+        ('PIS', fmtMoney(d['pisTotal'])),
+        ('COFINS', fmtMoney(d['cofinsTotal'])),
+        ('Total da nota', fmtMoney(d['invoiceTotal'])),
+      ]),
+    );
+  }
+
+  Widget _authSection(Map<String, dynamic> d) {
+    return Section(
+      title: 'Autorização',
+      child: InfoGrid([
+        ('Chave de acesso', fmt(d['accessKey'])),
+        ('Protocolo', fmt(d['protocol'])),
+        ('Ambiente', d['environment'] == 'Production' ? 'Produção' : 'Homologação'),
+        ('Emitida por', fmt(d['issuedBy'])),
+        ('Informações adicionais', fmt(d['additionalInfo'])),
+      ]),
+    );
+  }
 }
 
 /// Issuer data, environment and numbering. Admin only; fiscal emission stays off until enabled here.
@@ -366,93 +455,4 @@ class _FiscalSettingsScreenState extends State<FiscalSettingsScreen> {
       );
     },
   );
-
-  Widget _header(Map<String, dynamic> d) {
-    return RecordHeader(
-      icon: Icons.description_outlined,
-      kind: fiscalKinds['${d['kind']}'] ?? '${d['kind']}',
-      title: 'NF ${d['number']} · série ${d['series']}',
-      badge: StatusBadge(
-        fiscalStatuses[d['status']] ?? '${d['status']}',
-        tone: switch (d['status']) {
-          'Authorized' => Tone.success,
-          'Pending' => Tone.warning,
-          _ => Tone.danger,
-        },
-      ),
-      fields: [
-        ('Destinatário', '${d['recipientName']}'),
-        ('CNPJ/CPF', '${d['recipientDocument']}'),
-        ('CFOP', '${d['cfopCode']}'),
-        ('Emissão', fmtDate(d['issuedAt'])),
-        ('Valor da nota', fmtMoney(d['invoiceTotal'])),
-        if (d['deliveryReference'] != null) ('Entrega', '${d['deliveryReference']}'),
-      ],
-    );
-  }
-
-  Widget _statusNote(Map<String, dynamic> d) {
-    return NextStepCard(
-      title: switch (d['status']) {
-        'Pending' => 'Aguardando resposta da SEFAZ',
-        'Rejected' => 'NF rejeitada: número perdido',
-        _ => 'Observação',
-      },
-      message: d['status'] == 'Pending'
-          ? 'A resposta da SEFAZ não chegou. Use "Conciliar com a SEFAZ" para consultar a chave antes de emitir de novo. ${fmt(d['statusMessage'])}'
-          : d['status'] == 'Rejected'
-          ? '${fmt(d['statusMessage'])} Se o número não será reaproveitado, use "Inutilizar numeração" na lista de notas.'
-          : fmt(d['statusMessage']),
-      tone: d['status'] == 'Rejected' ? Tone.danger : Tone.warning,
-    );
-  }
-
-  Widget _itemsSection(Map<String, dynamic> d) {
-    return Section(
-      title: 'Itens',
-      child: SimpleTable(
-        columns: [
-          col('Item', 'sequence'),
-          col('Código', 'code'),
-          col('Descrição', 'description'),
-          col('NCM', 'ncm'),
-          ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
-          ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
-          moneyCol('Total', 'total'),
-          ColumnSpec('ICMS', (e) => '${e['icmsCst']} · ${fmtMoney(e['icmsValue'])}', numeric: true),
-          ColumnSpec('IPI', (e) => '${e['ipiCst']} · ${fmtMoney(e['ipiValue'])}', numeric: true),
-        ],
-        rows: (d['lines'] as List).cast<Map<String, dynamic>>(),
-      ),
-    );
-  }
-
-  Widget _totalsSection(Map<String, dynamic> d) {
-    return Section(
-      title: 'Totais',
-      child: InfoGrid([
-        ('Produtos', fmtMoney(d['productsTotal'])),
-        ('Frete', fmtMoney(d['freightTotal'])),
-        ('Base ICMS', fmtMoney(d['icmsBase'])),
-        ('ICMS', fmtMoney(d['icmsTotal'])),
-        ('IPI', fmtMoney(d['ipiTotal'])),
-        ('PIS', fmtMoney(d['pisTotal'])),
-        ('COFINS', fmtMoney(d['cofinsTotal'])),
-        ('Total da nota', fmtMoney(d['invoiceTotal'])),
-      ]),
-    );
-  }
-
-  Widget _authSection(Map<String, dynamic> d) {
-    return Section(
-      title: 'Autorização',
-      child: InfoGrid([
-        ('Chave de acesso', fmt(d['accessKey'])),
-        ('Protocolo', fmt(d['protocol'])),
-        ('Ambiente', d['environment'] == 'Production' ? 'Produção' : 'Homologação'),
-        ('Emitida por', fmt(d['issuedBy'])),
-        ('Informações adicionais', fmt(d['additionalInfo'])),
-      ]),
-    );
-  }
 }
