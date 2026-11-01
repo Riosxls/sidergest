@@ -397,4 +397,72 @@ public class FiscalTests(ApiFixture api)
             await Enable(admin, false);
         }
     }
+
+    [Fact]
+    public async Task Inutilization_and_reconciliation_reject_bad_requests()
+    {
+        var admin = await api.AdminAsync();
+        try
+        {
+            var settings = await Enable(admin, true);
+            Task<HttpResponseMessage> Inut(int? series, int from, int to, string? reason = "Numeracao pulada por falha de comunicacao", string? pw = null) =>
+                admin.Post("/api/fiscal/inutilizations", new InutilizeIn(series, from, to, reason, pw ?? ApiFixture.AdminPassword));
+
+            Assert.Equal(HttpStatusCode.BadRequest, (await Inut(null, 1, 1, null)).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await admin.Post("/api/fiscal/inutilizations", new InutilizeIn(null, 1, 1, "Numeracao pulada por falha", null))).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await Inut(null, 1, 1, new string('x', 256))).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await Inut(null, 0, 1)).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await Inut(null, 5, 4)).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await Inut(null, 1, 1001)).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await Inut(0, 1, 1)).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await Inut(1000, 1, 1)).StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, (await Inut(null, settings.NextNumber, settings.NextNumber)).StatusCode);
+            // another series never touched by this system: nothing to compare with, the numbers are simply given up
+            var other = await (await Inut(998, 1, 2)).Read<InutilizationOut>();
+            Assert.Equal(998, other.Series);
+            Assert.Equal(HttpStatusCode.Conflict, (await Inut(998, 2, 3)).StatusCode);
+
+            Assert.Equal(HttpStatusCode.NotFound, (await admin.Post("/api/fiscal/documents/999999/reconcile", new { })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await admin.Post("/api/fiscal/documents/999999/cancel", new CancelInvoiceIn("Erro de digitação no pedido", ApiFixture.AdminPassword))).StatusCode);
+        }
+        finally
+        {
+            await Enable(admin, false);
+        }
+    }
+
+    [Fact]
+    public async Task Cancel_is_refused_after_the_window_and_for_an_already_cancelled_nf()
+    {
+        var admin = await api.AdminAsync();
+        var s = await ReleasedSaleAsync(admin);
+        var original = await (await admin.GetAsync("/api/fiscal/settings")).Read<FiscalSettingsDto>();
+        try
+        {
+            var settings = await Enable(admin, true);
+            var delivery = await (await admin.Post($"/api/sales/orders/{s.Order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
+            await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, WithoutCertificate: true));
+            var doc = Assert.Single((await (await admin.GetAsync($"/api/fiscal/documents?deliveryId={delivery.Id}")).Read<Page<FiscalDocumentSummary>>()).Items);
+
+            settings = await (await admin.GetAsync("/api/fiscal/settings")).Read<FiscalSettingsDto>();
+            // issued three hours ago, window of one hour
+            await using (var db = api.NewDb())
+                await db.FiscalDocuments.Where(d => d.Id == doc.Id).ExecuteUpdateAsync(u => u.SetProperty(d => d.IssuedAt, DateTimeOffset.UtcNow.AddHours(-3)));
+            (await admin.Put("/api/fiscal/settings", settings with { CancelWindowHours = 1 })).EnsureSuccessStatusCode();
+            var late = await admin.Post($"/api/fiscal/documents/{doc.Id}/cancel", new CancelInvoiceIn("Erro de digitação no pedido do cliente", ApiFixture.AdminPassword));
+            Assert.Equal(HttpStatusCode.Conflict, late.StatusCode);
+            Assert.Contains("return NF", await late.Content.ReadAsStringAsync());
+
+            // no window at all: the cancellation works once, then the NF is no longer authorized
+            (await admin.Put("/api/fiscal/settings", settings with { CancelWindowHours = 0 })).EnsureSuccessStatusCode();
+            (await admin.Post($"/api/fiscal/documents/{doc.Id}/cancel", new CancelInvoiceIn("Erro de digitação no pedido do cliente", ApiFixture.AdminPassword))).EnsureSuccessStatusCode();
+            Assert.Equal(HttpStatusCode.Conflict, (await admin.Post($"/api/fiscal/documents/{doc.Id}/cancel", new CancelInvoiceIn("Erro de digitação no pedido do cliente", ApiFixture.AdminPassword))).StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, (await admin.Post($"/api/fiscal/documents/{doc.Id}/reconcile?minAgeMinutes=0", new { })).StatusCode);
+        }
+        finally
+        {
+            await Enable(admin, false);
+            (await admin.Put("/api/fiscal/settings", (await (await admin.GetAsync("/api/fiscal/settings")).Read<FiscalSettingsDto>()) with { CancelWindowHours = original.CancelWindowHours })).EnsureSuccessStatusCode();
+        }
+    }
 }
