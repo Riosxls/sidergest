@@ -12,8 +12,8 @@ powershell -File scripts\backup.ps1 -CopyTo \\server\ti  # also copy it to anoth
 - `scripts\start.ps1` takes a dump (`backups\ebt-pre-start-*.dump`) before it rebuilds or migrates, and stops if the dump fails.
 - The newest 14 dumps are kept (`-Keep` changes that). `backups\` and `*.dump` are gitignored: dumps hold real data.
 - A dump on the same disk is not a backup against disk failure. Use `-CopyTo` with an external drive or a share.
-- The API container mounts `backups` read-only at `/backups` (`Backup__Directory`); admins see the newest dump in Configurações through `GET /api/admin/backup-status`. Recreate the `api` container once after pulling this change so the mount exists.
-- Exposure: that mount lets the API process read the full dumps (real data). The API listens on 127.0.0.1 only and runs read-only with no capabilities, but if you do not want the mount, remove the `volumes` line of `api` in `compose.yaml`; the backup card then shows "not configured". The endpoint never returns the folder path.
+- `scriptsackup.ps1` writes `backup-statusstatus.json` (count, newest file, time, size) after every run. The API container mounts only that folder read-only at `/backup-status` (`Backup__Directory`); admins see the newest dump in Configurações through `GET /api/admin/backup-status`. Recreate the `api` container once after pulling this change so the new mount exists, and run one backup so the file exists.
+- Exposure: the API never sees the dumps (real data), only the status file. The endpoint never returns the folder path.
 
 ### Nightly backup (Windows Task Scheduler)
 

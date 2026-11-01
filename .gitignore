@@ -20,3 +20,9 @@ key.properties
 .run/
 *.dump
 backups/
+backup-status/
+
+.claude/settings.json
+.claude/worktrees/
+clients/flutter/devtools_options.yaml
+clients/flutter/*.png

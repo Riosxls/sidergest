@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Ebt.Api.Endpoints;
 using Ebt.Api.Infrastructure;
 using Ebt.Core.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace Ebt.Tests;
 
@@ -165,7 +166,15 @@ public class AuthTests(ApiFixture api)
         var second = await (await anon.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(first.RefreshToken))).Read<LoginResponse>();
         Assert.NotEqual(first.RefreshToken, second.RefreshToken);
 
-        // replaying the already-rotated token is treated as theft: it fails and kills the new session too
+        // a replay right after rotation is a second tab: it fails, but the new session survives
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(first.RefreshToken))).StatusCode);
+        var probeOk = api.Anonymous();
+        probeOk.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", second.Token);
+        Assert.Equal(HttpStatusCode.OK, (await probeOk.GetAsync("/api/products")).StatusCode);
+
+        // after the grace window the same replay is treated as theft: it fails and kills the new session too
+        await using (var db = api.NewDb())
+            await db.RefreshTokens.Where(r => r.TokenHash == TokenService.HashRefresh(first.RefreshToken)).ExecuteUpdateAsync(s => s.SetProperty(r => r.RevokedAt, DateTimeOffset.UtcNow.AddMinutes(-5)));
         Assert.Equal(HttpStatusCode.Unauthorized, (await anon.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(first.RefreshToken))).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anon.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(second.RefreshToken))).StatusCode);
         var probe = api.Anonymous();

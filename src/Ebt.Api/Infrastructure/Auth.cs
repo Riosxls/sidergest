@@ -28,14 +28,19 @@ public class JwtOptions
     public string Issuer { get; set; } = "ebt-erp";
     public string Audience { get; set; } = "ebt-erp-clients";
     public string SigningKey { get; set; } = "";
-    public int ExpiresMinutes { get; set; } = 60;
+    public int ExpiresMinutes { get; set; } = 15;
     public int RefreshDays { get; set; } = 14;
     public int ClockSkewSeconds { get; set; } = 60;
+
+    /// <summary>A just-rotated refresh token that comes back within this many seconds is a second tab or a retry, not theft.</summary>
+    public int RefreshReuseGraceSeconds { get; set; } = 20;
 }
 
 public class TokenService(JwtOptions options)
 {
     public const string VersionClaim = "tv";
+
+    public TimeSpan ReuseGrace => TimeSpan.FromSeconds(Math.Max(0, options.RefreshReuseGraceSeconds));
 
     public static string HashRefresh(string token) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
 
@@ -172,8 +177,10 @@ public static class AuthEndpoints
             var stored = await db.RefreshTokens.Include(r => r.User).FirstOrDefaultAsync(r => r.TokenHash == hash, ct);
             if (stored?.User is not { } user) return Results.Unauthorized();
             var now = DateTimeOffset.UtcNow;
-            if (stored.RevokedAt is not null)
+            if (stored.RevokedAt is { } rotatedAt)
             {
+                // Two tabs (or a retry) refreshing at once: the loser holds a token that was rotated a moment ago. Refuse it, but do not sign the user out everywhere.
+                if (now - rotatedAt <= tokens.ReuseGrace) return Results.Unauthorized();
                 // A rotated token came back: treat it as stolen and sign the user out everywhere.
                 user.TokenVersion++;
                 await db.RefreshTokens.Where(r => r.UserId == user.Id).ExecuteDeleteAsync(ct);

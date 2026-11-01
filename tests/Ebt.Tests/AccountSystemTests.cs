@@ -133,18 +133,14 @@ public class AccountSystemTests(ApiFixture api)
     }
 
     [Fact]
-    public async Task Backup_status_reports_the_newest_dump_of_the_configured_folder()
+    public async Task Backup_status_reports_the_status_file_of_the_configured_folder()
     {
         var dir = Directory.CreateTempSubdirectory("ebt-backups-").FullName;
         try
         {
-            var older = Path.Combine(dir, "ebt-nightly-20261030-220000.dump");
-            var newest = Path.Combine(dir, "ebt-nightly-20261031-220000.dump");
-            File.WriteAllText(older, "old");
-            File.WriteAllText(newest, "newest dump");
-            File.WriteAllText(Path.Combine(dir, "notes.txt"), "ignored");
-            File.SetLastWriteTimeUtc(older, DateTime.UtcNow.AddDays(-2));
-            File.SetLastWriteTimeUtc(newest, DateTime.UtcNow.AddDays(-1));
+            var at = DateTimeOffset.UtcNow.AddDays(-1).ToString("o");
+            File.WriteAllText(Path.Combine(dir, "status.json"),
+                "{\"count\":2,\"lastBackupAt\":\"" + at + "\",\"lastBackupFile\":\"ebt-nightly-20261031-220000.dump\",\"lastBackupSizeBytes\":11}");
 
             var host = api.Anonymous(new Dictionary<string, string> { ["Backup:Directory"] = dir });
             var login = await (await host.PostAsJsonAsync("/api/auth/login", new LoginRequest(ApiFixture.AdminUser, ApiFixture.AdminPassword))).Read<LoginResponse>();
@@ -153,7 +149,7 @@ public class AccountSystemTests(ApiFixture api)
             Assert.True(s.Configured);
             Assert.Equal(2, s.Count);
             Assert.Equal("ebt-nightly-20261031-220000.dump", s.LastBackupFile);
-            Assert.Equal("newest dump".Length, s.LastBackupSizeBytes);
+            Assert.Equal(11, s.LastBackupSizeBytes);
             Assert.InRange((DateTimeOffset.UtcNow - s.LastBackupAt!.Value).TotalHours, 23, 25);
         }
         finally { Directory.Delete(dir, true); }
@@ -189,6 +185,20 @@ public class AccountSystemTests(ApiFixture api)
     }
 
     [Fact]
+    public void Scanning_a_broken_status_file_is_unconfigured()
+    {
+        var dir = Directory.CreateTempSubdirectory("ebt-backups-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "status.json"), "{not json");
+            Assert.False(SystemEndpoints.ScanBackups(dir).Configured);
+            File.WriteAllText(Path.Combine(dir, "status.json"), "null");
+            Assert.False(SystemEndpoints.ScanBackups(dir).Configured);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public async Task About_gives_environment_details_to_admins_only()
     {
         var admin = await (await (await api.AdminAsync()).GetAsync("/api/system/about")).Read<JsonElement>();
@@ -211,7 +221,7 @@ public class AccountSystemTests(ApiFixture api)
         var dir = Directory.CreateTempSubdirectory("ebt-backups-").FullName;
         try
         {
-            File.WriteAllText(Path.Combine(dir, "ebt-nightly-20261031-220000.dump"), "x");
+            File.WriteAllText(Path.Combine(dir, "status.json"), "{\"count\":1}");
             Assert.Null(SystemEndpoints.ScanBackups(dir).Directory);
             Assert.Null(SystemEndpoints.ScanBackups(Path.Combine(dir, "missing")).Directory);
         }

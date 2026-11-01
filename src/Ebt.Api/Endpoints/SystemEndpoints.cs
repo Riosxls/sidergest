@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Security.Claims;
+using System.Text.Json;
 using Ebt.Api.Infrastructure;
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
@@ -11,13 +12,25 @@ public record BackupStatus(bool Configured, string? Directory, int Count, DateTi
 
 public static class SystemEndpoints
 {
-    /// <summary>Looks at the folder the backup script writes to (mounted read-only into the API container) and reports the newest <c>ebt-*.dump</c>.</summary>
+    /// <summary>What <c>scripts/backup.ps1</c> writes to <c>status.json</c> after each run.</summary>
+    private record BackupStatusFile(int Count, DateTimeOffset? LastBackupAt, string? LastBackupFile, long? LastBackupSizeBytes);
+
+    /// <summary>
+    /// Reads <c>status.json</c> from the folder the backup script writes it to. Only that file is mounted (read-only) into the API container,
+    /// never the dumps, so the API process cannot read the data they hold.
+    /// </summary>
     public static BackupStatus ScanBackups(string? directory)
     {
-        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) return new BackupStatus(false, null, 0, null, null, null);
-        var files = new DirectoryInfo(directory).GetFiles("ebt-*.dump").OrderByDescending(f => f.LastWriteTimeUtc).ToList();
-        var last = files.FirstOrDefault();
-        return new BackupStatus(true, null, files.Count, last is null ? null : new DateTimeOffset(last.LastWriteTimeUtc, TimeSpan.Zero), last?.Name, last?.Length);
+        var none = new BackupStatus(false, null, 0, null, null, null);
+        if (string.IsNullOrWhiteSpace(directory)) return none;
+        var path = Path.Combine(directory, "status.json");
+        if (!File.Exists(path)) return none;
+        try
+        {
+            var s = JsonSerializer.Deserialize<BackupStatusFile>(File.ReadAllText(path), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            return s is null ? none : new BackupStatus(true, null, s.Count, s.LastBackupAt, s.LastBackupFile, s.LastBackupSizeBytes);
+        }
+        catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException) { return none; }
     }
 
     public static void MapSystem(this WebApplication app)

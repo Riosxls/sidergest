@@ -43,6 +43,17 @@ try {
         Remove-Item $_.FullName -Force
         Say "Removed old backup $($_.Name)"
     }
+    # The API container mounts only backup-status (never the dumps), so it can report the last backup without being able to read the data.
+    $StatusDir = Join-Path $Root 'backup-status'
+    New-Item -ItemType Directory -Force -Path $StatusDir | Out-Null
+    $all = @(Get-ChildItem $Dir -Filter 'ebt-*.dump' | Sort-Object LastWriteTime -Descending)
+    $status = [ordered]@{ count = $all.Count; lastBackupAt = $null; lastBackupFile = $null; lastBackupSizeBytes = $null }
+    if ($all.Count -gt 0) {
+        $status.lastBackupAt = $all[0].LastWriteTimeUtc.ToString('o')
+        $status.lastBackupFile = $all[0].Name
+        $status.lastBackupSizeBytes = $all[0].Length
+    }
+    $status | ConvertTo-Json | Set-Content -Path (Join-Path $StatusDir 'status.json') -Encoding utf8
     exit 0
 } catch {
     Write-Host "BACKUP FAILED: $($_.Exception.Message)" -ForegroundColor Red
