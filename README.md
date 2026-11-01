@@ -82,7 +82,7 @@ graphify explain "EbtDbContext"
 
 Claude Code sessions can query the graph through MCP: `.claude/.mcp.json` starts `graphify-mcp graphify-out/graph.json` (installed with graphify; it is the same server as `python -m graphify.serve`).
 
-God nodes (most connected, from `GRAPH_REPORT.md`, 2026-10-30): `EbtDbContext` (247 edges), `Ebt.Core.Entities`, `SalesService`, `FiscalDocument`, `ProductionService`, `StockService`, `SalesOrder`, `QualityCertificate`, `Ebt.Core.Data`, `Material`. No import cycles. Changes to the top ones touch many modules; run the tests before merging.
+God nodes (most connected, from `GRAPH_REPORT.md`, 2026-11-01): `EbtDbContext` (267 edges), `Ebt.Core.Entities` (90), `SalesService` (82), `FiscalDocument` (70), `ProductionService` (70), `StockService` (65), `SalesOrder` (62), `QualityCertificate` (59), `Ebt.Core.Data` (57). Changes to the top ones touch many modules; run the tests before merging.
 ## Run with Docker
 
 ```
