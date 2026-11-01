@@ -149,93 +149,89 @@ class _SteelScreenState extends State<SteelScreen> {
             ),
           ),
           Expanded(
-            child: TabBarView(
-              children: [
-                RecordList(
-                  key: _lots,
-                  api: api,
-                  path: '/api/steel/lots',
-                  searchHint: 'Lote, NF de compra, fornecedor ou especificação',
-                  fab: s.canSteel
-                      ? _fab('new-steel-lot', 'Nova bobina', () => _create(_lots, 'Nova bobina', '/api/steel/lots', _lotFields(), openLot: true))
-                      : null,
-                  columns: [
-                    col('Lote', 'lotCode'),
-                    col('Fornecedor', 'supplierName'),
-                    col('NF compra', 'purchaseInvoice'),
-                    dateCol('Recebida', 'receivedDate'),
-                    col('Espec.', 'specification'),
-                    col('Peso (kg)', 'weightKg', numeric: true),
-                    ColumnSpec('R\$/kg', (e) => fmtNum(e['pricePerKg'], 4), numeric: true),
-                    col('Saldo (kg)', 'balanceKg', numeric: true),
-                    moneyCol('Saldo R\$', 'balanceValue'),
-                    ColumnSpec('Slitter', (e) => (e['pendingJobs'] as num? ?? 0) > 0 ? '${e['pendingJobs']} pendente(s)' : ''),
-                  ],
-                  rowColor: (ctx, e) => (e['balanceKg'] as num? ?? 0) < 0 ? toneColors(ctx, Tone.danger).$1 : null,
-                  onTap: (e) async {
-                    await openSteelLot(context, s, e['id'] as int);
-                    _lots.currentState?.reload();
-                  },
-                ),
-                RecordList(
-                  key: _jobs,
-                  api: api,
-                  path: '/api/steel/slitter',
-                  searchHint: 'Lote, NF de remessa/retorno ou beneficiador',
-                  fab: s.canSteel
-                      ? _fab('new-slitter-job', 'Nova remessa', () => _create(_jobs, 'Remessa ao slitter', '/api/steel/slitter', _jobFields()))
-                      : null,
-                  columns: [
-                    col('Lote', 'lotCode'),
-                    col('Beneficiador', 'processorName'),
-                    col('NF remessa', 'shipmentInvoice'),
-                    dateCol('Remessa', 'shipmentDate'),
-                    col('Enviado (kg)', 'sentKg', numeric: true),
-                    col('NF retorno', 'returnInvoice'),
-                    col('Acabado (kg)', 'finishedKg', numeric: true),
-                    col('Refilo (kg)', 'scrapKg', numeric: true),
-                    ColumnSpec('Perda %', (e) => e['lossPercent'] == null ? '' : fmtNum(e['lossPercent'], 2), numeric: true),
-                    ColumnSpec('Situação', (e) => e['returned'] == true ? 'Retornou' : 'No slitter'),
-                  ],
-                  rowColor: (ctx, e) => e['returned'] == true ? null : toneColors(ctx, Tone.warning).$1,
-                  onTap: _editJob,
-                ),
-                RecordList(
-                  key: _usages,
-                  api: api,
-                  path: '/api/steel/usages',
-                  searchHint: 'Lote ou referência',
-                  fab: s.canSteel
-                      ? _fab('new-steel-usage', 'Novo consumo', () => _create(_usages, 'Uso interno de aço', '/api/steel/usages', _usageFields()))
-                      : null,
-                  columns: [
-                    col('Lote', 'lotCode'),
-                    dateCol('Data', 'date'),
-                    col('Peso (kg)', 'kg', numeric: true),
-                    moneyCol('Mão de obra', 'laborCost'),
-                    col('Referência', 'reference'),
-                    col('Observações', 'notes'),
-                  ],
-                  onTap: (e) async {
-                    if (!s.canSteel) return;
-                    await submitForm(
-                      context,
-                      api: api,
-                      title: 'Uso interno · ${e['lotCode']}',
-                      fields: _usageFields(),
-                      initial: {
-                        for (final k in ['lotId', 'date', 'kg', 'laborCost', 'reference', 'notes']) k: e[k],
-                        '_labels': {'lotId': '${e['lotCode']}'},
-                      },
-                      submit: (b) => api.put('/api/steel/usages/${e['id']}', b),
-                    );
-                  },
-                ),
-              ],
-            ),
+            child: TabBarView(children: [_lotsTab(), _jobsTab(), _usagesTab()]),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _lotsTab() => RecordList(
+    key: _lots,
+    api: api,
+    path: '/api/steel/lots',
+    searchHint: 'Lote, NF de compra, fornecedor ou especificação',
+    fab: s.canSteel ? _fab('new-steel-lot', 'Nova bobina', () => _create(_lots, 'Nova bobina', '/api/steel/lots', _lotFields(), openLot: true)) : null,
+    columns: [
+      col('Lote', 'lotCode'),
+      col('Fornecedor', 'supplierName'),
+      col('NF compra', 'purchaseInvoice'),
+      dateCol('Recebida', 'receivedDate'),
+      col('Espec.', 'specification'),
+      col('Peso (kg)', 'weightKg', numeric: true),
+      ColumnSpec('R\$/kg', (e) => fmtNum(e['pricePerKg'], 4), numeric: true),
+      col('Saldo (kg)', 'balanceKg', numeric: true),
+      moneyCol('Saldo R\$', 'balanceValue'),
+      ColumnSpec('Slitter', (e) => (e['pendingJobs'] as num? ?? 0) > 0 ? '${e['pendingJobs']} pendente(s)' : ''),
+    ],
+    rowColor: (ctx, e) => (e['balanceKg'] as num? ?? 0) < 0 ? toneColors(ctx, Tone.danger).$1 : null,
+    onTap: (e) async {
+      await openSteelLot(context, s, e['id'] as int);
+      _lots.currentState?.reload();
+    },
+  );
+
+  Widget _jobsTab() => RecordList(
+    key: _jobs,
+    api: api,
+    path: '/api/steel/slitter',
+    searchHint: 'Lote, NF de remessa/retorno ou beneficiador',
+    fab: s.canSteel ? _fab('new-slitter-job', 'Nova remessa', () => _create(_jobs, 'Remessa ao slitter', '/api/steel/slitter', _jobFields())) : null,
+    columns: [
+      col('Lote', 'lotCode'),
+      col('Beneficiador', 'processorName'),
+      col('NF remessa', 'shipmentInvoice'),
+      dateCol('Remessa', 'shipmentDate'),
+      col('Enviado (kg)', 'sentKg', numeric: true),
+      col('NF retorno', 'returnInvoice'),
+      col('Acabado (kg)', 'finishedKg', numeric: true),
+      col('Refilo (kg)', 'scrapKg', numeric: true),
+      ColumnSpec('Perda %', (e) => e['lossPercent'] == null ? '' : fmtNum(e['lossPercent'], 2), numeric: true),
+      ColumnSpec('Situação', (e) => e['returned'] == true ? 'Retornou' : 'No slitter'),
+    ],
+    rowColor: (ctx, e) => e['returned'] == true ? null : toneColors(ctx, Tone.warning).$1,
+    onTap: _editJob,
+  );
+
+  Widget _usagesTab() => RecordList(
+    key: _usages,
+    api: api,
+    path: '/api/steel/usages',
+    searchHint: 'Lote ou referência',
+    fab: s.canSteel ? _fab('new-steel-usage', 'Novo consumo', () => _create(_usages, 'Uso interno de aço', '/api/steel/usages', _usageFields())) : null,
+    columns: [
+      col('Lote', 'lotCode'),
+      dateCol('Data', 'date'),
+      col('Peso (kg)', 'kg', numeric: true),
+      moneyCol('Mão de obra', 'laborCost'),
+      col('Referência', 'reference'),
+      col('Observações', 'notes'),
+    ],
+    onTap: _editUsage,
+  );
+
+  Future<void> _editUsage(Map<String, dynamic> e) async {
+    if (!s.canSteel) return;
+    await submitForm(
+      context,
+      api: api,
+      title: 'Uso interno · ${e['lotCode']}',
+      fields: _usageFields(),
+      initial: {
+        for (final k in ['lotId', 'date', 'kg', 'laborCost', 'reference', 'notes']) k: e[k],
+        '_labels': {'lotId': '${e['lotCode']}'},
+      },
+      submit: (b) => api.put('/api/steel/usages/${e['id']}', b),
     );
   }
 }
@@ -426,55 +422,10 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
   );
 
   Widget _body(Map<String, dynamic> l) {
-    final returned = _jobs.where((j) => j['returned'] == true).toList();
-    final sentReturned = returned.fold<num>(0, (a, j) => a + (j['sentKg'] as num));
-    final finished = returned.fold<num>(0, (a, j) => a + ((j['finishedKg'] as num?) ?? 0));
-    final loss = sentReturned == 0 ? null : (sentReturned - finished) / sentReturned * 100;
-    final negative = (l['balanceKg'] as num) < 0;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _kpi(
-              'Saldo (kg)',
-              fmt(l['balanceKg']),
-              caption: negative ? 'Consumo maior que o saldo' : null,
-              icon: Icons.scale_outlined,
-              tone: negative ? Tone.danger : Tone.success,
-            ),
-            _kpi('Saldo (R\$)', fmtMoney(l['balanceValue']), icon: Icons.payments_outlined),
-            _kpi(
-              'Comprado',
-              '${fmt(l['weightKg'])} kg',
-              caption: '${fmtNum(l['pricePerKg'], 4)} R\$/kg · ${fmtMoney(l['purchaseValue'])}',
-              icon: Icons.shopping_cart_outlined,
-            ),
-            _kpi(
-              'No slitter',
-              '${fmt((l['sentKg'] as num) - (l['returnedKg'] as num))} kg',
-              caption: '${l['pendingJobs']} remessa(s) pendente(s)',
-              icon: Icons.content_cut,
-              tone: (l['pendingJobs'] as num) > 0 ? Tone.warning : Tone.neutral,
-            ),
-            _kpi(
-              'Retornado',
-              '${fmt(l['returnedKg'])} kg',
-              caption: 'Refilo ${fmt(l['scrapKg'])} kg${loss == null ? '' : ' · perda ${fmtNum(loss, 2)}%'}',
-              icon: Icons.south_west,
-              tone: Tone.progress,
-            ),
-            _kpi('Uso interno', '${fmt(l['usedKg'])} kg', caption: 'Mão de obra ${fmtMoney(l['laborCost'])}', icon: Icons.precision_manufacturing_outlined),
-            _kpi(
-              'Custo total',
-              fmtMoney(l['totalCost']),
-              caption: 'Compra + slitter ${fmtMoney(l['serviceCost'])} + mão de obra',
-              icon: Icons.calculate_outlined,
-            ),
-          ],
-        ),
+        Wrap(spacing: 12, runSpacing: 12, children: _kpis(l)),
         gap,
         Section(
           title: 'Dados do lote',
@@ -488,69 +439,113 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
           ]),
         ),
         gap,
-        Section(
-          title: 'Slitter (${_jobs.length})',
-          actions: [
-            if (s.canSteel)
-              FilledButton.tonalIcon(key: const ValueKey('lot-new-job'), onPressed: _newJob, icon: const Icon(Icons.add), label: const Text('Remessa')),
-          ],
-          child: SimpleTable(
-            columns: [
-              col('Beneficiador', 'processorName'),
-              col('NF remessa', 'shipmentInvoice'),
-              dateCol('Remessa', 'shipmentDate'),
-              col('Enviado (kg)', 'sentKg', numeric: true),
-              col('NF retorno', 'returnInvoice'),
-              dateCol('Retorno', 'returnDate'),
-              col('Acabado (kg)', 'finishedKg', numeric: true),
-              col('Refilo (kg)', 'scrapKg', numeric: true),
-              ColumnSpec('Perda %', (e) => e['lossPercent'] == null ? '' : fmtNum(e['lossPercent'], 2), numeric: true),
-              moneyCol('Serviço', 'serviceCost'),
-            ],
-            rows: _jobs,
-            actions: s.canSteel
-                ? (j) => [
-                    if (j['returned'] != true)
-                      TextButton(key: ValueKey('job-return-${j['id']}'), onPressed: () => _returnJob(j), child: const Text('Registrar retorno')),
-                    IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _editJob(j)),
-                    IconButton(
-                      tooltip: 'Remover',
-                      icon: const Icon(Icons.delete_outline, size: 20),
-                      onPressed: () => _deleteChild('/api/steel/slitter/${j['id']}', 'remessa'),
-                    ),
-                  ]
-                : null,
-          ),
-        ),
+        _slitterSection(),
         gap,
-        Section(
-          title: 'Uso interno (${_usages.length})',
-          actions: [
-            if (s.canSteel)
-              FilledButton.tonalIcon(key: const ValueKey('lot-new-usage'), onPressed: _newUsage, icon: const Icon(Icons.add), label: const Text('Consumo')),
-          ],
-          child: SimpleTable(
-            columns: [
-              dateCol('Data', 'date'),
-              col('Peso (kg)', 'kg', numeric: true),
-              moneyCol('Mão de obra', 'laborCost'),
-              col('Referência', 'reference'),
-              col('Observações', 'notes'),
-            ],
-            rows: _usages,
-            actions: s.canSteel
-                ? (u) => [
-                    IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _editUsage(u)),
-                    IconButton(
-                      tooltip: 'Remover',
-                      icon: const Icon(Icons.delete_outline, size: 20),
-                      onPressed: () => _deleteChild('/api/steel/usages/${u['id']}', 'consumo'),
-                    ),
-                  ]
-                : null,
-          ),
-        ),
+        _usageSection(),
       ],
     );
   }
+
+  List<Widget> _kpis(Map<String, dynamic> l) {
+    final returned = _jobs.where((j) => j['returned'] == true).toList();
+    final sentReturned = returned.fold<num>(0, (a, j) => a + (j['sentKg'] as num));
+    final finished = returned.fold<num>(0, (a, j) => a + ((j['finishedKg'] as num?) ?? 0));
+    final loss = sentReturned == 0 ? null : (sentReturned - finished) / sentReturned * 100;
+    final negative = (l['balanceKg'] as num) < 0;
+    return [
+      _kpi(
+        'Saldo (kg)',
+        fmt(l['balanceKg']),
+        caption: negative ? 'Consumo maior que o saldo' : null,
+        icon: Icons.scale_outlined,
+        tone: negative ? Tone.danger : Tone.success,
+      ),
+      _kpi('Saldo (R\$)', fmtMoney(l['balanceValue']), icon: Icons.payments_outlined),
+      _kpi(
+        'Comprado',
+        '${fmt(l['weightKg'])} kg',
+        caption: '${fmtNum(l['pricePerKg'], 4)} R\$/kg · ${fmtMoney(l['purchaseValue'])}',
+        icon: Icons.shopping_cart_outlined,
+      ),
+      _kpi(
+        'No slitter',
+        '${fmt((l['sentKg'] as num) - (l['returnedKg'] as num))} kg',
+        caption: '${l['pendingJobs']} remessa(s) pendente(s)',
+        icon: Icons.content_cut,
+        tone: (l['pendingJobs'] as num) > 0 ? Tone.warning : Tone.neutral,
+      ),
+      _kpi(
+        'Retornado',
+        '${fmt(l['returnedKg'])} kg',
+        caption: 'Refilo ${fmt(l['scrapKg'])} kg${loss == null ? '' : ' · perda ${fmtNum(loss, 2)}%'}',
+        icon: Icons.south_west,
+        tone: Tone.progress,
+      ),
+      _kpi('Uso interno', '${fmt(l['usedKg'])} kg', caption: 'Mão de obra ${fmtMoney(l['laborCost'])}', icon: Icons.precision_manufacturing_outlined),
+      _kpi('Custo total', fmtMoney(l['totalCost']), caption: 'Compra + slitter ${fmtMoney(l['serviceCost'])} + mão de obra', icon: Icons.calculate_outlined),
+    ];
+  }
+
+  Widget _slitterSection() => Section(
+    title: 'Slitter (${_jobs.length})',
+    actions: [
+      if (s.canSteel)
+        FilledButton.tonalIcon(key: const ValueKey('lot-new-job'), onPressed: _newJob, icon: const Icon(Icons.add), label: const Text('Remessa')),
+    ],
+    child: SimpleTable(
+      columns: [
+        col('Beneficiador', 'processorName'),
+        col('NF remessa', 'shipmentInvoice'),
+        dateCol('Remessa', 'shipmentDate'),
+        col('Enviado (kg)', 'sentKg', numeric: true),
+        col('NF retorno', 'returnInvoice'),
+        dateCol('Retorno', 'returnDate'),
+        col('Acabado (kg)', 'finishedKg', numeric: true),
+        col('Refilo (kg)', 'scrapKg', numeric: true),
+        ColumnSpec('Perda %', (e) => e['lossPercent'] == null ? '' : fmtNum(e['lossPercent'], 2), numeric: true),
+        moneyCol('Serviço', 'serviceCost'),
+      ],
+      rows: _jobs,
+      actions: s.canSteel
+          ? (j) => [
+              if (j['returned'] != true)
+                TextButton(key: ValueKey('job-return-${j['id']}'), onPressed: () => _returnJob(j), child: const Text('Registrar retorno')),
+              IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _editJob(j)),
+              IconButton(
+                tooltip: 'Remover',
+                icon: const Icon(Icons.delete_outline, size: 20),
+                onPressed: () => _deleteChild('/api/steel/slitter/${j['id']}', 'remessa'),
+              ),
+            ]
+          : null,
+    ),
+  );
+
+  Widget _usageSection() => Section(
+    title: 'Uso interno (${_usages.length})',
+    actions: [
+      if (s.canSteel)
+        FilledButton.tonalIcon(key: const ValueKey('lot-new-usage'), onPressed: _newUsage, icon: const Icon(Icons.add), label: const Text('Consumo')),
+    ],
+    child: SimpleTable(
+      columns: [
+        dateCol('Data', 'date'),
+        col('Peso (kg)', 'kg', numeric: true),
+        moneyCol('Mão de obra', 'laborCost'),
+        col('Referência', 'reference'),
+        col('Observações', 'notes'),
+      ],
+      rows: _usages,
+      actions: s.canSteel
+          ? (u) => [
+              IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _editUsage(u)),
+              IconButton(
+                tooltip: 'Remover',
+                icon: const Icon(Icons.delete_outline, size: 20),
+                onPressed: () => _deleteChild('/api/steel/usages/${u['id']}', 'consumo'),
+              ),
+            ]
+          : null,
+    ),
+  );
 }
