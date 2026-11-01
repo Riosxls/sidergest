@@ -71,7 +71,8 @@ class _ModuleScreenState extends State<ModuleScreen> {
   Future<void> _settle() async {
     try {
       await _data;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('modules: Load errors are shown by the view that owns the future: $e');
       // Load errors are shown by the view that owns the future.
     }
     if (mounted) setState(() => _updated = DateTime.now());

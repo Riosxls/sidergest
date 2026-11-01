@@ -53,7 +53,8 @@ class AuditDetailDialog extends StatelessWidget {
       final c = entry['changes'];
       final d = c is String ? jsonDecode(c) : c;
       return d is Map<String, dynamic> ? d : {};
-    } catch (_) {
+    } catch (e) {
+      debugPrint('audit: lookup failed, using fallback: $e');
       return {};
     }
   }

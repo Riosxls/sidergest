@@ -45,7 +45,8 @@ class AdminSection extends StatelessWidget {
               load: () async {
                 try {
                   return BackupStatus(await session.api.get('/api/admin/backup-status') as Map<String, dynamic>);
-                } catch (_) {
+                } catch (e) {
+                  debugPrint('settings_admin: lookup failed, using fallback: $e');
                   return null;
                 }
               },

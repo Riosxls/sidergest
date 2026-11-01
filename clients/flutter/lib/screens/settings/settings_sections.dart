@@ -458,7 +458,8 @@ class AboutSection extends StatelessWidget {
       load: () async {
         try {
           return ServerAbout(await session.api.get('/api/system/about') as Map<String, dynamic>);
-        } catch (_) {
+        } catch (e) {
+          debugPrint('settings_sections: lookup failed, using fallback: $e');
           return null;
         }
       },

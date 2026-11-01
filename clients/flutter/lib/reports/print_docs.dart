@@ -138,7 +138,8 @@ Future<Map<String, dynamic>?> _customer(ApiClient api, Object? id) async {
   if (id == null) return null;
   try {
     return await api.get('/api/customers/$id') as Map<String, dynamic>;
-  } catch (_) {
+  } catch (e) {
+    debugPrint('print_docs: lookup failed, using fallback: $e');
     return null;
   }
 }
@@ -535,7 +536,8 @@ Future<Uint8List> buildProductionOrderPdf(ApiClient api, Map<String, dynamic> o)
   Map<String, dynamic>? product;
   try {
     product = await api.get('/api/products/${o['productId']}') as Map<String, dynamic>;
-  } catch (_) {
+  } catch (e) {
+    debugPrint('print_docs: Optional data; the document prints without it: $e');
     // Optional data; the document prints without it.
   }
   final ops = (o['operations'] as List).cast<Map<String, dynamic>>();

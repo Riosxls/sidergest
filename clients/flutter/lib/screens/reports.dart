@@ -210,7 +210,8 @@ class _MaterialConsumptionScreenState extends State<MaterialConsumptionScreen> {
     try {
       final g = await widget.session.api.listAll('/api/material-groups');
       if (mounted) setState(() => _groups = {for (final e in g) '${e['id']}': '${e['code']} · ${e['name']}'});
-    } catch (_) {
+    } catch (e) {
+      debugPrint('reports: Optional context; the screen works without it: $e');
       // Optional context; the screen works without it.
     }
   }

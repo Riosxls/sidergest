@@ -65,7 +65,8 @@ class _Nf {
 Future<Map<String, dynamic>?> _try(ApiClient api, String path) async {
   try {
     return await api.get(path) as Map<String, dynamic>;
-  } catch (_) {
+  } catch (e) {
+    debugPrint('nf_doc: lookup failed, using fallback: $e');
     return null;
   }
 }

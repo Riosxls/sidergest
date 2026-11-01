@@ -13,7 +13,8 @@ class PrintLog {
   static Future<bool> isDone(String doc) async {
     try {
       return ((await SharedPreferences.getInstance()).getStringList(_key) ?? const []).contains(doc);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('print_gate: lookup failed, using fallback: $e');
       return false;
     }
   }
@@ -22,7 +23,8 @@ class PrintLog {
   static Future<int> count() async {
     try {
       return ((await SharedPreferences.getInstance()).getStringList(_key) ?? const []).length;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('print_gate: lookup failed, using fallback: $e');
       return 0;
     }
   }
@@ -31,7 +33,8 @@ class PrintLog {
   static Future<void> clear() async {
     try {
       await (await SharedPreferences.getInstance()).remove(_key);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('print_gate: Local storage is best effort; the in-memory value stays: $e');
       // Local storage is best effort; the in-memory value stays.
     }
   }
@@ -42,7 +45,8 @@ class PrintLog {
       final prefs = await SharedPreferences.getInstance();
       final list = prefs.getStringList(_key) ?? <String>[];
       if (!list.contains(doc)) await prefs.setStringList(_key, [...list.length > 500 ? list.sublist(list.length - 500) : list, doc]);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('print_gate: Local storage is best effort; the in-memory value stays: $e');
       // Local storage is best effort; the in-memory value stays.
     }
   }

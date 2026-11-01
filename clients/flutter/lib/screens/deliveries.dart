@@ -96,13 +96,15 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       try {
         final nfs = await api.get('/api/fiscal/documents', {'deliveryId': widget.id, 'status': 'Authorized'}) as Map<String, dynamic>;
         nfItems = (nfs['items'] as List).cast<Map<String, dynamic>>();
-      } catch (_) {
+      } catch (e) {
+        debugPrint('deliveries: Optional context; the screen works without it: $e');
         // Optional context; the screen works without it.
       }
       var certs = const <Map<String, dynamic>>[];
       try {
         certs = (await api.list('/api/sales/certificates', query: {'deliveryId': widget.id}, take: 100)).items;
-      } catch (_) {
+      } catch (e) {
+        debugPrint('deliveries: Optional context; the screen works without it: $e');
         // Optional context; the screen works without it.
       }
       // null = unknown (lookup failed): the server still enforces the rule when shipping.
@@ -111,7 +113,8 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
         final order = await api.get('/api/sales/orders/${d['orderId']}') as Map<String, dynamic>;
         final issued = (await api.list('/api/sales/certificates', query: {'orderId': d['orderId']}, take: 200)).items;
         certified = order['certificateWaived'] == true || issued.any((c) => c['status'] == 'Issued');
-      } catch (_) {
+      } catch (e) {
+        debugPrint('deliveries: Optional context; the screen works without it: $e');
         // Optional context; the screen works without it.
       }
       if (mounted) {

@@ -45,7 +45,8 @@ class RecentStore {
       final p = await SharedPreferences.getInstance();
       final raw = jsonDecode(p.getString(_key) ?? '[]');
       return [if (raw is List) ...raw.map(RecentItem.fromJson).whereType<RecentItem>()];
-    } catch (_) {
+    } catch (e) {
+      debugPrint('command_palette: lookup failed, using fallback: $e');
       return [];
     }
   }
@@ -53,7 +54,8 @@ class RecentStore {
   static Future<void> clear() async {
     try {
       await (await SharedPreferences.getInstance()).remove(_key);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('command_palette: Local storage is best effort; the in-memory value stays: $e');
       // Local storage is best effort; the in-memory value stays.
     }
   }
@@ -65,7 +67,8 @@ class RecentStore {
       list.insert(0, item);
       final p = await SharedPreferences.getInstance();
       await p.setString(_key, jsonEncode([for (final e in list.take(max)) e.toJson()]));
-    } catch (_) {
+    } catch (e) {
+      debugPrint('command_palette: Local storage is best effort; the in-memory value stays: $e');
       // Local storage is best effort; the in-memory value stays.
     }
   }

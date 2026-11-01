@@ -451,7 +451,8 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
     try {
       final o = await api.get('/api/sales/orders/${c['orderId']}') as Map<String, dynamic>;
       if (mounted) setState(() => _deliveries = (o['deliveries'] as List).cast<Map<String, dynamic>>().where((d) => d['status'] != 'Cancelled').toList());
-    } catch (_) {
+    } catch (e) {
+      debugPrint('certificates: Optional context; the screen works without it: $e');
       // Optional context; the screen works without it.
     }
   }

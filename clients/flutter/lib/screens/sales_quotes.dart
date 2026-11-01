@@ -379,7 +379,8 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
         if (!mounted || _customerId != customer) return;
         final price = r is Map<String, dynamic> ? r['unitPrice'] : null;
         setState(() => _listPrices[id] = price is num ? price : null);
-      } catch (_) {
+      } catch (e) {
+        debugPrint('sales_quotes: A failed lookup only hides the warning; the server still enforces the rule when the quote is sent: $e');
         // A failed lookup only hides the warning; the server still enforces the rule when the quote is sent.
       }
     }
@@ -441,7 +442,8 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
         _termId = termId;
         _termName = company?['paymentTermName'] as String?;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('sales_quotes: Optional context; the screen works without it: $e');
       // Optional context; the screen works without it.
     }
   }
@@ -461,7 +463,8 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
           _email.text = '${first?['email'] ?? ''}';
         }
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('sales_quotes: Optional context; the screen works without it: $e');
       // Optional context; the screen works without it.
     }
   }
@@ -814,7 +817,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
     try {
       final c = await api.get('$base/credit');
       if (mounted && c is Map<String, dynamic>) setState(() => _credit = c);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('sales_quotes: Optional context; the screen works without it: $e');
       // Optional context; the screen works without it.
     }
   }
@@ -897,7 +901,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
     var opened = false;
     try {
       opened = await launchUrl(uri);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('sales_quotes: Optional context; the screen works without it: $e');
       // Optional context; the screen works without it.
     }
     if (!opened && mounted) {

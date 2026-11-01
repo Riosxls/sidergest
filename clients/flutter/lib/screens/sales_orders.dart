@@ -176,7 +176,8 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       var certs = const <Map<String, dynamic>>[];
       try {
         certs = (await api.list('/api/sales/certificates', query: {'orderId': widget.id}, take: 200)).items;
-      } catch (_) {
+      } catch (e) {
+        debugPrint('sales_orders: Optional context; the screen works without it: $e');
         // Optional context; the screen works without it.
       }
       // The customer's purchase order lives on the quote; optional as well (orders can be typed without one).
@@ -184,7 +185,8 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       if (o['quoteId'] != null) {
         try {
           quote = await api.get('/api/sales/quotes/${o['quoteId']}') as Map<String, dynamic>;
-        } catch (_) {
+        } catch (e) {
+          debugPrint('sales_orders: Optional context; the screen works without it: $e');
           // Optional context; the screen works without it.
         }
       }

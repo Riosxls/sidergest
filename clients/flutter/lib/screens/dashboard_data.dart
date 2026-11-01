@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../api.dart';
 import '../entities.dart';
 
@@ -166,12 +167,14 @@ Future<StockDashboard> fetchStock(ApiClient api) async {
   var lowStock = <Map<String, dynamic>>[];
   try {
     lowStock = (await api.get('/api/stock/low-stock') as List).cast<Map<String, dynamic>>();
-  } catch (_) {
+  } catch (e) {
+    debugPrint('dashboard_data: Optional context; the screen works without it: $e');
     // Optional context; the screen works without it.
   }
   try {
     steel = (await api.list('/api/steel/lots', take: 200)).items;
-  } catch (_) {
+  } catch (e) {
+    debugPrint('dashboard_data: lookup failed, using fallback: $e');
     steelUnavailable = true;
   }
   return StockDashboard(

@@ -167,7 +167,8 @@ class _ShellState extends State<Shell> {
       setState(() {
         _collapsed = p.getBool('navCollapsed') ?? false;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('shell: Local storage is best effort; the in-memory value stays: $e');
       // Local storage is best effort; the in-memory value stays.
     }
   }
@@ -177,7 +178,8 @@ class _ShellState extends State<Shell> {
     try {
       final p = await SharedPreferences.getInstance();
       await p.setBool('navCollapsed', _collapsed);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('shell: Local storage is best effort; the in-memory value stays: $e');
       // Local storage is best effort; the in-memory value stays.
     }
   }
