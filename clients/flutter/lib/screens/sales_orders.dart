@@ -641,24 +641,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     final released = !['Created', 'Cancelled'].contains(o['status']);
     return SideBySide(
       main: [
-        RecordHeader(
-          icon: Icons.receipt_long_outlined,
-          kind: 'Pedido de venda',
-          title: '${o['reference']}',
-          badge: StatusBadge(salesOrderStatuses[o['status']] ?? '${o['status']}', tone: orderTone(o['status'])),
-          amount: fmtMoney(o['total']),
-          fields: [
-            ('Cliente', '${o['customerName']}'),
-            ('Pedido do cliente', fmt(o['customerPo'])),
-            ('Faturar para', billToLabels[o['billTo']] ?? fmt(o['billTo'])),
-            ('Origem', orderOrigins[o['origin']] ?? fmt(o['origin'])),
-            ('Responsável de vendas', fmt(o['salesperson'])),
-            ('Prazo', fmt(o['paymentTermName'] ?? o['customPaymentTerm'])),
-            ('Frete', freightTerms[o['freight']] ?? fmt(o['freight'])),
-            ('Orçamento', fmt(o['quoteReference'])),
-            ('Crédito', credit['limit'] == null ? 'Sem limite' : '${fmtMoney(credit['open'])} em aberto de ${fmtMoney(credit['limit'])}'),
-          ],
-        ),
+        _orderHeader(o, credit),
         gap,
         StagePath(steps: flowSteps, current: step, failedLabel: failed),
         gap,
@@ -666,110 +649,12 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         if (o['status'] != 'Cancelled') ...[gap, PrintPanel(docs: _printDocs(o))],
         if (released) ...[gap, _production(lines)],
         gap,
-        Section(
-          title: 'Itens (${lines.length})',
-          actions: [
-            if (o['quoteId'] != null)
-              TextButton.icon(
-                onPressed: () => openQuote(context, s, o['quoteId'] as int).then((_) => _load()),
-                icon: const Icon(Icons.request_quote_outlined),
-                label: const Text('Ver orçamento'),
-              ),
-          ],
-          child: SimpleTable(
-            columns: [
-              col('Item', 'sequence'),
-              ColumnSpec('Produto', (e) => '${e['productCode']}${e['customerPartNumber'] == null ? '' : ' (${e['customerPartNumber']})'}'),
-              col('Descrição', 'description'),
-              ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
-              ColumnSpec('Medidas', (e) => _measures(e['spec'])),
-              ColumnSpec('Norma', (e) => _standard(e['spec'])),
-              ColumnSpec('MP (kg)', (e) => fmt((e['spec'] as Map?)?['materialNeedKg']), numeric: true),
-              col('Viabilidade', 'feasibilityReference'),
-              ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
-              col('IPI %', 'ipiPercent', numeric: true),
-              dateCol('Entrega', 'dueDate'),
-              moneyCol('Total', 'total'),
-              col('Expedido', 'shipped', numeric: true),
-              col('Saldo', 'remaining', numeric: true),
-              moneyCol('Saldo R\$', 'balanceValue'),
-            ],
-            rows: lines,
-          ),
-        ),
+        _itemsSection(o, lines),
         gap,
-        Section(
-          title: 'Entregas (${deliveries.length})',
-          actions: [
-            if (s.canShip && ['Released', 'PartiallyShipped'].contains(o['status']))
-              FilledButton.tonalIcon(onPressed: _planDelivery, icon: const Icon(Icons.add), label: const Text('Programar')),
-          ],
-          child: SimpleTable(
-            columns: [
-              col('Entrega', 'reference'),
-              dateCol('Data', 'plannedDate'),
-              labelCol('Situação', 'status', deliveryStatuses),
-              col('NF', 'invoiceNumber'),
-              col('Volumes', 'packages', numeric: true),
-            ],
-            rows: deliveries,
-            actions: (d) => [
-              IconButton(
-                tooltip: 'Abrir',
-                icon: const Icon(Icons.open_in_new, size: 20),
-                onPressed: () => openDelivery(context, s, d['id'] as int).then((_) => _load()),
-              ),
-            ],
-          ),
-        ),
-        if (released) ...[
-          gap,
-          Section(
-            title: 'Certificados de qualidade (${_certs.length})',
-            actions: [
-              if (o['certificateWaived'] == true)
-                TextButton(onPressed: s.canIssueCertificate ? () => _waiveCertificate(false) : null, child: const Text('Dispensado · exigir novamente'))
-              else if (s.canCertificate && status != 'Cancelled')
-                FilledButton.tonalIcon(
-                  key: const ValueKey('order-new-certificate'),
-                  onPressed: _newCertificate,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Emitir certificado'),
-                ),
-            ],
-            child: SimpleTable(
-              columns: [
-                col('Certificado', 'reference'),
-                dateCol('Data', 'issueDate'),
-                labelCol('Situação', 'status', certificateStatuses),
-                col('Produto', 'description'),
-                ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
-                col('Entrega', 'deliveryReference'),
-                col('NF', 'invoiceNumber'),
-              ],
-              rows: _certs,
-              actions: (c) => [
-                IconButton(
-                  tooltip: 'Abrir',
-                  icon: const Icon(Icons.open_in_new, size: 20),
-                  onPressed: () => openCertificate(context, s, c['id'] as int).then((_) => _load()),
-                ),
-              ],
-            ),
-          ),
-        ],
+        _deliveriesSection(o, deliveries),
+        if (released) ...[gap, _certificatesSection(o)],
         gap,
-        Section(
-          title: 'Detalhes',
-          child: InfoGrid([
-            ('Local de entrega', fmt(o['addressText'])),
-            ('Observações', fmt(o['notes'])),
-            ('Criado', '${fmt(o['createdBy'])} · ${fmtDate(o['createdAt'])}'),
-            ('Liberado', o['releasedAt'] == null ? '' : '${fmt(o['releasedBy'])} · ${fmtDate(o['releasedAt'])}'),
-            ('Produtos', fmtMoney(o['products'])),
-            ('IPI', fmtMoney(o['ipi'])),
-          ]),
-        ),
+        _detailsSection(o),
       ],
       side: [
         Section(
@@ -779,6 +664,133 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       ],
     );
   }
+
+  Widget _orderHeader(Map<String, dynamic> o, Map<String, dynamic> credit) =>
+    RecordHeader(
+      icon: Icons.receipt_long_outlined,
+      kind: 'Pedido de venda',
+      title: '${o['reference']}',
+      badge: StatusBadge(salesOrderStatuses[o['status']] ?? '${o['status']}', tone: orderTone(o['status'])),
+      amount: fmtMoney(o['total']),
+      fields: [
+        ('Cliente', '${o['customerName']}'),
+        ('Pedido do cliente', fmt(o['customerPo'])),
+        ('Faturar para', billToLabels[o['billTo']] ?? fmt(o['billTo'])),
+        ('Origem', orderOrigins[o['origin']] ?? fmt(o['origin'])),
+        ('Responsável de vendas', fmt(o['salesperson'])),
+        ('Prazo', fmt(o['paymentTermName'] ?? o['customPaymentTerm'])),
+        ('Frete', freightTerms[o['freight']] ?? fmt(o['freight'])),
+        ('Orçamento', fmt(o['quoteReference'])),
+        ('Crédito', credit['limit'] == null ? 'Sem limite' : '${fmtMoney(credit['open'])} em aberto de ${fmtMoney(credit['limit'])}'),
+      ],
+    );
+
+  Widget _itemsSection(Map<String, dynamic> o, List<Map<String, dynamic>> lines) =>
+    Section(
+      title: 'Itens (${lines.length})',
+      actions: [
+        if (o['quoteId'] != null)
+          TextButton.icon(
+            onPressed: () => openQuote(context, s, o['quoteId'] as int).then((_) => _load()),
+            icon: const Icon(Icons.request_quote_outlined),
+            label: const Text('Ver orçamento'),
+          ),
+      ],
+      child: SimpleTable(
+        columns: [
+          col('Item', 'sequence'),
+          ColumnSpec('Produto', (e) => '${e['productCode']}${e['customerPartNumber'] == null ? '' : ' (${e['customerPartNumber']})'}'),
+          col('Descrição', 'description'),
+          ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
+          ColumnSpec('Medidas', (e) => _measures(e['spec'])),
+          ColumnSpec('Norma', (e) => _standard(e['spec'])),
+          ColumnSpec('MP (kg)', (e) => fmt((e['spec'] as Map?)?['materialNeedKg']), numeric: true),
+          col('Viabilidade', 'feasibilityReference'),
+          ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
+          col('IPI %', 'ipiPercent', numeric: true),
+          dateCol('Entrega', 'dueDate'),
+          moneyCol('Total', 'total'),
+          col('Expedido', 'shipped', numeric: true),
+          col('Saldo', 'remaining', numeric: true),
+          moneyCol('Saldo R\$', 'balanceValue'),
+        ],
+        rows: lines,
+      ),
+    );
+
+  Widget _deliveriesSection(Map<String, dynamic> o, List<Map<String, dynamic>> deliveries) =>
+    Section(
+      title: 'Entregas (${deliveries.length})',
+      actions: [
+        if (s.canShip && ['Released', 'PartiallyShipped'].contains(o['status']))
+          FilledButton.tonalIcon(onPressed: _planDelivery, icon: const Icon(Icons.add), label: const Text('Programar')),
+      ],
+      child: SimpleTable(
+        columns: [
+          col('Entrega', 'reference'),
+          dateCol('Data', 'plannedDate'),
+          labelCol('Situação', 'status', deliveryStatuses),
+          col('NF', 'invoiceNumber'),
+          col('Volumes', 'packages', numeric: true),
+        ],
+        rows: deliveries,
+        actions: (d) => [
+          IconButton(
+            tooltip: 'Abrir',
+            icon: const Icon(Icons.open_in_new, size: 20),
+            onPressed: () => openDelivery(context, s, d['id'] as int).then((_) => _load()),
+          ),
+        ],
+      ),
+    );
+
+  Widget _certificatesSection(Map<String, dynamic> o) =>
+    Section(
+      title: 'Certificados de qualidade (${_certs.length})',
+      actions: [
+        if (o['certificateWaived'] == true)
+          TextButton(onPressed: s.canIssueCertificate ? () => _waiveCertificate(false) : null, child: const Text('Dispensado · exigir novamente'))
+        else if (s.canCertificate && status != 'Cancelled')
+          FilledButton.tonalIcon(
+            key: const ValueKey('order-new-certificate'),
+            onPressed: _newCertificate,
+            icon: const Icon(Icons.add),
+            label: const Text('Emitir certificado'),
+          ),
+      ],
+      child: SimpleTable(
+        columns: [
+          col('Certificado', 'reference'),
+          dateCol('Data', 'issueDate'),
+          labelCol('Situação', 'status', certificateStatuses),
+          col('Produto', 'description'),
+          ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
+          col('Entrega', 'deliveryReference'),
+          col('NF', 'invoiceNumber'),
+        ],
+        rows: _certs,
+        actions: (c) => [
+          IconButton(
+            tooltip: 'Abrir',
+            icon: const Icon(Icons.open_in_new, size: 20),
+            onPressed: () => openCertificate(context, s, c['id'] as int).then((_) => _load()),
+          ),
+        ],
+      ),
+    );
+
+  Widget _detailsSection(Map<String, dynamic> o) =>
+    Section(
+      title: 'Detalhes',
+      child: InfoGrid([
+        ('Local de entrega', fmt(o['addressText'])),
+        ('Observações', fmt(o['notes'])),
+        ('Criado', '${fmt(o['createdBy'])} · ${fmtDate(o['createdAt'])}'),
+        ('Liberado', o['releasedAt'] == null ? '' : '${fmt(o['releasedBy'])} · ${fmtDate(o['releasedAt'])}'),
+        ('Produtos', fmtMoney(o['products'])),
+        ('IPI', fmtMoney(o['ipi'])),
+      ]),
+    );
 
   Widget _production(List<Map<String, dynamic>> lines) => Section(
     title: 'Produção e disponibilidade',
