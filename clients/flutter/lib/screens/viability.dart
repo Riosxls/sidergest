@@ -152,7 +152,7 @@ class _FeasibilityScreenState extends State<FeasibilityScreen> {
 
   Future<void> _post(String path, {Object? body, String? success}) async {
     final r = await runAction(context, () => api.post('$base/$path', body ?? <String, dynamic>{}), success: success);
-    if (r is Map<String, dynamic>) setState(() => _f = r);
+    if (r is Map<String, dynamic> && mounted) setState(() => _f = r);
   }
 
   Future<void> _edit() async {

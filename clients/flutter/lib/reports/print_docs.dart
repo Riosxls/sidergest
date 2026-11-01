@@ -5,12 +5,12 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import '../widgets/print_gate.dart';
 
 import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
 import '../screens/customers.dart' show fmtDocument;
+import '../widgets/print_gate.dart';
 
 // Dados da empresa no cabeçalho dos documentos. Ajustar quando o cadastro da empresa existir no sistema.
 const _companyName = 'EBT';

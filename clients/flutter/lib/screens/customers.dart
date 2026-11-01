@@ -356,7 +356,7 @@ class _CustomerAddressesState extends State<_CustomerAddresses> {
   @override
   Widget build(BuildContext context) => Scaffold(
     floatingActionButton: widget.session.canCustomers
-        ? FloatingActionButton.extended(heroTag: 'new-customer-address', onPressed: () => _edit(), icon: const Icon(Icons.add), label: const Text('Novo local'))
+        ? FloatingActionButton.extended(heroTag: 'new-customer-address', onPressed: _edit, icon: const Icon(Icons.add), label: const Text('Novo local'))
         : null,
     body: FutureView<dynamic>(
       future: _future,

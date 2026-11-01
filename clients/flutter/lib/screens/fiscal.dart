@@ -348,7 +348,7 @@ class _FiscalSettingsScreenState extends State<FiscalSettingsScreen> {
       initial: d,
       submit: (b) => widget.session.api.put('/api/fiscal/settings', b),
     );
-    if (r != null) {
+    if (r != null && mounted) {
       setState(() {
         _future = _fetch();
       });

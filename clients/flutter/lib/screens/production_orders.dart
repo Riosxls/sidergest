@@ -681,7 +681,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
             if (canIssue && lines.any((l) => (l['remaining'] as num) > 0))
               FilledButton.tonalIcon(
                 key: const ValueKey('issue-all'),
-                onPressed: () => _issue(),
+                onPressed: _issue,
                 icon: const Icon(Icons.outbox_outlined),
                 label: const Text('Requisitar saldo'),
               ),

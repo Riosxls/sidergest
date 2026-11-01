@@ -181,7 +181,7 @@ List<(String, String, num)> _installments(String terms, num total, DateTime from
 
 const _line = PdfColors.black;
 
-pw.TextStyle _lbl() => pw.TextStyle(fontSize: 5.5, fontStyle: pw.FontStyle.italic, color: PdfColors.grey800);
+pw.TextStyle _lbl() => const pw.TextStyle(fontSize: 5.5, fontStyle: pw.FontStyle.italic, color: PdfColors.grey800);
 pw.TextStyle _val([double size = 8, bool bold = false]) => pw.TextStyle(fontSize: size, fontWeight: bold ? pw.FontWeight.bold : null);
 
 pw.Widget _cell(String label, String value, {int flex = 1, bool right = false, bool bold = false, double size = 8, PdfColor? fill}) => pw.Expanded(
@@ -203,7 +203,7 @@ pw.Widget _row(List<pw.Widget> cells, {double? height}) => pw.SizedBox(height: h
 
 pw.Widget _title(String t) => pw.Padding(
   padding: const pw.EdgeInsets.only(top: 3, bottom: 1),
-  child: pw.Text(t, style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+  child: pw.Text(t, style: const pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
 );
 
 Future<Uint8List> _render(_Nf nf) async {
@@ -230,7 +230,7 @@ Future<Uint8List> _render(_Nf nf) async {
     width: width,
     padding: const pw.EdgeInsets.all(2),
     decoration: pw.BoxDecoration(color: PdfColors.grey300, border: pw.Border.all(width: 0.4)),
-    child: pw.Text(t, style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center),
+    child: pw.Text(t, style: const pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center),
   );
   pw.Widget item(String t, double width, {bool right = false}) => pw.Container(
     width: width,

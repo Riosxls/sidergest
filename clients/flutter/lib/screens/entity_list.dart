@@ -113,7 +113,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final page = _page;
     return Scaffold(
-      floatingActionButton: canWrite ? FloatingActionButton.extended(onPressed: () => _edit(), icon: const Icon(Icons.add), label: const Text('Novo')) : null,
+      floatingActionButton: canWrite ? FloatingActionButton.extended(onPressed: _edit, icon: const Icon(Icons.add), label: const Text('Novo')) : null,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
