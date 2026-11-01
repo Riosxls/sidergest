@@ -1,3 +1,4 @@
 *.bat text eol=crlf
 *.ps1 text eol=crlf
 graphify-out/graph.json merge=graphify
+scripts/hooks/* text eol=lf
