@@ -42,7 +42,7 @@ The first build takes a few minutes; the window opens on the login screen. `http
 
 ## Layout (MVC mapping)
 
-The code is layered and already follows MVC; see `ARCHITECTURE.md` for the request lifecycle and audit notes.
+The code is layered and already follows MVC; see `docs/mvc/ARCHITECTURE.md` for the request lifecycle and audit notes.
 
 ```
 Ebt.sln
@@ -71,7 +71,7 @@ compose.yaml             db + api (+ dbf-import under the "tools" profile)
 
 ## Knowledge graph (Graphify)
 
-`graphify-out/` holds a code knowledge graph (`graph.json`, `GRAPH_REPORT.md`, `graph.html`). It is generated output.
+`graphify-out/` holds a code knowledge graph (`graph.json`, `GRAPH_REPORT.md`, `graph.html`). It is generated output.  A snapshot of the report is in `docs/mvc/GRAPH_REPORT.md`.
 
 ```
 graphify update .                      # refresh after code changes (AST only, no API cost)
