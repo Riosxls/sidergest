@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../entities.dart';
@@ -28,7 +29,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       fields: suppliers.fields,
       onSubmit: (b) async => await widget.session.api.post(suppliers.path, b) as Map<String, dynamic>?,
     );
-    if (r != null) _list.currentState?.reload();
+    if (r != null) unawaited(_list.currentState?.reload());
   }
 
   @override
@@ -242,7 +243,7 @@ class _SupplierMaterialsState extends State<_SupplierMaterials> {
           await s.api.put('/api/suppliers/${widget.supplierId}/materials/${current?['materialId'] ?? b['materialId']}', b) as Map<String, dynamic>?,
       onDelete: current == null ? null : () => s.api.delete('/api/suppliers/${widget.supplierId}/materials/${current['materialId']}'),
     );
-    if (r != null) _list.currentState?.reload();
+    if (r != null) unawaited(_list.currentState?.reload());
   }
 
   @override

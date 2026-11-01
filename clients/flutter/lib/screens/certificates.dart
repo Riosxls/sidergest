@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -98,7 +99,7 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
     ],
     onTap: (e) async {
       await openCertificate(context, widget.session, e['id'] as int);
-      _list.currentState?.reload();
+      unawaited(_list.currentState?.reload());
     },
   );
 }
@@ -895,13 +896,13 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
     );
     if (ok != true || !mounted) return;
     await runAction(context, () => api.delete('/api/sales/certificates/templates/${t['id']}'), success: 'Modelo removido');
-    _load();
+    unawaited(_load());
   }
 
   Future<void> _edit(Map<String, dynamic> t) async {
     if (await showTemplateEditor(context, api, t) && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Modelo salvo')));
-      _load();
+      unawaited(_load());
     }
   }
 
@@ -914,7 +915,7 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
         ? 'Nada novo: os modelos dos certificados em Excel já estão carregados.'
         : '$created modelos criados a partir dos certificados em Excel (${m['noCustomer']} sem cliente cadastrado, ${m['noProduct']} sem produto cadastrado).';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-    _load();
+    unawaited(_load());
   }
 
   static const _kinds = {'Chemical': 'Química', 'Dimensional': 'Dimensional', 'Mechanical': 'Mecânico'};

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -36,7 +37,7 @@ class _LowStockScreenState extends State<LowStockScreen> {
         ),
       ),
     );
-    _list.currentState?.reload();
+    unawaited(_list.currentState?.reload());
   }
 
   @override

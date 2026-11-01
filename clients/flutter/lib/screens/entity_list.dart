@@ -89,7 +89,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
     );
     if (result == null) return;
     await _load();
-    if (isProduct && item == null && result['id'] != null && mounted) _open(result);
+    if (isProduct && item == null && result['id'] != null && mounted) unawaited(_open(result));
   }
 
   Future<void> _open(Map<String, dynamic> item) async {
@@ -99,7 +99,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
         builder: (_) => ProductDetailScreen(session: widget.session, productId: item['id'] as int),
       ),
     );
-    _load();
+    unawaited(_load());
   }
 
   void _whereUsed(Map<String, dynamic> item) => Navigator.of(context).push(

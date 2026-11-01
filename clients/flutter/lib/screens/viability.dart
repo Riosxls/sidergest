@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -77,10 +78,10 @@ class _ViabilityScreenState extends State<ViabilityScreen> {
 
   Future<void> _new() async {
     final r = await newFeasibility(context, widget.session);
-    _list.currentState?.reload();
+    unawaited(_list.currentState?.reload());
     if (r == null || r['id'] is! int || !mounted) return;
     await openFeasibility(context, widget.session, r['id'] as int);
-    _list.currentState?.reload();
+    unawaited(_list.currentState?.reload());
   }
 
   @override
@@ -107,7 +108,7 @@ class _ViabilityScreenState extends State<ViabilityScreen> {
     ],
     onTap: (e) async {
       await openFeasibility(context, widget.session, e['id'] as int);
-      _list.currentState?.reload();
+      unawaited(_list.currentState?.reload());
     },
   );
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -195,9 +196,9 @@ class _QuotesScreenState extends State<QuotesScreen> {
       success: 'Cópia de ${e['reference']} criada',
     );
     if (r is! Map<String, dynamic> || !mounted) return;
-    _list.currentState?.reload();
+    unawaited(_list.currentState?.reload());
     await openQuote(context, widget.session, r['id'] as int);
-    _list.currentState?.reload();
+    unawaited(_list.currentState?.reload());
   }
 
   /// Quick cancel from the list: asks for the reason, no need to open the quote.
@@ -220,7 +221,7 @@ class _QuotesScreenState extends State<QuotesScreen> {
     );
     if (!ok || !mounted) return;
     await runAction(context, () => widget.session.api.delete('/api/sales/quotes/${e['id']}'), success: '${e['reference']} excluído');
-    _list.currentState?.reload();
+    unawaited(_list.currentState?.reload());
   }
 
   @override
@@ -279,7 +280,7 @@ class _QuotesScreenState extends State<QuotesScreen> {
     rowColor: (ctx, e) => e['status'] == 'PendingApproval' ? toneColors(ctx, Tone.warning).$1 : null,
     onTap: (e) async {
       await openQuote(context, widget.session, e['id'] as int);
-      _list.currentState?.reload();
+      unawaited(_list.currentState?.reload());
     },
   );
 }
@@ -783,7 +784,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
           _q = q;
           _error = null;
         });
-        _loadCredit(q);
+        unawaited(_loadCredit(q));
       }
     } catch (e) {
       if (mounted) setState(() => _error = friendlyError(e));
@@ -912,7 +913,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     );
     if (r != null && r['reference'] != null) {
       setState(() => _q = r);
-      _loadCredit(r);
+      unawaited(_loadCredit(r));
     }
   }
 
@@ -966,7 +967,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     if (r == null || r['id'] == null || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${r['reference']} criado como cópia de ${q['reference']}')));
     await openQuote(context, s, r['id'] as int);
-    if (mounted) _load();
+    if (mounted) unawaited(_load());
   }
 
   /// "Pedido de compra" step: the customer's PO (file and/or text) must be attached before the quote moves on.
@@ -1117,7 +1118,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${q['reference']} substituída · nova revisão ${r['reference']} em rascunho')));
     await _load();
     if (mounted) await openQuote(context, s, r['id'] as int);
-    if (mounted) _load();
+    if (mounted) unawaited(_load());
   }
 
   Future<void> _convert() async {
@@ -1153,7 +1154,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Pedido ${order['reference']} criado')));
     await _load();
     if (mounted) await openSalesOrder(context, s, order['id'] as int);
-    _load();
+    unawaited(_load());
   }
 
   Future<void> _edit() async {

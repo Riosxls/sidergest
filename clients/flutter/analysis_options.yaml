@@ -43,6 +43,7 @@ linter:
     prefer_final_fields: true
     unnecessary_null_checks: true
     use_named_constants: true
+    unawaited_futures: true
     avoid_void_async: true
     # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
 

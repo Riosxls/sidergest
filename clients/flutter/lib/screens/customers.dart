@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../entities.dart';
@@ -126,7 +127,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         return await s.api.post('/api/customers', body) as Map<String, dynamic>?;
       },
     );
-    if (r != null) _list.currentState?.reload();
+    if (r != null) unawaited(_list.currentState?.reload());
   }
 
   @override

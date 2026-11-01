@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -108,7 +109,7 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
     rowColor: (ctx, e) => e['late'] == true ? toneColors(ctx, Tone.danger).$1 : null,
     onTap: (e) async {
       await openSalesOrder(context, widget.session, e['id'] as int);
-      _list.currentState?.reload();
+      unawaited(_list.currentState?.reload());
     },
   );
 }
@@ -150,7 +151,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
   bool get _certified => _o?['certificateWaived'] == true || _certs.any((c) => c['status'] == 'Issued');
 
   Future<void> _newCertificate() async {
-    if (await newCertificate(context, s, _o!) && mounted) _load();
+    if (await newCertificate(context, s, _o!) && mounted) unawaited(_load());
   }
 
   Future<void> _waiveCertificate(bool waived) async {
@@ -159,7 +160,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       () => api.post('$base/certificate-waiver', {'waived': waived}),
       success: waived ? 'Certificado dispensado' : 'Certificado exigido novamente',
     );
-    if (r != null) _load();
+    if (r != null) unawaited(_load());
   }
 
   @override
@@ -316,7 +317,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     if (d is Map<String, dynamic>) {
       await _load();
       if (mounted) await openDelivery(context, s, d['id'] as int);
-      _load();
+      unawaited(_load());
     }
   }
 

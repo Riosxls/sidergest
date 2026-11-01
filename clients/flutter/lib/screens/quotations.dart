@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -36,7 +37,7 @@ class _QuotationsScreenState extends State<QuotationsScreen> {
       barrierDismissible: false,
       builder: (_) => NewQuotationDialog(api: widget.session.api),
     );
-    _list.currentState?.reload();
+    unawaited(_list.currentState?.reload());
     if (q != null && mounted) _open(q['id'] as int);
   }
 
@@ -297,7 +298,7 @@ class _QuotationScreenState extends State<QuotationScreen> {
         builder: (_) => OrderScreen(session: widget.session, id: o['id'] as int),
       ),
     );
-    _load();
+    unawaited(_load());
   }
 
   Future<void> _cancel() async {

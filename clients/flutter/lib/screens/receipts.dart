@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -27,7 +28,7 @@ class _ReceiptsViewState extends State<ReceiptsView> {
 
   Future<void> _new() async {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReceiveScreen(session: widget.session)));
-    _list.currentState?.reload();
+    unawaited(_list.currentState?.reload());
   }
 
   @override

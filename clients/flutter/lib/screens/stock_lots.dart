@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../entities.dart';
@@ -131,7 +132,7 @@ class _ReservationsViewState extends State<ReservationsView> {
       initial: widget.query['materialId'] != null || widget.query['productId'] != null ? {...widget.query} : null,
       submit: (b) => widget.session.api.post('/api/stock/reservations', b),
     );
-    if (r != null) _list.currentState?.reload();
+    if (r != null) unawaited(_list.currentState?.reload());
   }
 
   Future<void> _open(Map<String, dynamic> e) async {

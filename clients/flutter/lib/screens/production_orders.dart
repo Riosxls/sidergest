@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -273,7 +274,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
     final r = await runAction(context, () => api.post('$base/child-orders', {}));
     if (r is List && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r.isEmpty ? 'Nenhuma OF filha necessária' : '${r.length} OF(s) filha(s) gerada(s)')));
-      _load();
+      unawaited(_load());
     }
   }
 
@@ -281,7 +282,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
     final r = await runAction(context, () => api.post('$base/schedule', {}));
     if (r is! List || !mounted) return;
     await showScheduleResult(context, r.cast<Map<String, dynamic>>());
-    _load();
+    unawaited(_load());
   }
 
   Future<void> _receive() async {
@@ -297,7 +298,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
       ],
       submit: (b) => api.post('$base/receipts', b),
     );
-    if (r != null) _load();
+    if (r != null) unawaited(_load());
   }
 
   List<Widget> _actions() {
@@ -471,7 +472,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
 
   Future<void> _report(Map<String, dynamic> op) async {
     final r = await showReportForm(context, s, _o!, op);
-    if (r != null) _load();
+    if (r != null) unawaited(_load());
   }
 
   Future<void> _details(Map<String, dynamic> op) async {
@@ -529,7 +530,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
       ],
       submit: (b) => api.post('$base/operations/${op['sequence']}/overrun-releases', b),
     );
-    if (r != null) _load();
+    if (r != null) unawaited(_load());
   }
 
   Future<void> _send(Map<String, dynamic> op) async {
@@ -547,7 +548,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
       submit: (b) => api.post('$base/operations/${op['sequence']}/outside-shipments', b),
     );
     if (r != null) {
-      _load();
+      unawaited(_load());
       if (mounted) {
         await printNf(
           context,
@@ -629,7 +630,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
     if (line == null) {
       if (!await confirm(context, 'Requisitar todo o saldo dos materiais para ${_o!['reference']}?') || !mounted) return;
       final r = await runAction(context, () => api.post('$base/issues', {'date': today}), success: 'Material requisitado');
-      if (r != null) _load();
+      if (r != null) unawaited(_load());
       return;
     }
     final r = await submitForm(
@@ -664,7 +665,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
         ],
       }),
     );
-    if (r != null) _load();
+    if (r != null) unawaited(_load());
   }
 
   Widget _materials(Map<String, dynamic> o) {

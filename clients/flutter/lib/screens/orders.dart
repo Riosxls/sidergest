@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -140,7 +141,7 @@ class _OrderScreenState extends State<OrderScreen> {
       initial: {'dueDate': line['dueDate']},
       submit: (b) => api.put('$base/lines/${line['id']}/due-date', b),
     );
-    if (r != null) _load();
+    if (r != null) unawaited(_load());
   }
 
   Future<void> _receive() async {
@@ -149,7 +150,7 @@ class _OrderScreenState extends State<OrderScreen> {
         builder: (_) => ReceiveScreen(session: widget.session, supplierId: _o!['supplierId'] as int, supplierName: '${_o!['supplierName']}'),
       ),
     );
-    _load();
+    unawaited(_load());
   }
 
   @override

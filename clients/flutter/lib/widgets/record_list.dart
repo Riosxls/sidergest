@@ -176,7 +176,7 @@ class RecordListState extends State<RecordList> {
   Future<void> _tap(Map<String, dynamic> e) async {
     if (widget.onTap == null) return;
     await widget.onTap!(e);
-    if (mounted) reload();
+    if (mounted) unawaited(reload());
   }
 
   @override
@@ -344,7 +344,7 @@ class RecordListState extends State<RecordList> {
       tooltip: 'Ações',
       onSelected: (a) async {
         await a.run();
-        if (mounted) reload();
+        if (mounted) unawaited(reload());
       },
       itemBuilder: (_) => [
         for (final a in actions)

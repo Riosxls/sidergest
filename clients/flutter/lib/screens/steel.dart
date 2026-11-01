@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -104,12 +105,12 @@ class _SteelScreenState extends State<SteelScreen> {
 
   Future<void> _create(GlobalKey<RecordListState> list, String title, String path, List<FieldSpec> fields, {bool openLot = false}) async {
     final r = await submitForm(context, api: api, title: title, fields: fields, submit: (b) => api.post(path, b));
-    _lots.currentState?.reload();
-    _jobs.currentState?.reload();
-    _usages.currentState?.reload();
+    unawaited(_lots.currentState?.reload());
+    unawaited(_jobs.currentState?.reload());
+    unawaited(_usages.currentState?.reload());
     if (openLot && r != null && r['id'] is int && mounted) {
       await openSteelLot(context, s, r['id'] as int);
-      _lots.currentState?.reload();
+      unawaited(_lots.currentState?.reload());
     }
   }
 
@@ -177,7 +178,7 @@ class _SteelScreenState extends State<SteelScreen> {
     rowColor: (ctx, e) => (e['balanceKg'] as num? ?? 0) < 0 ? toneColors(ctx, Tone.danger).$1 : null,
     onTap: (e) async {
       await openSteelLot(context, s, e['id'] as int);
-      _lots.currentState?.reload();
+      unawaited(_lots.currentState?.reload());
     },
   );
 
@@ -291,7 +292,7 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
       },
       submit: (b) => api.put(base, b),
     );
-    if (r != null) _load();
+    if (r != null) unawaited(_load());
   }
 
   Future<void> _deleteLot() async {
@@ -320,7 +321,7 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
       initial: {..._lotPreset(_lot!), 'shipmentDate': isoDate(DateTime.now())},
       submit: (b) => api.post('/api/steel/slitter', b),
     );
-    if (r != null) _load();
+    if (r != null) unawaited(_load());
   }
 
   Future<void> _editJob(Map<String, dynamic> j) async {
@@ -332,7 +333,7 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
       initial: _jobInitial(j),
       submit: (b) => api.put('/api/steel/slitter/${j['id']}', b),
     );
-    if (r != null) _load();
+    if (r != null) unawaited(_load());
   }
 
   Future<void> _returnJob(Map<String, dynamic> j) async {
@@ -347,14 +348,14 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
       },
       submit: (b) => api.put('/api/steel/slitter/${j['id']}', {..._jobInitial(j)..remove('_labels'), ...b}),
     );
-    if (r != null) _load();
+    if (r != null) unawaited(_load());
   }
 
   Future<void> _deleteChild(String path, String what) async {
     if (!await confirmStep(context, title: 'Remover $what?', message: 'O saldo do lote é recalculado.', confirmLabel: 'Remover', danger: true)) return;
     if (!mounted) return;
     await runAction(context, () => api.delete(path));
-    _load();
+    unawaited(_load());
   }
 
   Future<void> _newUsage() async {
@@ -366,7 +367,7 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
       initial: {..._lotPreset(_lot!), 'date': isoDate(DateTime.now()), 'laborCost': 0},
       submit: (b) => api.post('/api/steel/usages', b),
     );
-    if (r != null) _load();
+    if (r != null) unawaited(_load());
   }
 
   Future<void> _editUsage(Map<String, dynamic> u) async {
@@ -381,7 +382,7 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
       },
       submit: (b) => api.put('/api/steel/usages/${u['id']}', b),
     );
-    if (r != null) _load();
+    if (r != null) unawaited(_load());
   }
 
   @override

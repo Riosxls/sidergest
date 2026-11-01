@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../entities.dart';
@@ -88,7 +89,7 @@ class _ReportsViewState extends State<ReportsView> {
 
   Future<void> _new() async {
     await newReport(context, s);
-    _list.currentState?.reload();
+    unawaited(_list.currentState?.reload());
     widget.onChanged?.call();
   }
 

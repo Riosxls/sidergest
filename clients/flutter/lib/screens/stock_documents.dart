@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -31,7 +32,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
 
   Future<void> _new() async {
     final doc = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => StockPostScreen(session: widget.session)));
-    _list.currentState?.reload();
+    unawaited(_list.currentState?.reload());
     if (doc != null && mounted) {
       await Navigator.of(context).push(
         MaterialPageRoute(

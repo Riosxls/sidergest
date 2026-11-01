@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -48,7 +49,7 @@ class _FiscalDocumentsScreenState extends State<FiscalDocumentsScreen> {
     );
     if (r != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Numeração ${r['fromNumber']} a ${r['toNumber']} inutilizada (protocolo ${r['protocol']})')));
-      _list.currentState?.reload();
+      unawaited(_list.currentState?.reload());
     }
   }
 
@@ -79,7 +80,7 @@ class _FiscalDocumentsScreenState extends State<FiscalDocumentsScreen> {
     ],
     onTap: (e) async {
       await openFiscalDocument(context, widget.session, e['id'] as int);
-      _list.currentState?.reload();
+      unawaited(_list.currentState?.reload());
     },
   );
 }

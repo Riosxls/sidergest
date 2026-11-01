@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -59,7 +60,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     if (result['_deleted'] == true) {
       Navigator.pop(context);
     } else {
-      _load();
+      unawaited(_load());
     }
   }
 
@@ -192,7 +193,7 @@ class _RoutingTabState extends State<RoutingTab> {
 
   Future<void> _editOp([Map<String, dynamic>? op]) async {
     final next = (_ops ?? []).fold<int>(0, (m, o) => (o['sequence'] as int) > m ? o['sequence'] as int : m) + 10;
-    _done(
+    unawaited(_done(
       await showEntityForm(
         context,
         api: api,
@@ -205,11 +206,11 @@ class _RoutingTabState extends State<RoutingTab> {
                 as Map<String, dynamic>?,
         onDelete: op == null ? null : () => api.delete('/api/routing-operations/${op['id']}'),
       ),
-    );
+    ));
   }
 
   Future<void> _editItem(Map<String, dynamic> op, [Map<String, dynamic>? item]) async {
-    _done(
+    unawaited(_done(
       await showEntityForm(
         context,
         api: api,
@@ -222,7 +223,7 @@ class _RoutingTabState extends State<RoutingTab> {
                 as Map<String, dynamic>?,
         onDelete: item == null ? null : () => api.delete('/api/bom-items/${item['id']}'),
       ),
-    );
+    ));
   }
 
   @override

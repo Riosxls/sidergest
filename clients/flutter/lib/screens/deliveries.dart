@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -55,7 +56,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
     rowColor: (ctx, e) => e['status'] == 'Planned' && isLate(e['plannedDate']) ? toneColors(ctx, Tone.danger).$1 : null,
     onTap: (e) async {
       await openDelivery(context, widget.session, e['id'] as int);
-      _list.currentState?.reload();
+      unawaited(_list.currentState?.reload());
     },
   );
 }
@@ -397,7 +398,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
                 key: const ValueKey('delivery-new-certificate'),
                 onPressed: () async {
                   final order = await api.get('/api/sales/orders/${d['orderId']}') as Map<String, dynamic>;
-                  if (mounted && await newCertificate(context, s, order, deliveryId: d['id'] as int)) _load();
+                  if (mounted && await newCertificate(context, s, order, deliveryId: d['id'] as int)) unawaited(_load());
                 },
                 icon: const Icon(Icons.add),
                 label: const Text('Emitir certificado'),
