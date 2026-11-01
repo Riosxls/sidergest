@@ -144,7 +144,7 @@ void main() {
     });
 
     test('invalid saved values fall back to the defaults', () async {
-      SharedPreferences.setMockInitialValues({'rowsPerPage': 7, 'dashboardRefreshMinutes': 3, 'idleLockMinutes': 1});
+      SharedPreferences.setMockInitialValues({'rowsPerPage': 7, 'dashboardRefreshMinutes': 3});
       final s = Session();
       await s.restore();
       expect(s.rowsPerPage, 50);
@@ -233,10 +233,16 @@ void main() {
     });
 
     testWidgets('idle lock choice is saved', (tester) async {
-      final (s, _) = await open(tester, 'Reader', none, section: 'account');
+      final (s, log) = await open(
+        tester,
+        'Reader',
+        (r) async => r.url.path == '/api/auth/idle-lock' ? json({'idleLockMinutes': 30, 'maxIdleMinutes': 0}) : json({}),
+        section: 'account',
+      );
       await tapV(tester, find.descendant(of: find.byKey(const ValueKey('settings-idle')), matching: find.text('30 min')));
       await tester.pumpAndSettle();
       expect(s.idleLockMinutes, 30);
+      expect(log.where((r) => r.method == 'PUT' && r.url.path == '/api/auth/idle-lock').single.body, '{"minutes":30}');
     });
 
     testWidgets('sign out closes the window and ends the session', (tester) async {
@@ -436,7 +442,7 @@ void main() {
       expect(session.idleSignedOut, isTrue);
     });
 
-    testWidgets('a click tells the server, at most once a minute, and only when a lock is set', (tester) async {
+    testWidgets('a click tells the server, at most once a minute, also when no lock is set', (tester) async {
       final now = DateTime(2026, 11, 1, 9);
       final posts = <String>[];
       final client = MockClient((r) async {
@@ -450,15 +456,14 @@ void main() {
       await tester.tapAt(const Offset(10, 10));
       await tester.tapAt(const Offset(12, 12));
       await tester.pump();
-      expect(posts, ['{"idleLockMinutes":15}'], reason: 'the second click is within the minute');
+      expect(posts, ['{}'], reason: 'the second click is within the minute, and no idle value is sent');
       session.idleLockMinutes = 0;
       session.reportActivity();
       await tester.pump();
-      expect(posts, hasLength(1), reason: 'no lock, nothing to report');
-      await session.setIdleLockMinutes(0);
+      expect(posts, hasLength(1), reason: 'still throttled');
+      session.reportActivity(force: true);
       await tester.pump();
-      expect(posts, hasLength(2), reason: 'changing the setting is sent at once');
-      expect(posts.last, '{"idleLockMinutes":0}');
+      expect(posts, hasLength(2), reason: 'a forced ping goes out at once, whatever the lock');
     });
 
     testWidgets('never means never', (tester) async {

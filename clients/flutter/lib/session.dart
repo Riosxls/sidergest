@@ -59,8 +59,11 @@ class Session extends ChangeNotifier {
   /// Ask to print or download a paper before a step ends (see `printGate`).
   bool printPrompts = true;
 
-  /// Sign out after this many idle minutes; 0 never.
+  /// Sign out after this many idle minutes; 0 never. The server's effective value (it is the source of truth, per user).
   int idleLockMinutes = 0;
+
+  /// Longest idle time the administrator allows; 0 means no cap.
+  int maxIdleMinutes = 0;
 
   /// Set when the idle lock signed the user out, so the login screen can say why. Cleared by the next login.
   bool idleSignedOut = false;
@@ -71,6 +74,19 @@ class Session extends ChangeNotifier {
 
   static const dashboardRefreshChoices = [0, 2, 5, 10];
   static const idleLockChoices = [0, 15, 30, 60];
+  static const textScaleChoices = [1.0, 1.15, 1.3];
+
+  /// Idle-lock options offered in the settings: with an administrator cap the larger ones and "Nunca" disappear, and an effective value
+  /// outside the list (the cap itself, or a server default such as 45) is added so the current setting is always shown.
+  List<int> get idleChoices {
+    final list = [
+      for (final m in idleLockChoices)
+        if (maxIdleMinutes <= 0 || (m > 0 && m <= maxIdleMinutes)) m,
+    ];
+    if (!list.contains(idleLockMinutes)) list.add(idleLockMinutes);
+    list.sort((a, b) => a == 0 ? -1 : (b == 0 ? 1 : a.compareTo(b)));
+    return list;
+  }
 
   /// Name this device gives itself on the server's list of connected devices.
   static String get deviceLabel {
@@ -123,7 +139,7 @@ class Session extends ChangeNotifier {
       remember = p.getBool('rememberLogin') ?? true;
       lastUser = p.getString('lastUser') ?? '';
       comfortable = p.getBool('comfortable') ?? false;
-      textScale = (p.getDouble('textScale') ?? 1).clamp(1.0, 1.5);
+      textScale = snapTextScale(p.getDouble('textScale') ?? 1);
       homeScreen = p.getString('homeScreen') ?? 'dashboard';
       final refresh = p.getInt('dashboardRefreshMinutes') ?? 2;
       dashboardRefreshMinutes = dashboardRefreshChoices.contains(refresh) ? refresh : 2;
@@ -132,8 +148,6 @@ class Session extends ChangeNotifier {
       reduceMotion = p.getBool('reduceMotion') ?? false;
       highContrast = p.getBool('highContrast') ?? false;
       printPrompts = p.getBool('printPrompts') ?? true;
-      final idle = p.getInt('idleLockMinutes') ?? 0;
-      idleLockMinutes = idleLockChoices.contains(idle) ? idle : 0;
       AppPrefs.rowsPerPage = rowsPerPage;
       AppPrefs.printPrompts = printPrompts;
     } catch (e) {
@@ -158,7 +172,8 @@ class Session extends ChangeNotifier {
         if (!accessValid && !await api.refresh()) await logout();
         if (api.token != null) {
           await _syncProfile();
-          reportActivity(force: true);
+          await _migrateIdlePref();
+          reportActivity();
         }
       }
     } catch (e) {
@@ -177,6 +192,7 @@ class Session extends ChangeNotifier {
       if (me['permissions'] is List) permissions = (me['permissions'] as List).cast<String>().toSet();
       displayName = me['displayName'] as String?;
       email = me['email'] as String?;
+      _adoptIdle(me);
       if (remember) await _storage.write(key: 'permissions', value: jsonEncode(permissions.toList()));
     } catch (e) {
       debugPrint('session: Local storage is best effort; the in-memory value stays: $e');
@@ -184,8 +200,32 @@ class Session extends ChangeNotifier {
     }
   }
 
+  /// Takes the idle-lock values the server sent (login, /auth/me, PUT /auth/idle-lock); absent fields leave the current value.
+  void _adoptIdle(Map<String, dynamic> r) {
+    final v = r['idleLockMinutes'];
+    if (v is num) idleLockMinutes = v.toInt();
+    final m = r['maxIdleMinutes'];
+    if (m is num) maxIdleMinutes = m.toInt();
+  }
+
+  /// Older versions kept the idle lock per device in local storage. When the server has none, send that value once; then drop it.
+  Future<void> _migrateIdlePref() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final old = p.getInt('idleLockMinutes');
+      if (old == null) return;
+      if (idleLockMinutes == 0 && old > 0 && idleLockChoices.contains(old)) {
+        await setIdleLockMinutes(old);
+      }
+      await p.remove('idleLockMinutes');
+    } catch (e) {
+      debugPrint('session: idle lock migration will retry on the next start: $e');
+    }
+  }
+
   /// Applies a login/refresh response and persists it.
   Future<void> _apply(Map<String, dynamic> r) async {
+    _adoptIdle(r);
     api.token = r['token'] as String;
     api.refreshToken = r['refreshToken'] as String?;
     username = r['username'] as String? ?? username;
@@ -238,6 +278,7 @@ class Session extends ChangeNotifier {
       // Local storage is best effort; the in-memory value stays.
     }
     await _apply(r);
+    await _migrateIdlePref();
     reportActivity(force: true);
   }
 
@@ -281,6 +322,15 @@ class Session extends ChangeNotifier {
       debugPrint('session: Local storage is best effort; the in-memory value stays: $e');
       // Local storage is best effort; the in-memory value stays.
     }
+  }
+
+  /// The text size choice closest to [value]; anything stored outside the choices snaps to the nearest one.
+  static double snapTextScale(double value) {
+    var best = textScaleChoices.first;
+    for (final c in textScaleChoices) {
+      if ((c - value).abs() < (best - value).abs()) best = c;
+    }
+    return best;
   }
 
   Future<void> setTextScale(double value) async {
@@ -344,22 +394,25 @@ class Session extends ChangeNotifier {
     return _savePref('printPrompts', value);
   }
 
-  Future<void> setIdleLockMinutes(int minutes) {
-    idleLockMinutes = minutes;
-    reportActivity(force: true);
-    return _savePref('idleLockMinutes', minutes);
+  /// Asks the server to set this user's idle lock and adopts the effective value it answers with (the administrator's cap may lower it).
+  /// Returns that effective value; throws when the server refuses.
+  Future<int> setIdleLockMinutes(int minutes) async {
+    final r = await api.put('/api/auth/idle-lock', {'minutes': minutes}) as Map<String, dynamic>;
+    _adoptIdle(r);
+    notifyListeners();
+    return idleLockMinutes;
   }
 
   DateTime? _activitySent;
 
-  /// Tells the server the user is active (clicks and key presses, not background polling) so it can enforce the idle lock too,
-  /// not only this window. Sent at most once a minute; [force] also sends the current lock setting right away.
+  /// Tells the server the user is active (mouse, touch and key presses, not background polling) so it can enforce the idle lock too,
+  /// not only this window. Sent at most once a minute, also when no lock is set; [force] sends it right away.
   void reportActivity({bool force = false}) {
-    if (!loggedIn || (!force && idleLockMinutes <= 0)) return;
+    if (!loggedIn) return;
     final now = DateTime.now();
     if (!force && _activitySent != null && now.difference(_activitySent!) < const Duration(seconds: 60)) return;
     _activitySent = now;
-    unawaited(api.post('/api/auth/activity', {'idleLockMinutes': idleLockMinutes}).then<void>((_) {}, onError: (Object e) => debugPrint('session: activity ping failed: $e')));
+    unawaited(api.post('/api/auth/activity', {}).then<void>((_) {}, onError: (Object e) => debugPrint('session: activity ping failed: $e')));
   }
 
   /// Saves the display name and email on the server; empty text clears a field.

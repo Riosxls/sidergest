@@ -247,6 +247,19 @@ class _AccountSectionState extends State<AccountSection> {
   bool _busy = false;
   String? _error;
 
+  Future<void> _setIdle(int minutes) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final effective = await widget.session.setIdleLockMinutes(minutes);
+      if (effective != minutes) {
+        final cap = widget.session.maxIdleMinutes;
+        messenger.showSnackBar(SnackBar(content: Text(cap > 0 ? 'O administrador limita o bloqueio a $cap minutos.' : 'O servidor aplicou $effective minutos.')));
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(friendlyError(e))));
+    }
+  }
+
   @override
   void dispose() {
     _name.dispose();
@@ -329,13 +342,16 @@ class _AccountSectionState extends State<AccountSection> {
             const SizedBox(height: 8),
             SettingRow(
               title: 'Desconectar por inatividade',
-              subtitle: 'Sem clicar nem digitar pelo tempo escolhido, o aplicativo encerra a sessão.',
+              subtitle: 'Sem usar o mouse nem o teclado pelo tempo escolhido, a sessão é encerrada (um aviso aparece 1 minuto antes).',
               control: SegmentedButton<int>(
                 key: const ValueKey('settings-idle'),
                 showSelectedIcon: false,
-                segments: [for (final m in Session.idleLockChoices) ButtonSegment(value: m, label: Text(m == 0 ? 'Nunca' : '$m min'))],
+                segments: [
+                  for (final m in s.idleChoices)
+                    ButtonSegment(value: m, label: Text(m == 0 ? 'Nunca' : (Session.idleLockChoices.contains(m) ? '$m min' : '$m minutos (limite do administrador)'))),
+                ],
                 selected: {s.idleLockMinutes},
-                onSelectionChanged: (v) => s.setIdleLockMinutes(v.first),
+                onSelectionChanged: (v) => _setIdle(v.first),
               ),
             ),
             Wrap(
