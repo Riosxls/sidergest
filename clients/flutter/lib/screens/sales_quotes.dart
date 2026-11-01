@@ -977,6 +977,10 @@ class _QuoteScreenState extends State<QuoteScreen> {
       onDownload: q['requestFileName'] == null ? null : _saveRequest,
     );
     if (!proceed || !mounted) return;
+    await _submitPurchaseOrder(q);
+  }
+
+  Future<void> _submitPurchaseOrder(Map<String, dynamic> q) async {
     final lines = (q['lines'] as List).cast<Map<String, dynamic>>();
     final approved = DateTime.tryParse('${q['decidedAt'] ?? ''}')?.toLocal() ?? DateTime.now();
     // Our delivery date: the lead time in working days counted from the day the customer approved the quote.
@@ -1308,13 +1312,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     return StatusBadge(label, tone: tone, icon: Icons.schedule);
   }
 
-  /// Approved by the customer: first attach what the customer sent, then register it. The attach step is the primary button until something is attached.
-  Widget _acceptedStep(
-    Map<String, dynamic> q,
-    FilledButton Function(String, String, IconData, VoidCallback) primary,
-    Widget Function(String, String, IconData, VoidCallback, {String? tip}) secondary,
-    Widget Function(String, String, IconData, VoidCallback) negative,
-  ) {
+  Widget _acceptedStep(Map<String, dynamic> q) {
     final sell = s.canSell;
     final attached = q['requestFileName'] != null || '${q['requestText'] ?? ''}'.trim().isNotEmpty;
     return NextStepCard(
@@ -1324,132 +1322,174 @@ class _QuoteScreenState extends State<QuoteScreen> {
           : 'Passo 1 de 2: anexe o pedido de compra que o cliente enviou (PDF, imagem ou texto). Depois, registre-o para gerar o pedido de venda.',
       tone: attached ? Tone.success : Tone.warning,
       actions: [
-        if (sell && !attached) primary('quote-po-start', 'Anexar pedido de compra', Icons.attach_file, _attachRequest),
-        if (sell && !attached) secondary('quote-po-start-text', 'Escrever texto do pedido', Icons.edit_note, _setRequestText),
-        if (sell && attached) primary('quote-po', 'Registrar pedido de compra', Icons.assignment_turned_in_outlined, _receivePo),
-        if (sell) secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
-        if (sell) negative('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, _gaveUp),
+        if (sell && !attached) _primary('quote-po-start', 'Anexar pedido de compra', Icons.attach_file, _attachRequest),
+        if (sell && !attached) _secondary('quote-po-start-text', 'Escrever texto do pedido', Icons.edit_note, _setRequestText),
+        if (sell && attached) _primary('quote-po', 'Registrar pedido de compra', Icons.assignment_turned_in_outlined, _receivePo),
+        if (sell) _secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
+        if (sell) _negative('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, _gaveUp),
       ],
     );
   }
 
   void _gaveUp() => _decline(gaveUp: true);
 
+  FilledButton _primary(String key, String label, IconData icon, VoidCallback onPressed) =>
+      FilledButton.icon(key: ValueKey(key), onPressed: onPressed, icon: Icon(icon), label: Text(label));
+
+  Widget _secondary(String key, String label, IconData icon, VoidCallback onPressed, {String? tip}) {
+    final button = OutlinedButton.icon(key: ValueKey(key), onPressed: onPressed, icon: Icon(icon), label: Text(label));
+    return tip == null ? button : Tooltip(message: tip, child: button);
+  }
+
+  // Outcomes that end the sale read as such: error-coloured outline instead of the neutral one.
+  Widget _negative(String key, String label, IconData icon, VoidCallback onPressed) {
+    final error = Theme.of(context).colorScheme.error;
+    return OutlinedButton.icon(
+      key: ValueKey(key),
+      onPressed: onPressed,
+      icon: Icon(icon),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(foregroundColor: error, side: BorderSide(color: error.withValues(alpha: 0.7))),
+    );
+  }
+
   Widget _nextStep(Map<String, dynamic> q) {
-    final st = q['status'];
-    final sell = s.canSell;
-    FilledButton primary(String key, String label, IconData icon, VoidCallback onPressed) =>
-        FilledButton.icon(key: ValueKey(key), onPressed: onPressed, icon: Icon(icon), label: Text(label));
-    Widget secondary(String key, String label, IconData icon, VoidCallback onPressed, {String? tip}) {
-      final button = OutlinedButton.icon(key: ValueKey(key), onPressed: onPressed, icon: Icon(icon), label: Text(label));
-      return tip == null ? button : Tooltip(message: tip, child: button);
-    }
-
-    // Outcomes that end the sale read as such: error-coloured outline instead of the neutral one.
-    Widget negative(String key, String label, IconData icon, VoidCallback onPressed) {
-      final error = Theme.of(context).colorScheme.error;
-      return OutlinedButton.icon(
-        key: ValueKey(key),
-        onPressed: onPressed,
-        icon: Icon(icon),
-        label: Text(label),
-        style: OutlinedButton.styleFrom(foregroundColor: error, side: BorderSide(color: error.withValues(alpha: 0.7))),
-      );
-    }
-
-    return switch (st) {
-      'Draft' => NextStepCard(
-        title: q['needsApproval'] == true ? 'Desconto acima do limite' : 'Pronta para enviar?',
-        message: q['needsApproval'] == true
-            ? 'O maior desconto sobre a tabela é ${fmt(q['totals']['maxDiscountPercent'])}%${_maxDiscount == null ? '' : ' (limite ${fmt(_maxDiscount)}%)'}. O envio passa pela aprovação do gerente comercial.'
-            : _rejectionNote(q) != null
-            ? 'O gerente recusou o desconto: ${_rejectionNote(q)}. Ajuste os preços e envie de novo.'
-            : 'Confira itens, preços e prazos. Ao enviar, a validade começa a contar.',
-        tone: q['needsApproval'] == true || _rejectionNote(q) != null ? Tone.warning : Tone.info,
-        actions: [if (sell) primary('quote-send', q['needsApproval'] == true ? 'Enviar para aprovação' : 'Enviar ao cliente', Icons.send, _send)],
-      ),
-      'PendingApproval' => NextStepCard(
-        title: 'Aguardando aprovação do gerente',
-        message: 'Desconto de ${fmt(q['totals']['maxDiscountPercent'])}% sobre a tabela de preços. Para mudar algo antes disso, volte para rascunho.',
-        tone: Tone.warning,
-        actions: [
-          if (s.canApproveSales) primary('quote-approve', 'Aprovar desconto', Icons.thumb_up_alt_outlined, () => _act('approve', success: 'Desconto aprovado')),
-          if (s.canApproveSales)
-            secondary(
-              'quote-reject-approval',
-              'Recusar desconto',
-              Icons.thumb_down_alt_outlined,
-              () => _reason('reject-approval', 'Recusar desconto', success: 'Orçamento voltou para rascunho'),
-            ),
-          if (sell) secondary('quote-reopen', 'Voltar para rascunho para editar', Icons.edit_outlined, _reopen),
-        ],
-      ),
-      'Approved' => NextStepCard(
-        title: 'Desconto aprovado',
-        message: 'Aprovado por ${q['approvedBy'] ?? ''} em ${fmtDate(q['approvedAt'])}. Agora envie ao cliente. Para mudar algo antes, volte para rascunho.',
-        actions: [
-          if (sell) primary('quote-send', 'Enviar ao cliente', Icons.send, _send),
-          if (sell) secondary('quote-reopen', 'Voltar para rascunho para editar', Icons.edit_outlined, _reopen),
-        ],
-      ),
-      'Sent' => NextStepCard(
-        title: 'Aguardando resposta do cliente',
-        message: _sentMessage(q),
-        badge: _validityBadge(q),
-        actions: [
-          if (sell) primary('quote-accept', 'Cliente aprovou', Icons.thumb_up_alt_outlined, _accept),
-          if (sell) secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
-          if (sell) negative('quote-decline', 'Cliente recusou (venda perdida)', Icons.thumb_down_alt_outlined, _decline),
-        ],
-        trailing: [
-          TextButton.icon(key: const ValueKey('quote-mail'), onPressed: _mail, icon: const Icon(Icons.mail_outline), label: const Text('Abrir e-mail')),
-          if (sell) TextButton.icon(key: const ValueKey('quote-extend'), onPressed: _extend, icon: const Icon(Icons.event_repeat), label: const Text('Prorrogar validade')),
-        ],
-      ),
-      'Accepted' => _acceptedStep(q, primary, secondary, negative),
-      'PurchaseOrder' => NextStepCard(
-        title: 'Pedido de compra recebido',
-        message: 'Gere o pedido de venda${q['customerPo'] == null ? '' : ' (pedido do cliente ${q['customerPo']})'} para liberar a produção.',
-        tone: Tone.success,
-        actions: [
-          if (sell) primary('quote-convert', 'Gerar pedido de venda', Icons.receipt_long, _convert),
-          if (sell) secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
-          if (sell) negative('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, () => _decline(gaveUp: true)),
-        ],
-      ),
-      'Converted' => NextStepCard(
-        title: 'Convertida em pedido',
-        message: 'Este orçamento virou o pedido ${q['salesOrderReference'] ?? ''}.',
-        tone: Tone.success,
-        actions: [
-          if (q['salesOrderId'] != null)
-            primary('quote-open-order', 'Abrir pedido', Icons.open_in_new, () => openSalesOrder(context, s, q['salesOrderId'] as int).then((_) => _load())),
-        ],
-      ),
-      'Rejected' => NextStepCard(
-        title: 'Venda perdida',
-        message:
-            '${q['lostReason'] == null ? '' : '${lostReasons['${q['lostReason']}'] ?? q['lostReason']}. '}${q['decisionNote'] ?? ''}\nSe o cliente voltar a negociar, abra uma nova revisão a partir desta.',
-        tone: Tone.danger,
-        actions: [if (sell) primary('quote-revise', 'Retomar com nova revisão', Icons.restart_alt, _revise)],
-      ),
-      'Expired' => NextStepCard(
-        title: 'Validade expirada',
-        message: 'A validade passou sem resposta. Prorrogue se o cliente ainda pode responder; crie uma nova revisão para mudar preço ou prazo.',
-        tone: Tone.danger,
-        actions: [
-          if (sell) primary('quote-extend', 'Prorrogar validade', Icons.event_repeat, _extend),
-          if (sell) secondary('quote-revise', 'Nova revisão', Icons.restart_alt, _revise, tip: _reviseTip),
-        ],
-      ),
-      _ when isSuperseded(q) => NextStepCard(
-        title: 'Substituída pela revisão ${q['supersededBy']}',
-        message: 'Esta versão ficou só para consulta. A que está em andamento é a ${q['supersededBy']}.',
-        tone: Tone.info,
-        actions: [primary('quote-open-latest', 'Abrir ${q['supersededBy']}', Icons.open_in_new, () => openQuote(context, s, q['supersededById'] as int).then((_) => _load()))],
-      ),
+    return switch (q['status']) {
+      'Draft' => _draftStep(q),
+      'PendingApproval' => _pendingApprovalStep(q),
+      'Approved' => _approvedStep(q),
+      'Sent' => _sentStep(q),
+      'Accepted' => _acceptedStep(q),
+      'PurchaseOrder' => _purchaseOrderStep(q),
+      'Converted' => _convertedStep(q),
+      'Rejected' => _rejectedStep(q),
+      'Expired' => _expiredStep(q),
+      _ when isSuperseded(q) => _supersededStep(q),
       _ => NextStepCard(title: 'Cancelada', message: '${q['decisionNote'] ?? ''}', tone: Tone.danger),
     };
+  }
+
+  Widget _draftStep(Map<String, dynamic> q) {
+    final sell = s.canSell;
+    return NextStepCard(
+      title: q['needsApproval'] == true ? 'Desconto acima do limite' : 'Pronta para enviar?',
+      message: q['needsApproval'] == true
+          ? 'O maior desconto sobre a tabela é ${fmt(q['totals']['maxDiscountPercent'])}%${_maxDiscount == null ? '' : ' (limite ${fmt(_maxDiscount)}%)'}. O envio passa pela aprovação do gerente comercial.'
+          : _rejectionNote(q) != null
+          ? 'O gerente recusou o desconto: ${_rejectionNote(q)}. Ajuste os preços e envie de novo.'
+          : 'Confira itens, preços e prazos. Ao enviar, a validade começa a contar.',
+      tone: q['needsApproval'] == true || _rejectionNote(q) != null ? Tone.warning : Tone.info,
+      actions: [if (sell) _primary('quote-send', q['needsApproval'] == true ? 'Enviar para aprovação' : 'Enviar ao cliente', Icons.send, _send)],
+    );
+  }
+
+  Widget _pendingApprovalStep(Map<String, dynamic> q) {
+    final sell = s.canSell;
+    return NextStepCard(
+      title: 'Aguardando aprovação do gerente',
+      message: 'Desconto de ${fmt(q['totals']['maxDiscountPercent'])}% sobre a tabela de preços. Para mudar algo antes disso, volte para rascunho.',
+      tone: Tone.warning,
+      actions: [
+        if (s.canApproveSales) _primary('quote-approve', 'Aprovar desconto', Icons.thumb_up_alt_outlined, () => _act('approve', success: 'Desconto aprovado')),
+        if (s.canApproveSales)
+          _secondary(
+            'quote-reject-approval',
+            'Recusar desconto',
+            Icons.thumb_down_alt_outlined,
+            () => _reason('reject-approval', 'Recusar desconto', success: 'Orçamento voltou para rascunho'),
+          ),
+        if (sell) _secondary('quote-reopen', 'Voltar para rascunho para editar', Icons.edit_outlined, _reopen),
+      ],
+    );
+  }
+
+  Widget _approvedStep(Map<String, dynamic> q) {
+    final sell = s.canSell;
+    return NextStepCard(
+      title: 'Desconto aprovado',
+      message: 'Aprovado por ${q['approvedBy'] ?? ''} em ${fmtDate(q['approvedAt'])}. Agora envie ao cliente. Para mudar algo antes, volte para rascunho.',
+      actions: [
+        if (sell) _primary('quote-send', 'Enviar ao cliente', Icons.send, _send),
+        if (sell) _secondary('quote-reopen', 'Voltar para rascunho para editar', Icons.edit_outlined, _reopen),
+      ],
+    );
+  }
+
+  Widget _sentStep(Map<String, dynamic> q) {
+    final sell = s.canSell;
+    return NextStepCard(
+      title: 'Aguardando resposta do cliente',
+      message: _sentMessage(q),
+      badge: _validityBadge(q),
+      actions: [
+        if (sell) _primary('quote-accept', 'Cliente aprovou', Icons.thumb_up_alt_outlined, _accept),
+        if (sell) _secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
+        if (sell) _negative('quote-decline', 'Cliente recusou (venda perdida)', Icons.thumb_down_alt_outlined, _decline),
+      ],
+      trailing: [
+        TextButton.icon(key: const ValueKey('quote-mail'), onPressed: _mail, icon: const Icon(Icons.mail_outline), label: const Text('Abrir e-mail')),
+        if (sell) TextButton.icon(key: const ValueKey('quote-extend'), onPressed: _extend, icon: const Icon(Icons.event_repeat), label: const Text('Prorrogar validade')),
+      ],
+    );
+  }
+
+  Widget _purchaseOrderStep(Map<String, dynamic> q) {
+    final sell = s.canSell;
+    return NextStepCard(
+      title: 'Pedido de compra recebido',
+      message: 'Gere o pedido de venda${q['customerPo'] == null ? '' : ' (pedido do cliente ${q['customerPo']})'} para liberar a produção.',
+      tone: Tone.success,
+      actions: [
+        if (sell) _primary('quote-convert', 'Gerar pedido de venda', Icons.receipt_long, _convert),
+        if (sell) _secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
+        if (sell) _negative('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, () => _decline(gaveUp: true)),
+      ],
+    );
+  }
+
+  Widget _convertedStep(Map<String, dynamic> q) {
+    return NextStepCard(
+      title: 'Convertida em pedido',
+      message: 'Este orçamento virou o pedido ${q['salesOrderReference'] ?? ''}.',
+      tone: Tone.success,
+      actions: [
+        if (q['salesOrderId'] != null)
+          _primary('quote-open-order', 'Abrir pedido', Icons.open_in_new, () => openSalesOrder(context, s, q['salesOrderId'] as int).then((_) => _load())),
+      ],
+    );
+  }
+
+  Widget _rejectedStep(Map<String, dynamic> q) {
+    final sell = s.canSell;
+    return NextStepCard(
+      title: 'Venda perdida',
+      message:
+          '${q['lostReason'] == null ? '' : '${lostReasons['${q['lostReason']}'] ?? q['lostReason']}. '}${q['decisionNote'] ?? ''}\nSe o cliente voltar a negociar, abra uma nova revisão a partir desta.',
+      tone: Tone.danger,
+      actions: [if (sell) _primary('quote-revise', 'Retomar com nova revisão', Icons.restart_alt, _revise)],
+    );
+  }
+
+  Widget _expiredStep(Map<String, dynamic> q) {
+    final sell = s.canSell;
+    return NextStepCard(
+      title: 'Validade expirada',
+      message: 'A validade passou sem resposta. Prorrogue se o cliente ainda pode responder; crie uma nova revisão para mudar preço ou prazo.',
+      tone: Tone.danger,
+      actions: [
+        if (sell) _primary('quote-extend', 'Prorrogar validade', Icons.event_repeat, _extend),
+        if (sell) _secondary('quote-revise', 'Nova revisão', Icons.restart_alt, _revise, tip: _reviseTip),
+      ],
+    );
+  }
+
+  Widget _supersededStep(Map<String, dynamic> q) {
+    return NextStepCard(
+      title: 'Substituída pela revisão ${q['supersededBy']}',
+      message: 'Esta versão ficou só para consulta. A que está em andamento é a ${q['supersededBy']}.',
+      tone: Tone.info,
+      actions: [_primary('quote-open-latest', 'Abrir ${q['supersededBy']}', Icons.open_in_new, () => openQuote(context, s, q['supersededById'] as int).then((_) => _load()))],
+    );
   }
 
   /// The manager's reason when the discount was refused and the quote came back to draft (history is newest first).
@@ -1557,29 +1597,100 @@ class _QuoteScreenState extends State<QuoteScreen> {
     );
   }
 
+  Widget _header(Map<String, dynamic> q, Map<String, dynamic> t) {
+    return RecordHeader(
+  icon: Icons.request_quote_outlined,
+  kind: 'Orçamento comercial${q['revision'] == 0 ? '' : ' · revisão ${String.fromCharCode(65 + (q['revision'] as int))}'}',
+  title: '${q['reference']}',
+  // The stage path already names these statuses; the badge stays for the ones it cannot say (draft, approval, lost with a reason, replaced...).
+  badge: const ['Sent', 'Accepted', 'PurchaseOrder', 'Converted'].contains(q['status']) ? null : StatusBadge(quoteSituation(q), tone: quoteToneOf(q)),
+  amount: fmtMoney(t['total']),
+  fields: [
+    ('Cliente', '${q['customerName']}'),
+    ('Contato', [q['contactName'], q['contactEmail']].whereType<String>().join(' · ')),
+    ('Validade', q['validUntil'] != null ? fmtDay(q['validUntil']) : '${q['validityDays']} dias após envio'),
+    ('Prazo', fmt(q['paymentTermName'] ?? q['customPaymentTerm'])),
+    ('Frete', freightTerms[q['freight']] ?? fmt(q['freight'])),
+    ('Ref. do cliente', fmt(q['customerReference'])),
+    ('Pedido do cliente', fmt(q['customerPo'])),
+  ],
+);
+  }
+
+  Widget _itemsSection(Map<String, dynamic> q, Map<String, dynamic> t, List<Map<String, dynamic>> lines) {
+    return Section(
+  title: 'Itens (${lines.length})',
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      SimpleTable(
+        columns: [
+          col('Item', 'sequence'),
+          ColumnSpec('Produto', (e) => '${e['productCode']}${e['customerPartNumber'] == null ? '' : ' (${e['customerPartNumber']})'}'),
+          col('Descrição', 'description'),
+          ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
+          ColumnSpec('Preço Unitário', (e) => fmtMoney(e['unitPrice']), numeric: true),
+          ColumnSpec('Desc. %', (e) => e['discountPercent'] == null || e['discountPercent'] == 0 ? '—' : fmt(e['discountPercent']), numeric: true),
+          col('IPI %', 'ipiPercent', numeric: true),
+          ColumnSpec(
+            'Entrega',
+            (e) => e['deliveryDate'] != null ? fmtDay(e['deliveryDate']) : (e['leadTimeDays'] != null ? '${e['leadTimeDays']} dias úteis' : ''),
+            numeric: true,
+          ),
+          moneyCol('Total', 'total'),
+        ],
+        rows: lines,
+        rowColor: (e) => _maxDiscount != null && _n(e['discountPercent']) > _maxDiscount! ? toneColors(context, Tone.warning).$1 : null,
+      ),
+      if (lines.any((l) => l['leadTimeDays'] != null && l['deliveryDate'] == null))
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Text(
+            'Prazo de entrega em dias úteis, contado a partir da data em que o cliente aprovar o orçamento.',
+            key: const ValueKey('quote-lead-note'),
+            style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+        ),
+      const SizedBox(height: 14),
+      // The printed total is products + IPI, so that row is the emphasised one; the ICMS estimate sits below it.
+      TotalsBlock(
+        [
+          ('Produtos', fmtMoney(t['products'])),
+          ('IPI', fmtMoney(t['ipi'])),
+          ('Total', fmtMoney(t['total'])),
+          if (_n(t['icms']) > 0) ('ICMS (estimativa)', fmtMoney(t['icms'])),
+          if (_n(t['icms']) > 0) ('Total com ICMS', fmtMoney(_n(t['total']) + _n(t['icms']))),
+        ],
+        strong: 2,
+      ),
+    ],
+  ),
+);
+  }
+
+  Widget _detailsSection(Map<String, dynamic> q) {
+    return Section(
+  title: 'Detalhes',
+  child: InfoGrid([
+    ('Local de entrega', fmt(q['addressText'])),
+    ('Condições gerais', fmt(q['conditions'])),
+    ('Observações', fmt(q['notes'])),
+    ('Criada', '${fmt(q['createdBy'])} · ${fmtDate(q['createdAt'])}'),
+    ('Aprovação interna', q['approvedAt'] == null ? '' : '${fmt(q['approvedBy'])} · ${fmtDate(q['approvedAt'])}'),
+    ('Enviada', q['sentAt'] == null ? '' : _sentDetail(q)),
+    ('Resposta do cliente', q['decidedAt'] == null ? '' : '${fmtDate(q['decidedAt'])}${q['decisionNote'] == null ? '' : ' · ${q['decisionNote']}'}'),
+    ('Motivo da perda', q['lostReason'] == null ? '' : lostReasons['${q['lostReason']}'] ?? '${q['lostReason']}'),
+  ]),
+);
+  }
+
   Widget _body(Map<String, dynamic> q) {
     final t = q['totals'] as Map<String, dynamic>;
     final (step, failed) = quotePath(q['status'], superseded: isSuperseded(q));
     final lines = (q['lines'] as List).cast<Map<String, dynamic>>();
     return SideBySide(
       main: [
-        RecordHeader(
-          icon: Icons.request_quote_outlined,
-          kind: 'Orçamento comercial${q['revision'] == 0 ? '' : ' · revisão ${String.fromCharCode(65 + (q['revision'] as int))}'}',
-          title: '${q['reference']}',
-          // The stage path already names these statuses; the badge stays for the ones it cannot say (draft, approval, lost with a reason, replaced...).
-          badge: const ['Sent', 'Accepted', 'PurchaseOrder', 'Converted'].contains(q['status']) ? null : StatusBadge(quoteSituation(q), tone: quoteToneOf(q)),
-          amount: fmtMoney(t['total']),
-          fields: [
-            ('Cliente', '${q['customerName']}'),
-            ('Contato', [q['contactName'], q['contactEmail']].whereType<String>().join(' · ')),
-            ('Validade', q['validUntil'] != null ? fmtDay(q['validUntil']) : '${q['validityDays']} dias após envio'),
-            ('Prazo', fmt(q['paymentTermName'] ?? q['customPaymentTerm'])),
-            ('Frete', freightTerms[q['freight']] ?? fmt(q['freight'])),
-            ('Ref. do cliente', fmt(q['customerReference'])),
-            ('Pedido do cliente', fmt(q['customerPo'])),
-          ],
-        ),
+        _header(q, t),
         gap,
         StagePath(steps: flowSteps, current: step, failedLabel: failed),
         gap,
@@ -1587,73 +1698,14 @@ class _QuoteScreenState extends State<QuoteScreen> {
         _nextStep(q),
         if (const ['Accepted', 'PurchaseOrder'].contains(q['status'])) ...[gap, _requestSection(q)],
         gap,
-        Section(
-          title: 'Itens (${lines.length})',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SimpleTable(
-                columns: [
-                  col('Item', 'sequence'),
-                  ColumnSpec('Produto', (e) => '${e['productCode']}${e['customerPartNumber'] == null ? '' : ' (${e['customerPartNumber']})'}'),
-                  col('Descrição', 'description'),
-                  ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
-                  ColumnSpec('Preço Unitário', (e) => fmtMoney(e['unitPrice']), numeric: true),
-                  ColumnSpec('Desc. %', (e) => e['discountPercent'] == null || e['discountPercent'] == 0 ? '—' : fmt(e['discountPercent']), numeric: true),
-                  col('IPI %', 'ipiPercent', numeric: true),
-                  ColumnSpec(
-                    'Entrega',
-                    (e) => e['deliveryDate'] != null ? fmtDay(e['deliveryDate']) : (e['leadTimeDays'] != null ? '${e['leadTimeDays']} dias úteis' : ''),
-                    numeric: true,
-                  ),
-                  moneyCol('Total', 'total'),
-                ],
-                rows: lines,
-                rowColor: (e) => _maxDiscount != null && _n(e['discountPercent']) > _maxDiscount! ? toneColors(context, Tone.warning).$1 : null,
-              ),
-              if (lines.any((l) => l['leadTimeDays'] != null && l['deliveryDate'] == null))
-                Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Text(
-                    'Prazo de entrega em dias úteis, contado a partir da data em que o cliente aprovar o orçamento.',
-                    key: const ValueKey('quote-lead-note'),
-                    style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                  ),
-                ),
-              const SizedBox(height: 14),
-              // The printed total is products + IPI, so that row is the emphasised one; the ICMS estimate sits below it.
-              TotalsBlock(
-                [
-                  ('Produtos', fmtMoney(t['products'])),
-                  ('IPI', fmtMoney(t['ipi'])),
-                  ('Total', fmtMoney(t['total'])),
-                  if (_n(t['icms']) > 0) ('ICMS (estimativa)', fmtMoney(t['icms'])),
-                  if (_n(t['icms']) > 0) ('Total com ICMS', fmtMoney(_n(t['total']) + _n(t['icms']))),
-                ],
-                strong: 2,
-              ),
-            ],
-          ),
-        ),
+        _itemsSection(q, t, lines),
         gap,
         if (!const ['Accepted', 'PurchaseOrder'].contains(q['status']) &&
             (q['status'] == 'Converted' || q['requestFileName'] != null || '${q['requestText'] ?? ''}'.isNotEmpty)) ...[
           _requestSection(q),
           gap,
         ],
-        Section(
-          title: 'Detalhes',
-          child: InfoGrid([
-            ('Local de entrega', fmt(q['addressText'])),
-            ('Condições gerais', fmt(q['conditions'])),
-            ('Observações', fmt(q['notes'])),
-            ('Criada', '${fmt(q['createdBy'])} · ${fmtDate(q['createdAt'])}'),
-            ('Aprovação interna', q['approvedAt'] == null ? '' : '${fmt(q['approvedBy'])} · ${fmtDate(q['approvedAt'])}'),
-            ('Enviada', q['sentAt'] == null ? '' : _sentDetail(q)),
-            ('Resposta do cliente', q['decidedAt'] == null ? '' : '${fmtDate(q['decidedAt'])}${q['decisionNote'] == null ? '' : ' · ${q['decisionNote']}'}'),
-            ('Motivo da perda', q['lostReason'] == null ? '' : lostReasons['${q['lostReason']}'] ?? '${q['lostReason']}'),
-          ]),
-        ),
+        _detailsSection(q),
       ],
       side: [
         Section(
