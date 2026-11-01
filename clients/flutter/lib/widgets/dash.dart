@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../entities.dart';
 
+/// A cell of [DashGrid]: one column wide by default, [GridItem.panel] and [GridItem.bars] span two.
 class GridItem {
   const GridItem(this.child) : span = 1, height = DashTile.height;
   const GridItem.panel(this.child, {this.height = BarPanel.height}) : span = 2;
@@ -16,6 +17,7 @@ class GridItem {
   final double height;
 }
 
+/// Responsive grid of dashboard tiles and panels.
 class DashGrid extends StatelessWidget {
   const DashGrid({super.key, required this.items});
 
@@ -68,6 +70,7 @@ ShapeBorder dashCardShape(BuildContext context) => RoundedRectangleBorder(
   side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
 );
 
+/// Dashboard card with an icon, a [value] and a [label]; [alert] highlights it.
 class DashTile extends StatelessWidget {
   const DashTile({super.key, required this.icon, required this.label, required this.value, this.alert = false, this.onTap});
 
@@ -145,6 +148,7 @@ class DashTile extends StatelessWidget {
   }
 }
 
+/// Full width dashboard message with an icon, a [title] and a [subtitle].
 class DashNotice extends StatelessWidget {
   const DashNotice({super.key, required this.icon, required this.title, required this.subtitle});
 
@@ -181,6 +185,7 @@ class DashNotice extends StatelessWidget {
   }
 }
 
+/// Dashboard panel with a horizontal bar per row of [data]; [warn] marks rows to highlight.
 class BarPanel extends StatelessWidget {
   const BarPanel({super.key, required this.title, required this.data, this.max, this.emptyText = 'Sem dados ainda', this.warn = const {}, this.onRowTap});
 

@@ -12,6 +12,7 @@ import 'widgets/alerts.dart';
 
 const defaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://localhost:8080');
 
+/// Signed-in state (token, role, permissions) and personal preferences. Notifies listeners on change; persists to secure storage and SharedPreferences.
 class Session extends ChangeNotifier {
   Session({ApiClient? api, FlutterSecureStorage? storage})
     : api = api ?? ApiClient(baseUrl: defaultApiUrl),

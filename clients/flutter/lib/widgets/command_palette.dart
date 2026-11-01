@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../session.dart';
 
+/// A screen the command palette can open, shown under [section].
 class SearchTarget {
   const SearchTarget(this.id, this.icon, this.title, this.section);
 
@@ -16,6 +17,7 @@ class SearchTarget {
   final String section;
 }
 
+/// A record the user opened recently, kept by [RecentStore].
 class RecentItem {
   const RecentItem(this.type, this.id, this.title);
 
@@ -33,6 +35,7 @@ class RecentItem {
   }
 }
 
+/// Persists the last [max] opened records in SharedPreferences.
 class RecentStore {
   static const _key = 'recentItems';
   static const max = 6;
@@ -84,6 +87,7 @@ const searchGroups = {
   'certificates': ('Certificados', Icons.verified_outlined),
 };
 
+/// A quick action listed in the command palette.
 class PaletteAction {
   const PaletteAction(this.icon, this.label, this.run);
 
@@ -102,6 +106,7 @@ class _Entry {
   final void Function() run;
 }
 
+/// Search box shaped button that opens the command palette through [onOpen].
 class SearchLauncher extends StatelessWidget {
   const SearchLauncher({super.key, required this.onOpen, this.compact = false});
 

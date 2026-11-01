@@ -39,6 +39,7 @@ void showError(BuildContext context, Object e) {
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e is String ? e : friendlyError(e)), backgroundColor: Theme.of(context).colorScheme.error));
 }
 
+/// Dialog form built from a list of field specs; validates, shows API field errors and calls [onSubmit] (and [onDelete] when given).
 class EntityFormDialog extends StatefulWidget {
   const EntityFormDialog({
     super.key,
@@ -378,6 +379,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
   }
 }
 
+/// Form field that picks a related record through a [LookupPicker] and shows its display name.
 class LookupField extends StatefulWidget {
   const LookupField({
     super.key,
@@ -479,6 +481,7 @@ class _LookupFieldState extends State<LookupField> {
   }
 }
 
+/// Searchable dialog that lists records of [path] and returns the chosen one; [create] adds a "new" flow.
 class LookupPicker extends StatefulWidget {
   const LookupPicker({super.key, required this.api, required this.path, required this.title, this.query = const {}, this.selectedId, this.create, this.createLabel = 'Novo'});
 

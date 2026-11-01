@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// One entry of the notification bell: a [count] of items for the screen [navId], optionally pre-filtered by [filter].
 class AlertInfo {
   const AlertInfo(this.icon, this.label, this.count, this.navId, [this.filter]);
 
@@ -10,12 +11,14 @@ class AlertInfo {
   final String? filter;
 }
 
+/// Holds the current alerts; [total] is the sum of all counts shown on the bell.
 class AlertCenter extends ValueNotifier<List<AlertInfo>> {
   AlertCenter() : super(const []);
 
   int get total => value.fold(0, (n, a) => n + a.count);
 }
 
+/// App bar bell that lists the alerts of [center] and calls [onNavigate] with the chosen screen and filter.
 class AlertBell extends StatelessWidget {
   const AlertBell({super.key, required this.center, required this.onNavigate});
 

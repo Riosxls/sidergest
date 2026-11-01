@@ -106,6 +106,7 @@ Future<Map<String, dynamic>?> submitForm(
   },
 );
 
+/// Editable table of child lines (items of an order, operations...) with add, edit and remove through an [EntityFormDialog].
 class LinesEditor extends StatelessWidget {
   const LinesEditor({
     super.key,

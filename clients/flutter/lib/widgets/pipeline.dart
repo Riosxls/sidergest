@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../entities.dart';
 
+/// Colour family of badges, tiles and meters.
 enum Tone { neutral, info, progress, success, warning, danger }
 
 (Color, Color) toneColors(BuildContext context, Tone tone) {
@@ -27,6 +28,7 @@ Color toneAccent(BuildContext context, Tone tone) => switch (tone) {
   Tone.danger => const Color(0xFFC62828),
 };
 
+/// Small coloured label for a status.
 class StatusBadge extends StatelessWidget {
   const StatusBadge(this.label, {super.key, this.tone = Tone.neutral, this.icon});
 
@@ -54,6 +56,7 @@ class StatusBadge extends StatelessWidget {
   }
 }
 
+/// A step of a [StagePath].
 class PathStep {
   const PathStep(this.label, {this.icon});
 
@@ -61,6 +64,7 @@ class PathStep {
   final IconData? icon;
 }
 
+/// Horizontal path of [steps] with the [current] one highlighted; [failedLabel] marks a path that ended off track.
 class StagePath extends StatelessWidget {
   const StagePath({super.key, required this.steps, required this.current, this.failedLabel});
 
@@ -157,6 +161,7 @@ class _Chevron extends CustomClipper<Path> {
   bool shouldReclip(_Chevron old) => old.first != first || old.last != last;
 }
 
+/// Summary tile with a [value], a [label] and an optional [caption]; tappable when [onTap] is set.
 class KpiTile extends StatelessWidget {
   const KpiTile({super.key, required this.label, required this.value, this.caption, this.icon, this.tone = Tone.info, this.onTap});
 
@@ -207,6 +212,7 @@ class KpiTile extends StatelessWidget {
   }
 }
 
+/// Progress bar for a [value] between 0 and 1; turns green at 1.
 class ProgressMeter extends StatelessWidget {
   const ProgressMeter(this.value, {super.key, this.label});
 
@@ -236,6 +242,7 @@ class ProgressMeter extends StatelessWidget {
   }
 }
 
+/// One event of a [TimelineView].
 class TimelineEntry {
   const TimelineEntry({required this.title, required this.at, this.subtitle, this.user, this.tone = Tone.neutral, this.icon = Icons.circle});
 
@@ -247,6 +254,7 @@ class TimelineEntry {
   final IconData icon;
 }
 
+/// Vertical history of [TimelineEntry] items.
 class TimelineView extends StatelessWidget {
   const TimelineView({super.key, required this.entries});
 
@@ -358,6 +366,7 @@ class NextStepCard extends StatelessWidget {
   }
 }
 
+/// Header of a record screen: icon, [kind], [title], optional [badge], summary [fields] and [amount].
 class RecordHeader extends StatelessWidget {
   const RecordHeader({super.key, required this.icon, required this.kind, required this.title, this.badge, this.fields = const [], this.amount});
 

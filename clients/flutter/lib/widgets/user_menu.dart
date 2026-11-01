@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../screens/settings/settings_dialog.dart';
 import '../session.dart';
 
+/// Avatar menu: opens settings and signs out.
 class UserMenu extends StatelessWidget {
   const UserMenu({super.key, required this.session});
 

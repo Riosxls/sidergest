@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+/// Error answer from the API: HTTP [status], a user-facing [message] and per-field validation messages in [fieldErrors].
 class ApiException implements Exception {
   ApiException(this.status, this.message, [this.fieldErrors = const {}]);
 
@@ -15,6 +16,7 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
+/// One page of a paged list endpoint: [items] plus the [total] row count and the [skip]/[take] window.
 class PageResult {
   PageResult(this.items, this.total, this.skip, this.take);
 
@@ -27,6 +29,7 @@ class PageResult {
   final int take;
 }
 
+/// HTTP client for the MetaGest API. Adds the bearer token, refreshes it silently on 401, sends the last seen version as `If-Match` on writes, and maps failures to [ApiException].
 class ApiClient {
   // ignore: prefer_initializing_formals
   ApiClient({required String baseUrl, this.token, http.Client? client, this.onUnauthorized}) : _baseUrl = baseUrl, _http = client ?? http.Client();

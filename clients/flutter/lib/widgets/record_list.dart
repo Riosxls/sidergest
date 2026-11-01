@@ -17,6 +17,7 @@ class RowAction {
   final Future<void> Function() run;
 }
 
+/// Paged, searchable, sortable list with empty, error and retry states; the base of most list screens.
 class RecordList extends StatefulWidget {
   const RecordList({
     super.key,
@@ -70,6 +71,7 @@ class RecordList extends StatefulWidget {
   State<RecordList> createState() => RecordListState();
 }
 
+/// State of [RecordList]; call `reload` on it after a change made outside the list.
 class RecordListState extends State<RecordList> {
   PageResult? _page;
 
@@ -437,6 +439,7 @@ class RecordListState extends State<RecordList> {
   }
 }
 
+/// Drop-down filter for a [RecordList].
 class ChoiceFilter extends StatelessWidget {
   const ChoiceFilter({super.key, required this.label, required this.value, required this.choices, required this.onChanged, this.allLabel = 'Todos'});
 
@@ -463,6 +466,7 @@ class ChoiceFilter extends StatelessWidget {
   );
 }
 
+/// Memoised lookup of a record display name by path and id; falls back to `#id` when the fetch fails.
 class NameCache {
   static final _cache = <String, Future<String>>{};
 
@@ -595,6 +599,7 @@ class TotalsBlock extends StatelessWidget {
   }
 }
 
+/// Outlined status chip; [alert] paints it red, [ok] in the primary colour.
 class StatusChip extends StatelessWidget {
   const StatusChip(this.label, {super.key, this.alert = false, this.ok = false});
 
@@ -622,6 +627,7 @@ class StatusChip extends StatelessWidget {
   }
 }
 
+/// Read-only table for small, already loaded rows.
 class SimpleTable extends StatelessWidget {
   const SimpleTable({super.key, required this.columns, required this.rows, this.actions, this.rowColor, this.actionsFirst = false});
 
@@ -740,6 +746,7 @@ class SimpleTable extends StatelessWidget {
   );
 }
 
+/// Titled block with optional header [actions].
 class Section extends StatelessWidget {
   const Section({super.key, required this.title, required this.child, this.actions = const []});
 
@@ -768,6 +775,7 @@ class Section extends StatelessWidget {
   );
 }
 
+/// Builds [builder] when [future] completes; shows a spinner while waiting and the error with a retry button on failure.
 class FutureView<T> extends StatelessWidget {
   const FutureView({super.key, required this.future, required this.builder, this.onRetry});
 
