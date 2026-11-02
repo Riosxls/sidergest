@@ -19,8 +19,8 @@ public class BackupSettings
     public DayOfWeek Weekday { get; set; } = DayOfWeek.Sunday;
     /// <summary>Folder, drive or share where each dump is also copied; null keeps it on the server computer only.</summary>
     public string? Destination { get; set; }
-    /// <summary>How many dumps to keep in the local folder.</summary>
-    public int Keep { get; set; } = 14;
+    /// <summary>How many dumps to keep (one pool for all of them; a new backup replaces the oldest). At most 5.</summary>
+    public int Keep { get; set; } = 5;
     /// <summary>Set by "Fazer backup agora"; the agent runs as soon as this is newer than <see cref="LastRunAt"/>.</summary>
     public DateTimeOffset? RunRequestedAt { get; set; }
     /// <summary>Set by "Interromper"; the agent stops the running backup when this is newer than the start of the run.</summary>
@@ -33,4 +33,7 @@ public class BackupSettings
     /// <summary>Dump file the admin asked to restore; the agent restores it once <see cref="RestoreRequestedAt"/> is newer than its last restore result.</summary>
     public string? RestoreFile { get; set; }
     public DateTimeOffset? RestoreRequestedAt { get; set; }
+    /// <summary>Dump file the admin asked to delete; the host agent deletes it (the API cannot touch dumps) and reports in <c>delete-result.json</c>.</summary>
+    public string? DeleteFile { get; set; }
+    public DateTimeOffset? DeleteRequestedAt { get; set; }
 }

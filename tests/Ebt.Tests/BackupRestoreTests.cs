@@ -151,7 +151,7 @@ public class BackupRestoreTests(ApiFixture api)
             Assert.Contains(page.Items, a => a.Action == "Update" && a.Changes.Contains("RestoreFile") && a.User == ApiFixture.AdminUser);
 
             // The plan screen's save must not wipe the request.
-            (await admin.PutAsJsonAsync("/api/admin/backup-settings", new BackupSettingsInput(false, "Daily", "22:00", 0, null, 14))).EnsureSuccessStatusCode();
+            (await admin.PutAsJsonAsync("/api/admin/backup-settings", new BackupSettingsInput(false, "Daily", "22:00", 0, null, 5))).EnsureSuccessStatusCode();
             Assert.Equal(Newest, (await admin.GetFromJsonAsync<SystemEndpoints.BackupListResponse>(Url, ApiFixture.Json))!.Restore.File);
         }
         finally { Directory.Delete(dir, true); }

@@ -273,6 +273,15 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("cancel_requested_at");
 
+                    b.Property<string>("DeleteFile")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("delete_file");
+
+                    b.Property<DateTimeOffset?>("DeleteRequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("delete_requested_at");
+
                     b.Property<string>("Destination")
                         .HasMaxLength(260)
                         .HasColumnType("character varying(260)")
@@ -329,7 +338,7 @@ namespace Ebt.Core.Data.Migrations
 
                     b.ToTable("backup_settings", null, t =>
                         {
-                            t.HasCheckConstraint("ck_backup_settings_keep", "keep >= 1 AND keep <= 365");
+                            t.HasCheckConstraint("ck_backup_settings_keep", "keep >= 1 AND keep <= 5");
                         });
 
                     b.HasData(
@@ -338,7 +347,7 @@ namespace Ebt.Core.Data.Migrations
                             Id = 1,
                             Enabled = false,
                             Frequency = 2,
-                            Keep = 14,
+                            Keep = 5,
                             TimeOfDay = new TimeOnly(22, 0, 0),
                             Weekday = 0
                         });

@@ -78,7 +78,11 @@ public static class SystemEndpoints
     /// <summary>What the agent writes to <c>restore-result.json</c> when a restore ends.</summary>
     public record RestoreResult(bool Ok, string? Message, string? File, string? SafetyDump, DateTimeOffset? FinishedAt);
     public record RestoreState(DateTimeOffset? RequestedAt, string? File, RestoreResult? Result);
-    public record BackupListResponse(List<BackupItem> Items, DateTimeOffset? ListedAt, RestoreState Restore);
+    /// <summary>What the agent writes to <c>delete-result.json</c> when it has deleted (or failed to delete) a dump.</summary>
+    public record DeleteResult(bool Ok, string? Message, string? File, DateTimeOffset? FinishedAt);
+    public record DeleteState(DateTimeOffset? RequestedAt, string? File, DeleteResult? Result);
+    public record BackupListResponse(List<BackupItem> Items, DateTimeOffset? ListedAt, RestoreState Restore, DeleteState Delete);
+    public record DeleteRequest(string? File, string? Confirm);
     public record RestoreRequest(string? File, string? Confirm);
 
     private static readonly System.Text.RegularExpressions.Regex DumpName = new("^ebt-[A-Za-z0-9-]+-[0-9]{8}-[0-9]{6}[.]dump$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
@@ -105,10 +109,16 @@ public static class SystemEndpoints
     private static bool RestorePending(BackupSettings s, RestoreResult? result) =>
         s.RestoreRequestedAt is not null && (result?.FinishedAt is null || result.FinishedAt <= s.RestoreRequestedAt);
 
+    public static DeleteResult? ScanDeleteResult(string? directory) => ReadAgentFile<DeleteResult>(directory, "delete-result.json");
+
+    private static bool DeletePending(BackupSettings s, DeleteResult? result) =>
+        s.DeleteRequestedAt is not null && (result?.FinishedAt is null || result.FinishedAt <= s.DeleteRequestedAt);
+
     private static BackupListResponse BackupList(BackupSettings s, string? directory)
     {
         var (items, listedAt) = ScanBackupList(directory);
-        return new BackupListResponse(items, listedAt, new RestoreState(s.RestoreRequestedAt, s.RestoreFile, ScanRestoreResult(directory)));
+        return new BackupListResponse(items, listedAt, new RestoreState(s.RestoreRequestedAt, s.RestoreFile, ScanRestoreResult(directory)),
+            new DeleteState(s.DeleteRequestedAt, s.DeleteFile, ScanDeleteResult(directory)));
     }
 
     public static void MapSystem(this WebApplication app)
@@ -152,7 +162,7 @@ public static class SystemEndpoints
                 .Require(Enum.TryParse<BackupFrequency>(i.Frequency, out _) && Enum.IsDefined(Enum.Parse<BackupFrequency>(i.Frequency!)), "frequency", "Hourly, Every6Hours, Daily or Weekly")
                 .Require(TimeOnly.TryParseExact(i.TimeOfDay, "HH:mm", out _), "timeOfDay", "Use HH:mm, for example 22:00")
                 .Require(i.Weekday is >= 0 and <= 6, "weekday", "Between 0 (Sunday) and 6 (Saturday)")
-                .Require(i.Keep is >= 1 and <= 365, "keep", "Between 1 and 365");
+                .Require(i.Keep is >= 1 and <= 5, "keep", "Between 1 and 5");
             if (i.Enabled && string.IsNullOrWhiteSpace(i.Destination)) errors.Require(false, "destination", "Choose the destination folder before turning on automatic backup");
             if (BackupSchedule.DestinationError(i.Destination) is { } why) errors.Require(false, "destination", why);
             if (errors.Count > 0) return Results.ValidationProblem(errors);
@@ -206,6 +216,26 @@ public static class SystemEndpoints
             if (RestorePending(s, ScanRestoreResult(dir))) return Results.Problem("A restore is already requested and has not finished", statusCode: StatusCodes.Status409Conflict);
             s.RestoreFile = name;
             s.RestoreRequestedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return Results.Json(BackupList(s, dir), new JsonSerializerOptions(JsonSerializerDefaults.Web), statusCode: StatusCodes.Status202Accepted);
+        });
+        backups.MapPost("/delete", async (DeleteRequest r, EbtDbContext db, IConfiguration config, CancellationToken ct) =>
+        {
+            var dir = config["Backup:Directory"];
+            var (items, _) = ScanBackupList(dir);
+            var name = r.File?.Trim() ?? "";
+            var shaped = DumpName.IsMatch(name);
+            var errors = Errors()
+                .Require(shaped, "file", "Not a backup file name")
+                .Require(!shaped || items.Any(i => i.Name == name), "file", "Backup not found in the list published by the backup agent")
+                .Require(r.Confirm == "EXCLUIR", "confirm", "Type EXCLUIR to confirm");
+            if (errors.Count > 0) return Results.ValidationProblem(errors);
+            var s = await LoadBackupSettings(db, ct);
+            if (ScanProgress(dir) is { Running: true }) return Results.Problem("A backup or restore is running; wait for it to finish", statusCode: StatusCodes.Status409Conflict);
+            if (RestorePending(s, ScanRestoreResult(dir))) return Results.Problem("A restore is requested and has not finished", statusCode: StatusCodes.Status409Conflict);
+            if (DeletePending(s, ScanDeleteResult(dir))) return Results.Problem("A deletion is already requested and has not finished", statusCode: StatusCodes.Status409Conflict);
+            s.DeleteFile = name;
+            s.DeleteRequestedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
             return Results.Json(BackupList(s, dir), new JsonSerializerOptions(JsonSerializerDefaults.Web), statusCode: StatusCodes.Status202Accepted);
         });

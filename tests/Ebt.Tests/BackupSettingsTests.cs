@@ -15,7 +15,7 @@ public class BackupSettingsTests(ApiFixture api)
     private static readonly char Bs = '\u005c';
 
     private static BackupSettingsInput Valid(string? destination = null, string frequency = "Daily") =>
-        new(true, frequency, "22:30", 3, destination ?? ("C:" + Bs + "backups"), 10);
+        new(true, frequency, "22:30", 3, destination ?? ("C:" + Bs + "backups"), 4);
 
     [Fact]
     public async Task Settings_are_admin_only()
@@ -39,24 +39,34 @@ public class BackupSettingsTests(ApiFixture api)
         Assert.Equal("22:30", s.TimeOfDay);
         Assert.Equal(3, s.Weekday);
         Assert.Equal(dest, s.Destination);
-        Assert.Equal(10, s.Keep);
+        Assert.Equal(4, s.Keep);
         Assert.NotNull(s.NextRunAt); // nothing ran yet, so it is due now
     }
 
     [Theory]
-    [InlineData("Monthly", "22:00", 0, 14, null, "frequency")]
-    [InlineData("Daily", "25:00", 0, 14, null, "timeOfDay")]
-    [InlineData("Daily", "22:00", 7, 14, null, "weekday")]
+    [InlineData("Monthly", "22:00", 0, 5, null, "frequency")]
+    [InlineData("Daily", "25:00", 0, 5, null, "timeOfDay")]
+    [InlineData("Daily", "22:00", 7, 5, null, "weekday")]
     [InlineData("Daily", "22:00", 0, 0, null, "keep")]
-    [InlineData("Daily", "22:00", 0, 366, null, "keep")]
-    [InlineData("Daily", "22:00", 0, 14, "backups", "destination")]
-    [InlineData("Daily", "22:00", 0, 14, "D:/x/../y", "destination")]
-    [InlineData("Daily", "22:00", 0, 14, "D:/x*", "destination")]
+    [InlineData("Daily", "22:00", 0, 6, null, "keep")]
+    [InlineData("Daily", "22:00", 0, 5, "backups", "destination")]
+    [InlineData("Daily", "22:00", 0, 5, "D:/x/../y", "destination")]
+    [InlineData("Daily", "22:00", 0, 5, "D:/x*", "destination")]
     public async Task Invalid_settings_are_refused(string frequency, string time, int weekday, int keep, string? destination, string field)
     {
         var res = await (await api.AdminAsync()).PutAsJsonAsync(Url, new BackupSettingsInput(true, frequency, time, weekday, destination, keep));
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
         Assert.Contains($"\"{field}\"", await res.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    public async Task The_keep_boundaries_are_accepted(int keep)
+    {
+        var res = await (await api.AdminAsync()).PutAsJsonAsync(Url, Valid() with { Keep = keep });
+        res.EnsureSuccessStatusCode();
+        Assert.Equal(keep, (await res.Read<BackupSettingsDto>()).Keep);
     }
 
     [Fact]
@@ -241,7 +251,7 @@ public class BackupSettingsTests(ApiFixture api)
     public async Task A_destination_is_required_to_turn_on_automatic_backup_or_to_run_now()
     {
         var admin = await api.AdminAsync();
-        var noFolder = new BackupSettingsInput(true, "Daily", "22:00", 0, null, 14);
+        var noFolder = new BackupSettingsInput(true, "Daily", "22:00", 0, null, 5);
         var res = await admin.PutAsJsonAsync(Url, noFolder);
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
         Assert.Contains("\"destination\"", await res.Content.ReadAsStringAsync());
