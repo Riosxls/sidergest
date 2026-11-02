@@ -47,6 +47,8 @@ class ApiClient {
 
   /// Called with the refresh response (same shape as login) after a successful silent refresh.
   void Function(Map<String, dynamic> session)? onRefreshed;
+  /// Asked when the server refuses the refresh token. Return true after adopting a newer session (for example one another tab stored a moment ago) in [token] and [refreshToken].
+  Future<bool> Function()? onRefreshRejected;
   Future<bool>? _refreshing;
   final http.Client _http;
   final _versions = <String, String>{};
@@ -130,6 +132,10 @@ class ApiClient {
           .timeout(requestTimeout);
       if (r.statusCode < 200 || r.statusCode >= 300) {
         refreshRejected = r.statusCode == 400 || r.statusCode == 401 || r.statusCode == 403;
+        if (refreshRejected && await (onRefreshRejected?.call() ?? Future.value(false))) {
+          refreshRejected = false;
+          return true;
+        }
         return false;
       }
       // Signed out while the request was in flight: do not bring the old session back.

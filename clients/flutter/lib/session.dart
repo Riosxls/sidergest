@@ -18,6 +18,7 @@ class Session extends ChangeNotifier {
     : api = api ?? ApiClient(baseUrl: defaultApiUrl),
       _storage = storage ?? const FlutterSecureStorage() {
     this.api.onUnauthorized = logout;
+    this.api.onRefreshRejected = _adoptStored;
     this.api.onRefreshed = (r) => unawaited(_apply(r).catchError((Object e) => debugPrint('session: could not apply the refreshed session: $e')));
   }
 
@@ -220,6 +221,26 @@ class Session extends ChangeNotifier {
       await p.remove('idleLockMinutes');
     } catch (e) {
       debugPrint('session: idle lock migration will retry on the next start: $e');
+    }
+  }
+
+  /// Another tab of the same browser may have refreshed first: its new session is in storage while this tab still holds the rotated-out token.
+  /// Takes that session over instead of signing out. False when storage holds nothing newer.
+  Future<bool> _adoptStored() async {
+    try {
+      final v = await _storage.readAll();
+      final token = v['token'];
+      final rt = v['refreshToken'];
+      final rExp = DateTime.tryParse(v['refreshExpiresAt'] ?? '');
+      if (token == null || rt == null || rt == api.refreshToken || rExp == null || !rExp.isAfter(DateTime.now())) return false;
+      api.token = token;
+      api.refreshToken = rt;
+      expiresAt = DateTime.tryParse(v['expiresAt'] ?? '');
+      refreshExpiresAt = rExp;
+      return true;
+    } catch (_) {
+      // Storage unreadable: nothing to adopt, the caller treats it as a refused refresh.
+      return false;
     }
   }
 

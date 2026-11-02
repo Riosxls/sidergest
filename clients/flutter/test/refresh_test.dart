@@ -164,6 +164,29 @@ void main() {
     expect(s.loggedIn, isFalse);
   });
 
+  test('a refused refresh adopts the newer session another tab stored, once', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      'token': 'tab-b',
+      'refreshToken': 'rt-b',
+      'expiresAt': DateTime.now().add(const Duration(minutes: 15)).toIso8601String(),
+      'refreshExpiresAt': DateTime.now().add(const Duration(days: 1)).toIso8601String(),
+    });
+    final seen = <String>[];
+    final client = MockClient((r) async {
+      seen.add('${r.url.path} ${r.headers['Authorization'] ?? ''}');
+      if (r.url.path == '/api/auth/refresh') return http.Response('', 401);
+      return r.headers['Authorization'] == 'Bearer tab-b' ? http.Response('{"ok":true}', 200) : http.Response('', 401);
+    });
+    final s = Session(api: ApiClient(baseUrl: 'http://x', client: client, token: 'old')..refreshToken = 'rt-a');
+    expect(await s.api.get('/api/things'), {'ok': true});
+    expect(s.api.refreshToken, 'rt-b');
+    expect(seen.last, '/api/things Bearer tab-b');
+
+    // nothing newer in storage (same token): the refusal stands
+    final s2 = Session(api: ApiClient(baseUrl: 'http://x', client: client, token: 'old')..refreshToken = 'rt-b');
+    expect(await s2.api.refresh(), isFalse);
+  });
+
   test('logout posts the refresh token and clears the session', () async {
     final seen = <http.Request>[];
     final client = MockClient((r) async {
