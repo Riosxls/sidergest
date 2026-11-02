@@ -128,6 +128,10 @@ void main() {
     await tester.pump();
     await esc(tester);
     expect(find.byKey(const ValueKey('module-PCP')), findsNothing);
+    // Esc steps back one screen: the PCP overview it came from, then the Painel.
+    await esc(tester);
+    expect(find.byKey(const ValueKey('module-PCP')), findsNothing);
+    expect(find.byKey(const ValueKey('link-production-orders')), findsOneWidget);
     await esc(tester);
     expect(find.byKey(const ValueKey('module-PCP')), findsOneWidget);
   });

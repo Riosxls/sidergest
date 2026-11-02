@@ -8,6 +8,7 @@ import '../widgets/actions.dart';
 import '../widgets/entity_form.dart' show showError;
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
+import '../widgets/record_nav.dart';
 import 'sales_common.dart';
 
 const _supplierLookup = LookupSpec('/api/suppliers');
@@ -57,11 +58,8 @@ List<FieldSpec> _usageFields() => [
   const FieldSpec('notes', 'Observações'),
 ];
 
-Future<void> openSteelLot(BuildContext context, Session session, int id) => Navigator.of(context).push(
-  MaterialPageRoute(
-    builder: (_) => SteelLotScreen(session: session, id: id),
-  ),
-);
+Future<void> openSteelLot(BuildContext context, Session session, int id) =>
+    pushRecord<void>(context, 'steel-lot', id, (_) => SteelLotScreen(session: session, id: id));
 
 Map<String, dynamic> _lotPreset(Map<String, dynamic> lot) => {
   'lotId': lot['id'],

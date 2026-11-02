@@ -9,6 +9,7 @@ import '../widgets/actions.dart';
 import '../widgets/entity_form.dart' show showError;
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
+import '../widgets/record_nav.dart';
 import 'sales_common.dart';
 
 Tone feasibilityTone(Object? s) => switch (s) {
@@ -44,11 +45,8 @@ const feasibilityFields = [
   FieldSpec('ordersAllowed', 'Pedidos cobertos', type: FieldType.integer, defaultValue: 3),
 ];
 
-Future<void> openFeasibility(BuildContext context, Session session, int id) => Navigator.of(context).push(
-  MaterialPageRoute(
-    builder: (_) => FeasibilityScreen(session: session, id: id),
-  ),
-);
+Future<void> openFeasibility(BuildContext context, Session session, int id) =>
+    pushRecord<void>(context, 'feasibility', id, (_) => FeasibilityScreen(session: session, id: id));
 
 Future<Map<String, dynamic>?> newFeasibility(BuildContext context, Session session, {Map<String, dynamic>? initial}) {
   final api = session.api;

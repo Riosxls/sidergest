@@ -10,6 +10,7 @@ import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/record_list.dart';
+import '../widgets/record_nav.dart';
 import 'orders.dart';
 import 'production_floor.dart';
 import 'stock_documents.dart';
@@ -52,11 +53,8 @@ const productionUpdateFields = [
   FieldSpec('notes', 'Observações'),
 ];
 
-Future<void> openProductionOrder(BuildContext context, Session session, int id) => Navigator.of(context).push(
-  MaterialPageRoute(
-    builder: (_) => ProductionOrderScreen(session: session, id: id),
-  ),
-);
+Future<void> openProductionOrder(BuildContext context, Session session, int id) =>
+    pushRecord<void>(context, 'production-order', id, (_) => ProductionOrderScreen(session: session, id: id));
 
 Future<void> newProductionOrder(BuildContext context, Session session, {VoidCallback? onSaved}) async {
   final o = await submitForm(

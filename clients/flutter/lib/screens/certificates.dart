@@ -12,6 +12,7 @@ import '../widgets/discard_guard.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
+import '../widgets/record_nav.dart';
 import 'sales_common.dart';
 
 Tone certificateTone(Object? s) => switch (s) {
@@ -20,11 +21,8 @@ Tone certificateTone(Object? s) => switch (s) {
   _ => Tone.danger,
 };
 
-Future<Map<String, dynamic>?> openCertificate(BuildContext context, Session session, int id) => Navigator.of(context).push<Map<String, dynamic>>(
-  MaterialPageRoute(
-    builder: (_) => CertificateScreen(session: session, id: id),
-  ),
-);
+Future<Map<String, dynamic>?> openCertificate(BuildContext context, Session session, int id) =>
+    pushRecord<Map<String, dynamic>>(context, 'certificate', id, (_) => CertificateScreen(session: session, id: id));
 
 /// Creates a draft certificate for an order line (prefilled by the server) and opens the editor on it.
 /// Returns true when a certificate was created.

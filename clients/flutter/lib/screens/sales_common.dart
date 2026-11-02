@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../labels.dart';
 import '../session.dart';
 import '../widgets/pipeline.dart';
+import '../widgets/record_nav.dart';
 import 'deliveries.dart';
 import 'sales_orders.dart';
 import 'sales_quotes.dart';
@@ -129,23 +130,13 @@ List<TimelineEntry> timeline(List<dynamic> history) => [
     ),
 ];
 
-Future<void> openQuote(BuildContext context, Session session, int id) => Navigator.of(context).push(
-  MaterialPageRoute(
-    builder: (_) => QuoteScreen(session: session, id: id),
-  ),
-);
+Future<void> openQuote(BuildContext context, Session session, int id) => pushRecord<void>(context, 'quote', id, (_) => QuoteScreen(session: session, id: id));
 
-Future<void> openSalesOrder(BuildContext context, Session session, int id) => Navigator.of(context).push(
-  MaterialPageRoute(
-    builder: (_) => SalesOrderScreen(session: session, id: id),
-  ),
-);
+Future<void> openSalesOrder(BuildContext context, Session session, int id) =>
+    pushRecord<void>(context, 'sales-order', id, (_) => SalesOrderScreen(session: session, id: id));
 
-Future<void> openDelivery(BuildContext context, Session session, int id) => Navigator.of(context).push(
-  MaterialPageRoute(
-    builder: (_) => DeliveryScreen(session: session, id: id),
-  ),
-);
+Future<void> openDelivery(BuildContext context, Session session, int id) =>
+    pushRecord<void>(context, 'delivery', id, (_) => DeliveryScreen(session: session, id: id));
 
 /// Lays a main and a side column in a row on wide screens and stacks them on narrow ones.
 class SideBySide extends StatelessWidget {

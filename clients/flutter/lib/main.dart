@@ -7,6 +7,7 @@ import 'session.dart';
 import 'widgets/app_text_scale.dart';
 import 'widgets/esc_back.dart';
 import 'widgets/idle_guard.dart';
+import 'widgets/record_nav.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +29,7 @@ class EbtApp extends StatefulWidget {
 class _EbtAppState extends State<EbtApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _escObserver = EscRouteObserver();
+  final _trail = RecordTrail();
   bool _wasLoggedIn = false;
 
   Session get session => widget.session;
@@ -59,7 +61,7 @@ class _EbtAppState extends State<EbtApp> {
       builder: (_, _) => MaterialApp(
         title: 'MetaGest',
         navigatorKey: _navigatorKey,
-        navigatorObservers: [_escObserver],
+        navigatorObservers: [_escObserver, _trail],
         debugShowCheckedModeBanner: false,
         theme: appTheme(Brightness.light, comfortable: session.comfortable, highContrast: session.highContrast, reduceMotion: session.reduceMotion),
         darkTheme: appTheme(Brightness.dark, comfortable: session.comfortable, highContrast: session.highContrast, reduceMotion: session.reduceMotion),

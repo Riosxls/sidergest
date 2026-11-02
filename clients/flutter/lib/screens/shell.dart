@@ -7,6 +7,7 @@ import '../entities.dart';
 import '../session.dart';
 import '../widgets/alerts.dart';
 import '../widgets/command_palette.dart';
+import '../widgets/record_nav.dart';
 import '../widgets/user_menu.dart';
 import 'audit.dart';
 import 'certificates.dart';
@@ -139,18 +140,70 @@ class _ShellState extends State<Shell> {
   String? _filter;
   bool _collapsed = false;
 
+  /// Screens left behind by [_go], newest last, so Esc and Back return to the previous screen and not always to the Painel.
+  final _history = <({String id, String? filter})>[];
+
+  /// Screens kept alive (filters, sort and scroll survive a visit elsewhere), keyed by [_key]. Oldest first.
+  final _mounted = <String, ({String id, String? filter})>{};
+  final _left = <String, DateTime>{};
+  static const _keepFor = Duration(minutes: 3);
+  static const _keepMax = 8;
+
+  /// Wide layout: record pages open inside the content area so the sidebar and the app bar stay.
+  final _innerKey = GlobalKey<NavigatorState>();
+  final _innerTrail = RecordTrail();
+  final _hero = MaterialApp.createMaterialHeroController();
+  final _rev = ValueNotifier<int>(0);
+  int _inner = 0;
+
+  static String _key(String id, String? filter) => '$id/${filter ?? ''}';
+
+  NavigatorState? get _innerNav => _innerKey.currentState;
+
+  /// Context whose Navigator receives pushed record pages: the inner one when it exists.
+  BuildContext get _navContext => _innerNav?.overlay?.context ?? context;
+
+  bool get _canBack => _inner > 0 || _history.isNotEmpty || _current != 'dashboard';
+
   @override
   void initState() {
     super.initState();
     if (_items.any((i) => i.id == widget.session.homeScreen)) _current = widget.session.homeScreen;
+    _mount(_current, null);
     _restorePrefs();
     HardwareKeyboard.instance.addHandler(_onKey);
+    _innerTrail.pages.addListener(_onInnerPages);
+    widget.session.addListener(_refreshPages);
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
+    _innerTrail.pages.removeListener(_onInnerPages);
+    widget.session.removeListener(_refreshPages);
+    _rev.dispose();
     super.dispose();
+  }
+
+  void _onInnerPages() {
+    final n = (_innerTrail.pages.value - 1).clamp(0, 99);
+    if (mounted && n != _inner) setState(() => _inner = n);
+  }
+
+  void _refreshPages() {
+    if (mounted) _rev.value++;
+  }
+
+  /// Marks a screen as alive. One left for a while, and the Painel, start over so they show fresh data.
+  void _mount(String id, String? filter) {
+    final k = _key(id, filter);
+    final seen = _left[k];
+    if (id == 'dashboard' || (seen != null && DateTime.now().difference(seen) > _keepFor)) _mounted.remove(k);
+    _mounted.removeWhere((key, t) => key != k && t.id == id);
+    _mounted[k] = (id: id, filter: filter);
+    while (_mounted.length > _keepMax) {
+      _mounted.remove(_mounted.keys.firstWhere((key) => key != k));
+    }
   }
 
   bool _paletteOpen = false;
@@ -163,7 +216,7 @@ class _ShellState extends State<Shell> {
     return true;
   }
 
-  /// Esc: leave a text field first, then return from a module screen to the Painel.
+  /// Esc: leave a text field first, then go back one step (open record, previous screen, Painel).
   bool _onEsc() {
     final k = HardwareKeyboard.instance;
     if (k.isControlPressed || k.isAltPressed || k.isShiftPressed || k.isMetaPressed) return false;
@@ -173,9 +226,7 @@ class _ShellState extends State<Shell> {
       focus!.unfocus();
       return true;
     }
-    if (_current == 'dashboard') return false;
-    _go('dashboard');
-    return true;
+    return _back();
   }
 
   Future<void> _restorePrefs() async {
@@ -202,15 +253,50 @@ class _ShellState extends State<Shell> {
     }
   }
 
+  /// Goes to a screen from the sidebar, the Painel, the bell or the palette: closes open record pages and remembers where it came from.
   void _go(String id, [String? filter]) {
+    _innerNav?.popUntil((r) => r.isFirst);
+    if (id == _current && filter == _filter) return;
+    if (id == 'dashboard') {
+      _history.clear();
+    } else {
+      _history.add((id: _current, filter: _filter));
+      if (_history.length > 30) _history.removeAt(0);
+    }
+    _show(id, filter);
+  }
+
+  /// One step back: the open record page, else the previous screen, else the Painel. False when there is nowhere to go.
+  bool _back() {
+    final inner = _innerNav;
+    if (inner != null && inner.canPop()) {
+      inner.maybePop();
+      return true;
+    }
+    if (_history.isNotEmpty) {
+      final t = _history.removeLast();
+      _show(t.id, t.filter);
+      return true;
+    }
+    if (_current != 'dashboard') {
+      _show('dashboard', null);
+      return true;
+    }
+    return false;
+  }
+
+  void _show(String id, String? filter) {
+    _left[_key(_current, _filter)] = DateTime.now();
+    _mount(id, filter);
     setState(() {
       _current = id;
       _filter = filter;
     });
+    _rev.value++;
     if (id != 'dashboard') RecentStore.add(RecentItem('screen', id, _items.firstWhere((i) => i.id == id).title));
   }
 
-  void _openProduct(int id) => Navigator.of(context).push(
+  void _openProduct(int id) => Navigator.of(_navContext).push(
     MaterialPageRoute(
       builder: (_) => ProductDetailScreen(session: widget.session, productId: id),
     ),
@@ -218,17 +304,17 @@ class _ShellState extends State<Shell> {
 
   Future<void> _openHit(String group, int id) async {
     final s = widget.session;
-    Future<void> push(Widget screen) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    Future<void> push(Widget screen) => Navigator.of(_navContext).push(MaterialPageRoute(builder: (_) => screen));
     try {
       switch (group) {
         case 'products':
           _openProduct(id);
         case 'production-orders':
-          await openProductionOrder(context, s, id);
+          await openProductionOrder(_navContext, s, id);
         case 'sales-orders':
-          await openSalesOrder(context, s, id);
+          await openSalesOrder(_navContext, s, id);
         case 'quotes':
-          await openQuote(context, s, id);
+          await openQuote(_navContext, s, id);
         case 'customers':
           final customer = await s.api.get('/api/customers/$id') as Map<String, dynamic>;
           if (mounted) await push(CustomerScreen(session: s, customer: customer));
@@ -255,7 +341,7 @@ class _ShellState extends State<Shell> {
     context,
     session: widget.session,
     targets: [for (final i in _items) SearchTarget(i.id, i.icon, i.title, i.section == hiddenSection ? 'Módulos' : i.section)],
-    actions: [for (final a in quickActionsFor(widget.session)) PaletteAction(a.icon, a.label, () => a.run(context))],
+    actions: [for (final a in quickActionsFor(widget.session)) PaletteAction(a.icon, a.label, () => a.run(_navContext))],
     onNavigate: _go,
     onOpenHit: _openHit,
   );
@@ -379,16 +465,41 @@ class _ShellState extends State<Shell> {
     return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
   }
 
+  Widget _pages() {
+    final s = widget.session;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        for (final e in _mounted.entries)
+          _PageSlot(
+            key: ValueKey(e.key),
+            active: e.key == _key(_current, _filter),
+            child: _items.firstWhere((i) => i.id == e.value.id).build(s, e.value.filter, _go),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final s = widget.session;
-    final page = KeyedSubtree(key: ValueKey('$_current/$_filter'), child: _item.build(s, _filter, _go));
-    // Back (Android, browser) from a module screen returns to the Painel instead of leaving the app.
+    // Wide: record pages open inside the content area, under the sidebar. Narrow: they cover the whole screen.
+    final page = wide
+        ? HeroControllerScope(
+            controller: _hero,
+            child: Navigator(
+              key: _innerKey,
+              observers: [_innerTrail],
+              onGenerateRoute: (_) => MaterialPageRoute<void>(builder: (_) => ListenableBuilder(listenable: _rev, builder: (_, _) => _pages())),
+            ),
+          )
+        : _pages();
+    // Back (Android, browser) steps back through open records and visited screens before leaving the app.
     return PopScope(
-      canPop: _current == 'dashboard',
+      canPop: !_canBack,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _go('dashboard');
+        if (!didPop) _back();
       },
       child: Scaffold(
         appBar: AppBar(
@@ -401,7 +512,7 @@ class _ShellState extends State<Shell> {
               : null,
           title: Row(
             children: [
-              if (_current != 'dashboard' && !wide) IconButton(tooltip: 'Voltar ao Painel', onPressed: () => _go('dashboard'), icon: const Icon(Icons.arrow_back)),
+              if (_canBack) IconButton(tooltip: _inner > 0 || _history.isNotEmpty ? 'Voltar' : 'Voltar ao Painel', onPressed: _back, icon: const Icon(Icons.arrow_back)),
               Flexible(
                 child: Text(
                   _moduleSection == null || _item.section == hiddenSection ? _item.title : '${_item.section} › ${_item.title}',
@@ -435,4 +546,56 @@ class _ShellState extends State<Shell> {
       ),
     );
   }
+}
+
+/// Keeps a visited screen alive while another one shows: hidden, with no tickers, heroes or focus, and a short fade when it returns.
+class _PageSlot extends StatefulWidget {
+  const _PageSlot({super.key, required this.active, required this.child});
+
+  final bool active;
+  final Widget child;
+
+  @override
+  State<_PageSlot> createState() => _PageSlotState();
+}
+
+class _PageSlotState extends State<_PageSlot> with SingleTickerProviderStateMixin {
+  late final _fade = AnimationController(vsync: this, duration: const Duration(milliseconds: 160), value: 1);
+  bool _first = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_first) {
+      _first = false;
+      if (widget.active && !MediaQuery.disableAnimationsOf(context)) _fade.forward(from: 0);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_PageSlot old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active && !MediaQuery.disableAnimationsOf(context)) _fade.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _fade.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Offstage(
+    offstage: !widget.active,
+    child: TickerMode(
+      enabled: widget.active,
+      child: HeroMode(
+        enabled: widget.active,
+        child: ExcludeFocus(
+          excluding: !widget.active,
+          child: FadeTransition(opacity: _fade, child: widget.child),
+        ),
+      ),
+    ),
+  );
 }

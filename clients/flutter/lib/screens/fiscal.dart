@@ -10,16 +10,14 @@ import '../widgets/actions.dart';
 import '../widgets/page_column.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
+import '../widgets/record_nav.dart';
 import 'sales_common.dart';
 
 const fiscalKinds = {'Sale': 'Venda', 'OutsideShipment': 'Remessa p/ industrialização'};
 const fiscalStatuses = {'Authorized': 'Autorizada', 'Cancelled': 'Cancelada', 'Pending': 'Pendente na SEFAZ', 'Rejected': 'Rejeitada'};
 
-Future<void> openFiscalDocument(BuildContext context, Session session, int id) => Navigator.of(context).push(
-  MaterialPageRoute(
-    builder: (_) => FiscalDocumentScreen(session: session, id: id),
-  ),
-);
+Future<void> openFiscalDocument(BuildContext context, Session session, int id) =>
+    pushRecord<void>(context, 'fiscal', id, (_) => FiscalDocumentScreen(session: session, id: id));
 
 /// List of fiscal documents (NF-e).
 class FiscalDocumentsScreen extends StatefulWidget {
