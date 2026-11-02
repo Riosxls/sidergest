@@ -1,12 +1,12 @@
 ﻿param(
-    [int]$Keep = 14,
+    [int]$Keep = 5,
     [string]$CopyTo,
     [string]$Reason = 'manual',
     [switch]$Quiet,
     [string]$LocalDir   # tests only: keep the dumps here and leave the status files alone
 )
 
-# Dumps the Docker database to backups\ebt-<reason>-<timestamp>.dump (pg_dump custom format), checks it, keeps the newest $Keep scheduled/manual
+# Dumps the Docker database to backups\ebt-<reason>-<timestamp>.dump (pg_dump custom format), checks it, keeps the newest $Keep (at most 5, of every kind)
 # dumps and optionally copies the new one to another disk or share (-CopyTo, or the METAGEST_BACKUP_COPYTO environment variable, which the backup agent
 # uses so that a path ending in a backslash is never mangled by command-line quoting). Exit code 0 only when the dump exists, is readable by pg_restore,
 # matches its SHA-256 after leaving the container and, when copied, matches at the destination too.
@@ -18,6 +18,8 @@ $Dir = if ($LocalDir) { $LocalDir } else { Join-Path $Root 'backups' }
 $StatusDir = Join-Path $Root 'backup-status'
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 New-Item -ItemType Directory -Force -Path $StatusDir | Out-Null
+$MaxBackups = 5   # one pool for every dump, whatever its reason; a new backup replaces the oldest
+$Keep = [Math]::Max(1, [Math]::Min($MaxBackups, $Keep))
 if (-not $CopyTo) { $CopyTo = $env:METAGEST_BACKUP_COPYTO }
 if ($CopyTo) { $CopyTo = $CopyTo.Trim() }
 
@@ -36,23 +38,19 @@ function Set-Progress([int]$Percent, [string]$Stage, [bool]$Running = $true) {
     } catch { }   # progress is a nicety: never fail the backup because of it
 }
 
-# Scheduled and manual dumps are rotated by count; safety dumps (pre-start, before-restore, before-rebuild, ...) are only removed when older than this.
-$SafetyDumpMaxAgeDays = 180
-$RotatedName = '^ebt-(scheduled|manual|nightly)-.*[.]dump$'
-
 function Remove-Dump([string]$Path) {
     Remove-Item $Path -Force -ErrorAction SilentlyContinue
     Remove-Item ($Path + '.sha256') -Force -ErrorAction SilentlyContinue
 }
 
+# At most $Keep dumps of any kind (manual, scheduled, pre-start, before-restore...) stay in a folder; the oldest are replaced by newer ones.
+# This runs only after the new dump was verified, so a failed backup never costs an old one.
 function Remove-OldDumps([string]$Folder, [string]$Label) {
-    $dumps = @(Get-ChildItem $Folder -Filter 'ebt-*.dump' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
-    $rotated = @($dumps | Where-Object { $_.Name -match $RotatedName })
-    $rotated | Select-Object -Skip $Keep | ForEach-Object { Remove-Dump $_.FullName; Say "Removed old backup $($_.Name) $Label" }
-    $limit = (Get-Date).AddDays(-$SafetyDumpMaxAgeDays)
-    $dumps | Where-Object { $_.Name -notmatch $RotatedName -and $_.LastWriteTime -lt $limit } | ForEach-Object { Remove-Dump $_.FullName; Say "Removed old safety backup $($_.Name) $Label" }
+    Get-ChildItem $Folder -Filter 'ebt-*.dump' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -Skip $Keep | ForEach-Object {
+        Remove-Dump $_.FullName
+        Say "Removed old backup $($_.Name) $Label"
+    }
 }
-
 Push-Location $Root
 try {
     Set-Progress 1 'Preparando...'

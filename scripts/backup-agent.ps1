@@ -171,6 +171,54 @@ function Invoke-RestoreRequest([string]$Container, $Plan) {
     return $true
 }
 
+# A deletion asked for in the app: removes the dump (and its .sha256) from this computer and from the destination, refreshes status.json and the list.
+function Invoke-DeleteRequest([string]$Container, $Plan) {
+    $file = $null
+    try { $file = (Invoke-Sql $Container 'select delete_file from backup_settings where id = 1 and delete_requested_at is not null and delete_file is not null' | Select-Object -First 1) } catch { return $false }
+    if (-not $file) { return $false }
+    $file = "$file".Trim()
+    try { Invoke-Sql $Container 'update backup_settings set delete_file = null where id = 1' | Out-Null } catch { }
+    Write-AgentLog "delete requested: $file"
+    $ok = $false; $message = ''
+    if ($file -notmatch '^ebt-[A-Za-z0-9-]+-[0-9]{8}-[0-9]{6}[.]dump$') {
+        $message = 'Nome de arquivo inválido.'
+    } else {
+        $folders = @((Join-Path $Root 'backups'))
+        if ($Plan.Destination) { $folders += $Plan.Destination }
+        $removed = 0
+        foreach ($f in $folders) {
+            $path = Join-Path $f $file
+            try {
+                if (Test-Path -LiteralPath $path) {
+                    Remove-Item -LiteralPath $path -Force
+                    Remove-Item -LiteralPath ($path + '.sha256') -Force -ErrorAction SilentlyContinue
+                    $removed++
+                }
+            } catch { $message = "Não foi possível apagar em ${f}: $($_.Exception.Message)" }
+        }
+        if (-not $message) {
+            if ($removed -gt 0) { $ok = $true; $message = 'Backup excluído.' } else { $message = 'O arquivo já não existia.'; $ok = $true }
+        }
+    }
+    # status.json describes the newest dump and the count: recompute it so the app never points at a deleted file.
+    try {
+        $dir = Join-Path $Root 'backup-status'
+        $all = @(Get-ChildItem (Join-Path $Root 'backups') -Filter 'ebt-*.dump' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+        $status = [ordered]@{ count = $all.Count; lastBackupAt = $null; lastBackupFile = $null; lastBackupSizeBytes = $null; lastBackupSha256 = $null }
+        if ($all.Count -gt 0) {
+            $status.lastBackupAt = $all[0].LastWriteTimeUtc.ToString('o'); $status.lastBackupFile = $all[0].Name; $status.lastBackupSizeBytes = $all[0].Length
+            $side = $all[0].FullName + '.sha256'
+            if (Test-Path -LiteralPath $side) { $status.lastBackupSha256 = ((Get-Content -LiteralPath $side -TotalCount 1) -split '\s+')[0] }
+        }
+        $status | ConvertTo-Json | Set-Content -Path (Join-Path $dir 'status.json') -Encoding utf8
+        $res = [ordered]@{ ok = $ok; message = $message; file = $file; finishedAt = [DateTimeOffset]::UtcNow.ToString('o') } | ConvertTo-Json
+        Set-Content -Path (Join-Path $dir 'delete-result.json') -Value $res -Encoding utf8
+    } catch { Write-AgentLog "delete bookkeeping error: $($_.Exception.Message)" }
+    Write-AgentLog "delete finished ok=${ok}: $message"
+    Publish-BackupList $Plan.Destination
+    return $true
+}
+
 function Invoke-Agent {
     Push-Location $Root
     try {
@@ -196,6 +244,7 @@ from backup_settings where id = 1
         }
 
         if (Invoke-RestoreRequest $container $plan) { return }
+        if (Invoke-DeleteRequest $container $plan) { return }
         if (((Get-Date) - $script:LastListed).TotalMinutes -ge 10) { Publish-BackupList $plan.Destination }
 
         $now = [DateTimeOffset]::UtcNow
