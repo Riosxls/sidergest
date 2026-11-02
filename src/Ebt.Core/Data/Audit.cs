@@ -41,6 +41,16 @@ public sealed class AuditInterceptor(ICurrentUser user) : SaveChangesInterceptor
         typeof(Shift), typeof(Employee), typeof(Holiday)
     ];
 
+    /// <summary>
+    /// Transactional documents whose full edits are not logged (they keep their own history) but whose status changes must show who made them:
+    /// production orders (release, stop, cancel, close) and quality certificates (issue, cancel, delete).
+    /// </summary>
+    private static readonly Dictionary<Type, string[]> Transitions = new()
+    {
+        [typeof(ProductionOrder)] = ["Status", "StatusReason"],
+        [typeof(QualityCertificate)] = ["Status"]
+    };
+
     private static readonly HashSet<string> Hidden = ["PasswordHash", "TokenVersion", "FailedLogins", "LockedUntil", "xmin", "NextNumber", "LastActivityAt"];
     private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never };
 
@@ -102,6 +112,19 @@ public sealed class AuditInterceptor(ICurrentUser user) : SaveChangesInterceptor
                     if (diff.Count > 0) ctx.Set<AuditEntry>().Add(Row(entry, "Update", diff));
                     break;
             }
+        }
+        foreach (var entry in ctx.ChangeTracker.Entries().Where(e => e.State is EntityState.Modified or EntityState.Deleted && Transitions.ContainsKey(e.Entity.GetType())).ToList())
+        {
+            var fields = Transitions[entry.Entity.GetType()];
+            if (entry.State == EntityState.Deleted)
+            {
+                ctx.Set<AuditEntry>().Add(Row(entry, "Delete", fields.ToDictionary(f => f, f => entry.Property(f).OriginalValue)));
+                continue;
+            }
+            var diff = entry.Properties
+                .Where(p => fields.Contains(p.Metadata.Name) && p.IsModified && !Equals(p.OriginalValue, p.CurrentValue))
+                .ToDictionary(p => p.Metadata.Name, p => (object?)new { from = p.OriginalValue, to = p.CurrentValue });
+            if (diff.Count > 0) ctx.Set<AuditEntry>().Add(Row(entry, "Status", diff));
         }
     }
 

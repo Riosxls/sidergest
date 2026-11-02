@@ -138,9 +138,10 @@ Future<Map<String, dynamic>?> _customer(ApiClient api, Object? id) async {
   if (id == null) return null;
   try {
     return await api.get('/api/customers/$id') as Map<String, dynamic>;
-  } catch (e) {
-    debugPrint('print_docs: lookup failed, using fallback: $e');
-    return null;
+  } on ApiException catch (e) {
+    // A customer that no longer exists prints blank; any other failure stops the print instead of leaving the customer out.
+    if (e.status == 404) return null;
+    rethrow;
   }
 }
 
@@ -536,9 +537,9 @@ Future<Uint8List> buildProductionOrderPdf(ApiClient api, Map<String, dynamic> o)
   Map<String, dynamic>? product;
   try {
     product = await api.get('/api/products/${o['productId']}') as Map<String, dynamic>;
-  } catch (e) {
-    debugPrint('print_docs: Optional data; the document prints without it: $e');
-    // Optional data; the document prints without it.
+  } on ApiException catch (e) {
+    // The measures on the OF come from the product: only a deleted product may print without them.
+    if (e.status != 404) rethrow;
   }
   final ops = (o['operations'] as List).cast<Map<String, dynamic>>();
   final mats = (o['materials'] as List).cast<Map<String, dynamic>>();
@@ -674,7 +675,7 @@ class PrintButton extends StatelessWidget {
               await Printing.layoutPdf(name: name, onLayout: (_) async => bytes, format: PdfPageFormat.a4);
               await PrintLog.mark(doneKey);
             } catch (e) {
-              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: $e')));
+              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: ${friendlyError(e)}')));
             }
           }
         : null,

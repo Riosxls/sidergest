@@ -101,7 +101,7 @@ void main() {
       await open(tester);
       status = 400;
       await fill(tester, 'wrong-password-1', 'new-password-22', 'new-password-22');
-      expect(find.textContaining('Senha atual: Incorrect password'), findsOneWidget);
+      expect(find.textContaining('Senha atual: Senha incorreta'), findsOneWidget);
       expect(find.text('Alterar minha senha'), findsOneWidget);
     });
   });

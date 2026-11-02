@@ -52,7 +52,9 @@ public partial class StockService
             var last = await LastClosedPeriodAsync(ct);
             if (last != period) throw StockException.Conflict(last is null ? "No period is closed" : $"Only the last closed period ({last}) can be reopened");
             await db.AverageCosts.Where(a => a.Period == period && !a.Imported).ExecuteDeleteAsync(ct);
-            await db.StockClosings.Where(c => c.Period == period).ExecuteDeleteAsync(ct);
+            // Removed through the change tracker so the audit log records who reopened the period.
+            db.StockClosings.RemoveRange(await db.StockClosings.Where(c => c.Period == period).ToListAsync(ct));
+            await db.SaveChangesAsync(ct);
             return 0;
         }, ct);
     }

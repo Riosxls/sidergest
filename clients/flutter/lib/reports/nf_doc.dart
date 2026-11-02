@@ -62,12 +62,14 @@ class _Nf {
   final List<(String, String, num)> installments;
 }
 
+/// Looks up data the NF paper needs. A record that no longer exists (404) prints blank; any other failure stops the print, since a
+/// fiscal paper with silently missing customer, NCM or prices must never come out of the printer.
 Future<Map<String, dynamic>?> _try(ApiClient api, String path) async {
   try {
     return await api.get(path) as Map<String, dynamic>;
-  } catch (e) {
-    debugPrint('nf_doc: lookup failed, using fallback: $e');
-    return null;
+  } on ApiException catch (e) {
+    if (e.status == 404) return null;
+    rethrow;
   }
 }
 
@@ -499,6 +501,6 @@ Future<void> printNf(BuildContext context, {required String name, String number 
     final bytes = await build(f);
     await Printing.layoutPdf(name: name, onLayout: (_) async => bytes, format: PdfPageFormat.a4);
   } catch (e) {
-    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: $e')));
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: ${friendlyError(e)}')));
   }
 }

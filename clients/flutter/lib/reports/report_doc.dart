@@ -9,6 +9,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../api.dart';
+
 /// Visual kind of a row in a printed report.
 enum ReportRowKind { normal, group, subtotal, total, section }
 
@@ -118,7 +120,7 @@ class ReportActions extends StatelessWidget {
     try {
       await f();
     } catch (e) {
-      if (c.mounted) _toast(c, 'Falha: $e');
+      if (c.mounted) _toast(c, 'Falha: ${friendlyError(e)}');
     }
   }
 

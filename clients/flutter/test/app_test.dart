@@ -165,7 +165,7 @@ void main() {
     final api = ApiClient(baseUrl: 'http://api.test', token: 'tok', client: fakeBackend([]));
     await expectLater(
       api.post('/api/products', {}),
-      throwsA(isA<ApiException>().having((e) => e.status, 'status', 400).having((e) => e.fieldErrors['ncm'], 'ncm', ['NCM must have 8 digits'])),
+      throwsA(isA<ApiException>().having((e) => e.status, 'status', 400).having((e) => e.fieldErrors['ncm'], 'ncm', ['O NCM deve ter 8 dígitos'])),
     );
   });
 
@@ -204,7 +204,7 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('field-ncm')), '123');
     await tester.tap(find.text('Salvar'));
     await tester.pumpAndSettle();
-    expect(find.text('NCM must have 8 digits'), findsOneWidget);
+    expect(find.text('O NCM deve ter 8 dígitos'), findsOneWidget);
     final post = log.lastWhere((r) => r.method == 'POST');
     final body = jsonDecode(post.body) as Map<String, dynamic>;
     expect(body['kind'], 'Part');

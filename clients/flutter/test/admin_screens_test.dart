@@ -146,7 +146,7 @@ void main() {
     await tester.pumpAndSettle();
     final put = log.singleWhere((r) => r.method == 'PUT');
     expect(jsonDecode(put.body), {'role': 'Admin', 'active': true});
-    expect(find.text('At least one active Admin must remain'), findsOneWidget);
+    expect(find.text('Deve restar pelo menos um administrador ativo'), findsOneWidget);
   });
 
   testWidgets('permission matrix shows a check for Admin/admin and none for Reader', (tester) async {

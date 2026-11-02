@@ -228,7 +228,7 @@ void main() {
       await tester.pump();
       await tapV(tester, find.byKey(const ValueKey('settings-profile-save')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Invalid email'), findsOneWidget);
+      expect(find.textContaining('E-mail inválido'), findsOneWidget);
       expect(s.email, isNull);
     });
 

@@ -252,8 +252,12 @@ public static class MasterDataEndpoints
 
         g.MapDelete("/{id:int}", async (int customerId, int id, EbtDbContext db, CancellationToken ct) =>
         {
-            var deleted = await db.CustomerAddresses.Where(x => x.Id == id && x.CustomerId == customerId).ExecuteDeleteAsync(ct);
-            return deleted == 0 ? Results.NotFound() : Results.NoContent();
+            // Removed through the change tracker (not ExecuteDelete) so the audit log records it.
+            var address = await db.CustomerAddresses.FirstOrDefaultAsync(x => x.Id == id && x.CustomerId == customerId, ct);
+            if (address is null) return Results.NotFound();
+            db.CustomerAddresses.Remove(address);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
         }).RequireAuthorization(SalesPolicies.Customers);
     }
 
@@ -319,8 +323,11 @@ public static class MasterDataEndpoints
 
         g.MapDelete("/{id:int}", async (int supplierId, int id, EbtDbContext db, CancellationToken ct) =>
         {
-            var deleted = await db.SupplierAddresses.Where(x => x.Id == id && x.SupplierId == supplierId).ExecuteDeleteAsync(ct);
-            return deleted == 0 ? Results.NotFound() : Results.NoContent();
+            var address = await db.SupplierAddresses.FirstOrDefaultAsync(x => x.Id == id && x.SupplierId == supplierId, ct);
+            if (address is null) return Results.NotFound();
+            db.SupplierAddresses.Remove(address);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
         }).RequireAuthorization(Policies.Write);
     }
 

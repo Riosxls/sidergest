@@ -413,6 +413,18 @@ void main() {
       expect(fake.has('PUT', '/api/sales/certificates/7'), isFalse);
     });
 
+    testWidgets('leaving with unsaved edits asks first', (tester) async {
+      final fake = _Fake();
+      await _pump(tester, fake, (s) => CertificateEditorScreen(session: s, certificate: _cert()));
+      await tester.enterText(find.byKey(const ValueKey('cert-quantity')), '99');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Descartar alterações?'), findsOneWidget);
+      await tester.tap(find.text('Continuar editando'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('cert-save')), findsOneWidget);
+    });
+
     testWidgets('an API error is shown and the editor stays; the delivery dropdown is sent', (tester) async {
       final fake = _Fake()
         ..putStatus = 422

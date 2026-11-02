@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../api.dart';
 import '../prefs.dart';
 
 /// Remembers, on this computer, which papers were already printed or downloaded (or deliberately skipped), so the flow only asks once.
@@ -62,7 +63,7 @@ Future<bool> savePdf(BuildContext context, String fileName, Future<Uint8List> Fu
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Arquivo salvo')));
     return true;
   } catch (e) {
-    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao salvar: $e')));
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao salvar: ${friendlyError(e)}')));
     return false;
   }
 }

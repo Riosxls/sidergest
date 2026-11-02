@@ -145,8 +145,23 @@ public static class AuthEndpoints
         await db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(s => s.SetProperty(u => u.FailedLogins, u => u.FailedLogins + 1), ct);
         var locked = await db.Users.Where(u => u.Id == userId && u.FailedLogins >= MaxFailedLogins)
             .ExecuteUpdateAsync(s => s.SetProperty(u => u.LockedUntil, now + LockoutDuration).SetProperty(u => u.FailedLogins, 0), ct);
-        return locked > 0;
+        if (locked == 0) return false;
+        var name = await db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.Username).FirstOrDefaultAsync(ct);
+        AuditSecurity(db, name, userId, "Lockout", new { until = now + LockoutDuration });
+        await db.SaveChangesAsync(ct);
+        return true;
     }
+
+    /// <summary>
+    /// Writes one audit row for a security event. The generic audit skips password, lockout and token columns, so a reset, an unlock or a
+    /// sign-out of other devices would otherwise leave no trace. Added to the context only: the caller's SaveChanges writes it.
+    /// </summary>
+    public static void AuditSecurity(EbtDbContext db, string? actor, int targetId, string action, object details) =>
+        db.AuditLog.Add(new AuditEntry
+        {
+            At = DateTimeOffset.UtcNow, User = actor, Entity = "AppUser", EntityId = targetId.ToString(), Action = action,
+            Changes = JsonSerializer.Serialize(details)
+        });
 
     /// <summary>
     /// Asks again for the signed-in user's password before a destructive action (cancel an NF, wipe data). Wrong attempts count toward the same
@@ -332,7 +347,10 @@ public static class AuthEndpoints
         {
             if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var uid)) return Results.Unauthorized();
             var removed = await db.RefreshTokens.Where(r => r.Id == id && r.UserId == uid).ExecuteDeleteAsync(ct);
-            return removed == 0 ? Results.NotFound() : Results.NoContent();
+            if (removed == 0) return Results.NotFound();
+            AuditSecurity(db, principal.Identity?.Name, uid, "SessionRevoked", new { sessionId = id });
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
         }).RequireAuthorization(Policies.Read);
 
         // Signs every other device out at once: bumping the token version also kills their access tokens; this device gets fresh tokens.
@@ -349,6 +367,7 @@ public static class AuthEndpoints
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             user.TokenVersion++;
             await db.RefreshTokens.Where(r => r.UserId == id).ExecuteDeleteAsync(ct);
+            AuditSecurity(db, user.Username, id, "SessionsRevoked", new { others = true });
             await db.SaveChangesAsync(ct);
             var (token, expires) = tokens.Issue(user);
             var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct, new DeviceInfo(current.Device, current.UserAgent, current.Ip));
@@ -381,6 +400,7 @@ public static class AuthEndpoints
             user.LockedUntil = null;
             user.TokenVersion++;
             await db.RefreshTokens.Where(r => r.UserId == user.Id).ExecuteDeleteAsync(ct);
+            AuditSecurity(db, user.Username, user.Id, "PasswordChange", new { self = true, sessionsRevoked = true });
             await db.SaveChangesAsync(ct);
             logs.CreateLogger("Ebt.Auth").LogInformation("User {User} changed their own password; other sessions revoked", user.Username);
             var (token, expires) = tokens.Issue(user);
@@ -429,6 +449,8 @@ public static class AuthEndpoints
                 user.FailedLogins = 0;
                 user.LockedUntil = null;
                 logs.CreateLogger("Ebt.Auth").LogInformation("User {Target} changed by {Actor}: role {Role}, active {Active}, password changed {Pwd}", user.Username, actor.Identity?.Name, user.Role, user.Active, req.Password is not null);
+                AuditSecurity(db, actor.Identity?.Name, user.Id, req.Password is not null ? "PasswordReset" : "AccessChanged",
+                    new { passwordChanged = req.Password is not null, role = user.Role.ToString(), active = user.Active, sessionsRevoked = true });
             }
             await db.SaveChangesAsync(ct);
             return Results.Ok(new UserDto(user.Id, user.Username, user.Role, user.Active));
@@ -440,6 +462,7 @@ public static class AuthEndpoints
             if (user is null) return Results.NotFound();
             user.FailedLogins = 0;
             user.LockedUntil = null;
+            AuditSecurity(db, actor.Identity?.Name, user.Id, "Unlock", new { });
             await db.SaveChangesAsync(ct);
             logs.CreateLogger("Ebt.Auth").LogInformation("User {Target} unlocked by {Actor}", user.Username, actor.Identity?.Name);
             return Results.Ok(new UserDto(user.Id, user.Username, user.Role, user.Active));

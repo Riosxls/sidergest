@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../api.dart';
 import '../reports/print_docs.dart' show printTheme;
 import 'print_gate.dart';
 import 'record_list.dart';
@@ -16,7 +17,7 @@ Future<void> printPdf(BuildContext context, String name, Future<Uint8List> Funct
     await Printing.layoutPdf(name: name, onLayout: (_) async => bytes, format: PdfPageFormat.a4);
     await PrintLog.mark(doneKey);
   } catch (e) {
-    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: $e')));
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: ${friendlyError(e)}')));
   }
 }
 

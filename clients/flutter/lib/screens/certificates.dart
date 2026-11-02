@@ -8,6 +8,7 @@ import '../reports/certificate_doc.dart';
 import '../reports/print_docs.dart' show PrintButton;
 import '../session.dart';
 import '../widgets/actions.dart';
+import '../widgets/discard_guard.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
@@ -418,8 +419,17 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
   int? _deliveryId;
   String? _error;
   bool _busy = false;
+  String _initial = '';
 
   ApiClient get api => widget.session.api;
+
+  /// Everything the user can edit, to tell whether leaving would lose something.
+  String _signature() => [
+    for (final e in _fields.entries) '${e.key}=${e.value.text}',
+    for (var i = 0; i < _measures.length; i++) '${_measures[i]['kind']}|${_measures[i]['name']}|${_spec[i].text}|${_found[i].text}',
+    '$_deliveryId',
+    '$_title',
+  ].join('\u0001');
 
   @override
   void initState() {
@@ -445,6 +455,7 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
       _found.add(TextEditingController(text: text2(m['found'])));
     }
     _deliveryId = c['deliveryId'] as int?;
+    _initial = _signature();
     _loadDeliveries();
   }
 
@@ -806,7 +817,12 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
   );
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => DiscardGuard(
+    isDirty: () => _signature() != _initial,
+    child: _scaffold(context),
+  );
+
+  Widget _scaffold(BuildContext context) => Scaffold(
     appBar: AppBar(
       title: Text('Certificado ${c['reference']} · ${c['orderReference']}'),
       actions: [
@@ -1053,6 +1069,20 @@ class _TemplateEditorState extends State<_TemplateEditor> {
   ];
   String? _error;
   bool _busy = false;
+  String _initial = '';
+
+  String _signature() => [
+    _title.text,
+    _finish.text,
+    _notes.text,
+    for (final r in _rows) '${r.kind}|${r.name.text}|${r.specified.text}',
+  ].join('\u0001');
+
+  @override
+  void initState() {
+    super.initState();
+    _initial = _signature();
+  }
 
   static const _kinds = {'Chemical': 'Química', 'Dimensional': 'Dimensional', 'Mechanical': 'Mecânico'};
 
@@ -1132,6 +1162,13 @@ class _TemplateEditorState extends State<_TemplateEditor> {
   @override
   Widget build(BuildContext context) {
     const dec = InputDecoration(border: OutlineInputBorder(), isDense: true);
+    return DiscardGuard(
+      isDirty: () => _signature() != _initial,
+      child: _dialog(context, dec),
+    );
+  }
+
+  Widget _dialog(BuildContext context, InputDecoration dec) {
     return AlertDialog(
       title: Text('Modelo · ${widget.template['customerName']} · ${widget.template['productCode']}'),
       content: SizedBox(

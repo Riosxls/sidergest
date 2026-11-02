@@ -207,8 +207,8 @@ class ApiClient {
     try {
       final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       final errors = <String, List<String>>{};
-      (j['errors'] as Map<String, dynamic>?)?.forEach((k, v) => errors[k] = (v as List).cast<String>());
-      final msg = [_serverTitles[j['title']] ?? j['title'], j['detail']].whereType<String>().where((s) => s.isNotEmpty).join(': ');
+      (j['errors'] as Map<String, dynamic>?)?.forEach((k, v) => errors[k] = (v as List).cast<String>().map(translateServerText).toList());
+      final msg = [_serverTitles[j['title']] ?? j['title'], j['detail']].whereType<String>().where((s) => s.isNotEmpty).map(translateServerText).join(': ');
       return ApiException(r.statusCode, errors.isNotEmpty ? 'Verifique os campos destacados' : (msg.isEmpty ? _fallback(r.statusCode) : msg), errors);
     } catch (_) {
       return ApiException(r.statusCode, _fallback(r.statusCode));
@@ -230,6 +230,73 @@ const _serverTitles = {
   'Cannot clear data': 'Não foi possível limpar os dados',
   'Cannot reverse': 'Não foi possível estornar',
 };
+
+/// Business-rule messages the API sends in English, by exact text.
+const _serverMessages = {
+  'Required': 'Obrigatório',
+  'Cannot be negative': 'Não pode ser negativo',
+  'Must not be negative': 'Não pode ser negativo',
+  'Must be greater than zero': 'Deve ser maior que zero',
+  'Must be positive': 'Deve ser positivo',
+  'Not found': 'Não encontrado',
+  'Between 0 and 100': 'Entre 0 e 100',
+  'Between 0 and 24': 'Entre 0 e 24',
+  'Rates between 0 and 100': 'Alíquotas entre 0 e 100',
+  'Two-letter state': 'UF com duas letras',
+  'Unknown UF': 'UF desconhecida',
+  'Invalid email': 'E-mail inválido',
+  'Email already used by another user': 'E-mail já usado por outro usuário',
+  'Incorrect password': 'Senha incorreta',
+  'Wrong password': 'Senha incorreta',
+  'Must differ from the current password': 'Deve ser diferente da senha atual',
+  'Too many wrong attempts; try again later': 'Muitas tentativas erradas. Tente de novo mais tarde.',
+  'At least one active Admin must remain': 'Deve restar pelo menos um administrador ativo',
+  'Unknown, inactive or third-party location': 'Local desconhecido, inativo ou de terceiros',
+  'Required for rectangular tubes': 'Obrigatório para tubos retangulares',
+  'Required for circular tubes': 'Obrigatório para tubos redondos',
+  'Required for ICMS contributors': 'Obrigatório para contribuintes de ICMS',
+  'Required when rejecting': 'Obrigatório ao recusar',
+  'Required to enable fiscal emission': 'Obrigatório para ligar a emissão fiscal',
+  'Full address required to enable fiscal emission': 'Endereço completo obrigatório para ligar a emissão fiscal',
+  'Lot not found': 'Lote não encontrado',
+  'Supplier not found': 'Fornecedor não encontrado',
+  'Product not found': 'Produto não encontrado',
+  'Material not found': 'Material não encontrado',
+  'Processor not found': 'Beneficiador não encontrado',
+  'Not an active session of this user': 'Não é uma sessão ativa deste usuário',
+  'Not a backup file name': 'Não é o nome de um arquivo de backup',
+  'Backup not found in the list published by the backup agent': 'Backup não encontrado na lista publicada pelo agente de backup',
+  'Use HH:mm, for example 22:00': 'Use HH:mm, por exemplo 22:00',
+  'Type RESTAURAR to confirm': 'Digite RESTAURAR para confirmar',
+  'Type EXCLUIR to confirm': 'Digite EXCLUIR para confirmar',
+  'Type your password to confirm the cancellation': 'Digite sua senha para confirmar o cancelamento',
+  'Type your password to confirm the inutilização': 'Digite sua senha para confirmar a inutilização',
+  'Must not exceed maxStock': 'Não pode passar do estoque máximo',
+  'Must be a positive multiple of 10': 'Deve ser um múltiplo positivo de 10',
+  'Wall thickness must be less than half the diameter': 'A espessura deve ser menor que a metade do diâmetro',
+  'Finished plus scrap exceeds what was sent': 'Produzido mais sucata passa do que foi enviado',
+  'Hourly, Every6Hours, Daily or Weekly': 'De hora em hora, a cada 6 horas, diário ou semanal',
+  'Make a backup first: the newest one is missing or older than 1 hour': 'Faça um backup antes: o mais recente não existe ou tem mais de 1 hora',
+  'NCM must have 8 digits': 'O NCM deve ter 8 dígitos',
+};
+
+final _serverPatterns = <(RegExp, String Function(Match))>[
+  (RegExp(r'^At least (\d+) characters$'), (m) => 'Pelo menos ${m[1]} caracteres'),
+  (RegExp(r'^At most (\d+) characters$'), (m) => 'No máximo ${m[1]} caracteres'),
+  (RegExp(r'^(\d+) digits$'), (m) => '${m[1]} dígitos'),
+  (RegExp(r'^Must be greater than the last issued number \((\d+)\)$'), (m) => 'Deve ser maior que o último número emitido (${m[1]})'),
+];
+
+/// Portuguese text for an API message; text with no known translation (already Portuguese, or free text) is returned as it came.
+String translateServerText(String s) {
+  final exact = _serverMessages[s];
+  if (exact != null) return exact;
+  for (final (re, fn) in _serverPatterns) {
+    final m = re.firstMatch(s);
+    if (m != null) return fn(m);
+  }
+  return s;
+}
 
 /// Portuguese captions for the API field names that reach the user in validation messages.
 const _fieldCaptions = {

@@ -1107,7 +1107,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       if (saved != null) await PrintLog.mark('quote:${_q!['id']}:po');
       if (saved != null && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Arquivo salvo')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha: ${friendlyError(e)}')));
     }
   }
 

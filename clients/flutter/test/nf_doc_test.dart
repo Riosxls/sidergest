@@ -19,7 +19,7 @@ void main() {
     client: MockClient((r) async {
       log.add(r.url.path);
       final hit = routes[r.url.path];
-      return hit == null ? json({'title': 'x', 'status': 500}, 500) : json(hit);
+      return hit == null ? json({'title': 'x', 'status': 404}, 404) : json(hit);
     }),
   );
 
@@ -111,5 +111,10 @@ void main() {
   test('outside-processing shipment with zero quantity does not divide by zero', () async {
     final bytes = await buildOutsideNfPdf(api({}, []), {'orderId': 4, 'operationSequence': 20, 'supplierId': 8, 'supplierName': 'Térmica Beta', 'quantity': 0, 'serviceValue': 100}, const NfFiscal());
     expect(isPdf(bytes), isTrue);
+  });
+
+  test('a server failure while loading the data stops the NF print instead of leaving fields blank', () async {
+    final broken = ApiClient(baseUrl: 'http://api.test', token: 'tok', client: MockClient((r) async => json({'title': 'x', 'status': 500}, 500)));
+    await expectLater(buildSaleNfPdf(broken, delivery, fiscal), throwsA(isA<ApiException>()));
   });
 }

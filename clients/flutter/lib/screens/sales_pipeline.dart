@@ -60,9 +60,12 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
 
   Future<Map<String, dynamic>> _fetch() async => await api.get('/api/sales/pipeline', {'customerId': _customerId}) as Map<String, dynamic>;
 
-  void _reload() => setState(() {
-    _future = _fetch();
-  });
+  void _reload() {
+    if (!mounted) return;
+    setState(() {
+      _future = _fetch();
+    });
+  }
 
   Future<void> _open(Map<String, dynamic> c) async {
     if (c['kind'] == 'Quote') {
@@ -79,7 +82,16 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
     _reload();
   }
 
+  /// The lookups before a step (quote, drafts, order) can fail; the error is shown instead of leaving the click without any answer.
   Future<void> _advance(Map<String, dynamic> c, String from) async {
+    try {
+      await _advanceStep(c, from);
+    } catch (e) {
+      if (mounted) showError(context, friendlyError(e));
+    }
+  }
+
+  Future<void> _advanceStep(Map<String, dynamic> c, String from) async {
     final ref = c['reference'];
     final id = c['id'];
     Future<dynamic>? call;

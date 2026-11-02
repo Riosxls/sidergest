@@ -31,8 +31,8 @@ final _product = {'id': 3, 'shape': 'Round', 'diameterMm': 12.7, 'thicknessMm': 
 
 ApiClient _api({bool customerFails = false, bool productFails = false, Map<String, dynamic>? product, Map<String, dynamic>? customer}) {
   final client = MockClient((r) async {
-    if (r.url.path.startsWith('/api/customers/')) return customerFails ? _json({'message': 'erro'}, 500) : _json(customer ?? _customer);
-    if (r.url.path.startsWith('/api/products/')) return productFails ? _json({'message': 'erro'}, 500) : _json(product ?? _product);
+    if (r.url.path.startsWith('/api/customers/')) return customerFails ? _json({'message': 'erro'}, 404) : _json(customer ?? _customer);
+    if (r.url.path.startsWith('/api/products/')) return productFails ? _json({'message': 'erro'}, 404) : _json(product ?? _product);
     return _json({}, 404);
   });
   return ApiClient(baseUrl: 'http://api.test', client: client, token: 'tok');
@@ -129,8 +129,14 @@ void main() {
       _expectPdf(bytes);
     });
 
-    test('works when the customer lookup fails (500)', () async {
+    test('works when the customer no longer exists (404)', () async {
       _expectPdf(await buildQuotePdf(_api(customerFails: true), _quote()));
+    });
+
+    test('a server failure on the customer lookup stops the print', () async {
+      final broken = ApiClient(baseUrl: 'http://api.test', token: 'tok', client: MockClient((r) async => _json({'message': 'erro'}, 500)));
+      await expectLater(buildQuotePdf(broken, _quote()), throwsA(isA<ApiException>()));
+      await expectLater(buildProductionOrderPdf(broken, _productionOrder()), throwsA(isA<ApiException>()));
     });
 
     test('works without a customer id, custom prazo, valid-until date and free-text conditions', () async {
@@ -179,7 +185,7 @@ void main() {
       _expectPdf(bytes);
     });
 
-    test('works when the customer lookup fails and uses the custom prazo', () async {
+    test('works when the customer no longer exists and uses the custom prazo', () async {
       final bytes = await buildSalesOrderPdf(_api(customerFails: true), _salesOrder(extra: {'paymentTermName': null, 'customPaymentTerm': '45 dias'}));
       _expectPdf(bytes);
     });
@@ -190,7 +196,7 @@ void main() {
       _expectPdf(await buildProductionOrderPdf(_api(), _productionOrder()));
     });
 
-    test('works when customer and product lookups fail', () async {
+    test('works when customer and product no longer exist', () async {
       _expectPdf(await buildProductionOrderPdf(_api(customerFails: true, productFails: true), _productionOrder()));
     });
 

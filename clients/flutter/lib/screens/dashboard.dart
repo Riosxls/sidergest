@@ -464,7 +464,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         content = const LinearProgressIndicator();
       } else {
         final alerts = _alerts(snap.data!);
-        content = alerts.isEmpty
+        // A section that failed to load is null; "Nada pendente" would then hide a problem instead of reporting it.
+        final failed = snap.data!.where((s) => s == null).length;
+        final failedNotice = failed == 0
+            ? null
+            : DashNotice(
+                icon: Icons.cloud_off_outlined,
+                title: failed == snap.data!.length ? 'Não foi possível carregar o painel' : 'Parte do painel não carregou',
+                subtitle: '$failed de ${snap.data!.length} seções falharam. Use Atualizar para tentar de novo.',
+              );
+        content = alerts.isEmpty && failedNotice != null
+            ? failedNotice
+            : alerts.isEmpty
             ? FutureBuilder<BackupAlert?>(
                 future: _backup,
                 builder: (context, b) => b.data != null
@@ -475,8 +486,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         subtitle: 'Nenhuma OF atrasada, entrega em atraso, aprovação ou bloqueio.',
                       ),
               )
-            : DashGrid(
-                items: [for (final a in alerts) GridItem(DashTile(icon: a.icon, label: a.label, value: '${a.count}', alert: !a.muted, onTap: a.onTap))],
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (failedNotice != null) ...[failedNotice, const SizedBox(height: 12)],
+                  DashGrid(
+                    items: [for (final a in alerts) GridItem(DashTile(icon: a.icon, label: a.label, value: '${a.count}', alert: !a.muted, onTap: a.onTap))],
+                  ),
+                ],
               );
       }
       final backup = FutureBuilder<BackupAlert?>(
