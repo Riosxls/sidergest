@@ -38,6 +38,30 @@ powershell -File scripts\install-backup-agent.ps1 -Remove    # unregister
 
 ## Restore
 
+### From the app (Configurações > Administração > Cópia de segurança > Restaurar backup)
+
+Pick a backup in the list (this computer and the destination folder are both listed), press "Restaurar este backup…", read the warning and type `RESTAURAR`. Restoring replaces ALL current data with the data of that backup; everything done after it is lost, the system is unavailable for a few minutes and everyone has to sign in again.
+
+The API cannot run `pg_restore` itself, so the request goes to the backup agent, which runs `scripts\restore.ps1`:
+
+1. checks the dump (SHA-256 sidecar when present, `pg_restore -l`) and takes a safety backup of the current data (`ebt-before-restore-*.dump`);
+2. restores into a brand new database `ebt_restore` and sanity-checks it (tables, at least one user). Any failure up to here leaves the live database untouched and the app shows the reason;
+3. stops the `api` container, renames the live database to `ebt_before_restore_<time>` and the new one to `ebt`, starts the `api` again and waits for it to be healthy (migrations run on start, so a dump from an older schema is brought forward).
+
+The previous database stays inside Postgres as `ebt_before_restore_<time>` (only the newest one is kept) so a bad restore can be rolled back by hand:
+
+```
+docker exec metagest-db-1 psql -U ebt -d postgres -c "select datname from pg_database where datname like 'ebt%'"
+docker compose stop api
+docker exec metagest-db-1 psql -U ebt -d postgres -c "alter database ebt rename to ebt_bad"
+docker exec metagest-db-1 psql -U ebt -d postgres -c "alter database ebt_before_restore_<time> rename to ebt"
+docker compose start api
+```
+
+The outcome is written to `backup-status\restore-result.json` and shown by the app when the API is back. The list of dumps is published by the agent in `backup-status\backups.json` (refreshed after every backup, on start and every 10 minutes).
+
+### By hand
+
 Restoring replaces the whole database. Take a fresh dump first (`scripts\backup.ps1 -Reason before-restore`).
 
 ```

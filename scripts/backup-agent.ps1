@@ -109,6 +109,68 @@ function Stop-Backup($Proc, [string]$Container, [datetime]$StartedAt, [string]$D
     Write-AgentProgress 'Cancelado' $false
 }
 
+# Lists the dumps (this computer and the destination) in backup-status/backups.json so the app can offer them for restoring.
+function Publish-BackupList([string]$Destination) {
+    try {
+        $script:LastListed = Get-Date
+        $found = @{}
+        $scan = @(@{ Folder = (Join-Path $Root 'backups'); Where = 'local' })
+        if ($Destination) { $scan += @{ Folder = $Destination; Where = 'destination' } }
+        foreach ($s in $scan) {
+            if (-not (Test-Path -LiteralPath $s.Folder)) { continue }
+            foreach ($f in (Get-ChildItem -LiteralPath $s.Folder -Filter 'ebt-*.dump' -ErrorAction SilentlyContinue)) {
+                $created = $f.LastWriteTime
+                if ($f.Name -match '-(\d{8})-(\d{6})[.]dump$') {
+                    try { $created = [datetime]::ParseExact($Matches[1] + $Matches[2], 'yyyyMMddHHmmss', $null) } catch { }
+                }
+                $entry = if ($found.ContainsKey($f.Name)) { $found[$f.Name] } else { @{ name = $f.Name; sizeBytes = $f.Length; createdAt = ([DateTimeOffset]$created).ToString('o'); locations = @(); hasChecksum = $false } }
+                $entry.locations += $s.Where
+                if (Test-Path -LiteralPath ($f.FullName + '.sha256')) { $entry.hasChecksum = $true }
+                $found[$f.Name] = $entry
+            }
+        }
+        $items = @($found.Values | Sort-Object { $_.createdAt } -Descending | ForEach-Object {
+            [ordered]@{ name = $_.name; sizeBytes = $_.sizeBytes; createdAt = $_.createdAt; location = $(if ($_.locations.Count -gt 1) { 'both' } else { $_.locations[0] }); hasChecksum = $_.hasChecksum }
+        })
+        $json = [ordered]@{ listedAt = [DateTimeOffset]::UtcNow.ToString('o'); items = $items } | ConvertTo-Json -Depth 4
+        $dir = Join-Path $Root 'backup-status'
+        $tmp = Join-Path $dir 'backups.json.tmp'
+        Set-Content -Path $tmp -Value $json -Encoding utf8
+        Move-Item -Path $tmp -Destination (Join-Path $dir 'backups.json') -Force
+    } catch { Write-AgentLog "list error: $($_.Exception.Message)" }
+}
+
+# A restore asked for in the app. The request row is read separately from the plan: the columns may not exist yet (old schema), which must not stop the backups.
+function Invoke-RestoreRequest([string]$Container, $Plan) {
+    $file = $null
+    try { $file = (Invoke-Sql $Container 'select restore_file from backup_settings where id = 1 and restore_requested_at is not null and restore_file is not null' | Select-Object -First 1) } catch { return $false }
+    if (-not $file) { return $false }
+    $file = "$file".Trim()
+    # Taken: the request stays (restore_requested_at) until restore-result.json is newer; the file name is cleared so it cannot run twice.
+    try { Invoke-Sql $Container 'update backup_settings set restore_file = null where id = 1' | Out-Null } catch { }
+    Write-AgentLog "restore requested: $file"
+    $result = Join-Path (Join-Path $Root 'backup-status') 'restore-result.json'
+    $path = $null
+    if ($file -match '^ebt-[A-Za-z0-9-]+-[0-9]{8}-[0-9]{6}[.]dump$') {
+        $local = Join-Path (Join-Path $Root 'backups') $file
+        if (Test-Path -LiteralPath $local) { $path = $local }
+        elseif ($Plan.Destination -and (Test-Path -LiteralPath (Join-Path $Plan.Destination $file))) { $path = Join-Path $Plan.Destination $file }
+    }
+    if (-not $path) {
+        $json = [ordered]@{ ok = $false; message = 'Arquivo de backup não encontrado. Os dados atuais foram mantidos.'; file = $file; safetyDump = $null; finishedAt = [DateTimeOffset]::UtcNow.ToString('o') } | ConvertTo-Json
+        Set-Content -Path $result -Value $json -Encoding utf8
+        Write-AgentLog 'restore: file not found'
+        return $true
+    }
+    $env:METAGEST_BACKUP_COPYTO = $Plan.Destination
+    $q = [string][char]34
+    $proc = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ($q + (Join-Path $PSScriptRoot 'restore.ps1') + $q), '-DumpPath', ($q + $path + $q)) -PassThru -Wait -WindowStyle Hidden
+    Write-AgentLog "restore finished, exit code $($proc.ExitCode)"
+    $script:Container = $null
+    Publish-BackupList $Plan.Destination
+    return $true
+}
+
 function Invoke-Agent {
     Push-Location $Root
     try {
@@ -132,6 +194,9 @@ from backup_settings where id = 1
             Invoke-Sql $container 'update backup_settings set agent_seen_at = now() where id = 1' | Out-Null
             $script:LastBeat = Get-Date
         }
+
+        if (Invoke-RestoreRequest $container $plan) { return }
+        if (((Get-Date) - $script:LastListed).TotalMinutes -ge 10) { Publish-BackupList $plan.Destination }
 
         $now = [DateTimeOffset]::UtcNow
         $due = Get-NextDue $plan $now
@@ -175,6 +240,7 @@ from backup_settings where id = 1
         }
         # Keep the message plain so it can sit inside a SQL literal.
         Write-AgentLog "backup end ok=${ok}: $message"
+        Publish-BackupList $plan.Destination
         $safe = ($message -replace '[^\p{L}\p{N} .,:;_()/\\-]', '?')
         if ($safe.Length -gt 480) { $safe = $safe.Substring(0, 480) }
         Invoke-Sql $container "update backup_settings set last_run_at = now(), last_run_ok = $(if ($ok) { 'true' } else { 'false' }), last_run_message = '$($safe -replace "'", "''")' where id = 1" | Out-Null
@@ -190,6 +256,7 @@ if ($MyInvocation.InvocationName -ne '.') {
     $script:Container = $null
     Write-AgentLog "agent started"
     $script:LastBeat = [datetime]::MinValue
+    $script:LastListed = [datetime]::MinValue
     try {
         do {
             try { Invoke-Agent } catch { $script:Container = $null; Write-AgentLog "error: $($_.Exception.Message)" }
