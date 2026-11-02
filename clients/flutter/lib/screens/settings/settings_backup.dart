@@ -8,6 +8,7 @@ import '../../api.dart';
 import '../../labels.dart';
 import '../../session.dart';
 import '../../widgets/discard_guard.dart';
+import 'settings_restore.dart';
 import 'settings_widgets.dart';
 
 /// The agent on the server computer must have called in within this time, or the schedule is not being run.
@@ -184,6 +185,12 @@ class _BackupFormState extends State<_BackupForm> {
   int _waitTicks = 0;
   bool _polling = false;
 
+  /// A restore is requested or running: the schedule form is hidden and the slow refresh stays quiet.
+  bool _restoring = false;
+
+  /// Counts finished backups so the restore list reloads after each one.
+  int _backupsDone = 0;
+
   bool get _active => _status.waiting || _status.running;
 
   bool get _canBrowse => widget.canBrowse ?? (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows);
@@ -245,7 +252,7 @@ class _BackupFormState extends State<_BackupForm> {
   /// Silent reload: refreshes the status and, when the form has no unsaved edits, the editable fields too.
   /// Errors are only logged; the last known state stays.
   Future<void> _reload() async {
-    if (_reloading || _busy || _poll != null) return;
+    if (_reloading || _busy || _poll != null || _restoring) return;
     _reloading = true;
     try {
       final res = BackupSettings.fromJson(await widget.session.api.get('/api/admin/backup-settings') as Map<String, dynamic>);
@@ -301,6 +308,7 @@ class _BackupFormState extends State<_BackupForm> {
   }
 
   void _tellResult(BackupSettings res) {
+    setState(() => _backupsDone++);
     if (res.cancelled) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Backup interrompido.')));
       return;
@@ -421,6 +429,25 @@ class _BackupFormState extends State<_BackupForm> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Offstage(offstage: _restoring, child: _controls()),
+        RestoreSection(
+          session: widget.session,
+          backupBusy: _busy || _active,
+          reloadSignal: _backupsDone,
+          onRestoringChanged: (v) {
+            if (v == _restoring) return;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _restoring = v);
+            });
+          },
+        ),
+      ],
+    ),
+  );
+
+  Widget _controls() => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         if (_agentLate) const _AgentWarning(),
         _BackupStatusBlock(settings: _status, onRefresh: _reload),
         if (_active) _BackupProgressBar(settings: _status),
@@ -512,8 +539,7 @@ class _BackupFormState extends State<_BackupForm> {
             ),
           ),
       ],
-    ),
-  );
+    );
 
   Widget _scheduleFields() => Wrap(
     spacing: 16,

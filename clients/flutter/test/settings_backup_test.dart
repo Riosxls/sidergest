@@ -197,9 +197,10 @@ void main() {
     expect(bar.value, isNull);
     expect(find.text('Backup em andamento'), findsOneWidget);
     expect(tester.widget<OutlinedButton>(find.byKey(const ValueKey('backup-run-now'))).onPressed, isNull);
-    final before = log.where((r) => r.method == 'GET').length;
+    int polls() => log.where((r) => r.method == 'GET' && r.url.path == '/api/admin/backup-settings').length;
+    final before = polls();
     await tester.pump(const Duration(seconds: 1));
-    expect(log.where((r) => r.method == 'GET').length, before + 1);
+    expect(polls(), before + 1);
     await _unmount(tester);
   });
 
