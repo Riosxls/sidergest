@@ -5,6 +5,7 @@ import 'package:ebt_engenharia/screens/settings/settings_backup.dart';
 import 'package:ebt_engenharia/screens/settings/settings_restore.dart';
 import 'package:ebt_engenharia/session.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -34,9 +35,22 @@ class _Server {
   int unauthorized = 0;
   int postStatus = 202;
   String? postError;
+  Map<String, dynamic> deleteInfo = {'requestedAt': null, 'file': null, 'result': null};
+  int deleteStatus = 202;
   final log = <http.Request>[];
 
-  Map<String, dynamic> get catalog => {'items': items, 'listedAt': _ago(Duration.zero), 'restore': restore};
+  Map<String, dynamic> get catalog => {'items': items, 'listedAt': _ago(Duration.zero), 'restore': restore, 'delete': deleteInfo};
+
+  void requestDelete(String file) => deleteInfo = {'requestedAt': _ago(const Duration(seconds: 2)), 'file': file, 'result': null};
+
+  void finishDelete({required bool ok, String? message}) {
+    final file = deleteInfo['file'];
+    if (ok) items = [for (final i in items) if (i['name'] != file) i];
+    deleteInfo = {
+      ...deleteInfo,
+      'result': {'ok': ok, 'message': message, 'file': file, 'finishedAt': _ago(Duration.zero)},
+    };
+  }
 
   void request() => restore = {'requestedAt': _ago(const Duration(seconds: 5)), 'file': 'ebt-2.dump', 'result': null};
 
@@ -86,6 +100,10 @@ Future<(Session, _Server)> _pump(WidgetTester tester, _Server s) async {
           }, s.postStatus);
         }
         s.request();
+        return _json(s.catalog, 202);
+      case '/api/admin/backups/delete':
+        if (s.deleteStatus != 202) return _json({'title': 'Há um backup em andamento'}, s.deleteStatus);
+        s.requestDelete((jsonDecode(r.body) as Map<String, dynamic>)['file'] as String);
         return _json(s.catalog, 202);
       case '/api/admin/backups/restore/cancel':
         s.restore = {'requestedAt': null, 'file': null, 'result': null};
@@ -150,6 +168,24 @@ Future<void> _confirm(WidgetTester tester) async {
   await tester.enterText(find.byKey(const ValueKey('restore-confirm')), 'RESTAURAR');
   await tester.pump();
   await tester.tap(find.byKey(const ValueKey('restore-confirm-run')));
+  await tester.pump();
+  await tester.pump();
+}
+
+Future<void> _tick1(WidgetTester tester) async {
+  await tester.pump(deletePollInterval);
+  await tester.pump();
+  await tester.pump();
+}
+
+Future<void> _openDelete(WidgetTester tester, String name) async {
+  await _tap(tester, find.byKey(ValueKey('delete-$name')));
+}
+
+Future<void> _confirmDelete(WidgetTester tester, [String word = 'EXCLUIR']) async {
+  await tester.enterText(find.byKey(const ValueKey('delete-confirm')), word);
+  await tester.pump();
+  await tester.tap(find.byKey(const ValueKey('delete-confirm-run')));
   await tester.pump();
   await tester.pump();
 }
@@ -322,5 +358,142 @@ void main() {
     await tester.pump();
     expect(find.textContaining('demorando mais do que o esperado'), findsNothing);
     await _unmount(tester);
+  });
+
+  group('excluir backup', () {
+    testWidgets('shows the count and a delete button per row; disabled while a backup runs', (tester) async {
+      await _pump(tester, _Server());
+      expect(find.text('2 de 5 backups guardados'), findsOneWidget);
+      expect(find.byTooltip('Excluir este backup'), findsNWidgets(2));
+      expect(tester.widget<IconButton>(find.byKey(const ValueKey('delete-ebt-2.dump'))).onPressed, isNotNull);
+      await _unmount(tester);
+      await _pump(tester, _Server()..progress = {'running': true, 'percent': 20, 'stage': 'Copiando', 'startedAt': null, 'updatedAt': null});
+      expect(tester.widget<IconButton>(find.byKey(const ValueKey('delete-ebt-2.dump'))).onPressed, isNull);
+      await _unmount(tester);
+    });
+
+    testWidgets('disabled while a deletion is pending on the server', (tester) async {
+      await _pump(tester, _Server()..requestDelete('ebt-1.dump'));
+      expect(tester.widget<IconButton>(find.byKey(const ValueKey('delete-ebt-2.dump'))).onPressed, isNull);
+      await _unmount(tester);
+    });
+
+    testWidgets('the dialog needs the exact word, shows the place and the latest warning; Cancelar does not call the API', (tester) async {
+      final s = _Server();
+      await _pump(tester, s);
+      await _openDelete(tester, 'ebt-2.dump');
+      expect(find.byKey(const ValueKey('delete-dialog')), findsOneWidget);
+      expect(find.text('Excluir backup?'), findsOneWidget);
+      expect(find.textContaining('será apagado de forma permanente (Nos dois lugares). Isto não pode ser desfeito.'), findsOneWidget);
+      expect(find.text('É o backup mais recente.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('delete-warn-only')), findsNothing);
+      FilledButton run() => tester.widget<FilledButton>(find.byKey(const ValueKey('delete-confirm-run')));
+      expect(run().onPressed, isNull);
+      await tester.enterText(find.byKey(const ValueKey('delete-confirm')), 'excluir');
+      await tester.pump();
+      expect(run().onPressed, isNull);
+      await tester.enterText(find.byKey(const ValueKey('delete-confirm')), 'EXCLUIR');
+      await tester.pump();
+      expect(run().onPressed, isNotNull);
+      await _tap(tester, find.text('Cancelar'));
+      expect(find.byKey(const ValueKey('delete-dialog')), findsNothing);
+      await _openDelete(tester, 'ebt-2.dump');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await _settle(tester);
+      expect(find.byKey(const ValueKey('delete-dialog')), findsNothing);
+      expect(s.log.any((r) => r.url.path == '/api/admin/backups/delete'), isFalse);
+      await _unmount(tester);
+    });
+
+    testWidgets('an older backup has no latest warning; the only backup gets the strong warning', (tester) async {
+      await _pump(tester, _Server());
+      await _openDelete(tester, 'ebt-1.dump');
+      expect(find.text('É o backup mais recente.'), findsNothing);
+      expect(find.textContaining('Neste computador). Isto'), findsOneWidget);
+      await _tap(tester, find.text('Cancelar'));
+      await _unmount(tester);
+      await _pump(tester, _Server()..items = [_item('ebt-9.dump', location: 'destination')]);
+      await _openDelete(tester, 'ebt-9.dump');
+      expect(find.text('É o único backup guardado. Depois disso você não terá nenhum.'), findsOneWidget);
+      expect(find.textContaining('(Na pasta de destino)'), findsOneWidget);
+      await _tap(tester, find.text('Cancelar'));
+      await _unmount(tester);
+    });
+
+    testWidgets('a 409 stays in the dialog', (tester) async {
+      final s = _Server()..deleteStatus = 409;
+      await _pump(tester, s);
+      await _openDelete(tester, 'ebt-1.dump');
+      await _confirmDelete(tester);
+      await _settle(tester);
+      expect(find.byKey(const ValueKey('delete-dialog-error')), findsOneWidget);
+      expect(find.byKey(const ValueKey('delete-dialog')), findsOneWidget);
+      await _unmount(tester);
+    });
+
+    testWidgets('success: posts file and word, polls, removes the row, clears the selection', (tester) async {
+      final s = _Server();
+      await _pump(tester, s);
+      await _tap(tester, find.byKey(const ValueKey('restore-item-ebt-1.dump')));
+      await _openDelete(tester, 'ebt-1.dump');
+      await _confirmDelete(tester);
+      await _settle(tester);
+      final post = s.log.lastWhere((r) => r.method == 'POST');
+      expect(post.url.path, '/api/admin/backups/delete');
+      expect(jsonDecode(post.body), {'file': 'ebt-1.dump', 'confirm': 'EXCLUIR'});
+      await _settle(tester);
+      expect(find.byKey(const ValueKey('delete-dialog')), findsNothing);
+      expect(find.text('Excluindo o backup...'), findsOneWidget);
+      await _tick1(tester);
+      expect(find.byKey(const ValueKey('restore-item-ebt-1.dump')), findsOneWidget);
+      s.finishDelete(ok: true);
+      await _tick1(tester);
+      await _settle(tester);
+      expect(find.text('Backup excluído.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('restore-item-ebt-1.dump')), findsNothing);
+      expect(find.text('1 de 5 backups guardados'), findsOneWidget);
+      expect(tester.widget<FilledButton>(find.byKey(const ValueKey('restore-start'))).onPressed, isNull);
+      await _unmount(tester);
+    });
+
+    testWidgets('success is also detected when only the file disappears', (tester) async {
+      final s = _Server();
+      await _pump(tester, s);
+      await _openDelete(tester, 'ebt-1.dump');
+      await _confirmDelete(tester);
+      await _settle(tester);
+      s.items = [s.items.first];
+      await _tick1(tester);
+      await _settle(tester);
+      expect(find.text('Backup excluído.'), findsOneWidget);
+      await _unmount(tester);
+    });
+
+    testWidgets('a failed result shows its message', (tester) async {
+      final s = _Server();
+      await _pump(tester, s);
+      await _openDelete(tester, 'ebt-1.dump');
+      await _confirmDelete(tester);
+      await _settle(tester);
+      s.finishDelete(ok: false, message: 'Arquivo em uso');
+      await _tick1(tester);
+      await _settle(tester);
+      expect(find.text('Arquivo em uso'), findsOneWidget);
+      expect(find.byKey(const ValueKey('restore-item-ebt-1.dump')), findsOneWidget);
+      await _unmount(tester);
+    });
+
+    testWidgets('gives up after thirty seconds', (tester) async {
+      final s = _Server();
+      await _pump(tester, s);
+      await _openDelete(tester, 'ebt-1.dump');
+      await _confirmDelete(tester);
+      await _settle(tester);
+      for (var i = 0; i < 31; i++) {
+        await _tick1(tester);
+      }
+      expect(find.text('Não foi possível confirmar a exclusão. Atualize a lista.'), findsOneWidget);
+      await _unmount(tester);
+    });
   });
 }

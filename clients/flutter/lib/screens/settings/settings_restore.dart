@@ -14,6 +14,16 @@ const restoreGiveUpAfter = Duration(minutes: 15);
 /// Word the admin types before the database is replaced; the server checks it too.
 const restoreConfirmWord = 'RESTAURAR';
 
+/// Word the admin types before a backup is deleted; the server checks it too.
+const deleteConfirmWord = 'EXCLUIR';
+
+/// The system keeps at most this many backups (server limit for the keep setting).
+const maxBackupCopies = 5;
+
+/// Poll interval while a deletion runs, and how long the screen waits for the host agent.
+const deletePollInterval = Duration(seconds: 1);
+const deleteGiveUpAfter = Duration(seconds: 30);
+
 /// One backup file offered for restore (`items` in `GET /api/admin/backups`).
 class RestoreItem {
   const RestoreItem({required this.name, required this.sizeBytes, required this.createdAt, required this.location, required this.hasChecksum});
@@ -37,6 +47,13 @@ class RestoreItem {
   String get locationLabel => switch (location) {
     'destination' => 'Na pasta de destino',
     'both' => 'Nos dois',
+    _ => 'Neste computador',
+  };
+
+  /// Where the file lives, as shown in the delete confirmation.
+  String get placeLabel => switch (location) {
+    'destination' => 'Na pasta de destino',
+    'both' => 'Nos dois lugares',
     _ => 'Neste computador',
   };
 }
@@ -89,18 +106,22 @@ class RestoreInfo {
 
 /// Answer of `/api/admin/backups` and of the restore POSTs.
 class BackupCatalog {
-  const BackupCatalog({this.items = const [], this.restore = const RestoreInfo()});
+  const BackupCatalog({this.items = const [], this.restore = const RestoreInfo(), this.delete = const RestoreInfo()});
 
   factory BackupCatalog.fromJson(Object? j) {
     if (j is! Map<String, dynamic>) return const BackupCatalog();
     return BackupCatalog(
       items: [for (final e in (j['items'] as List?) ?? const []) RestoreItem.fromJson(e as Map<String, dynamic>)],
       restore: RestoreInfo.fromJson(j['restore']),
+      delete: RestoreInfo.fromJson(j['delete']),
     );
   }
 
   final List<RestoreItem> items;
   final RestoreInfo restore;
+
+  /// The deletion request and its result (same shape as [restore]).
+  final RestoreInfo delete;
 }
 
 /// "Restaurar backup": list of available backups, confirmation and the waiting screen while the database is replaced.
@@ -139,6 +160,13 @@ class _RestoreSectionState extends State<RestoreSection> {
   Timer? _timer;
   bool _polling = false;
 
+  bool _deleting = false;
+  bool _deleteServerPending = false;
+  int _deleteTicks = 0;
+  bool _deletePolling = false;
+  Timer? _deleteTimer;
+  String? _deletingFile;
+
   @override
   void initState() {
     super.initState();
@@ -154,6 +182,7 @@ class _RestoreSectionState extends State<RestoreSection> {
   @override
   void dispose() {
     _timer?.cancel();
+    _deleteTimer?.cancel();
     super.dispose();
   }
 
@@ -170,6 +199,7 @@ class _RestoreSectionState extends State<RestoreSection> {
       setState(() {
         _items = c.items;
         if (_selected != null && !c.items.any((i) => i.name == _selected)) _selected = null;
+        _deleteServerPending = c.delete.pending;
       });
       if (c.restore.pending) _enterRunning();
     } catch (e) {
@@ -294,6 +324,73 @@ class _RestoreSectionState extends State<RestoreSection> {
     _enterRunning();
   }
 
+  void _toast(String text, {bool error = false}) {
+    final m = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
+    m.showSnackBar(SnackBar(content: Text(text), backgroundColor: error ? Theme.of(context).colorScheme.error : null));
+  }
+
+  Future<void> _askDelete(RestoreItem item) async {
+    final latest = _items.every((i) => !i.createdAt.isAfter(item.createdAt));
+    final started = await showDialog<bool>(
+      context: context,
+      builder: (_) => _DeleteDialog(session: widget.session, item: item, only: _items.length == 1, latest: latest),
+    );
+    if (started != true || !mounted) return;
+    _toast('Excluindo o backup...');
+    setState(() {
+      _deleting = true;
+      _deletingFile = item.name;
+      _deleteTicks = 0;
+    });
+    _deleteTimer?.cancel();
+    _deleteTimer = Timer.periodic(deletePollInterval, (_) => _deleteTick());
+  }
+
+  void _endDelete() {
+    _deleteTimer?.cancel();
+    _deleteTimer = null;
+    if (mounted) {
+      setState(() {
+        _deleting = false;
+        _deletingFile = null;
+      });
+    }
+  }
+
+  Future<void> _deleteTick() async {
+    if (_deletePolling || !_deleting) return;
+    _deletePolling = true;
+    try {
+      if (++_deleteTicks * deletePollInterval.inSeconds > deleteGiveUpAfter.inSeconds) {
+        _endDelete();
+        if (mounted) _toast('Não foi possível confirmar a exclusão. Atualize a lista.', error: true);
+        return;
+      }
+      final c = await _fetch();
+      if (!mounted) return;
+      final file = _deletingFile;
+      final gone = !c.items.any((i) => i.name == file);
+      final fresh = c.delete.hasFreshResult && c.delete.requestedAt != null;
+      if (fresh && !(c.delete.result?.ok ?? false)) {
+        _endDelete();
+        setState(() => _items = c.items);
+        _toast(c.delete.result?.message ?? 'Não foi possível excluir o backup.', error: true);
+      } else if (fresh || gone) {
+        _endDelete();
+        setState(() {
+          _items = c.items;
+          if (_selected == file || (_selected != null && !c.items.any((i) => i.name == _selected))) _selected = null;
+          _deleteServerPending = false;
+        });
+        _toast('Backup excluído.');
+      }
+    } catch (e) {
+      debugPrint('delete poll failed: $e');
+    } finally {
+      _deletePolling = false;
+    }
+  }
+
   Future<void> _cancelRequest() async {
     setState(() => _cancelling = true);
     try {
@@ -313,7 +410,7 @@ class _RestoreSectionState extends State<RestoreSection> {
 
   Widget _listView(BuildContext context) {
     final theme = Theme.of(context);
-    final canStart = _selected != null && !widget.backupBusy && !_loading;
+    final canStart = _selected != null && !widget.backupBusy && !_loading && !_deleting;
     return Padding(
       padding: const EdgeInsets.only(top: 32),
       child: Column(
@@ -324,6 +421,11 @@ class _RestoreSectionState extends State<RestoreSection> {
           Row(
             children: [
               Expanded(child: Text('Restaurar backup', style: theme.textTheme.titleMedium)),
+              if (!_loading && _error == null)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text('${_items.length} de $maxBackupCopies backups guardados', key: const ValueKey('restore-count'), style: theme.textTheme.bodySmall),
+                ),
               IconButton(key: const ValueKey('restore-refresh'), tooltip: 'Atualizar lista', icon: const Icon(Icons.refresh), onPressed: _loading ? null : _load),
             ],
           ),
@@ -374,7 +476,18 @@ class _RestoreSectionState extends State<RestoreSection> {
           if (!i.hasChecksum) Text('Sem verificação', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
         ],
       ),
-      trailing: Chip(label: Text(i.locationLabel), visualDensity: VisualDensity.compact),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Chip(label: Text(i.locationLabel), visualDensity: VisualDensity.compact),
+          IconButton(
+            key: ValueKey('delete-${i.name}'),
+            tooltip: 'Excluir este backup',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: widget.backupBusy || _deleting || _deleteServerPending ? null : () => _askDelete(i),
+          ),
+        ],
+      ),
       onTap: () => setState(() => _selected = i.name),
     );
   }
@@ -533,6 +646,92 @@ class _RestoreDialogState extends State<_RestoreDialog> {
           style: FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
           onPressed: ok ? _run : null,
           child: const Text('Restaurar agora'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeleteDialog extends StatefulWidget {
+  const _DeleteDialog({required this.session, required this.item, required this.only, required this.latest});
+
+  final Session session;
+  final RestoreItem item;
+  final bool only;
+  final bool latest;
+
+  @override
+  State<_DeleteDialog> createState() => _DeleteDialogState();
+}
+
+class _DeleteDialogState extends State<_DeleteDialog> {
+  final _confirm = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.session.api.post('/api/admin/backups/delete', {'file': widget.item.name, 'confirm': _confirm.text});
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) setState(() => _error = friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final ok = _confirm.text == deleteConfirmWord && !_busy;
+    final warn = TextStyle(color: cs.error, fontWeight: FontWeight.w600);
+    return AlertDialog(
+      key: const ValueKey('delete-dialog'),
+      title: const Text('Excluir backup?'),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('O backup de ${formatMoment(widget.item.createdAt)} será apagado de forma permanente (${widget.item.placeLabel}). Isto não pode ser desfeito.'),
+              if (widget.only) ...[const SizedBox(height: 8), Text('É o único backup guardado. Depois disso você não terá nenhum.', key: const ValueKey('delete-warn-only'), style: warn)],
+              if (widget.latest && !widget.only) ...[const SizedBox(height: 8), Text('É o backup mais recente.', key: const ValueKey('delete-warn-latest'), style: warn)],
+              const SizedBox(height: 16),
+              TextField(
+                key: const ValueKey('delete-confirm'),
+                controller: _confirm,
+                autofocus: true,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: 'Digite $deleteConfirmWord para confirmar', border: OutlineInputBorder(), isDense: true),
+              ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(_error!, key: const ValueKey('delete-dialog-error'), style: TextStyle(color: cs.error)),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancelar')),
+        FilledButton(
+          key: const ValueKey('delete-confirm-run'),
+          style: FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
+          onPressed: ok ? _run : null,
+          child: const Text('Excluir'),
         ),
       ],
     );

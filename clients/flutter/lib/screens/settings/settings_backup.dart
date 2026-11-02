@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../api.dart';
 import '../../labels.dart';
@@ -43,7 +44,7 @@ class BackupSettings {
     this.timeOfDay = '22:00',
     this.weekday = 0,
     this.destination,
-    this.keep = 14,
+    this.keep = maxBackupCopies,
     this.runRequestedAt,
     this.lastRunAt,
     this.lastRunOk,
@@ -63,7 +64,7 @@ class BackupSettings {
       timeOfDay: (j['timeOfDay'] as String?) ?? '22:00',
       weekday: (j['weekday'] as num?)?.toInt() ?? 0,
       destination: dest == null || dest.isEmpty ? null : dest,
-      keep: (j['keep'] as num?)?.toInt() ?? 14,
+      keep: ((j['keep'] as num?)?.toInt() ?? maxBackupCopies).clamp(1, maxBackupCopies),
       runRequestedAt: when('runRequestedAt'),
       lastRunAt: when('lastRunAt'),
       lastRunOk: j['lastRunOk'] as bool?,
@@ -371,8 +372,8 @@ class _BackupFormState extends State<_BackupForm> {
 
   Future<bool> _save({String done = 'Configuração salva'}) {
     final keep = int.tryParse(_keep.text.trim());
-    if (keep == null || keep < 1 || keep > 365) {
-      _tell('Informe de 1 a 365 cópias para guardar.');
+    if (keep == null || keep < 1 || keep > maxBackupCopies) {
+      _tell('Informe de 1 a $maxBackupCopies.');
       return Future.value(false);
     }
     if (_enabled && !_hasDestination) {
@@ -498,7 +499,14 @@ class _BackupFormState extends State<_BackupForm> {
           key: const ValueKey('backup-keep'),
           controller: _keep,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Quantas cópias guardar', helperText: 'De 1 a 365', border: OutlineInputBorder()),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: const InputDecoration(labelText: 'Quantas cópias guardar', helperText: 'De 1 a $maxBackupCopies', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'O sistema guarda no máximo $maxBackupCopies backups. Ao fazer um novo com $maxBackupCopies já guardados, o mais antigo é substituído.',
+          key: const ValueKey('backup-limit-info'),
+          style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 20),
         Wrap(

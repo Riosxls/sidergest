@@ -18,7 +18,7 @@ Map<String, dynamic> _settings({Object? agentSeenAt = 'now', bool enabled = true
   'timeOfDay': '22:00',
   'weekday': 1,
   'destination': destination,
-  'keep': 14,
+  'keep': 3,
   'runRequestedAt': null,
   'lastRunAt': DateTime.now().toUtc().subtract(const Duration(hours: 3)).toIso8601String(),
   'lastRunOk': lastRunOk,
@@ -142,10 +142,10 @@ void main() {
     await _tap(tester, find.byKey(const ValueKey('backup-weekday')));
     await _tap(tester, find.text('Sexta-feira').last);
     await tester.enterText(find.byKey(const ValueKey('backup-destination')), r'\\srv\bk');
-    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '30');
+    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '2');
     await _tap(tester, find.byKey(const ValueKey('backup-save')));
     final put = log.singleWhere((r) => r.method == 'PUT');
-    expect(jsonDecode(put.body), {'enabled': true, 'frequency': 'Weekly', 'timeOfDay': '22:00', 'weekday': 5, 'destination': r'\\srv\bk', 'keep': 30});
+    expect(jsonDecode(put.body), {'enabled': true, 'frequency': 'Weekly', 'timeOfDay': '22:00', 'weekday': 5, 'destination': r'\\srv\bk', 'keep': 2});
     expect(find.text('Configuração salva'), findsOneWidget);
   });
 
@@ -172,13 +172,35 @@ void main() {
     expect(body['destination'], isNull);
   });
 
+  testWidgets('copies are limited to 1..5: 6 is not sent, letters are dropped, info line is shown', (tester) async {
+    final (_, log) = await _pump(tester, _settings());
+    expect(find.byKey(const ValueKey('backup-limit-info')), findsOneWidget);
+    expect(find.text('O sistema guarda no máximo 5 backups. Ao fazer um novo com 5 já guardados, o mais antigo é substituído.'), findsOneWidget);
+    expect(find.text('De 1 a 5'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '6');
+    await _tap(tester, find.byKey(const ValueKey('backup-save')));
+    expect(find.text('Informe de 1 a 5.'), findsOneWidget);
+    expect(log.where((r) => r.method == 'PUT'), isEmpty);
+    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '1a');
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('backup-keep'))).controller!.text, '1');
+    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '5');
+    await _tap(tester, find.byKey(const ValueKey('backup-save')));
+    expect(jsonDecode(log.singleWhere((r) => r.method == 'PUT').body)['keep'], 5);
+  });
+
+  testWidgets('a value above 5 from an old server is clamped to 5 and the form stays clean', (tester) async {
+    await _pump(tester, {..._settings(), 'keep': 14});
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('backup-keep'))).controller!.text, '5');
+    await _unmount(tester);
+  });
+
   testWidgets('invalid number of copies is not sent; a server error is shown', (tester) async {
     final (_, log) = await _pump(tester, _settings(), putStatus: 400);
     await tester.enterText(find.byKey(const ValueKey('backup-keep')), '0');
     await _tap(tester, find.byKey(const ValueKey('backup-save')));
-    expect(find.text('Informe de 1 a 365 cópias para guardar.'), findsOneWidget);
+    expect(find.text('Informe de 1 a 5.'), findsOneWidget);
     expect(log.where((r) => r.method == 'PUT'), isEmpty);
-    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '20');
+    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '4');
     await _tap(tester, find.byKey(const ValueKey('backup-save')));
     expect(log.where((r) => r.method == 'PUT'), hasLength(1));
     expect(find.text('Configuração salva'), findsNothing);
@@ -320,22 +342,22 @@ void main() {
 
   testWidgets('a silent reload keeps unsaved edits but updates the status', (tester) async {
     await _pump(tester, _settings());
-    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '30');
-    _live = {..._settings(), 'keep': 99, 'lastRunMessage': 'Cópia nova'};
+    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '2');
+    _live = {..._settings(), 'keep': 5, 'lastRunMessage': 'Cópia nova'};
     await tester.pump(const Duration(seconds: 10));
     await tester.pump();
     expect(find.text('Cópia nova'), findsOneWidget);
-    expect(find.text('30'), findsOneWidget);
-    expect(find.text('99'), findsNothing);
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('5'), findsNothing);
     await _unmount(tester);
   });
 
   testWidgets('a silent reload refreshes a clean form', (tester) async {
     await _pump(tester, _settings());
-    _live = {..._settings(), 'keep': 99};
+    _live = {..._settings(), 'keep': 4};
     await tester.pump(const Duration(seconds: 10));
     await tester.pump();
-    expect(find.text('99'), findsOneWidget);
+    expect(find.text('4'), findsOneWidget);
     await _unmount(tester);
   });
 
@@ -402,13 +424,13 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('backup-run-now')));
     await tester.pump();
     await tester.pump();
-    expect(find.text('Informe de 1 a 365 cópias para guardar.'), findsOneWidget);
+    expect(find.text('Informe de 1 a 5.'), findsOneWidget);
     expect(log.where((r) => r.method != 'GET' && r.url.path.startsWith('/api/admin/backup-settings')), isEmpty);
   });
 
   testWidgets('a failed save does not request the run', (tester) async {
     final (_, log) = await _pump(tester, _settings(), putStatus: 400);
-    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '20');
+    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '4');
     await tester.tap(find.byKey(const ValueKey('backup-run-now')));
     await tester.pump();
     await tester.pump();
@@ -446,7 +468,7 @@ void main() {
       _settings(),
       home: (s) => BackupSettingsView(session: s, canBrowse: true, pickFolder: (_) async => r'E:\copias'),
     );
-    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '30');
+    await tester.enterText(find.byKey(const ValueKey('backup-keep')), '2');
     await _tap(tester, find.byKey(const ValueKey('backup-pick-folder')));
     expect(log.where((r) => r.method == 'PUT'), isEmpty);
     expect(find.text(r'E:\copias'), findsOneWidget);
