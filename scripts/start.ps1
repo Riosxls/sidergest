@@ -137,7 +137,17 @@ if (-not $NoDocker) {
     $env:EBT_DB_PORT = "$DbPort"
     $env:EBT_CORS_ORIGIN = "http://localhost:$WebPort"
     # The API migrates the database on start. When a database is already running, dump it first and stop if the dump fails.
-    if (& docker compose ps --status running -q db 2>$null) {
+    $dbRunning = & docker compose ps --status running -q db 2>$null
+    if (-not $dbRunning -and ((& docker volume ls -q 2>$null) -match 'pgdata')) {
+        # The database exists but is stopped (after stop.bat): bring it up alone so it can be dumped before anything migrates it.
+        Step "Starting PostgreSQL to back it up before the API rebuilds and migrates"
+        & docker compose up -d db
+        for ($i = 0; $i -lt 60 -and -not $dbRunning; $i++) {
+            $c = & docker compose ps --status running -q db 2>$null
+            if ($c -and ((& docker inspect -f '{{.State.Health.Status}}' $c 2>$null) -eq 'healthy')) { $dbRunning = $c } else { Start-Sleep -Seconds 2 }
+        }
+    }
+    if ($dbRunning) {
         Step "Backing up the database before the API rebuilds and migrates"
         & powershell -NoProfile -File (Join-Path $PSScriptRoot 'backup.ps1') -Reason pre-start -Quiet
         if ($LASTEXITCODE -ne 0) { Pop-Location; Fail "Pre-start backup failed, so the API was not rebuilt. Fix the backup (see above) or run scripts\backup.ps1 yourself." }

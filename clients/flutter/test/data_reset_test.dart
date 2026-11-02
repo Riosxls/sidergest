@@ -73,6 +73,9 @@ void main() {
     expect(run().onPressed, isNull, reason: 'the word is case sensitive');
     await tester.enterText(find.byKey(const ValueKey('reset-confirm')), 'LIMPAR');
     await tester.pump();
+    expect(run().onPressed, isNull, reason: 'the password is required too');
+    await tester.enterText(find.byKey(const ValueKey('reset-password')), 'secret-pass');
+    await tester.pump();
     expect(run().onPressed, isNotNull);
 
     await tester.tap(find.byKey(const ValueKey('reset-run')));
@@ -80,6 +83,7 @@ void main() {
     final del = seen.last;
     expect(del.url.path, '/api/admin/data-reset');
     expect(jsonDecode(del.body)['confirm'], 'LIMPAR');
+    expect(jsonDecode(del.body)['password'], 'secret-pass');
     expect(find.text('Limpar dados de movimento'), findsNothing, reason: 'dialog closes on success');
   });
 
@@ -100,6 +104,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('reset-preview')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('reset-confirm')), 'LIMPAR');
+    await tester.enterText(find.byKey(const ValueKey('reset-password')), 'secret-pass');
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('reset-run')));
     await tester.pumpAndSettle();

@@ -865,7 +865,7 @@ public class SalesTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.BadRequest, (await admin.Post("/api/admin/data-reset", body with { Confirm = "limpar tudo" })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/api/sales/quotes/{q.Id}")).StatusCode);
 
-        var done = await (await admin.Post("/api/admin/data-reset", body with { Confirm = MaintenanceEndpoints.ConfirmWord })).Read<DataResetOut>();
+        var done = await (await admin.Post("/api/admin/data-reset", body with { Confirm = MaintenanceEndpoints.ConfirmWord, Password = ApiFixture.AdminPassword })).Read<DataResetOut>();
         Assert.True(done.TotalRows >= 2);
         Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync($"/api/sales/quotes/{q.Id}")).StatusCode);
         Assert.Equal(0, (await (await admin.GetAsync("/api/sales/quotes?take=1")).Read<Page<QuoteSummaryOut>>()).Total);
@@ -890,7 +890,7 @@ public class SalesTests(ApiFixture api)
         await Act(admin, q.Id, "purchase-order");
         (await admin.Post($"/api/sales/quotes/{q.Id}/convert", new ConvertInput())).EnsureSuccessStatusCode();
 
-        var all = new DataResetIn([Ebt.Core.Maintenance.ResetScope.Sales, Ebt.Core.Maintenance.ResetScope.Purchasing, Ebt.Core.Maintenance.ResetScope.Production, Ebt.Core.Maintenance.ResetScope.Stock], MaintenanceEndpoints.ConfirmWord);
+        var all = new DataResetIn([Ebt.Core.Maintenance.ResetScope.Sales, Ebt.Core.Maintenance.ResetScope.Purchasing, Ebt.Core.Maintenance.ResetScope.Production, Ebt.Core.Maintenance.ResetScope.Stock], MaintenanceEndpoints.ConfirmWord, ApiFixture.AdminPassword);
         var res = await admin.Post("/api/admin/data-reset", all);
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         var done = await res.Read<DataResetOut>();
@@ -910,7 +910,7 @@ public class SalesTests(ApiFixture api)
         await Act(admin, q.Id, "purchase-order");
         var order = await (await admin.Post($"/api/sales/quotes/{q.Id}/convert", new ConvertInput())).Read<SalesOrderOut>();
         (await admin.Post($"/api/sales/orders/{order.Id}/release", new { })).EnsureSuccessStatusCode();
-        var res = await admin.Post("/api/admin/data-reset", new DataResetIn([Ebt.Core.Maintenance.ResetScope.Stock], MaintenanceEndpoints.ConfirmWord));
+        var res = await admin.Post("/api/admin/data-reset", new DataResetIn([Ebt.Core.Maintenance.ResetScope.Stock], MaintenanceEndpoints.ConfirmWord, ApiFixture.AdminPassword));
         // Either the order has reservations pointing at stock or it does not; in both cases the database state stays consistent.
         Assert.True(res.StatusCode is HttpStatusCode.OK or HttpStatusCode.Conflict);
         Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/api/sales/orders/{order.Id}")).StatusCode);

@@ -119,6 +119,7 @@ function Publish-BackupList([string]$Destination) {
         foreach ($s in $scan) {
             if (-not (Test-Path -LiteralPath $s.Folder)) { continue }
             foreach ($f in (Get-ChildItem -LiteralPath $s.Folder -Filter 'ebt-*.dump' -ErrorAction SilentlyContinue)) {
+                if (-not (Test-Path -LiteralPath ($f.FullName + '.sha256'))) { continue }   # no checksum file = unfinished run, not offered
                 $created = $f.LastWriteTime
                 if ($f.Name -match '-(\d{8})-(\d{6})[.]dump$') {
                     try { $created = [datetime]::ParseExact($Matches[1] + $Matches[2], 'yyyyMMddHHmmss', $null) } catch { }

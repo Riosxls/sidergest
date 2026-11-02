@@ -7,7 +7,7 @@ using Ebt.Core.Maintenance;
 
 namespace Ebt.Api.Endpoints;
 
-public record DataResetIn(List<ResetScope> Scopes, string? Confirm = null);
+public record DataResetIn(List<ResetScope> Scopes, string? Confirm = null, string? Password = null);
 
 public record DataResetOut(IReadOnlyList<ResetTableCount> Tables, long TotalRows);
 /// <summary><c>AllManual</c> selects every row whose source is <c>From</c> (default Manual), so Test records can be turned back into Manual.</summary>
@@ -18,6 +18,20 @@ public static class MaintenanceEndpoints
 {
     /// <summary>The word the admin has to type before movement data is deleted.</summary>
     public const string ConfirmWord = "LIMPAR";
+
+    /// <summary>The newest backup must be younger than this before movement data may be deleted.</summary>
+    public static readonly TimeSpan BackupMaxAge = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Why the wipe is refused for lack of a fresh backup, or null when it may go on. With no backup folder configured (development,
+    /// tests) there is nothing to check.
+    /// </summary>
+    public static string? BackupBlock(string? directory, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(directory)) return null;
+        var last = SystemEndpoints.ScanBackups(directory).LastBackupAt;
+        return last is { } at && now - at <= BackupMaxAge ? null : "Make a backup first: the newest one is missing or older than 1 hour";
+    }
 
     public static void MapMaintenance(this WebApplication app)
     {
@@ -30,10 +44,13 @@ public static class MaintenanceEndpoints
             return Results.Ok(new DataResetOut(tables, tables.Sum(t => t.Rows)));
         });
 
-        g.MapPost("/", async (DataResetIn i, DataResetService svc, CancellationToken ct) =>
+        g.MapPost("/", async (DataResetIn i, DataResetService svc, EbtDbContext db, IConfiguration config, System.Security.Claims.ClaimsPrincipal principal, CancellationToken ct) =>
         {
             if (i.Scopes is not { Count: > 0 }) return Results.ValidationProblem(new Dictionary<string, string[]> { ["scopes"] = ["Choose at least one group"] });
             if (i.Confirm != ConfirmWord) return Results.ValidationProblem(new Dictionary<string, string[]> { ["confirm"] = [$"Type {ConfirmWord} to confirm"] });
+            if (string.IsNullOrEmpty(i.Password)) return Results.ValidationProblem(new Dictionary<string, string[]> { ["password"] = ["Type your password to confirm"] });
+            if (await AuthEndpoints.ReauthAsync(db, principal, i.Password, ct) is { } denied) return denied;
+            if (BackupBlock(config["Backup:Directory"], DateTimeOffset.UtcNow) is { } block) return Results.Problem(block, statusCode: StatusCodes.Status409Conflict, title: "Cannot clear data");
             try
             {
                 var tables = await svc.ResetAsync(i.Scopes, ct);
@@ -43,7 +60,7 @@ public static class MaintenanceEndpoints
             {
                 return Results.Problem(e.Message, statusCode: StatusCodes.Status409Conflict, title: "Cannot clear data");
             }
-        });
+        }).RequireRateLimiting(Policies.AccountLimiter);
         var s = app.MapGroup("/api/admin/data-source").WithTags("Maintenance").RequireAuthorization(Policies.Admin);
 
         s.MapGet("/", async (EbtDbContext db, CancellationToken ct) =>

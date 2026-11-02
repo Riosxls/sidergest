@@ -29,7 +29,7 @@ start.bat              # DB + API (Docker) + Flutter Windows app
 start.bat -Web         # app in Chrome at http://localhost:8081 (-Device edge for Edge)
 start.bat -ApiOnly     # DB + API only
 start.bat -NoDocker    # API via dotnet run against local PostgreSQL 16 (EBT_DB_PORT)
-stop.bat [-Purge]      # stop; -Purge also deletes DB volume
+stop.bat [-Purge]      # stop; -Purge dumps the DB, asks for DELETE, then deletes the DB volume
 ```
 
 `start.bat` -> `scripts/start.ps1` (starts containers, migrates, creates admin, launches app).

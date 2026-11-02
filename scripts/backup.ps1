@@ -43,14 +43,33 @@ function Remove-Dump([string]$Path) {
     Remove-Item ($Path + '.sha256') -Force -ErrorAction SilentlyContinue
 }
 
-# At most $Keep dumps of any kind (manual, scheduled, pre-start, before-restore...) stay in a folder; the oldest are replaced by newer ones.
-# This runs only after the new dump was verified, so a failed backup never costs an old one.
+# Kinds the user asks for (the app's backup button and the plan). Every other kind (pre-start, before-rebuild, before-restore...) is a safety copy:
+# only the newest one of each such kind is kept, so safety copies never push the user's own backups out of the pool.
+$UserKinds = @('manual', 'scheduled')
+function Get-DumpKind([string]$Name) { if ($Name -match '^ebt-(.+)-\d{8}-\d{6}[.]dump$') { $Matches[1] } else { 'unknown' } }
+
+# At most $Keep dumps of any kind stay in a folder; the oldest are replaced by newer ones. A dump without its .sha256 is the leftover of a failed run
+# (a finished run always writes it) and goes once it is a few minutes old. This runs only after the new dump was verified, so a failed backup never costs an old one.
 function Remove-OldDumps([string]$Folder, [string]$Label) {
+    $dumps = @(Get-ChildItem $Folder -Filter 'ebt-*.dump' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+    foreach ($d in $dumps) {
+        if (-not (Test-Path -LiteralPath ($d.FullName + '.sha256')) -and $d.LastWriteTime -lt (Get-Date).AddMinutes(-10)) {
+            Remove-Dump $d.FullName
+            Say "Removed unfinished backup $($d.Name) $Label"
+        }
+    }
+    $seen = @{}
+    foreach ($d in @(Get-ChildItem $Folder -Filter 'ebt-*.dump' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)) {
+        $kind = Get-DumpKind $d.Name
+        if ($UserKinds -contains $kind) { continue }
+        if ($seen.ContainsKey($kind)) { Remove-Dump $d.FullName; Say "Replaced older $kind copy $($d.Name) $Label" } else { $seen[$kind] = $true }
+    }
     Get-ChildItem $Folder -Filter 'ebt-*.dump' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -Skip $Keep | ForEach-Object {
         Remove-Dump $_.FullName
         Say "Removed old backup $($_.Name) $Label"
     }
 }
+$container = $null; $file = $null; $tmp = $null
 Push-Location $Root
 try {
     Set-Progress 1 'Preparando...'
@@ -123,7 +142,7 @@ try {
     if ($CopyTo) { Remove-OldDumps $CopyTo '(destination)' }
 
     # The API container mounts only backup-status (never the dumps), so it can report the last backup without being able to read the data.
-    $all = @(Get-ChildItem $Dir -Filter 'ebt-*.dump' | Sort-Object LastWriteTime -Descending)
+    $all = @(Get-ChildItem $Dir -Filter 'ebt-*.dump' | Where-Object { Test-Path -LiteralPath ($_.FullName + '.sha256') } | Sort-Object LastWriteTime -Descending)
     $status = [ordered]@{ count = $all.Count; lastBackupAt = $null; lastBackupFile = $null; lastBackupSizeBytes = $null; lastBackupSha256 = $null }
     if ($all.Count -gt 0) {
         $status.lastBackupAt = $all[0].LastWriteTimeUtc.ToString('o')
@@ -135,6 +154,9 @@ try {
     Set-Progress 100 'Concluído' $false
     exit 0
 } catch {
+    # A failed run leaves nothing behind: no partial dump here, none inside the container.
+    if ($file) { Remove-Dump $file }
+    if ($container -and $tmp) { & docker exec $container rm -f $tmp 2>$null | Out-Null }
     Set-Progress $script:Percent 'Falhou' $false
     Write-Host "BACKUP FAILED: $($_.Exception.Message)" -ForegroundColor Red
     exit 1

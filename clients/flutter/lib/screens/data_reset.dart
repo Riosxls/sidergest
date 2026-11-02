@@ -82,6 +82,7 @@ class _DataResetDialog extends StatefulWidget {
 class _DataResetDialogState extends State<_DataResetDialog> {
   final _selected = <String>{'Sales'};
   final _confirm = TextEditingController();
+  final _password = TextEditingController();
   List<Map<String, dynamic>>? _preview;
   int _total = 0;
   String? _error;
@@ -90,6 +91,7 @@ class _DataResetDialogState extends State<_DataResetDialog> {
   @override
   void dispose() {
     _confirm.dispose();
+    _password.dispose();
     super.dispose();
   }
 
@@ -123,7 +125,7 @@ class _DataResetDialogState extends State<_DataResetDialog> {
       _error = null;
     });
     try {
-      final r = await widget.session.api.post('/api/admin/data-reset', {..._body, 'confirm': _confirm.text.trim()}) as Map<String, dynamic>;
+      final r = await widget.session.api.post('/api/admin/data-reset', {..._body, 'confirm': _confirm.text.trim(), 'password': _password.text}) as Map<String, dynamic>;
       NameCache.clear();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${r['totalRows']} registros apagados')));
@@ -139,12 +141,13 @@ class _DataResetDialogState extends State<_DataResetDialog> {
     on ? _selected.add(key) : _selected.remove(key);
     _preview = null;
     _confirm.clear();
+    _password.clear();
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final canDelete = _preview != null && _confirm.text.trim() == dataResetConfirmWord && !_busy;
+    final canDelete = _preview != null && _confirm.text.trim() == dataResetConfirmWord && _password.text.isNotEmpty && !_busy;
     return AlertDialog(
       title: const Text('Limpar dados de movimento'),
       content: SizedBox(
@@ -190,6 +193,14 @@ class _DataResetDialogState extends State<_DataResetDialog> {
                     controller: _confirm,
                     onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(labelText: 'Digite $dataResetConfirmWord para confirmar', border: OutlineInputBorder(), isDense: true),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const ValueKey('reset-password'),
+                    controller: _password,
+                    obscureText: true,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(labelText: 'Sua senha', border: OutlineInputBorder(), isDense: true),
                   ),
                 ],
               ],
