@@ -71,6 +71,46 @@ public static class SystemEndpoints
         catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException) { return null; }
     }
 
+    /// <summary>One dump the agent lists in <c>backups.json</c>; location is local, destination or both.</summary>
+    public record BackupItem(string Name, long SizeBytes, DateTimeOffset? CreatedAt, string? Location, bool HasChecksum);
+    private record BackupListFile(DateTimeOffset? ListedAt, List<BackupItem>? Items);
+
+    /// <summary>What the agent writes to <c>restore-result.json</c> when a restore ends.</summary>
+    public record RestoreResult(bool Ok, string? Message, string? File, string? SafetyDump, DateTimeOffset? FinishedAt);
+    public record RestoreState(DateTimeOffset? RequestedAt, string? File, RestoreResult? Result);
+    public record BackupListResponse(List<BackupItem> Items, DateTimeOffset? ListedAt, RestoreState Restore);
+    public record RestoreRequest(string? File, string? Confirm);
+
+    private static readonly System.Text.RegularExpressions.Regex DumpName = new("^ebt-[A-Za-z0-9-]+-[0-9]{8}-[0-9]{6}[.]dump$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private static T? ReadAgentFile<T>(string? directory, string name) where T : class
+    {
+        if (string.IsNullOrWhiteSpace(directory)) return null;
+        var path = Path.Combine(directory, name);
+        if (!File.Exists(path)) return null;
+        try { return JsonSerializer.Deserialize<T>(File.ReadAllText(path), new JsonSerializerOptions(JsonSerializerDefaults.Web)); }
+        catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    /// <summary>The dumps listed in <c>backups.json</c>, newest first; empty when the file is missing or invalid.</summary>
+    public static (List<BackupItem> Items, DateTimeOffset? ListedAt) ScanBackupList(string? directory)
+    {
+        var f = ReadAgentFile<BackupListFile>(directory, "backups.json");
+        var items = (f?.Items ?? []).Where(i => i is not null && !string.IsNullOrWhiteSpace(i.Name)).OrderByDescending(i => i.CreatedAt ?? DateTimeOffset.MinValue).ThenByDescending(i => i.Name, StringComparer.Ordinal).ToList();
+        return (items, f?.ListedAt);
+    }
+
+    public static RestoreResult? ScanRestoreResult(string? directory) => ReadAgentFile<RestoreResult>(directory, "restore-result.json");
+
+    private static bool RestorePending(BackupSettings s, RestoreResult? result) =>
+        s.RestoreRequestedAt is not null && (result?.FinishedAt is null || result.FinishedAt <= s.RestoreRequestedAt);
+
+    private static BackupListResponse BackupList(BackupSettings s, string? directory)
+    {
+        var (items, listedAt) = ScanBackupList(directory);
+        return new BackupListResponse(items, listedAt, new RestoreState(s.RestoreRequestedAt, s.RestoreFile, ScanRestoreResult(directory)));
+    }
+
     public static void MapSystem(this WebApplication app)
     {
         app.MapGet("/api/system/about", async (EbtDbContext db, IWebHostEnvironment env, ClaimsPrincipal principal, CancellationToken ct) =>
@@ -146,6 +186,41 @@ public static class SystemEndpoints
             s.RunRequestedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
             return Results.Ok(BackupSettingsDto.From(s, ScanProgress(config["Backup:Directory"])));
+        });
+
+        var backups = app.MapGroup("/api/admin/backups").WithTags("System").RequireAuthorization(Policies.Admin);
+        backups.MapGet("/", async (EbtDbContext db, IConfiguration config, CancellationToken ct) => Results.Ok(BackupList(await LoadBackupSettings(db, ct), config["Backup:Directory"])));
+        backups.MapPost("/restore", async (RestoreRequest r, EbtDbContext db, IConfiguration config, CancellationToken ct) =>
+        {
+            var dir = config["Backup:Directory"];
+            var (items, _) = ScanBackupList(dir);
+            var name = r.File?.Trim() ?? "";
+            var shaped = DumpName.IsMatch(name);
+            var errors = Errors()
+                .Require(shaped, "file", "Not a backup file name")
+                .Require(!shaped || items.Any(i => i.Name == name), "file", "Backup not found in the list published by the backup agent")
+                .Require(r.Confirm == "RESTAURAR", "confirm", "Type RESTAURAR to confirm");
+            if (errors.Count > 0) return Results.ValidationProblem(errors);
+            var s = await LoadBackupSettings(db, ct);
+            if (ScanProgress(dir) is { Running: true }) return Results.Problem("A backup or restore is running; wait for it to finish", statusCode: StatusCodes.Status409Conflict);
+            if (RestorePending(s, ScanRestoreResult(dir))) return Results.Problem("A restore is already requested and has not finished", statusCode: StatusCodes.Status409Conflict);
+            s.RestoreFile = name;
+            s.RestoreRequestedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return Results.Json(BackupList(s, dir), new JsonSerializerOptions(JsonSerializerDefaults.Web), statusCode: StatusCodes.Status202Accepted);
+        });
+        backups.MapPost("/restore/cancel", async (EbtDbContext db, IConfiguration config, CancellationToken ct) =>
+        {
+            var dir = config["Backup:Directory"];
+            var s = await LoadBackupSettings(db, ct);
+            if (RestorePending(s, ScanRestoreResult(dir)))
+            {
+                if (ScanProgress(dir) is { Running: true }) return Results.Problem("The restore is already running and cannot be cancelled", statusCode: StatusCodes.Status409Conflict);
+                s.RestoreFile = null;
+                s.RestoreRequestedAt = null;
+                await db.SaveChangesAsync(ct);
+            }
+            return Results.Ok(BackupList(s, dir));
         });
     }
 

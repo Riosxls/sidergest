@@ -30,4 +30,7 @@ public class BackupSettings
     public string? LastRunMessage { get; set; }
     /// <summary>Heartbeat of the agent; the app warns when it is old, because then nothing runs the backups.</summary>
     public DateTimeOffset? AgentSeenAt { get; set; }
+    /// <summary>Dump file the admin asked to restore; the agent restores it once <see cref="RestoreRequestedAt"/> is newer than its last restore result.</summary>
+    public string? RestoreFile { get; set; }
+    public DateTimeOffset? RestoreRequestedAt { get; set; }
 }

@@ -303,6 +303,15 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("last_run_ok");
 
+                    b.Property<string>("RestoreFile")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("restore_file");
+
+                    b.Property<DateTimeOffset?>("RestoreRequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("restore_requested_at");
+
                     b.Property<DateTimeOffset?>("RunRequestedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("run_requested_at");

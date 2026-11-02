@@ -14,6 +14,7 @@ public partial class EbtDbContext
             e.ToTable("backup_settings");
             e.Property(x => x.Destination).HasMaxLength(260);
             e.Property(x => x.LastRunMessage).HasMaxLength(500);
+            e.Property(x => x.RestoreFile).HasMaxLength(120);
             e.ToTable(t => t.HasCheckConstraint("ck_backup_settings_keep", "keep >= 1 AND keep <= 365"));
             e.HasData(new BackupSettings { Id = 1 });
         });
