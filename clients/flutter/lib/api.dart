@@ -116,14 +116,24 @@ class ApiClient {
   /// Exchanges the refresh token for a new session. Concurrent callers share one request.
   Future<bool> refresh() => _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
 
+  /// True when the last [refresh] was refused by the server (the refresh token is unknown, expired or revoked), so the session is really over.
+  /// False when it failed for any other reason (offline, timeout, 5xx, 429): the tokens are still good and the user stays signed in.
+  bool refreshRejected = false;
+
   Future<bool> _doRefresh() async {
     final rt = refreshToken;
+    refreshRejected = rt == null;
     if (rt == null) return false;
     try {
       final r = await _http
           .post(_uri('/api/auth/refresh'), headers: {'Content-Type': 'application/json', 'Accept': 'application/json'}, body: jsonEncode({'refreshToken': rt}))
           .timeout(requestTimeout);
-      if (r.statusCode < 200 || r.statusCode >= 300) return false;
+      if (r.statusCode < 200 || r.statusCode >= 300) {
+        refreshRejected = r.statusCode == 400 || r.statusCode == 401 || r.statusCode == 403;
+        return false;
+      }
+      // Signed out while the request was in flight: do not bring the old session back.
+      if (refreshToken != rt) return false;
       final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       token = j['token'] as String;
       refreshToken = j['refreshToken'] as String?;
@@ -146,12 +156,17 @@ class ApiClient {
       if (r.statusCode == 401 && token != null && !_noRefresh.any(path.startsWith)) {
         if (await refresh()) {
           r = await call().timeout(timeout);
+        } else if (!refreshRejected && refreshToken != null) {
+          // The server could not be asked (offline, restarting, busy): say so instead of ending a session that is still valid.
+          throw ApiException(0, 'Servidor indisponível ($baseUrl)');
         }
       }
       return r;
     } on TimeoutException {
       // A write may have reached the server before the answer was lost; say so, so nobody repeats it blindly.
       throw ApiException(0, write ? 'O servidor demorou para responder. Confira se a ação foi registrada antes de repetir.' : 'O servidor demorou demais para responder. Tente novamente.');
+    } on ApiException {
+      rethrow;
     } catch (e) {
       throw ApiException(0, write ? 'Conexão perdida. Confira se a ação foi registrada antes de repetir. ($baseUrl)' : 'Servidor indisponível ($baseUrl)');
     }
@@ -180,18 +195,35 @@ class ApiClient {
         return ApiException(412, 'O registro foi alterado por outra pessoa; recarregue e tente novamente');
       case 404:
         return ApiException(404, 'Registro não encontrado');
+      case 429:
+        return ApiException(429, 'Muitas tentativas em pouco tempo. Aguarde um instante e tente de novo.');
     }
     try {
       final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       final errors = <String, List<String>>{};
       (j['errors'] as Map<String, dynamic>?)?.forEach((k, v) => errors[k] = (v as List).cast<String>());
-      final msg = [j['title'], j['detail']].whereType<String>().where((s) => s.isNotEmpty).join(': ');
-      return ApiException(r.statusCode, errors.isNotEmpty ? 'Verifique os campos destacados' : (msg.isEmpty ? 'Erro ${r.statusCode}' : msg), errors);
+      final msg = [_serverTitles[j['title']] ?? j['title'], j['detail']].whereType<String>().where((s) => s.isNotEmpty).join(': ');
+      return ApiException(r.statusCode, errors.isNotEmpty ? 'Verifique os campos destacados' : (msg.isEmpty ? _fallback(r.statusCode) : msg), errors);
     } catch (_) {
-      return ApiException(r.statusCode, 'Erro ${r.statusCode}');
+      return ApiException(r.statusCode, _fallback(r.statusCode));
     }
   }
+
+  /// Message for an error answer that carried no text of its own.
+  static String _fallback(int status) => status >= 500 ? 'O servidor encontrou um problema. Tente de novo; se continuar, avise o suporte.' : 'Erro $status';
 }
+
+/// Generic problem titles the API sends in English (`Errors.cs`), shown in Portuguese.
+const _serverTitles = {
+  'Concurrent update': 'Registro alterado por outra pessoa',
+  'Duplicate value': 'Valor já cadastrado',
+  'Referenced record missing or still in use': 'Registro inexistente ou em uso',
+  'Invalid value': 'Valor inválido',
+  'Required value missing': 'Campo obrigatório vazio',
+  'Value too long': 'Valor longo demais',
+  'Cannot clear data': 'Não foi possível limpar os dados',
+  'Cannot reverse': 'Não foi possível estornar',
+};
 
 /// Portuguese captions for the API field names that reach the user in validation messages.
 const _fieldCaptions = {

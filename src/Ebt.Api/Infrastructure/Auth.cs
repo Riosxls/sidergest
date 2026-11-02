@@ -135,6 +135,38 @@ public static class AuthEndpoints
     public const int MinPasswordLength = 10;
     public const int MaxFailedLogins = 5;
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Counts one wrong password. The increment runs in the database, so parallel guesses are all counted (a read-modify-write on a loaded
+    /// entity would let ten simultaneous attempts count as one). Returns true when this failure locked the account.
+    /// </summary>
+    public static async Task<bool> RecordFailureAsync(EbtDbContext db, int userId, DateTimeOffset now, CancellationToken ct)
+    {
+        await db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(s => s.SetProperty(u => u.FailedLogins, u => u.FailedLogins + 1), ct);
+        var locked = await db.Users.Where(u => u.Id == userId && u.FailedLogins >= MaxFailedLogins)
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.LockedUntil, now + LockoutDuration).SetProperty(u => u.FailedLogins, 0), ct);
+        return locked > 0;
+    }
+
+    /// <summary>
+    /// Asks again for the signed-in user's password before a destructive action (cancel an NF, wipe data). Wrong attempts count toward the same
+    /// lockout as the login page, so a stolen access token cannot be used to guess the password. Null means the password was right.
+    /// </summary>
+    public static async Task<IResult?> ReauthAsync(EbtDbContext db, ClaimsPrincipal principal, string? password, CancellationToken ct)
+    {
+        var who = principal.Identity?.Name;
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == who && u.Active, ct);
+        if (user is null) return Results.Problem("Wrong password", statusCode: StatusCodes.Status403Forbidden);
+        var now = DateTimeOffset.UtcNow;
+        if (user.LockedUntil is { } until && until > now) return Results.Problem("Too many wrong attempts; try again later", statusCode: StatusCodes.Status429TooManyRequests);
+        if (VerifyPassword(user, password ?? ""))
+        {
+            if (user.FailedLogins > 0) await db.Users.Where(u => u.Id == user.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.FailedLogins, 0), ct);
+            return null;
+        }
+        await RecordFailureAsync(db, user.Id, now, ct);
+        return Results.Problem("Wrong password", statusCode: StatusCodes.Status403Forbidden);
+    }
     private static readonly PasswordHasher<AppUser> Hasher = new();
     private static readonly AppUser Dummy = new() { Username = "", PasswordHash = "" };
     private static readonly string DummyHash = Hasher.HashPassword(Dummy, "dummy-password-for-timing");
@@ -174,13 +206,8 @@ public static class AuthEndpoints
             var result = user.Active ? hasher.VerifyHashedPassword(user, user.PasswordHash, req.Password) : PasswordVerificationResult.Failed;
             if (result == PasswordVerificationResult.Failed)
             {
-                if (user.Active && ++user.FailedLogins >= MaxFailedLogins)
-                {
-                    user.LockedUntil = now + LockoutDuration;
-                    user.FailedLogins = 0;
-                    log.LogWarning("User {User} locked until {Until} after repeated failures from {Ip}", name, user.LockedUntil, http.Connection.RemoteIpAddress);
-                }
-                await db.SaveChangesAsync(ct);
+                if (user.Active && await RecordFailureAsync(db, user.Id, now, ct))
+                    log.LogWarning("User {User} locked until {Until} after repeated failures from {Ip}", name, now + LockoutDuration, http.Connection.RemoteIpAddress);
                 return Results.Unauthorized();
             }
             if (result == PasswordVerificationResult.SuccessRehashNeeded) user.PasswordHash = hasher.HashPassword(user, req.Password);
@@ -341,12 +368,7 @@ public static class AuthEndpoints
             if (!VerifyPassword(user, req.CurrentPassword ?? ""))
             {
                 // A stolen session must not be able to guess the current password without limit.
-                if (++user.FailedLogins >= MaxFailedLogins)
-                {
-                    user.LockedUntil = now + LockoutDuration;
-                    user.FailedLogins = 0;
-                }
-                await db.SaveChangesAsync(ct);
+                await RecordFailureAsync(db, user.Id, now, ct);
                 return Results.ValidationProblem(Crud.Errors().Require(false, "currentPassword", "Incorrect password"));
             }
             var errors = Crud.Errors()

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:ebt_engenharia/api.dart';
@@ -86,6 +87,81 @@ void main() {
     final api = ApiClient(baseUrl: 'http://x', client: client, token: 'old', onUnauthorized: () => unauthorized++)..refreshToken = 'rt-1';
     await expectLater(api.get('/api/a'), throwsA(isA<ApiException>().having((e) => e.status, 'status', 401)));
     expect(unauthorized, 1);
+  });
+
+  test('an unreachable refresh endpoint keeps the session and reports the server as unavailable', () async {
+    final client = MockClient((r) async {
+      if (r.url.path == '/api/auth/refresh') throw http.ClientException('offline');
+      return http.Response('', 401);
+    });
+    var unauthorized = 0;
+    final api = ApiClient(baseUrl: 'http://x', client: client, token: 'old', onUnauthorized: () => unauthorized++)..refreshToken = 'rt-1';
+    await expectLater(api.get('/api/a'), throwsA(isA<ApiException>().having((e) => e.status, 'status', 0)));
+    expect(unauthorized, 0);
+    expect(api.refreshToken, 'rt-1');
+    expect(api.refreshRejected, isFalse);
+  });
+
+  test('a 5xx or 429 from refresh does not end the session either', () async {
+    for (final code in [429, 500, 503]) {
+      final client = MockClient((r) async => r.url.path == '/api/auth/refresh' ? http.Response('', code) : http.Response('', 401));
+      var unauthorized = 0;
+      final api = ApiClient(baseUrl: 'http://x', client: client, token: 'old', onUnauthorized: () => unauthorized++)..refreshToken = 'rt-1';
+      await expectLater(api.get('/api/a'), throwsA(isA<ApiException>().having((e) => e.status, 'status', 0)));
+      expect(unauthorized, 0, reason: 'status $code');
+    }
+  });
+
+  test('a refresh answered after sign-out does not bring the old session back', () async {
+    final gate = Completer<void>();
+    final client = MockClient((r) async {
+      if (r.url.path == '/api/auth/refresh') {
+        await gate.future;
+        return http.Response(jsonEncode(_session('late', 'rt-2')), 200);
+      }
+      return http.Response('', 401);
+    });
+    final api = ApiClient(baseUrl: 'http://x', client: client, token: 'old')..refreshToken = 'rt-1';
+    final pending = api.refresh();
+    api.token = null;
+    api.refreshToken = null;
+    gate.complete();
+    expect(await pending, isFalse);
+    expect(api.token, isNull);
+    expect(api.refreshToken, isNull);
+  });
+
+  test('restore keeps a stored session when the server cannot be reached', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      'token': 'old',
+      'username': 'ana',
+      'role': 'Reader',
+      'permissions': '["read"]',
+      'expiresAt': DateTime.now().subtract(const Duration(minutes: 5)).toIso8601String(),
+      'refreshToken': 'rt-1',
+      'refreshExpiresAt': DateTime.now().add(const Duration(days: 1)).toIso8601String(),
+    });
+    final client = MockClient((r) async => throw http.ClientException('offline'));
+    final s = Session(api: ApiClient(baseUrl: 'http://x', client: client));
+    await s.restore();
+    expect(s.loggedIn, isTrue);
+    expect(s.api.refreshToken, 'rt-1');
+  });
+
+  test('restore signs out when the server refuses the refresh token', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      'token': 'old',
+      'username': 'ana',
+      'role': 'Reader',
+      'permissions': '["read"]',
+      'expiresAt': DateTime.now().subtract(const Duration(minutes: 5)).toIso8601String(),
+      'refreshToken': 'rt-1',
+      'refreshExpiresAt': DateTime.now().add(const Duration(days: 1)).toIso8601String(),
+    });
+    final client = MockClient((r) async => http.Response('', 401));
+    final s = Session(api: ApiClient(baseUrl: 'http://x', client: client));
+    await s.restore();
+    expect(s.loggedIn, isFalse);
   });
 
   test('logout posts the refresh token and clears the session', () async {

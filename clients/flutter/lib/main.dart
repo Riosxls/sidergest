@@ -28,8 +28,29 @@ class EbtApp extends StatefulWidget {
 class _EbtAppState extends State<EbtApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _escObserver = EscRouteObserver();
+  bool _wasLoggedIn = false;
 
   Session get session => widget.session;
+
+  @override
+  void initState() {
+    super.initState();
+    _wasLoggedIn = session.loggedIn;
+    session.addListener(_closeScreensOnSignOut);
+  }
+
+  @override
+  void dispose() {
+    session.removeListener(_closeScreensOnSignOut);
+    super.dispose();
+  }
+
+  /// Signing out (idle lock, expired session, manual) must not leave a pushed screen or dialog open over the login page.
+  void _closeScreensOnSignOut() {
+    final now = session.loggedIn;
+    if (_wasLoggedIn && !now) _navigatorKey.currentState?.popUntil((r) => r.isFirst);
+    _wasLoggedIn = now;
+  }
 
   @override
   Widget build(BuildContext context) {

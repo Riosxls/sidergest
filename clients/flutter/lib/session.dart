@@ -18,7 +18,7 @@ class Session extends ChangeNotifier {
     : api = api ?? ApiClient(baseUrl: defaultApiUrl),
       _storage = storage ?? const FlutterSecureStorage() {
     this.api.onUnauthorized = logout;
-    this.api.onRefreshed = (r) => unawaited(_apply(r));
+    this.api.onRefreshed = (r) => unawaited(_apply(r).catchError((Object e) => debugPrint('session: could not apply the refreshed session: $e')));
   }
 
   final ApiClient api;
@@ -169,7 +169,7 @@ class Session extends ChangeNotifier {
         permissions = (jsonDecode(v['permissions'] ?? '[]') as List).cast<String>().toSet();
         expiresAt = exp;
         refreshExpiresAt = rExp;
-        if (!accessValid && !await api.refresh()) await logout();
+        if (!accessValid && !await api.refresh() && api.refreshRejected) await logout();
         if (api.token != null) {
           await _syncProfile();
           await _migrateIdlePref();

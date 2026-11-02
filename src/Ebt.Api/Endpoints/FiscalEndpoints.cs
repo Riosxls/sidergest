@@ -85,10 +85,9 @@ public static class FiscalEndpoints
             var errors = Errors().Require(Has(i.Reason), "reason", "Required").Require(Has(i.Password), "password", "Type your password to confirm the inutilização");
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             var who = principal.Identity?.Name;
-            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == who && u.Active, ct);
-            if (user is null || !AuthEndpoints.VerifyPassword(user, i.Password!)) return Results.Problem("Wrong password", statusCode: StatusCodes.Status403Forbidden);
+            if (await AuthEndpoints.ReauthAsync(db, principal, i.Password, ct) is { } denied) return denied;
             return Results.Ok(ToOut(await fiscal.InutilizeAsync(i.Series, i.From, i.To, i.Reason, who, ct)));
-        }).RequireAuthorization(FiscalPolicies.Cancel);
+        }).RequireAuthorization(FiscalPolicies.Cancel).RequireRateLimiting(Policies.AccountLimiter);
     }
 
     private static void MapSettings(WebApplication app)
@@ -278,12 +277,11 @@ public static class FiscalEndpoints
             var errors = Errors().Require(Has(i.Reason), "reason", "Required").Require(Has(i.Password), "password", "Type your password to confirm the cancellation");
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             var who = principal.Identity?.Name;
-            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == who && u.Active, ct);
-            if (user is null || !AuthEndpoints.VerifyPassword(user, i.Password!)) return Results.Problem("Wrong password", statusCode: StatusCodes.Status403Forbidden);
+            if (await AuthEndpoints.ReauthAsync(db, principal, i.Password, ct) is { } denied) return denied;
             if (kind == FiscalKind.Sale) await sales.CancelInvoiceAsync(id, i.Reason, who, ct);
             else await fiscal.CancelAsync(id, i.Reason, who, ct);
             return Results.Ok(await Load(db, id, ct));
-        }).RequireAuthorization(FiscalPolicies.Cancel);
+        }).RequireAuthorization(FiscalPolicies.Cancel).RequireRateLimiting(Policies.AccountLimiter);
     }
 
     private static async Task<FiscalDocumentOut?> Load(EbtDbContext db, int id, CancellationToken ct)
