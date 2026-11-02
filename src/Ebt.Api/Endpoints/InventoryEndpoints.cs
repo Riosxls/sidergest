@@ -54,6 +54,9 @@ public static class InventoryEndpoints
 
         stock.MapPost("/documents/{id:int}/reverse", async (int id, ReverseIn? body, StockService svc, EbtDbContext db, ClaimsPrincipal user, CancellationToken ct) =>
         {
+            // A delivery's shipment document is undone by cancelling the delivery (which also reopens the order); reversing it here would leave the delivery shipped.
+            if (await db.Deliveries.AsNoTracking().Where(d => d.StockDocumentId == id && d.Status != DeliveryStatus.Cancelled).Select(d => d.Reference).FirstOrDefaultAsync(ct) is { } reference)
+                return Results.Problem($"This document is the shipment of delivery {reference}; cancel the delivery instead", statusCode: StatusCodes.Status409Conflict, title: "Cannot reverse");
             var doc = await svc.ReverseAsync(id, User(user), body?.Notes, ct);
             return Results.Created($"/api/stock/documents/{doc.Id}", await LoadDocument(db, doc.Id, ct));
         }).RequireAuthorization(Policies.Stock).AddEndpointFilter(new RowVersionFilter<StockDocument>());

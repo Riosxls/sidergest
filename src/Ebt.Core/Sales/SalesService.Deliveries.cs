@@ -68,6 +68,9 @@ public sealed partial class SalesService
             var certified = o.CertificateWaived || await db.QualityCertificates.AnyAsync(c => c.OrderId == o.Id && c.Status == CertificateStatus.Issued, ct);
             if (!certified && !i.WithoutCertificate)
                 throw SalesException.Conflict($"{o.Reference} has no issued quality certificate. Issue one, waive it on the order, or ship without it");
+            // Only someone who may emit the NF (or any shipper while emission is off) can name an NF number by hand; for others the field would skip the fiscal emission.
+            var fiscalOn = await fiscal.EnabledAsync(ct);
+            var typedInvoice = canEmitInvoice || !fiscalOn ? Clean(i.InvoiceNumber) : null;
             var location = await ShippingLocationAsync(ct);
             var stockLines = new List<StockLine>();
             foreach (var dl in d.Lines)
@@ -82,15 +85,15 @@ public sealed partial class SalesService
                 }
                 if (rest > 0) stockLines.Add(new StockLine(null, line.ProductId, location, rest));
             }
-            var doc = await stock.PostAsync(new StockPost(MovementType.Shipment, i.Date, stockLines, d.Reference, CustomerId: o.CustomerId, Notes: $"{o.Reference}{(Clean(i.InvoiceNumber) is { } nf ? $" · NF {nf}" : "")}"), user ?? "system", ct);
+            var doc = await stock.PostAsync(new StockPost(MovementType.Shipment, i.Date, stockLines, d.Reference, CustomerId: o.CustomerId, Notes: $"{o.Reference}{(typedInvoice is { } nf ? $" · NF {nf}" : "")}"), user ?? "system", ct);
             d.StockDocumentId = doc.Id;
             d.Status = DeliveryStatus.Shipped;
             d.ShippedAt = DateTimeOffset.UtcNow;
             d.ShippedBy = user;
-            d.InvoiceNumber = Clean(i.InvoiceNumber) ?? d.InvoiceNumber;
+            d.InvoiceNumber = typedInvoice ?? d.InvoiceNumber;
             // Venda (5101): stock is lowered first, then the NF is authorized; if SEFAZ rejects, the transaction rolls back and stock is untouched.
-            var invoicePending = d.InvoiceNumber is null && !canEmitInvoice && await fiscal.EnabledAsync(ct);
-            if (d.InvoiceNumber is null && !invoicePending && await fiscal.EnabledAsync(ct))
+            var invoicePending = d.InvoiceNumber is null && !canEmitInvoice && fiscalOn;
+            if (d.InvoiceNumber is null && !invoicePending && fiscalOn)
             {
                 var invoice = await fiscal.IssueSaleAsync(d, o, new SaleInvoiceOptions(i.Cfop, i.Freight ?? 0m, Clean(i.Carrier), Clean(i.VehiclePlate)?.ToUpper(), i.GrossWeightKg), user, ct);
                 d.InvoiceNumber = invoice.Number.ToString();
@@ -145,14 +148,17 @@ public sealed partial class SalesService
         }, ct);
     }
 
-    public async Task<Delivery> CancelDeliveryAsync(int id, string? reason, string? user, CancellationToken ct = default)
+    public Task<Delivery> CancelDeliveryAsync(int id, string? reason, string? user, CancellationToken ct = default) => CancelDeliveryCoreAsync(id, reason, user, false, ct);
+
+    /// <param name="invoiceBeingCancelled">True only from <see cref="CancelInvoiceAsync"/>, which cancels the NF itself right after the delivery was undone.</param>
+    private async Task<Delivery> CancelDeliveryCoreAsync(int id, string? reason, string? user, bool invoiceBeingCancelled, CancellationToken ct)
     {
         if (Clean(reason) is null) throw SalesException.Invalid("reason", "Required");
         return await InTransaction(async () =>
         {
             var d = await LockDeliveryAsync(id, ct);
             if (d.Status is DeliveryStatus.Cancelled or DeliveryStatus.Delivered) throw SalesException.Conflict($"Delivery is {d.Status}");
-            if (await db.FiscalDocuments.Where(f => f.DeliveryId == id && f.Status == FiscalStatus.Authorized).Select(f => (int?)f.Number).FirstOrDefaultAsync(ct) is { } nfNumber)
+            if (!invoiceBeingCancelled && await db.FiscalDocuments.Where(f => f.DeliveryId == id && f.Status == FiscalStatus.Authorized).Select(f => (int?)f.Number).FirstOrDefaultAsync(ct) is { } nfNumber)
                 throw SalesException.Conflict($"NF {nfNumber} is authorized for this delivery; cancel the NF first");
             var from = d.Status;
             if (d.Status == DeliveryStatus.Shipped && d.StockDocumentId is { } doc) await stock.ReverseAsync(doc, user ?? "system", $"{d.Reference} cancelada: {Clean(reason)}", ct);
@@ -174,9 +180,10 @@ public sealed partial class SalesService
             if (f.Kind != FiscalKind.Sale || f.DeliveryId is not { } deliveryId) throw SalesException.Conflict($"NF {f.Number} is not a sale NF");
             var d = await LockDeliveryAsync(deliveryId, ct);
             if (d.Status == DeliveryStatus.Delivered) throw SalesException.Conflict($"{d.Reference} was already delivered; issue a return NF instead of cancelling");
-            var cancelled = await fiscal.CancelAsync(documentId, reason, user, ct);
-            await CancelDeliveryAsync(deliveryId, $"NF {f.Number} cancelada: {Clean(reason)}", user, ct);
-            return cancelled;
+            // The delivery goes first (stock back, order reopened): that is where a closed period or another rule can refuse. SEFAZ is called last, so a refusal
+            // here leaves the NF untouched, and a SEFAZ refusal rolls the delivery cancellation back with everything else.
+            await CancelDeliveryCoreAsync(deliveryId, $"NF {f.Number} cancelada: {Clean(reason)}", user, true, ct);
+            return await fiscal.CancelAsync(documentId, reason, user, ct);
         }, ct);
     }
 }

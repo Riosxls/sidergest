@@ -36,13 +36,14 @@ public sealed partial class SalesService
         }, ct);
     }
 
-    public Task<SalesOrder> CreateOrderAsync(SalesOrderInput i, bool overrideCredit, string? user, CancellationToken ct = default) =>
-        InTransaction(() => CreateOrderCoreAsync(i, null, overrideCredit, user, ct), ct);
+    public Task<SalesOrder> CreateOrderAsync(SalesOrderInput i, bool overrideCredit, string? user, CancellationToken ct = default, bool mayApprovePrices = false) =>
+        InTransaction(() => CreateOrderCoreAsync(i, null, overrideCredit, user, ct, mayApprovePrices), ct);
 
-    private async Task<SalesOrder> CreateOrderCoreAsync(SalesOrderInput i, Quote? quote, bool overrideCredit, string? user, CancellationToken ct)
+    private async Task<SalesOrder> CreateOrderCoreAsync(SalesOrderInput i, Quote? quote, bool overrideCredit, string? user, CancellationToken ct, bool mayApprovePrices = false)
     {
         await ValidateHeaderAsync(i.CustomerId, i.AddressId, i.PaymentTermId, ct);
         var lines = await BuildLinesAsync(i.CustomerId, i.Lines, ct);
+        if (quote is null) await EnsurePricesAllowedAsync(lines, mayApprovePrices, ct);
         await ViabilityRules.ValidateAsync(db, i.CustomerId, lines.Select(l => (l.ProductId, l.FeasibilityId)), null, ct);
         var credit = await CreditAsync(i.CustomerId, i.PaymentTermId, Totals(lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, (decimal?)null))).Total, null, ct);
         if (credit.Exceeded && !overrideCredit)
@@ -68,7 +69,7 @@ public sealed partial class SalesService
         return order;
     }
 
-    public async Task<SalesOrder> UpdateOrderAsync(int id, SalesOrderInput i, string? user, CancellationToken ct = default)
+    public async Task<SalesOrder> UpdateOrderAsync(int id, SalesOrderInput i, string? user, CancellationToken ct = default, bool mayApprovePrices = false)
     {
         await ValidateHeaderAsync(i.CustomerId, i.AddressId, i.PaymentTermId, ct);
         var lines = await BuildLinesAsync(i.CustomerId, i.Lines, ct);
@@ -78,6 +79,7 @@ public sealed partial class SalesService
             var o = await LockOrderAsync(id, ct);
             if (o.Status != SalesOrderStatus.Created) throw SalesException.Conflict("Only orders not yet released can be edited");
             if (o.CustomerId != i.CustomerId) throw SalesException.Invalid("customerId", "The customer cannot change");
+            if (o.QuoteId is null) await EnsurePricesAllowedAsync(lines, mayApprovePrices, ct);
             var today = Today();
             o.AddressId = i.AddressId;
             o.CustomerPo = Clean(i.CustomerPo);

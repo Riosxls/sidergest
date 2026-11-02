@@ -71,8 +71,24 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
 
             var ofIds = doc.Lines.Where(l => l.ProductionOrderId != null).Select(l => l.ProductionOrderId!.Value).ToList();
             var ofs = await db.ProductionOrders.AsNoTracking().Where(o => ofIds.Contains(o.Id)).Select(o => o.Reference).ToListAsync(ct);
-            doc.AdditionalInfo = Join(order.Reference, ofs.Count > 0 ? string.Join(", ", ofs) : null, order.CustomerPo is { } po ? $"Pedido cliente {po}" : null, delivery.Notes, cfop.LegalText);
+            doc.AdditionalInfo = Join(order.Reference, $"Entrega ({delivery.Reference})", ofs.Count > 0 ? string.Join(", ", ofs) : null, order.CustomerPo is { } po ? $"Pedido cliente {po}" : null, delivery.Notes, cfop.LegalText);
             var transport = new NfeTransport(order.Freight == FreightTerms.Cif ? 0 : 1, opt.Carrier ?? delivery.Carrier, opt.VehiclePlate ?? delivery.VehiclePlate, delivery.Packages, opt.GrossWeightKg ?? delivery.GrossWeightKg);
+
+            // A shipment that failed after SEFAZ authorized its NF was rolled back, but the authorized NF (committed on its own connection) stayed without a delivery.
+            // Shipping again must pick that NF up, not issue a second one for the same goods.
+            var marker = $"({delivery.Reference})";
+            var orphan = await db.FiscalDocuments.FirstOrDefaultAsync(f => f.Kind == FiscalKind.Sale && f.Status == FiscalStatus.Authorized && f.DeliveryId == null
+                && f.CustomerId == customer.Id && f.AdditionalInfo != null && f.AdditionalInfo.Contains(marker), ct);
+            if (orphan is not null)
+            {
+                if (orphan.InvoiceTotal != doc.InvoiceTotal)
+                    throw FiscalException.Conflict($"NF {orphan.Number} was authorized for {delivery.Reference} but never linked to it, and its total ({orphan.InvoiceTotal:0.00}) differs from this shipment ({doc.InvoiceTotal:0.00}). Cancel that NF before shipping again");
+                orphan.DeliveryId = delivery.Id;
+                foreach (var l in doc.Lines) orphan.Lines.Add(l);
+                foreach (var i in doc.Installments) orphan.Installments.Add(i);
+                await db.SaveChangesAsync(ct);
+                return orphan;
+            }
             return await AuthorizeAndSaveAsync(settings, doc, cfop, recipient, transport, interstate, ct);
         }, ct);
     }

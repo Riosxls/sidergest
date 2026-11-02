@@ -44,6 +44,19 @@ public sealed partial class SalesService
 
     public static QuoteTotals Totals(Quote q) => Totals(q.Lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, l.ListPrice, l.IcmsPercent)));
 
+    /// <summary>
+    /// An order typed in directly (no approved quote behind it) skips the quote approval, so the same rule is applied here: a discount past the limit, an
+    /// off-list price (when the setting is on) or a free line needs a sales manager. Quote-born orders already went through that approval.
+    /// </summary>
+    private async Task EnsurePricesAllowedAsync(IReadOnlyList<ResolvedLine> lines, bool mayApprove, CancellationToken ct)
+    {
+        if (mayApprove) return;
+        var settings = await SettingsAsync(ct);
+        var totals = Totals(lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, l.ListPrice, l.IcmsPercent)));
+        if (lines.Any(l => l.UnitPrice <= 0) || NeedsApprovalFor(totals, settings))
+            throw SalesException.Conflict($"Prices need a sales manager: discount {totals.MaxDiscountPercent:0.##}% (limit {settings.MaxDiscountPercent:0.##}%), a free line or an off-list price. Ask a manager to create or edit this order");
+    }
+
     /// <summary>A quote needs the manager when a discount passes the limit, or (if the setting is on) when a price was typed by hand with no list price to compare.</summary>
     public static bool NeedsApprovalFor(QuoteTotals t, SalesSettings s) => t.MaxDiscountPercent > s.MaxDiscountPercent || s.OffListNeedsApproval && t.OffListLines > 0;
 }

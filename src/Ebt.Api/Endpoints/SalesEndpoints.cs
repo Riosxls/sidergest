@@ -371,13 +371,13 @@ public static class SalesEndpoints
 
         g.MapPost("/", async (SalesOrderIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
-            var o = await svc.CreateOrderAsync(new SalesOrderInput(i.CustomerId, i.AddressId, i.Lines, i.CustomerPo, i.PaymentTermId, i.Freight, i.Notes, i.Company, i.CustomPaymentTerm, i.BillTo, i.Origin, i.Salesperson), i.OverrideCredit && IsManager(user), Who(user), ct);
+            var o = await svc.CreateOrderAsync(new SalesOrderInput(i.CustomerId, i.AddressId, i.Lines, i.CustomerPo, i.PaymentTermId, i.Freight, i.Notes, i.Company, i.CustomPaymentTerm, i.BillTo, i.Origin, i.Salesperson), i.OverrideCredit && IsManager(user), Who(user), ct, IsManager(user));
             return Results.Created($"/api/sales/orders/{o.Id}", await LoadOrder(db, svc, o.Id, ct));
         }).RequireAuthorization(SalesPolicies.Sell);
 
         g.MapPut("/{id:int}", async (int id, SalesOrderIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
-            await svc.UpdateOrderAsync(id, new SalesOrderInput(i.CustomerId, i.AddressId, i.Lines, i.CustomerPo, i.PaymentTermId, i.Freight, i.Notes, i.Company, i.CustomPaymentTerm, i.BillTo, i.Origin, i.Salesperson), Who(user), ct);
+            await svc.UpdateOrderAsync(id, new SalesOrderInput(i.CustomerId, i.AddressId, i.Lines, i.CustomerPo, i.PaymentTermId, i.Freight, i.Notes, i.Company, i.CustomPaymentTerm, i.BillTo, i.Origin, i.Salesperson), Who(user), ct, IsManager(user));
             return Results.Ok(await LoadOrder(db, svc, id, ct));
         }).RequireAuthorization(SalesPolicies.Sell);
 
