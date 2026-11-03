@@ -26,3 +26,4 @@ backup-status/
 .claude/worktrees/
 clients/flutter/devtools_options.yaml
 clients/flutter/*.png
+backups-keep/
