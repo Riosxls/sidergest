@@ -37,6 +37,8 @@ class FieldSpec {
     this.dateFor,
     this.obscure = false,
     this.advanced = false,
+    this.uppercase = false,
+    this.lockWhenEditing = false,
   });
 
   final String key;
@@ -59,6 +61,12 @@ class FieldSpec {
 
   /// Rarely changed: shown under "Mais campos" in a form instead of next to the main fields.
   final bool advanced;
+
+  /// Typed text becomes upper case (units such as "kg" and "KG" are the same unit).
+  final bool uppercase;
+
+  /// Can be typed when the record is created but not changed afterwards (a revision that has its own history).
+  final bool lockWhenEditing;
 }
 
 /// One column of a record list or table: header, value reader and alignment.
@@ -154,7 +162,16 @@ String fmtMoney(Object? v) => v == null ? '' : 'R\$ ${fmtNum(v)}';
 
 String fmtPeriod(Object? p) => p is int ? '${_two(p % 100)}/${p ~/ 100}' : fmt(p);
 
-num? parseDecimal(String s) => num.tryParse(s.contains(',') ? s.replaceAll('.', '').replaceAll(',', '.') : s);
+/// Reads a typed number the Brazilian way: "1.234,56" is 1234.56 and "1.500" is 1500 (dots are thousands separators when
+/// three digits follow each one). "1,234.56" and "12.5" are read as typed in the other convention.
+num? parseDecimal(String s) {
+  final t = s.trim();
+  final comma = t.lastIndexOf(','), dot = t.lastIndexOf('.');
+  if (comma >= 0 && dot > comma) return num.tryParse(t.replaceAll(',', ''));
+  if (comma >= 0) return num.tryParse(t.replaceAll('.', '').replaceAll(',', '.'));
+  if (RegExp(r'^-?[1-9]\d{0,2}(\.\d{3})+$').hasMatch(t)) return num.tryParse(t.replaceAll('.', ''));
+  return num.tryParse(t);
+}
 
 ColumnSpec col(String label, String key, {bool numeric = false}) => ColumnSpec(label, (e) => fmt(e[key]), numeric: numeric);
 ColumnSpec dateCol(String label, String key) => ColumnSpec(label, (e) => fmtDay(e[key]));
@@ -178,18 +195,18 @@ final products = EntitySpec(
     FieldSpec('kind', 'Tipo', type: FieldType.choice, choices: kinds, required: true, defaultValue: 'Part'),
     FieldSpec('shape', 'Formato do tubo', type: FieldType.choice, choices: shapes),
     FieldSpec('diameterMm', 'Diâmetro (mm)', type: FieldType.decimal),
-    FieldSpec('widthMm', 'Largura (mm)', type: FieldType.decimal),
-    FieldSpec('heightMm', 'Altura (mm)', type: FieldType.decimal),
+    FieldSpec('widthMm', 'Largura (mm)', type: FieldType.decimal, advanced: true),
+    FieldSpec('heightMm', 'Altura (mm)', type: FieldType.decimal, advanced: true),
     FieldSpec('thicknessMm', 'Parede (mm)', type: FieldType.decimal),
     FieldSpec('lengthMm', 'Comprimento (mm)', type: FieldType.decimal),
     FieldSpec('netWeightKg', 'Peso líquido (kg)', type: FieldType.decimal, hint: 'Vazio = calculado pelo formato'),
-    FieldSpec('lossPercent', 'Perda (%)', type: FieldType.decimal),
+    FieldSpec('lossPercent', 'Perda (%)', type: FieldType.decimal, advanced: true),
     FieldSpec('ncm', 'NCM', required: true),
-    FieldSpec('stockUnit', 'Unidade', required: true, defaultValue: 'PC'),
-    FieldSpec('piecesPerPackage', 'Peças por embalagem', type: FieldType.integer),
+    FieldSpec('stockUnit', 'Unidade', required: true, defaultValue: 'PC', uppercase: true),
+    FieldSpec('piecesPerPackage', 'Peças por embalagem', type: FieldType.integer, advanced: true),
     FieldSpec('blocked', 'Bloqueado', type: FieldType.boolean, defaultValue: false),
-    FieldSpec('drawingRevision', 'Revisão desenho'),
-    FieldSpec('processRevision', 'Revisão processo'),
+    FieldSpec('drawingRevision', 'Revisão desenho', advanced: true, lockWhenEditing: true, hint: 'Depois de criado, altere pela aba Revisões do produto'),
+    FieldSpec('processRevision', 'Revisão processo', advanced: true, lockWhenEditing: true, hint: 'Depois de criado, altere pela aba Revisões do produto'),
   ],
   columns: [
     col('Código', 'code'),
@@ -214,19 +231,19 @@ final materials = EntitySpec(
     FieldSpec('classId', 'Classe', type: FieldType.lookup, lookup: LookupSpec('/api/material-classes')),
     FieldSpec('groupId', 'Grupo', type: FieldType.lookup, lookup: LookupSpec('/api/material-groups')),
     FieldSpec('subgroupId', 'Subgrupo', type: FieldType.lookup, lookup: LookupSpec('/api/material-subgroups')),
-    FieldSpec('stockUnit', 'Unidade estoque', required: true, defaultValue: 'KG'),
-    FieldSpec('purchaseUnit', 'Unidade compra', required: true, defaultValue: 'KG'),
+    FieldSpec('stockUnit', 'Unidade estoque', required: true, defaultValue: 'KG', uppercase: true),
+    FieldSpec('purchaseUnit', 'Unidade compra', required: true, defaultValue: 'KG', uppercase: true),
     FieldSpec('purchaseFactor', 'Fator compra', type: FieldType.decimal, required: true, defaultValue: 1),
-    FieldSpec('thicknessMm', 'Espessura (mm)', type: FieldType.decimal),
-    FieldSpec('widthMm', 'Largura (mm)', type: FieldType.decimal),
-    FieldSpec('ncm', 'NCM'),
-    FieldSpec('leadTimeDays', 'Lead time (dias)', type: FieldType.integer),
-    FieldSpec('purchaseLot', 'Lote compra', type: FieldType.decimal),
+    FieldSpec('thicknessMm', 'Espessura (mm)', type: FieldType.decimal, advanced: true),
+    FieldSpec('widthMm', 'Largura (mm)', type: FieldType.decimal, advanced: true),
+    FieldSpec('ncm', 'NCM', advanced: true),
+    FieldSpec('leadTimeDays', 'Lead time (dias)', type: FieldType.integer, advanced: true),
+    FieldSpec('purchaseLot', 'Lote compra', type: FieldType.decimal, advanced: true),
     FieldSpec('minStock', 'Estoque mínimo', type: FieldType.decimal),
-    FieldSpec('maxStock', 'Estoque máximo', type: FieldType.decimal),
+    FieldSpec('maxStock', 'Estoque máximo', type: FieldType.decimal, advanced: true),
     FieldSpec('requiresInspection', 'Exige inspeção', type: FieldType.boolean, defaultValue: false),
-    FieldSpec('generatesPurchaseOrder', 'Gera pedido de compra', type: FieldType.boolean, defaultValue: true),
-    FieldSpec('externalProcessing', 'Beneficiamento externo', type: FieldType.boolean, defaultValue: false),
+    FieldSpec('generatesPurchaseOrder', 'Gera pedido de compra', type: FieldType.boolean, defaultValue: true, advanced: true),
+    FieldSpec('externalProcessing', 'Beneficiamento externo', type: FieldType.boolean, defaultValue: false, advanced: true),
     FieldSpec('active', 'Ativo', type: FieldType.boolean, defaultValue: true),
   ],
   columns: [
@@ -331,10 +348,10 @@ const routingFields = [
   FieldSpec('toolId', 'Ferramenta', type: FieldType.lookup, lookup: LookupSpec('/api/tools')),
   FieldSpec('setupHours', 'Setup (h)', type: FieldType.decimal),
   FieldSpec('piecesPerHour', 'Peças/hora', type: FieldType.decimal),
-  FieldSpec('operators', 'Operadores', type: FieldType.decimal),
-  FieldSpec('description', 'Descrição'),
-  FieldSpec('standard', 'Norma'),
-  FieldSpec('notes', 'Observações'),
+  FieldSpec('operators', 'Operadores', type: FieldType.decimal, advanced: true),
+  FieldSpec('description', 'Descrição', advanced: true),
+  FieldSpec('standard', 'Norma', advanced: true),
+  FieldSpec('notes', 'Observações', advanced: true),
 ];
 
 const bomItemFields = [
@@ -352,7 +369,7 @@ const bomItemFields = [
     lookup: LookupSpec('/api/products', fill: {'unit': 'stockUnit'}),
   ),
   FieldSpec('quantity', 'Quantidade', type: FieldType.decimal, required: true),
-  FieldSpec('unit', 'Unidade', required: true),
+  FieldSpec('unit', 'Unidade', required: true, uppercase: true),
   FieldSpec('factor', 'Fator', type: FieldType.decimal, required: true, defaultValue: 1),
 ];
 

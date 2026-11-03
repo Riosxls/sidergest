@@ -7,6 +7,7 @@ import '../session.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/load_error.dart';
 import '../widgets/record_nav.dart';
+import 'stock_balances.dart';
 import 'where_used.dart';
 
 /// Product detail with tabs for data, routing, BOM explosion and revisions.
@@ -23,9 +24,10 @@ class ProductDetailScreen extends StatefulWidget {
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
 }
 
-class _ProductDetailScreenState extends State<ProductDetailScreen> {
+class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTickerProviderStateMixin {
   Map<String, dynamic>? _product;
   String? _error;
+  late final _tabs = TabController(length: 4, vsync: this);
 
   ApiClient get api => widget.session.api;
   String get base => '/api/products/${widget.productId}';
@@ -34,6 +36,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -61,6 +69,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       readOnly: !widget.session.canWrite,
       onSubmit: (body) async => await api.put(base, body) as Map<String, dynamic>?,
       onDelete: () => api.delete(base),
+      deleteMessage: 'O produto, o roteiro e a estrutura dele são apagados. Não dá para desfazer.',
     );
     if (result == null || !mounted) return;
     if (result['_deleted'] == true) {
@@ -73,52 +82,68 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final p = _product;
-    return DefaultTabController(
-      length: 4,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(p == null ? 'Produto' : '${p['code']} · ${p['name']}', overflow: TextOverflow.ellipsis),
-          actions: [if (p != null) IconButton(tooltip: 'Cadastro', onPressed: _edit, icon: const Icon(Icons.edit_outlined))],
-          bottom: const TabBar(
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            tabs: [
-              Tab(text: 'Roteiro e estrutura'),
-              Tab(text: 'Explosão'),
-              Tab(text: 'Onde é usado'),
-              Tab(text: 'Revisões'),
-            ],
-          ),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(p == null ? 'Produto' : '${p['code']} · ${p['name']}', overflow: TextOverflow.ellipsis),
+        actions: [
+          if (p != null)
+            RelatedMenu(
+              links: [
+                RelatedLink(
+                  Icons.inventory_outlined,
+                  'Saldo em estoque',
+                  () => openItemStock(context, widget.session, productId: widget.productId, title: '${p['code']} · ${p['name']}'),
+                ),
+                RelatedLink(Icons.account_tree_outlined, 'Onde é usado', () => _tabs.animateTo(2)),
+                RelatedLink(Icons.history, 'Revisões', () => _tabs.animateTo(3)),
+              ],
+            ),
+          if (p != null) IconButton(tooltip: 'Cadastro', onPressed: _edit, icon: const Icon(Icons.edit_outlined)),
+        ],
+        bottom: TabBar(
+          controller: _tabs,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          tabs: const [
+            Tab(text: 'Roteiro e estrutura'),
+            Tab(text: 'Explosão'),
+            Tab(text: 'Onde é usado'),
+            Tab(text: 'Revisões'),
+          ],
         ),
-        body: _error != null
-            ? LoadError(message: _error!, onRetry: _load)
-            : p == null
-            ? const Center(child: CircularProgressIndicator())
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _Summary(product: p),
-                  Expanded(
-                    child: TabBarView(
-                      children: [
-                        RoutingTab(session: widget.session, productId: widget.productId, onChanged: _load),
-                        ExplosionTab(api: api, productId: widget.productId),
-                        WhereUsedView(session: widget.session, path: '$base/where-used'),
-                        RevisionsTab(session: widget.session, productId: widget.productId, onChanged: _load),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
       ),
+      body: _error != null
+          ? LoadError(message: _error!, onRetry: _load)
+          : p == null
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _Summary(product: p, onRevisions: () => _tabs.animateTo(3)),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabs,
+                    children: [
+                      RoutingTab(session: widget.session, productId: widget.productId, onChanged: _load),
+                      ExplosionTab(session: widget.session, productId: widget.productId),
+                      WhereUsedView(session: widget.session, path: '$base/where-used'),
+                      RevisionsTab(session: widget.session, productId: widget.productId, onChanged: _load),
+                    ],
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }
 
 class _Summary extends StatelessWidget {
-  const _Summary({required this.product});
+  const _Summary({required this.product, required this.onRevisions});
 
   final Map<String, dynamic> product;
+
+  /// Revision chips jump to the Revisões tab, where those values are changed.
+  final VoidCallback onRevisions;
 
   @override
   Widget build(BuildContext context) {
@@ -129,13 +154,11 @@ class _Summary extends StatelessWidget {
         ? '${fmt(p['widthMm'])} × ${fmt(p['heightMm'])} × ${fmt(p['thicknessMm'])} × ${fmt(p['lengthMm'])} mm'
         : null;
     final chips = <String>[
-      kinds[p['kind']] ?? '',
+      ?kinds[p['kind']],
       'NCM ${p['ncm']}',
       'Un. ${p['stockUnit']}',
       ?dims,
       if (p['netWeightKg'] != null) '${fmt(p['netWeightKg'])} kg',
-      if (p['drawingRevision'] != null) 'Desenho rev. ${p['drawingRevision']}',
-      if (p['processRevision'] != null) 'Processo rev. ${p['processRevision']}',
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -146,6 +169,10 @@ class _Summary extends StatelessWidget {
           if (p['blocked'] == true)
             Chip(label: const Text('Bloqueado'), backgroundColor: Theme.of(context).colorScheme.errorContainer, visualDensity: VisualDensity.compact),
           for (final c in chips) Chip(label: Text(c), visualDensity: VisualDensity.compact),
+          if (p['drawingRevision'] != null)
+            ActionChip(label: Text('Desenho rev. ${p['drawingRevision']}'), onPressed: onRevisions, visualDensity: VisualDensity.compact, tooltip: 'Ver histórico de revisões'),
+          if (p['processRevision'] != null)
+            ActionChip(label: Text('Processo rev. ${p['processRevision']}'), onPressed: onRevisions, visualDensity: VisualDensity.compact, tooltip: 'Ver histórico de revisões'),
         ],
       ),
     );
@@ -212,6 +239,7 @@ class _RoutingTabState extends State<RoutingTab> {
             (op == null ? await api.post('/api/products/${widget.productId}/routing', body) : await api.put('/api/routing-operations/${op['id']}', body))
                 as Map<String, dynamic>?,
         onDelete: op == null ? null : () => api.delete('/api/routing-operations/${op['id']}'),
+        deleteMessage: 'A operação e os itens dela saem do roteiro. Não dá para desfazer.',
       ),
     ));
   }
@@ -229,6 +257,7 @@ class _RoutingTabState extends State<RoutingTab> {
             (item == null ? await api.post('/api/routing-operations/${op['id']}/items', body) : await api.put('/api/bom-items/${item['id']}', body))
                 as Map<String, dynamic>?,
         onDelete: item == null ? null : () => api.delete('/api/bom-items/${item['id']}'),
+        deleteMessage: 'O item sai da estrutura desta operação. Não dá para desfazer.',
       ),
     ));
   }
@@ -243,7 +272,27 @@ class _RoutingTabState extends State<RoutingTab> {
           ? FloatingActionButton.extended(onPressed: _editOp, icon: const Icon(Icons.add), label: const Text('Operação'))
           : null,
       body: ops.isEmpty
-          ? const Center(child: Text('Sem operações no roteiro'))
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Sem operações no roteiro', textAlign: TextAlign.center),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Uma OF deste produto sai com um processo sugerido (perfilar, trefilar, endireitar e cortar, inspeção) que o PCP ajusta antes de liberar.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    if (canWrite) ...[
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(key: const ValueKey('routing-first'), onPressed: _editOp, icon: const Icon(Icons.add), label: const Text('Adicionar a primeira operação')),
+                    ],
+                  ],
+                ),
+              ),
+            )
           : ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 88), children: [for (final op in ops) _opCard(op)]),
     );
   }
@@ -293,6 +342,7 @@ class _RoutingTabState extends State<RoutingTab> {
                       const SizedBox(width: 8),
                       Expanded(child: Text('${it['code']}  ${it['description']}', overflow: TextOverflow.ellipsis)),
                       Text('${fmt(it['quantity'])} ${it['unit']}${it['factor'] != 1 ? ' × ${fmt(it['factor'])}' : ''}'),
+                      ..._itemLinks(context, widget.session, materialId: it['materialId'] as int?, productId: it['componentProductId'] as int?),
                     ],
                   ),
                 ),
@@ -304,11 +354,31 @@ class _RoutingTabState extends State<RoutingTab> {
   }
 }
 
+/// Small buttons after a BOM line: the stock of a material, the page of a component product.
+List<Widget> _itemLinks(BuildContext context, Session session, {int? materialId, int? productId}) => [
+  if (materialId != null)
+    IconButton(
+      tooltip: 'Saldo em estoque',
+      visualDensity: VisualDensity.compact,
+      iconSize: 18,
+      icon: const Icon(Icons.inventory_outlined),
+      onPressed: () => openItemStock(context, session, materialId: materialId),
+    ),
+  if (productId != null)
+    IconButton(
+      tooltip: 'Abrir componente',
+      visualDensity: VisualDensity.compact,
+      iconSize: 18,
+      icon: const Icon(Icons.open_in_new),
+      onPressed: () => openProduct(context, session, productId),
+    ),
+];
+
 /// BOM explosion tab.
 class ExplosionTab extends StatefulWidget {
-  const ExplosionTab({super.key, required this.api, required this.productId});
+  const ExplosionTab({super.key, required this.session, required this.productId});
 
-  final ApiClient api;
+  final Session session;
   final int productId;
 
   @override
@@ -338,7 +408,7 @@ class _ExplosionTabState extends State<ExplosionTab> {
     if (q == null || q <= 0) return setState(() => _error = 'Quantidade inválida');
     setState(() => _loading = true);
     try {
-      final r = await widget.api.get('/api/products/${widget.productId}/bom/explode', {'quantity': q});
+      final r = await widget.session.api.get('/api/products/${widget.productId}/bom/explode', {'quantity': q});
       if (mounted) {
         setState(() {
           _result = r as Map<String, dynamic>;
@@ -380,6 +450,7 @@ class _ExplosionTabState extends State<ExplosionTab> {
                 Expanded(child: Text('${l['code']}  ${l['description']}', overflow: TextOverflow.ellipsis)),
                 Text('Op ${l['operationSequence']}  ', style: theme.textTheme.bodySmall),
                 Text('${fmt(l['totalQuantity'])} ${l['unit']}'),
+                ..._itemLinks(context, widget.session, materialId: l['materialId'] as int?, productId: l['componentProductId'] as int?),
               ],
             ),
           ),
@@ -395,7 +466,13 @@ class _ExplosionTabState extends State<ExplosionTab> {
           ListTile(
             dense: true,
             title: Text('${m['code']}  ${m['description']}'),
-            trailing: Text('${fmt(m['totalQuantity'])} ${m['unit']}', style: theme.textTheme.titleSmall),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('${fmt(m['totalQuantity'])} ${m['unit']}', style: theme.textTheme.titleSmall),
+                ..._itemLinks(context, widget.session, materialId: m['materialId'] as int?),
+              ],
+            ),
           ),
         if (mats.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('Nenhum material')),
       ],
@@ -502,7 +579,14 @@ class _RevisionsTabState extends State<RevisionsTab> {
       body: FutureBuilder(
         future: _future,
         builder: (context, snap) {
-          if (snap.hasError) return Center(child: Text(friendlyError(snap.error!)));
+          if (snap.hasError) {
+            return LoadError(
+              message: friendlyError(snap.error!),
+              onRetry: () => setState(() {
+                _future = _fetch();
+              }),
+            );
+          }
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final rows = snap.data!;
           if (rows.isEmpty) return const Center(child: Text('Sem revisões'));

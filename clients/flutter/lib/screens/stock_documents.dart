@@ -10,8 +10,12 @@ import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/entity_form.dart';
+import '../widgets/load_error.dart';
+import '../widgets/pipeline.dart' show confirmStep;
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
+import 'stock_balances.dart';
+import 'suppliers.dart';
 
 const materialLookup = LookupSpec('/api/materials');
 const productLookup = LookupSpec('/api/products');
@@ -50,6 +54,8 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       query: {'type': _type},
       searchParam: 'reference',
       searchHint: 'Referência exata',
+      filtersActive: _type != null,
+      onClearFilters: () => setState(() => _type = null),
       filters: [ChoiceFilter(label: 'Tipo', value: _type, choices: movementTypes, onChanged: (v) => setState(() => _type = v))],
       fab: widget.session.canStock
           ? FloatingActionButton.extended(heroTag: 'new-doc', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo lançamento'))
@@ -75,6 +81,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
 Future<void> openStockDocument(BuildContext context, Session session, int id) =>
     pushRecord<void>(context, 'stock-document', id, (_) => DocumentScreen(session: session, id: id));
 
+/// Same page in the place of the one that calls it (the reversal that has just been posted for it).
+Future<void> replaceWithStockDocument(BuildContext context, Session session, int id) =>
+    replaceRecord<void>(context, 'stock-document', id, (_) => DocumentScreen(session: session, id: id));
+
 class DocumentScreen extends StatefulWidget {
   const DocumentScreen({super.key, required this.session, required this.id});
 
@@ -95,14 +105,19 @@ class _DocumentScreenState extends State<DocumentScreen> {
   }
 
   Future<void> _reverse() async {
-    final notes = await promptText(context, title: 'Estornar documento nº ${widget.id}', label: 'Motivo', confirmLabel: 'Estornar');
+    final notes = await promptText(
+      context,
+      title: 'Estornar documento nº ${widget.id}',
+      label: 'Motivo do estorno (as linhas voltam ao estoque)',
+      required: true,
+      confirmLabel: 'Estornar',
+    );
     if (notes == null || !mounted) return;
     final r = await runAction(context, () => widget.session.api.post('/api/stock/documents/${widget.id}/reverse', {'notes': notes}));
     if (r == null || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Estorno nº ${r['id']} lançado')));
-    setState(() {
-      _future = _fetch();
-    });
+    // The reversal is where the work goes on: Back from it leaves for the list, not for the document it just cancelled.
+    await replaceWithStockDocument(context, widget.session, r['id'] as int);
   }
 
   @override
@@ -115,10 +130,26 @@ class _DocumentScreenState extends State<DocumentScreen> {
         return Scaffold(
           appBar: AppBar(
             title: Text(d == null ? 'Documento nº ${widget.id}' : 'Nº ${d['id']} · ${movementTypes[d['type']] ?? d['type']}'),
-            actions: [if (canReverse) TextButton.icon(onPressed: _reverse, icon: const Icon(Icons.undo), label: const Text('Estornar'))],
+            actions: [
+              if (d != null)
+                RelatedMenu(
+                  links: [
+                    if (d['reversalOfId'] != null)
+                      RelatedLink(Icons.undo, 'Documento estornado: nº ${d['reversalOfId']}', () => openStockDocument(context, widget.session, d['reversalOfId'] as int)),
+                    if (d['supplierId'] != null)
+                      RelatedLink(Icons.business_outlined, 'Fornecedor: ${d['supplierName'] ?? '#${d['supplierId']}'}', () => openSupplier(context, widget.session, d['supplierId'] as int)),
+                  ],
+                ),
+              if (canReverse) TextButton.icon(onPressed: _reverse, icon: const Icon(Icons.undo), label: const Text('Estornar')),
+            ],
           ),
           body: snap.hasError
-              ? Center(child: Text(friendlyError(snap.error!)))
+              ? LoadError(
+                  message: friendlyError(snap.error!),
+                  onRetry: () => setState(() {
+                    _future = _fetch();
+                  }),
+                )
               : d == null
               ? const Center(child: CircularProgressIndicator())
               : ListView(padding: const EdgeInsets.all(16), children: [_documentSection(d), const SizedBox(height: 12), _movementsSection(d)]),
@@ -128,14 +159,24 @@ class _DocumentScreenState extends State<DocumentScreen> {
   }
 
   Widget _documentSection(Map<String, dynamic> d) {
+    final reversalOf = d['reversalOfId'] as int?;
     return Section(
       title: 'Documento',
+      actions: [
+        if (reversalOf != null)
+          TextButton.icon(
+            key: const ValueKey('doc-open-original'),
+            onPressed: () => openStockDocument(context, widget.session, reversalOf),
+            icon: const Icon(Icons.open_in_new, size: 18),
+            label: Text('Abrir nº $reversalOf'),
+          ),
+      ],
       child: InfoGrid([
         ('Data', fmtDay(d['date'])),
         ('Referência', fmt(d['reference'])),
         ('Fornecedor', fmt(d['supplierName'])),
         ('Lançado por', '${d['createdBy']} · ${fmtDate(d['createdAt'])}'),
-        ('Situação', d['reversed'] == true ? 'Estornado' : (d['reversalOfId'] != null ? 'Estorno do nº ${d['reversalOfId']}' : 'Ativo')),
+        ('Situação', d['reversed'] == true ? 'Estornado' : (reversalOf != null ? 'Estorno do nº $reversalOf' : 'Ativo')),
         ('Observações', fmt(d['notes'])),
       ]),
     );
@@ -156,6 +197,13 @@ class _DocumentScreenState extends State<DocumentScreen> {
           col('Reserva', 'reservationId'),
         ],
         rows: (d['movements'] as List).cast<Map<String, dynamic>>(),
+        actions: (e) => [
+          IconButton(
+            tooltip: 'Saldo de ${e['itemCode']}',
+            icon: const Icon(Icons.inventory_outlined, size: 20),
+            onPressed: () => openItemStock(context, widget.session, materialId: e['materialId'] as int?, productId: e['productId'] as int?),
+          ),
+        ],
       ),
     );
   }
@@ -208,17 +256,20 @@ List<FieldSpec> stockLineFields(String type) => [
 
 /// Form to post a stock document of a given type.
 class StockPostScreen extends StatefulWidget {
-  const StockPostScreen({super.key, required this.session, this.type = 'Issue'});
+  /// [type] is only a starting point a caller may offer (e.g. a shortcut for a receipt); without it the user picks, so a posting that
+  /// lowers stock is never one tap away by default.
+  const StockPostScreen({super.key, required this.session, this.type});
 
   final Session session;
-  final String type;
+  final String? type;
 
   @override
   State<StockPostScreen> createState() => _StockPostScreenState();
 }
 
 class _StockPostScreenState extends State<StockPostScreen> {
-  late String _type = widget.type;
+  late String? _type = widget.type;
+  final _scroll = ScrollController();
   final _date = TextEditingController(text: fmtDay(isoDate(DateTime.now())));
   final _reference = TextEditingController();
   final _notes = TextEditingController();
@@ -240,22 +291,80 @@ class _StockPostScreenState extends State<StockPostScreen> {
 
   @override
   void dispose() {
+    _scroll.dispose();
     _date.dispose();
     _reference.dispose();
     _notes.dispose();
     super.dispose();
   }
 
+  /// Shows a problem at the top of the form, where the user is looking after pressing the button in the app bar.
+  void _fail(String message) {
+    setState(() => _message = message);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) unawaited(_scroll.animateTo(0, duration: const Duration(milliseconds: 200), curve: Curves.easeOut));
+    });
+  }
+
+  /// The first thing wrong with a line, named by its number; null when the line can be sent.
+  String? _lineProblem(int i, Map<String, dynamic> l, String type) {
+    final n = 'Linha ${i + 1}';
+    final hasMaterial = l['materialId'] != null, hasProduct = l['productId'] != null;
+    if (!hasMaterial && !hasProduct) return '$n: informe o material ou o produto';
+    if (hasMaterial && hasProduct) return '$n: informe o material ou o produto, não os dois';
+    final q = l['quantity'];
+    if (q is! num || (type == 'InventoryCount' ? q < 0 : q <= 0)) return '$n: a quantidade deve ser maior que zero';
+    if (_paired.contains(type) && l['fromLocationId'] == null) return '$n: informe o local de origem';
+    if (l['locationId'] == null) return '$n: informe o local';
+    return null;
+  }
+
+  /// A change of type replaces the fields of every line, so lines already typed are dropped, after asking.
+  Future<void> _changeType(String? v) async {
+    if (v == null || v == _type) return;
+    if (_lines.isNotEmpty) {
+      final ok = await confirmStep(
+        context,
+        title: 'Trocar o tipo do lançamento?',
+        message: 'Os campos das linhas mudam de um tipo para outro. As ${_lines.length} linhas já digitadas serão descartadas.',
+        confirmLabel: 'Trocar e descartar',
+        icon: Icons.swap_horiz,
+      );
+      if (!ok || !mounted) return;
+    }
+    setState(() {
+      _type = v;
+      _lines = [];
+      _message = null;
+    });
+  }
+
   Future<void> _save() async {
+    final type = _type;
+    if (type == null) return _fail('Escolha o tipo do lançamento');
     final date = parseDate(_date.text);
-    if (date == null) return setState(() => _message = 'Data inválida (dd/mm/aaaa)');
-    if (_lines.isEmpty) return setState(() => _message = 'Inclua ao menos uma linha');
-    final keys = stockLineFields(_type).map((f) => f.key).toSet();
+    if (date == null) return _fail('Data inválida (dd/mm/aaaa)');
+    if (_lines.isEmpty) return _fail('Inclua ao menos uma linha');
+    for (final (i, l) in _lines.indexed) {
+      final problem = _lineProblem(i, l, type);
+      if (problem != null) return _fail(problem);
+    }
+    if (_outbound.contains(type)) {
+      final ok = await confirmStep(
+        context,
+        title: 'Lançar ${movementTypes[type]}?',
+        message: 'As ${_lines.length} linhas vão reduzir o saldo do estoque. Dá para estornar depois, pelo documento.',
+        confirmLabel: 'Lançar',
+        icon: Icons.outbox_outlined,
+      );
+      if (!ok || !mounted) return;
+    }
+    final keys = stockLineFields(type).map((f) => f.key).toSet();
     final body = {
-      'type': _type,
+      'type': type,
       'date': date,
       'reference': _reference.text.trim().isEmpty ? null : _reference.text.trim(),
-      'supplierId': _withSupplier.contains(_type) ? _supplierId : null,
+      'supplierId': _withSupplier.contains(type) ? _supplierId : null,
       'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       'lines': [for (final l in _lines) Map.fromEntries(stripLocal(l).entries.where((e) => keys.contains(e.key)))],
     };
@@ -269,7 +378,7 @@ class _StockPostScreenState extends State<StockPostScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Documento nº ${doc['id']} lançado')));
       Navigator.pop(context, doc);
     } on ApiException catch (e) {
-      setState(() => _message = describeError(e));
+      _fail(describeError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -307,8 +416,24 @@ class _StockPostScreenState extends State<StockPostScreen> {
         ],
       ),
       body: ListView(
+        controller: _scroll,
         padding: const EdgeInsets.all(16),
         children: [
+          if (_message != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Semantics(
+                liveRegion: true,
+                child: Row(
+                  key: const ValueKey('post-message'),
+                  children: [
+                    Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+                  ],
+                ),
+              ),
+            ),
           Wrap(
             spacing: 12,
             runSpacing: 12,
@@ -316,12 +441,12 @@ class _StockPostScreenState extends State<StockPostScreen> {
               SizedBox(
                 width: w,
                 child: DropdownButtonFormField<String>(
-                  key: const ValueKey('post-type'),
+                  key: ValueKey('post-type-$_type'),
                   initialValue: _type,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Tipo *', border: OutlineInputBorder(), isDense: true),
+                  decoration: const InputDecoration(labelText: 'Tipo *', hintText: 'Escolha o tipo', border: OutlineInputBorder(), isDense: true),
                   items: [for (final t in postableTypes) DropdownMenuItem(value: t, child: Text(movementTypes[t]!))],
-                  onChanged: (v) => setState(() => _type = v!),
+                  onChanged: _changeType,
                 ),
               ),
               SizedBox(
@@ -368,8 +493,10 @@ class _StockPostScreenState extends State<StockPostScreen> {
           LinesEditor(
             api: api,
             title: 'Linhas',
-            fields: stockLineFields(_type),
+            fields: stockLineFields(_type ?? ''),
             lines: _lines,
+            addEnabled: _type != null,
+            disabledHint: 'Escolha o tipo antes de incluir linhas',
             onChanged: (l) => setState(() => _lines = l),
             columns: [
               ColumnSpec('Item', (e) => e['materialId'] != null ? lbl(e, 'materialId') : lbl(e, 'productId')),
@@ -380,11 +507,6 @@ class _StockPostScreenState extends State<StockPostScreen> {
               if (_valued.contains(_type)) col('Custo', 'unitCost', numeric: true),
             ],
           ),
-          if (_message != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            ),
         ],
       ),
     ));

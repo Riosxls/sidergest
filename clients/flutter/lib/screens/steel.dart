@@ -11,6 +11,7 @@ import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
 import 'sales_common.dart';
+import 'suppliers.dart';
 
 const _supplierLookup = LookupSpec('/api/suppliers');
 const _lotLookup = LookupSpec('/api/steel/lots');
@@ -149,6 +150,13 @@ class _SteelScreenState extends State<SteelScreen> {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+            child: Text(
+              'Controle próprio das bobinas de aço (compra, slitter e uso interno). Não são os lotes de estoque de "Lotes e inspeção".',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ),
           Expanded(
             child: TabBarView(children: [_lotsTab(), _jobsTab(), _usagesTab()]),
           ),
@@ -275,7 +283,10 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
         _error = null;
       });
     } catch (e) {
-      if (mounted) setState(() => _error = friendlyError(e));
+      if (!mounted) return;
+      // With a lot already on screen the page keeps it, so the failure is said out loud instead of staying invisible.
+      if (_lot != null) showError(context, e);
+      setState(() => _error = friendlyError(e));
     }
   }
 
@@ -309,7 +320,7 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
       await api.delete(base);
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) showError(context, e is ApiException ? describeError(e) : e);
+      if (mounted) showError(context, e);
     }
   }
 
@@ -352,10 +363,10 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
     if (r != null) unawaited(_load());
   }
 
-  Future<void> _deleteChild(String path, String what) async {
+  Future<void> _deleteChild(String path, String what, String done) async {
     if (!await confirmStep(context, title: 'Remover $what?', message: 'O saldo do lote é recalculado.', confirmLabel: 'Remover', danger: true)) return;
     if (!mounted) return;
-    await runAction(context, () => api.delete(path));
+    await runAction(context, () => api.delete(path), success: done);
     unawaited(_load());
   }
 
@@ -393,6 +404,8 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
       appBar: AppBar(
         title: Text(l == null ? 'Lote de aço' : '${l['lotCode']} · ${l['supplierName']}', overflow: TextOverflow.ellipsis),
         actions: [
+          if (l != null && l['supplierId'] is int)
+            RelatedMenu(links: [RelatedLink(Icons.business_outlined, 'Fornecedor: ${l['supplierName']}', () => openSupplier(context, s, l['supplierId'] as int))]),
           if (l != null && s.canSteel)
             PopupMenuButton<VoidCallback>(
               key: const ValueKey('lot-menu'),
@@ -508,16 +521,24 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
         moneyCol('Serviço', 'serviceCost'),
       ],
       rows: _jobs,
-      actions: s.canSteel
+      actions: s.canSteel || _jobs.any((j) => j['processorId'] is int)
           ? (j) => [
-              if (j['returned'] != true)
+              if (j['processorId'] is int)
+                IconButton(
+                  tooltip: 'Abrir ${j['processorName']}',
+                  icon: const Icon(Icons.business_outlined, size: 20),
+                  onPressed: () => openSupplier(context, s, j['processorId'] as int),
+                ),
+              if (s.canSteel && j['returned'] != true)
                 TextButton(key: ValueKey('job-return-${j['id']}'), onPressed: () => _returnJob(j), child: const Text('Registrar retorno')),
-              IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _editJob(j)),
-              IconButton(
-                tooltip: 'Remover',
-                icon: const Icon(Icons.delete_outline, size: 20),
-                onPressed: () => _deleteChild('/api/steel/slitter/${j['id']}', 'remessa'),
-              ),
+              if (s.canSteel) ...[
+                IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _editJob(j)),
+                IconButton(
+                  tooltip: 'Remover',
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  onPressed: () => _deleteChild('/api/steel/slitter/${j['id']}', 'remessa', 'Remessa removida'),
+                ),
+              ],
             ]
           : null,
     ),
@@ -544,7 +565,7 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
               IconButton(
                 tooltip: 'Remover',
                 icon: const Icon(Icons.delete_outline, size: 20),
-                onPressed: () => _deleteChild('/api/steel/usages/${u['id']}', 'consumo'),
+                onPressed: () => _deleteChild('/api/steel/usages/${u['id']}', 'consumo', 'Consumo removido'),
               ),
             ]
           : null,

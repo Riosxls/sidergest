@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api.dart';
 import '../entities.dart';
 import '../session.dart';
+import '../widgets/load_error.dart';
 import 'product_detail.dart';
 
 /// Shows where an item is used in BOMs.
@@ -26,7 +27,14 @@ class _WhereUsedViewState extends State<WhereUsedView> {
     return FutureBuilder(
       future: _future,
       builder: (context, snap) {
-        if (snap.hasError) return Center(child: Text(friendlyError(snap.error!)));
+        if (snap.hasError) {
+          return LoadError(
+            message: friendlyError(snap.error!),
+            onRetry: () => setState(() {
+              _future = _fetch();
+            }),
+          );
+        }
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final rows = snap.data!;
         if (rows.isEmpty) return const Center(child: Text('Não é usado em nenhuma estrutura'));
@@ -42,6 +50,7 @@ class _WhereUsedViewState extends State<WhereUsedView> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () async {
                 await openProduct(context, widget.session, r['productId'] as int);
+                if (!mounted) return;
                 setState(() {
                   _future = _fetch();
                 });

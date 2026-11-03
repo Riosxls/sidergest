@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show TextInputFormatter, TextEditingValue;
 
 import '../api.dart';
 import '../entities.dart';
 import '../workdays.dart';
 import 'discard_guard.dart';
 import 'drafts.dart';
+import 'pipeline.dart' show confirmStep;
 
 Future<Map<String, dynamic>?> showEntityForm(
   BuildContext context, {
@@ -17,11 +19,13 @@ Future<Map<String, dynamic>?> showEntityForm(
   Map<String, dynamic>? initial,
   required Future<Map<String, dynamic>?> Function(Map<String, dynamic> body) onSubmit,
   Future<void> Function()? onDelete,
+  String? deleteMessage,
   bool readOnly = false,
 }) => showDialog<Map<String, dynamic>>(
   context: context,
   barrierDismissible: true, // backdrop click and Esc ask before discarding edits (DiscardGuard)
-  builder: (_) => EntityFormDialog(api: api, title: title, fields: fields, initial: initial, onSubmit: onSubmit, onDelete: onDelete, readOnly: readOnly),
+  builder: (_) =>
+      EntityFormDialog(api: api, title: title, fields: fields, initial: initial, onSubmit: onSubmit, onDelete: onDelete, deleteMessage: deleteMessage, readOnly: readOnly),
 );
 
 Future<bool> confirm(BuildContext context, String message) async =>
@@ -51,6 +55,7 @@ class EntityFormDialog extends StatefulWidget {
     this.initial,
     required this.onSubmit,
     this.onDelete,
+    this.deleteMessage,
     this.readOnly = false,
   });
 
@@ -60,6 +65,9 @@ class EntityFormDialog extends StatefulWidget {
   final Map<String, dynamic>? initial;
   final Future<Map<String, dynamic>?> Function(Map<String, dynamic> body) onSubmit;
   final Future<void> Function()? onDelete;
+
+  /// What the delete confirmation says is lost; its title names the record.
+  final String? deleteMessage;
   final bool readOnly;
 
   @override
@@ -211,7 +219,15 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
   }
 
   Future<void> _delete() async {
-    if (!await confirm(context, 'Excluir este registro?')) return;
+    final ok = await confirmStep(
+      context,
+      title: 'Excluir ${widget.title}?',
+      message: widget.deleteMessage ?? 'O registro é apagado definitivamente. Não dá para desfazer.',
+      confirmLabel: 'Excluir',
+      icon: Icons.delete_outline,
+      danger: true,
+    );
+    if (!ok || !mounted) return;
     setState(() => _busy = true);
     try {
       await widget.onDelete!();
@@ -278,8 +294,10 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
         return TextField(
           key: ValueKey('field-${f.key}'),
           controller: _text[f.key],
-          readOnly: widget.readOnly,
+          readOnly: widget.readOnly || (f.lockWhenEditing && widget.initial?['id'] != null),
           obscureText: f.obscure,
+          inputFormatters: f.uppercase ? [_UpperCase()] : null,
+          textCapitalization: f.uppercase ? TextCapitalization.characters : TextCapitalization.none,
           keyboardType: f.type == FieldType.text
               ? TextInputType.text
               : (f.type == FieldType.date || f.type == FieldType.time ? TextInputType.datetime : const TextInputType.numberWithOptions(decimal: true)),
@@ -462,6 +480,11 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
           );
     return widget.readOnly ? dialog : DiscardGuard(isDirty: () => _signature() != _initial, child: dialog);
   }
+}
+
+class _UpperCase extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue old, TextEditingValue value) => value.copyWith(text: value.text.toUpperCase());
 }
 
 /// Form field that picks a related record through a [LookupPicker] and shows its display name.

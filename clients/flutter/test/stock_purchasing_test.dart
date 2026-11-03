@@ -25,6 +25,8 @@ Map<String, dynamic> page(List<Map<String, dynamic>> items) => {'items': items, 
 class Fake {
   final log = <http.Request>[];
   String role = 'Stock';
+  bool inspectionFails = false;
+  final reservations = <Map<String, dynamic>>[];
 
   final material = {'id': 4, 'code': 'BOB-15', 'description': 'Bobina 1,5mm', 'stockUnit': 'KG', 'purchaseUnit': 'KG'};
   final location = {'id': 1, 'code': 'ALM', 'name': 'Almoxarifado', 'kind': 'Internal', 'active': true};
@@ -259,6 +261,8 @@ class Fake {
 
   http.Request last(String method, String path) => log.lastWhere((r) => r.method == method && r.url.path == path);
 
+  bool has(String method, String path) => log.any((r) => r.method == method && r.url.path == path);
+
   MockClient get client => MockClient((r) async {
     log.add(r);
     final p = r.url.path;
@@ -278,16 +282,22 @@ class Fake {
     }
     if (p == '/api/stock/documents') return json(page([]));
     if (p == '/api/stock/documents/50') return json(doc);
+    if (p == '/api/stock/documents/51') return json({...doc, 'id': 51, 'type': 'Reversal', 'reversalOfId': 50, 'reversed': false});
     if (p == '/api/stock/documents/50/reverse') {
       doc['reversed'] = true;
       return json({...doc, 'id': 51, 'type': 'Reversal', 'reversalOfId': 50, 'reversed': false}, 201);
     }
     if (p == '/api/stock/lots') return json(page(q['status'] == null || q['status'] == lot['status'] ? [lot] : []));
     if (p == '/api/stock/lots/3/inspection') {
+      if (inspectionFails) return json({'title': 'Lote já inspecionado por outro usuário'}, 409);
       lot['status'] = body(r)['status'];
       return json(lot);
     }
-    if (p == '/api/stock/reservations') return json(page([]));
+    if (p == '/api/stock/availability') {
+      return json({'onHand': 10, 'released': 10, 'blocked': 0, 'atThirdParty': 0, 'reserved': 0, 'free': 10, 'averageCost': 5.5, 'byLocation': <Object>[]});
+    }
+    if (p == '/api/purchasing/materials/4/history') return json(<Object>[]);
+    if (p == '/api/stock/reservations') return json(page(reservations));
     if (p == '/api/stock/closings') {
       return json([
         {'period': 202609, 'closedBy': 'est', 'closedAt': '2026-10-02T10:00:00Z'},
@@ -432,6 +442,15 @@ void main() {
     await tester.tap(find.text('Novo lançamento'));
     await tester.pumpAndSettle();
 
+    // No type is chosen for the user: a posting that lowers stock is never one tap away by default.
+    await tester.tap(find.byKey(const ValueKey('post-stock')));
+    await tester.pumpAndSettle();
+    expect(find.text('Escolha o tipo do lançamento'), findsOneWidget);
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Requisição (consumo)').last);
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const ValueKey('post-stock')));
     await tester.pumpAndSettle();
     expect(find.text('Inclua ao menos uma linha'), findsOneWidget);
@@ -448,6 +467,11 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('post-stock')));
     await tester.pumpAndSettle();
+    // A posting that lowers stock asks first.
+    expect(find.text('Lançar Requisição (consumo)?'), findsOneWidget);
+    expect(fake.has('POST', '/api/stock/documents'), isFalse);
+    await tester.tap(find.byKey(const ValueKey('confirm-step')));
+    await tester.pumpAndSettle();
     final b = fake.body(fake.last('POST', '/api/stock/documents'));
     expect(b['type'], 'Issue');
     expect(b['reference'], 'OP-1');
@@ -459,11 +483,18 @@ void main() {
     expect(find.text('L-3'), findsOneWidget);
     await tester.tap(find.text('Estornar'));
     await tester.pumpAndSettle();
+    // The reason is required.
+    await tester.tap(find.widgetWithText(FilledButton, 'Estornar'));
+    await tester.pumpAndSettle();
+    expect(fake.has('POST', '/api/stock/documents/50/reverse'), isFalse);
     await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Lançado errado');
     await tester.tap(find.widgetWithText(FilledButton, 'Estornar'));
     await tester.pumpAndSettle();
     expect(fake.body(fake.last('POST', '/api/stock/documents/50/reverse'))['notes'], 'Lançado errado');
+    // The reversal opens in place of the cancelled document, which stays one tap away.
+    expect(find.text('Nº 51 · Estorno'), findsOneWidget);
     expect(find.text('Estornar'), findsNothing);
+    expect(find.byKey(const ValueKey('doc-open-original')), findsOneWidget);
   });
 
   testWidgets('quarantine lot is released by inspection', (tester) async {
@@ -487,7 +518,8 @@ void main() {
     expect(find.text('5,3333'), findsOneWidget);
     await tester.tap(find.text('Fechar mês'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Confirmar'));
+    expect(find.text('Fechar 10/2026?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('confirm-step')));
     await tester.pumpAndSettle();
     expect(fake.last('POST', '/api/stock/closings/202610'), isNotNull);
     expect(find.text('Reabrir 09/2026'), findsNothing);

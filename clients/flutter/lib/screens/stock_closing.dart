@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../entities.dart';
@@ -5,6 +7,7 @@ import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/page_column.dart';
+import '../widgets/pipeline.dart' show confirmStep;
 import '../widgets/record_list.dart';
 
 int? parsePeriod(String s) {
@@ -34,11 +37,31 @@ class _ClosingScreenState extends State<ClosingScreen> {
   String? _error;
   bool _busy = false;
 
+  /// Period of the rows on screen, when they are a preview or the stored costs of that period.
+  int? _shownPeriod;
+
   @override
   void initState() {
     super.initState();
     _loadClosings(setDefault: true);
   }
+
+  /// Another tab (a posted document, a reversal) changed the movements: whatever was calculated here is old.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final active = TickerMode.valuesOf(context).enabled;
+    if (active && !_wasActive && _rows != null && !_busy) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_loadClosings());
+        if (_mode.startsWith('Prévia')) unawaited(_preview());
+      });
+    }
+    _wasActive = active;
+  }
+
+  bool _wasActive = true;
 
   @override
   void dispose() {
@@ -78,6 +101,7 @@ class _ClosingScreenState extends State<ClosingScreen> {
         setState(() {
           _rows = rows;
           _mode = '$mode ${fmtPeriod(p)}';
+          _shownPeriod = p;
         });
       }
     } catch (e) {
@@ -87,6 +111,14 @@ class _ClosingScreenState extends State<ClosingScreen> {
     }
   }
 
+  /// Tries again what failed: the list of closings (nothing loaded yet) or the preview.
+  Future<void> _retry() async {
+    setState(() => _error = null);
+    if (_period.text.trim().isEmpty) return _loadClosings(setDefault: true);
+    await _loadClosings();
+    if (mounted && _error == null) await _preview();
+  }
+
   Future<void> _preview() => _fetch('Prévia', '/api/stock/average-costs/preview', {});
 
   Future<void> _view() => _fetch('Custos gravados', '/api/stock/average-costs', {});
@@ -94,8 +126,20 @@ class _ClosingScreenState extends State<ClosingScreen> {
   Future<void> _close() async {
     final p = parsePeriod(_period.text);
     if (p == null) return setState(() => _error = 'Período inválido (mm/aaaa)');
-    if (!await confirm(context, 'Fechar ${fmtPeriod(p)}? O mês não aceitará novos lançamentos nem estornos.')) return;
-    if (!mounted) return;
+    // Closing is only offered on figures the user has seen: a period typed after the last preview gets its own preview first.
+    if (_shownPeriod != p || !_mode.startsWith('Prévia')) {
+      await _preview();
+      if (!mounted || _shownPeriod != p || _error != null) return;
+    }
+    final count = _rows?.length ?? 0;
+    final ok = await confirmStep(
+      context,
+      title: 'Fechar ${fmtPeriod(p)}?',
+      message: 'A prévia acima tem $count linhas de custo médio e passa a valer. O mês não aceitará novos lançamentos nem estornos.',
+      confirmLabel: 'Fechar ${fmtPeriod(p)}',
+      icon: Icons.lock_outline,
+    );
+    if (!ok || !mounted) return;
     final r = await runAction(context, () => widget.session.api.post('/api/stock/closings/$p', {}), success: 'Mês ${fmtPeriod(p)} fechado');
     if (r == null) return;
     await _loadClosings();
@@ -104,8 +148,15 @@ class _ClosingScreenState extends State<ClosingScreen> {
 
   Future<void> _reopen() async {
     final p = _last!;
-    if (!await confirm(context, 'Reabrir ${fmtPeriod(p)}? Os custos médios do mês serão descartados.')) return;
-    if (!mounted) return;
+    final ok = await confirmStep(
+      context,
+      title: 'Reabrir ${fmtPeriod(p)}?',
+      message: 'Os custos médios do mês são descartados e o mês volta a aceitar lançamentos e estornos. Feche-o de novo depois de corrigir.',
+      confirmLabel: 'Reabrir ${fmtPeriod(p)}',
+      icon: Icons.lock_open,
+      danger: true,
+    );
+    if (!ok || !mounted) return;
     await runAction(context, () => widget.session.api.delete('/api/stock/closings/$p'), success: 'Mês ${fmtPeriod(p)} reaberto');
     _period.text = fmtPeriod(p);
     await _loadClosings();
@@ -120,7 +171,7 @@ class _ClosingScreenState extends State<ClosingScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Section(
-          title: 'Fechamento mensal e custo médio',
+          title: 'Período',
           child: Wrap(
             spacing: 12,
             runSpacing: 12,
@@ -132,6 +183,7 @@ class _ClosingScreenState extends State<ClosingScreen> {
                   key: const ValueKey('closing-period'),
                   controller: _period,
                   decoration: const InputDecoration(labelText: 'Período', hintText: 'mm/aaaa', border: OutlineInputBorder(), isDense: true),
+                  onSubmitted: (_) => _busy ? null : _preview(),
                 ),
               ),
               OutlinedButton.icon(onPressed: _busy ? null : _preview, icon: const Icon(Icons.calculate_outlined), label: const Text('Prévia')),
@@ -151,7 +203,17 @@ class _ClosingScreenState extends State<ClosingScreen> {
         if (_error != null)
           Padding(
             padding: const EdgeInsets.all(8),
-            child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            child: Semantics(
+              liveRegion: true,
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+                  TextButton(key: const ValueKey('closing-retry'), onPressed: _busy ? null : _retry, child: const Text('Tentar novamente')),
+                ],
+              ),
+            ),
           ),
         if (rows != null) ...[
           const SizedBox(height: 12),
@@ -173,6 +235,14 @@ class _ClosingScreenState extends State<ClosingScreen> {
                 ColumnSpec('Importado', (e) => e['imported'] == true ? 'Sim' : ''),
               ],
               rows: rows,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: Text(
+              'Médio do mês: custo médio das entradas do mês (compras e serviços, com a sucata). Médio: média ponderada entre o saldo anterior e o mês, '
+              'sem o ICMS quando a configuração manda deduzir. Médio bruto: a mesma média com o ICMS incluído.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
         ],

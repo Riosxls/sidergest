@@ -7,7 +7,9 @@ import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/record_list.dart';
+import 'stock_balances.dart';
 import 'stock_documents.dart';
+import 'suppliers.dart';
 
 /// Stock lots list.
 class LotsView extends StatefulWidget {
@@ -33,6 +35,8 @@ class _LotsViewState extends State<LotsView> {
       path: '/api/stock/lots',
       query: {...widget.query, 'status': _status},
       searchHint: 'Lote, NF ou corrida (exato)',
+      filtersActive: _status != null,
+      onClearFilters: () => setState(() => _status = null),
       filters: [ChoiceFilter(label: 'Situação', value: _status, choices: lotStatuses, onChanged: (v) => setState(() => _status = v))],
       enrich: (items) => NameCache.attachSupplier(api, items),
       columns: [
@@ -53,50 +57,111 @@ class _LotsViewState extends State<LotsView> {
 }
 
 Future<void> showLotDialog(BuildContext context, Session session, Map<String, dynamic> lot) async {
-  Future<void> inspect(BuildContext ctx, String status) async {
-    String? note;
-    if (status != 'Released') {
-      note = await promptText(
-        ctx,
-        title: status == 'Rejected' ? 'Rejeitar lote ${lot['code']}' : 'Voltar lote ${lot['code']} para quarentena',
-        label: 'Laudo / motivo',
-        required: status == 'Rejected',
-      );
-      if (note == null) return;
-    }
-    if (!ctx.mounted) return;
-    final r = await runAction(
-      ctx,
-      () => session.api.put('/api/stock/lots/${lot['id']}/inspection', {'status': status, 'note': note}),
-      success: 'Lote ${lot['code']}: ${lotStatuses[status]}',
-    );
-    if (r != null && ctx.mounted) Navigator.pop(ctx);
-  }
-
+  String? error;
+  var busy = false;
   await showDialog<void>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text('Lote ${lot['code']} · ${lot['itemCode']}'),
-      content: SizedBox(
-        width: 480,
-        child: InfoGrid([
-          ('Situação', lotStatuses[lot['status']] ?? fmt(lot['status'])),
-          ('Quantidade', fmt(lot['quantity'])),
-          ('Recebido em', fmtDay(lot['receivedOn'])),
-          ('Fornecedor', fmt(lot['supplierName'])),
-          ('NF', fmt(lot['invoiceNumber'])),
-          ('Corrida', fmt(lot['heatNumber'])),
-          ('Inspecionado por', lot['inspectedBy'] == null ? '' : '${lot['inspectedBy']} · ${fmtDate(lot['inspectedAt'])}'),
-          ('Laudo', fmt(lot['inspectionNote'])),
-        ]),
-      ),
-      actions: [
-        if (session.canStock && lot['status'] != 'Released')
-          FilledButton(key: const ValueKey('lot-release'), onPressed: () => inspect(ctx, 'Released'), child: const Text('Liberar')),
-        if (session.canStock && lot['status'] != 'Rejected') TextButton(onPressed: () => inspect(ctx, 'Rejected'), child: const Text('Rejeitar')),
-        if (session.canStock && lot['status'] != 'Quarantine') TextButton(onPressed: () => inspect(ctx, 'Quarantine'), child: const Text('Quarentena')),
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fechar')),
-      ],
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, set) {
+        Future<void> inspect(String status) async {
+          String? note;
+          if (status != 'Released') {
+            note = await promptText(
+              ctx,
+              title: status == 'Rejected' ? 'Rejeitar lote ${lot['code']}' : 'Voltar lote ${lot['code']} para quarentena',
+              label: 'Laudo / motivo',
+              required: status == 'Rejected',
+            );
+            if (note == null) return;
+          }
+          if (!ctx.mounted) return;
+          set(() {
+            busy = true;
+            error = null;
+          });
+          try {
+            await session.api.put('/api/stock/lots/${lot['id']}/inspection', {'status': status, 'note': note});
+            if (!ctx.mounted) return;
+            Navigator.pop(ctx);
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lote ${lot['code']}: ${lotStatuses[status]}')));
+          } catch (e) {
+            // The failure is shown where the user is looking: a snackbar would sit behind the dialog.
+            if (ctx.mounted) {
+              set(() {
+                busy = false;
+                error = friendlyError(e);
+              });
+            }
+          }
+        }
+
+        void open(Future<void> Function() go) {
+          Navigator.pop(ctx);
+          unawaited(go());
+        }
+
+        final itemId = (lot['materialId'] ?? lot['productId']) as int?;
+        return AlertDialog(
+          title: Text('Lote ${lot['code']} · ${lot['itemCode']}'),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: InfoGrid([
+                      ('Situação', lotStatuses[lot['status']] ?? fmt(lot['status'])),
+                      ('Quantidade', fmt(lot['quantity'])),
+                      ('Recebido em', fmtDay(lot['receivedOn'])),
+                      ('Fornecedor', fmt(lot['supplierName'])),
+                      ('NF', fmt(lot['invoiceNumber'])),
+                      ('Corrida', fmt(lot['heatNumber'])),
+                      ('Inspecionado por', lot['inspectedBy'] == null ? '' : '${lot['inspectedBy']} · ${fmtDate(lot['inspectedAt'])}'),
+                      ('Laudo', fmt(lot['inspectionNote'])),
+                    ]),
+                  ),
+                ),
+                if (itemId != null || lot['supplierId'] != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Wrap(
+                      spacing: 8,
+                      children: [
+                        if (itemId != null)
+                          TextButton.icon(
+                            key: const ValueKey('lot-open-item'),
+                            onPressed: () => open(() => openItemStock(context, session, materialId: lot['materialId'] as int?, productId: lot['productId'] as int?)),
+                            icon: const Icon(Icons.inventory_outlined, size: 18),
+                            label: const Text('Ver saldo do item'),
+                          ),
+                        if (lot['supplierId'] != null)
+                          TextButton.icon(
+                            onPressed: () => open(() => openSupplier(context, session, lot['supplierId'] as int)),
+                            icon: const Icon(Icons.business_outlined, size: 18),
+                            label: const Text('Ver fornecedor'),
+                          ),
+                      ],
+                    ),
+                  ),
+                if (error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Semantics(liveRegion: true, child: Text(error!, key: const ValueKey('lot-error'), style: TextStyle(color: Theme.of(ctx).colorScheme.error))),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            if (session.canStock && lot['status'] != 'Released')
+              FilledButton(key: const ValueKey('lot-release'), onPressed: busy ? null : () => inspect('Released'), child: const Text('Liberar')),
+            if (session.canStock && lot['status'] != 'Rejected') TextButton(onPressed: busy ? null : () => inspect('Rejected'), child: const Text('Rejeitar')),
+            if (session.canStock && lot['status'] != 'Quarantine') TextButton(onPressed: busy ? null : () => inspect('Quarantine'), child: const Text('Quarentena')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fechar')),
+          ],
+        );
+      },
     ),
   );
 }
@@ -137,11 +202,41 @@ class _ReservationsViewState extends State<ReservationsView> {
     if (r != null) unawaited(_list.currentState?.reload());
   }
 
-  Future<void> _open(Map<String, dynamic> e) async {
-    if (!widget.session.canStock || e['status'] != 'Open') return;
+  bool _canRelease(Map<String, dynamic> e) => widget.session.canStock && e['status'] == 'Open';
+
+  Future<void> _release(Map<String, dynamic> e) async {
     if (!await confirm(context, 'Liberar o saldo restante (${fmt(e['remaining'])}) da reserva ${e['reference']}?')) return;
     if (!mounted) return;
     await runAction(context, () => widget.session.api.post('/api/stock/reservations/${e['id']}/release', {}), success: 'Reserva liberada');
+  }
+
+  /// A reservation opens its details; releasing the balance is a button there and an entry of the row menu.
+  Future<void> _open(Map<String, dynamic> e) async {
+    final release = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Reserva ${e['reference']}'),
+        content: SizedBox(
+          width: 440,
+          child: InfoGrid([
+            ('Item', fmt(e['itemCode'])),
+            ('Local', fmt(e['locationCode'])),
+            ('Situação', reservationStatuses[e['status']] ?? fmt(e['status'])),
+            ('Quantidade', fmt(e['quantity'])),
+            ('Consumido', fmt(e['consumed'])),
+            ('Restante', fmt(e['remaining'])),
+            ('Necessário em', e['neededOn'] == null ? '' : fmtDay(e['neededOn'])),
+            ('Criada por', '${fmt(e['createdBy'])} · ${fmtDate(e['createdAt'])}'),
+          ]),
+        ),
+        actions: [
+          if (_canRelease(e))
+            FilledButton(key: const ValueKey('reservation-release'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Liberar saldo restante')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Fechar')),
+        ],
+      ),
+    );
+    if (release == true && mounted) await _release(e);
   }
 
   @override
@@ -154,6 +249,8 @@ class _ReservationsViewState extends State<ReservationsView> {
       query: {...widget.query, 'status': _status},
       searchParam: 'reference',
       searchHint: 'Referência exata',
+      filtersActive: _status != null,
+      onClearFilters: () => setState(() => _status = null),
       filters: [ChoiceFilter(label: 'Situação', value: _status, choices: reservationStatuses, onChanged: (v) => setState(() => _status = v))],
       fab: widget.session.canStock
           ? FloatingActionButton.extended(heroTag: 'new-res', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Nova reserva'))
@@ -172,6 +269,11 @@ class _ReservationsViewState extends State<ReservationsView> {
         labelCol('Situação', 'status', reservationStatuses),
         dateCol('Necessário em', 'neededOn'),
         col('Criada por', 'createdBy'),
+      ],
+      rowActions: (e) => [
+        if (_canRelease(e)) RowAction('Liberar saldo', Icons.lock_open_outlined, () => _release(e)),
+        if ((e['materialId'] != null || e['productId'] != null) && widget.query['materialId'] == null && widget.query['productId'] == null)
+          RowAction('Saldo do item', Icons.inventory_outlined, () => openItemStock(context, widget.session, materialId: e['materialId'] as int?, productId: e['productId'] as int?)),
       ],
       onTap: _open,
     );

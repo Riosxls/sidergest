@@ -568,10 +568,9 @@ class RecordListState extends State<RecordList> {
       elevation: 1,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        // The arrows sit on the left: the floating "novo" button covers the bottom right corner.
         child: Row(
           children: [
-            Text('$from–$to de ${page.total}'),
-            const Spacer(),
             IconButton(
               tooltip: 'Anterior',
               onPressed: _skip == 0
@@ -592,6 +591,9 @@ class RecordListState extends State<RecordList> {
                     },
               icon: const Icon(Icons.chevron_right),
             ),
+            const SizedBox(width: 8),
+            Text('$from–$to de ${page.total}'),
+            const Spacer(),
           ],
         ),
       ),
