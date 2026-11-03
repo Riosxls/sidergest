@@ -47,12 +47,21 @@ Future<bool> newCertificate(BuildContext context, Session session, Map<String, d
   }
   final c = await runAction(context, () => api.post('/api/sales/certificates', {'orderId': order['id'], 'orderLineId': lineId, 'deliveryId': deliveryId}));
   if (c is! Map<String, dynamic> || !context.mounted) return false;
-  await Navigator.of(context).push(
+  final saved = await Navigator.of(context).push<Map<String, dynamic>>(
     MaterialPageRoute(
       builder: (_) => CertificateEditorScreen(session: session, certificate: c),
     ),
   );
-  return true;
+  if (saved != null) return true;
+  // Backed out without saving: the draft only exists because the server numbered it, so it goes away (and frees the number when it is the last).
+  try {
+    await api.delete('/api/sales/certificates/${c['id']}');
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Rascunho ${c['reference']} descartado: nada foi salvo')));
+    return false;
+  } catch (e) {
+    debugPrint('certificates: The draft stays and can be deleted from its page: $e');
+    return true;
+  }
 }
 
 /// List of quality certificates with filters.

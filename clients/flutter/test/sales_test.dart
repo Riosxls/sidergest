@@ -554,6 +554,29 @@ void main() {
     expect(find.byKey(const ValueKey('quote-convert')), findsNothing);
   });
 
+  testWidgets('steps of the path open the record they stand for', (tester) async {
+    final fake = SalesFake()..quoteStatus = 'Converted';
+    await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+    // Only the step that lives on another page is a button.
+    expect(find.byTooltip('Abrir: Pedido de venda'), findsOneWidget);
+    expect(find.byTooltip('Abrir: Orçamento'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('path-tap-4')));
+    await tester.pumpAndSettle();
+    expect(find.text('PV 9 · BTS Tubos'), findsOneWidget);
+    // From the order, the early steps open the quote it came from.
+    await tester.tap(find.byKey(const ValueKey('path-tap-0')));
+    await tester.pumpAndSettle();
+    expect(find.text('Convertida em pedido'), findsOneWidget);
+  });
+
+  testWidgets('the link menu of an order and of a quote leads to each other', (tester) async {
+    final fake = SalesFake()..quoteStatus = 'Converted';
+    await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
+    await tester.tap(find.byIcon(Icons.link));
+    await tester.pumpAndSettle();
+    expect(find.text('Pedido de venda PV 9'), findsOneWidget);
+  });
+
   testWidgets('order release without stock, then plan a delivery', (tester) async {
     final fake = SalesFake();
     await pumpScreen(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
@@ -587,6 +610,8 @@ void main() {
       ..waived = true;
     await pumpScreen(tester, fake, (s) => DeliveryScreen(session: s, id: 15));
     await tester.tap(find.byKey(const ValueKey('delivery-ship')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('form-more')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('field-invoiceNumber')), '2581');
     await tester.enterText(find.byKey(const ValueKey('field-lotNumber')), 'L-77');

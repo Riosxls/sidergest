@@ -162,11 +162,11 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       fields: [
         FieldSpec('date', 'Data de saída', type: FieldType.date, required: true, defaultValue: isoDate(DateTime.now())),
         const FieldSpec('invoiceNumber', 'Nº da NF', hint: 'Vazio = emitir a NF-e automaticamente (emissor ligado); preencha só se a NF foi emitida fora'),
-        const FieldSpec('cfop', 'CFOP', hint: 'Vazio = CFOP do endereço de entrega ou 5101'),
-        const FieldSpec('freight', 'Frete na NF (R\$)', type: FieldType.decimal),
-        const FieldSpec('lotNumber', 'Nº do lote'),
-        const FieldSpec('invoicedValue', 'Valor faturado (R\$)', type: FieldType.decimal, hint: 'Total da NF, com impostos'),
-        FieldSpec('grossWeightKg', 'Peso bruto (kg)', type: FieldType.decimal, defaultValue: d['grossWeightKg']),
+        const FieldSpec('cfop', 'CFOP', advanced: true, hint: 'Vazio = CFOP do endereço de entrega ou 5101'),
+        const FieldSpec('freight', 'Frete na NF (R\$)', type: FieldType.decimal, advanced: true),
+        const FieldSpec('lotNumber', 'Nº do lote', advanced: true),
+        const FieldSpec('invoicedValue', 'Valor faturado (R\$)', type: FieldType.decimal, advanced: true, hint: 'Total da NF, com impostos'),
+        FieldSpec('grossWeightKg', 'Peso bruto (kg)', type: FieldType.decimal, advanced: true, defaultValue: d['grossWeightKg']),
         if (s.canApproveSales) const FieldSpec('overrideCredit', 'Autorizar acima do limite de crédito', type: FieldType.boolean, defaultValue: false, hint: 'Só vale se o cliente passou do limite; fica no histórico'),
       ],
       submit: (b) => api.post('$base/ship', {...b, if (withoutCertificate) 'withoutCertificate': true}),
@@ -309,7 +309,14 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       appBar: AppBar(
         title: Text(d == null ? 'Entrega' : '${d['reference']} · ${d['customerName']}', overflow: TextOverflow.ellipsis),
         actions: [
-          if (d != null) RelatedMenu(links: [RelatedLink(Icons.business_outlined, 'Cliente: ${d['customerName']}', () => openCustomer(context, s, d['customerId'] as int))]),
+          if (d != null)
+            RelatedMenu(
+              links: [
+                RelatedLink(Icons.business_outlined, 'Cliente: ${d['customerName']}', () => openCustomer(context, s, d['customerId'] as int)),
+                RelatedLink(Icons.receipt_long_outlined, 'Pedido de venda ${d['orderReference'] ?? ''}', () => openSalesOrder(context, s, d['orderId'] as int)),
+                if (_nf != null) RelatedLink(Icons.description_outlined, 'Nota fiscal ${d['invoiceNumber'] ?? ''}', () => openFiscalDocument(context, s, _nf!['id'] as int)),
+              ],
+            ),
           if (d != null && ['Shipped', 'Delivered'].contains(d['status']))
             IconButton(key: const ValueKey('delivery-print-nf'), tooltip: 'Imprimir NF', icon: const Icon(Icons.print_outlined), onPressed: _printNf),
           if (canCancel)
@@ -338,7 +345,20 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       main: [
         _header(d),
         gap,
-        StagePath(steps: flowSteps, current: step, failedLabel: failed),
+        StagePath(
+          steps: flowSteps,
+          current: step,
+          failedLabel: failed,
+          // Everything before the shipment lives on the order; the certificates of this delivery open directly.
+          onStep: (i) => i == 6
+              ? stepLink(context, 'Abrir qual certificado?', [
+                  for (final c in _certs.where((c) => c['status'] != 'Cancelled'))
+                    (label: '${c['reference']} · ${c['description']}', open: () => openCertificate(context, s, c['id'] as int).then((_) => _load())),
+                ])
+              : i <= 5
+              ? () => unawaited(openSalesOrder(context, s, d['orderId'] as int).then((_) => _load()))
+              : null,
+        ),
         gap,
         _nextStep(d),
         gap,

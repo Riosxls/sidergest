@@ -66,11 +66,14 @@ class PathStep {
 
 /// Horizontal path of [steps] with the [current] one highlighted; [failedLabel] marks a path that ended off track.
 class StagePath extends StatelessWidget {
-  const StagePath({super.key, required this.steps, required this.current, this.failedLabel});
+  const StagePath({super.key, required this.steps, required this.current, this.failedLabel, this.onStep});
 
   final List<PathStep> steps;
   final int current;
   final String? failedLabel;
+
+  /// Opens what a step stands for. Called with the step index; a step answers null when it has nothing to open, and then it is not a button.
+  final VoidCallback? Function(int index)? onStep;
 
   @override
   Widget build(BuildContext context) {
@@ -87,46 +90,50 @@ class StagePath extends StatelessWidget {
           children: [
             for (final (i, s) in steps.indexed)
               Expanded(
-                child: Tooltip(
-                  message: s.label,
-                  child: ClipPath(
-                    clipper: _Chevron(first: i == 0, last: i == steps.length - 1),
-                    child: Container(
-                      key: ValueKey('path-$i'),
-                      height: 44,
-                      margin: const EdgeInsets.only(right: 2),
-                      padding: EdgeInsets.only(left: i == 0 ? 8 : 16, right: 8),
-                      color: i < current
-                          ? done
-                          : i == current
-                          ? (failed ? toneAccent(context, Tone.danger) : cs.primary)
-                          : cs.surfaceContainerHighest,
-                      alignment: Alignment.center,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (i < current)
-                            const Icon(Icons.check, size: 16, color: Colors.white)
-                          else if (s.icon != null)
-                            Icon(s.icon, size: 16, color: i == current ? onActive : cs.onSurfaceVariant),
-                          if (!compact || i == current) ...[
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                i == current && failed ? failedLabel! : s.label,
-                                maxLines: 2,
-                                textAlign: TextAlign.center,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                  fontSize: roomy ? null : 11.5,
-                                  height: 1.1,
-                                  color: i < current ? Colors.white : (i == current ? onActive : cs.onSurfaceVariant),
-                                  fontWeight: i == current ? FontWeight.w700 : FontWeight.w500,
+                child: _Tappable(
+                  key: ValueKey('path-tap-$i'),
+                  onTap: onStep?.call(i),
+                  child: Tooltip(
+                    message: onStep?.call(i) == null ? s.label : 'Abrir: ${s.label}',
+                    child: ClipPath(
+                      clipper: _Chevron(first: i == 0, last: i == steps.length - 1),
+                      child: Container(
+                        key: ValueKey('path-$i'),
+                        height: 44,
+                        margin: const EdgeInsets.only(right: 2),
+                        padding: EdgeInsets.only(left: i == 0 ? 8 : 16, right: 8),
+                        color: i < current
+                            ? done
+                            : i == current
+                            ? (failed ? toneAccent(context, Tone.danger) : cs.primary)
+                            : cs.surfaceContainerHighest,
+                        alignment: Alignment.center,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (i < current)
+                              const Icon(Icons.check, size: 16, color: Colors.white)
+                            else if (s.icon != null)
+                              Icon(s.icon, size: 16, color: i == current ? onActive : cs.onSurfaceVariant),
+                            if (!compact || i == current) ...[
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  i == current && failed ? failedLabel! : s.label,
+                                  maxLines: 2,
+                                  textAlign: TextAlign.center,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                    fontSize: roomy ? null : 11.5,
+                                    height: 1.1,
+                                    color: i < current ? Colors.white : (i == current ? onActive : cs.onSurfaceVariant),
+                                    fontWeight: i == current ? FontWeight.w700 : FontWeight.w500,
+                                  ),
                                 ),
                               ),
-                            ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -137,6 +144,22 @@ class StagePath extends StatelessWidget {
       },
     );
   }
+}
+
+/// A step that opens something: pointer cursor and a tap; a plain child when [onTap] is null.
+class _Tappable extends StatelessWidget {
+  const _Tappable({super.key, required this.onTap, required this.child});
+
+  final VoidCallback? onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => onTap == null
+      ? child
+      : MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: child),
+        );
 }
 
 class _Chevron extends CustomClipper<Path> {
@@ -313,7 +336,15 @@ class TimelineView extends StatelessWidget {
 /// What to do next on a record: a title (with an optional [badge], e.g. days left), the message across the full card width,
 /// then the [actions] in one row. [trailing] holds quiet secondary actions that sit at the right edge, away from the main outcomes.
 class NextStepCard extends StatelessWidget {
-  const NextStepCard({super.key, required this.title, required this.message, this.actions = const [], this.trailing = const [], this.badge, this.tone = Tone.info});
+  const NextStepCard({
+    super.key,
+    required this.title,
+    required this.message,
+    this.actions = const [],
+    this.trailing = const [],
+    this.badge,
+    this.tone = Tone.info,
+  });
 
   final String title;
   final String message;
@@ -335,14 +366,16 @@ class NextStepCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Flexible(child: Text(title, style: theme.textTheme.titleSmall?.copyWith(color: fg, fontWeight: FontWeight.w700))),
+                Flexible(
+                  child: Text(
+                    title,
+                    style: theme.textTheme.titleSmall?.copyWith(color: fg, fontWeight: FontWeight.w700),
+                  ),
+                ),
                 if (badge != null) ...[const SizedBox(width: 10), badge!],
               ],
             ),
-            if (message.trim().isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(message, style: theme.textTheme.bodyMedium?.copyWith(color: fg)),
-            ],
+            if (message.trim().isNotEmpty) ...[const SizedBox(height: 2), Text(message, style: theme.textTheme.bodyMedium?.copyWith(color: fg))],
             if (actions.isNotEmpty || trailing.isNotEmpty) ...[
               const SizedBox(height: 12),
               LayoutBuilder(
@@ -373,6 +406,7 @@ class RecordHeader extends StatelessWidget {
   final IconData icon;
   final String kind;
   final String title;
+
   /// Shown next to the title; leave null when the stage path already says it.
   final Widget? badge;
   final List<(String, String)> fields;

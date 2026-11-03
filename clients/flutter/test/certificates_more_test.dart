@@ -229,6 +229,23 @@ void main() {
       expect(find.text('Certificado 5176-26 · PV 3'), findsOneWidget);
     });
 
+    testWidgets('backing out of the editor without saving discards the draft the server numbered', (tester) async {
+      final fake = _Fake();
+      await launch(tester, fake, {
+        'id': 3,
+        'lines': [
+          {'id': 11, 'sequence': 1, 'productCode': 'TB-1', 'description': 'Tubo'},
+        ],
+      });
+      await tester.tap(find.text('novo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Certificado 5176-26 · PV 3'), findsOneWidget);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(fake.log.where((r) => r.method == 'DELETE' && r.url.path.startsWith('/api/sales/certificates/')), hasLength(1));
+      expect(find.textContaining('descartado'), findsOneWidget);
+    });
+
     testWidgets('an order with several lines asks which item first; dismissing creates nothing', (tester) async {
       final fake = _Fake();
       await launch(tester, fake, {

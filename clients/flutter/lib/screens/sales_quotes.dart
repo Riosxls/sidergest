@@ -883,7 +883,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
             content: Text(
               'Orçamento registrado como enviado · válido até ${fmtDay(r['validUntil'])}. Ele ainda não saiu do sistema: abra o e-mail e anexe o PDF.',
             ),
-            duration: const Duration(seconds: 20),
+            duration: const Duration(seconds: 10),
             persist: false, // a snackbar with an action stays until dismissed unless told otherwise
             action: SnackBarAction(label: 'Abrir e-mail', onPressed: _mail),
           ),
@@ -1048,7 +1048,19 @@ class _QuoteScreenState extends State<QuoteScreen> {
         ],
       }),
     );
-    if (r != null && r['reference'] != null) setState(() => _q = r);
+    if (r != null && r['reference'] != null) {
+      setState(() => _q = r);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Pedido de compra registrado'),
+            duration: const Duration(seconds: 12),
+            persist: false,
+            action: s.canSell ? SnackBarAction(label: 'Gerar pedido de venda', onPressed: _convert) : null,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _accept() async {
@@ -1620,7 +1632,16 @@ class _QuoteScreenState extends State<QuoteScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(q == null ? 'Orçamento' : '${q['reference']} · ${q['customerName']}', overflow: TextOverflow.ellipsis),
-        actions: [if (q != null) RelatedMenu(links: [RelatedLink(Icons.business_outlined, 'Cliente: ${q['customerName']}', () => openCustomer(context, s, q['customerId'] as int))]), ..._menuActions()],
+        actions: [
+          if (q != null)
+            RelatedMenu(
+              links: [
+                RelatedLink(Icons.business_outlined, 'Cliente: ${q['customerName']}', () => openCustomer(context, s, q['customerId'] as int)),
+                if (q['salesOrderId'] != null) RelatedLink(Icons.receipt_long_outlined, 'Pedido de venda ${q['salesOrderReference'] ?? ''}', () => openSalesOrder(context, s, q['salesOrderId'] as int)),
+              ],
+            ),
+          ..._menuActions(),
+        ],
       ),
       body: _error != null && q == null
           ? LoadError(message: _error!, onRetry: _load)
@@ -1725,7 +1746,13 @@ class _QuoteScreenState extends State<QuoteScreen> {
       main: [
         _header(q, t),
         gap,
-        StagePath(steps: flowSteps, current: step, failedLabel: failed),
+        StagePath(
+          steps: flowSteps,
+          current: step,
+          failedLabel: failed,
+          // The order the quote became is the one step that lives on another page.
+          onStep: (i) => i == 4 && q['salesOrderId'] != null ? () => unawaited(openSalesOrder(context, s, q['salesOrderId'] as int).then((_) => _load())) : null,
+        ),
         gap,
         _creditBanner(),
         _nextStep(q),

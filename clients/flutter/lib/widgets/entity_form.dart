@@ -73,6 +73,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
   final _labels = <String, String>{};
   Map<String, List<String>> _serverErrors = {};
   final _clientErrors = <String, String>{};
+  bool _more = false;
   String? _message;
   bool _busy = false;
   late final String _initial;
@@ -366,18 +367,38 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
     }
   }
 
+  /// A field that already holds something (typed, a default, an error) is never folded away.
+  bool _hasValue(FieldSpec f) {
+    final t = _text[f.key]?.text.trim() ?? '';
+    final v = _values[f.key];
+    return t.isNotEmpty || (v != null && '$v'.isNotEmpty && v != false) || _clientErrors.containsKey(f.key) || _serverErrors.containsKey(f.key);
+  }
+
   @override
   Widget build(BuildContext context) {
     final narrow = MediaQuery.sizeOf(context).width < 600;
     final form = LayoutBuilder(
       builder: (context, c) {
         final w = c.maxWidth >= 560 ? (c.maxWidth - 12) / 2 : c.maxWidth;
+        // Fields marked advanced stay folded until asked for, unless they already hold a value or an error.
+        bool folded(FieldSpec f) => f.advanced && !_more && !_hasValue(f);
+        final extra = [for (final f in widget.fields) if (folded(f)) f];
         return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Wrap(
             spacing: 12,
             runSpacing: 14,
-            children: [for (final f in widget.fields) SizedBox(width: w, child: _field(f))],
+            children: [
+              for (final f in widget.fields)
+                if (!folded(f)) SizedBox(width: w, child: _field(f)),
+              if (extra.isNotEmpty)
+                TextButton.icon(
+                  key: const ValueKey('form-more'),
+                  onPressed: () => setState(() => _more = true),
+                  icon: const Icon(Icons.expand_more),
+                  label: Text('Mais campos (${extra.length})'),
+                ),
+            ],
           ),
         );
       },

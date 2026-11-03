@@ -632,7 +632,13 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       appBar: AppBar(
         title: Text(o == null ? 'Pedido de venda' : '${o['reference']} · ${o['customerName']}', overflow: TextOverflow.ellipsis),
         actions: [
-          if (o != null) RelatedMenu(links: [RelatedLink(Icons.business_outlined, 'Cliente: ${o['customerName']}', () => openCustomer(context, s, o['customerId'] as int))]),
+          if (o != null)
+            RelatedMenu(
+              links: [
+                RelatedLink(Icons.business_outlined, 'Cliente: ${o['customerName']}', () => openCustomer(context, s, o['customerId'] as int)),
+                if (o['quoteId'] != null) RelatedLink(Icons.request_quote_outlined, 'Orçamento ${o['quoteReference'] ?? ''}', () => openQuote(context, s, o['quoteId'] as int)),
+              ],
+            ),
           if (o != null) ..._printActions(o),
           if (menu.isNotEmpty) PopupMenuButton<VoidCallback>(key: const ValueKey('order-menu'), onSelected: (f) => f(), itemBuilder: (_) => menu),
         ],
@@ -645,6 +651,32 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     );
   }
 
+  /// Each step of the path opens the record it stands for: the quote, the OFs, the certificates, the deliveries.
+  VoidCallback? _stepLink(int i, Map<String, dynamic> o, List<Map<String, dynamic>> lines, List<Map<String, dynamic>> deliveries) {
+    switch (i) {
+      case <= 3:
+        if (o['quoteId'] == null) return null;
+        return () => unawaited(openQuote(context, s, o['quoteId'] as int).then((_) => _load()));
+      case 5:
+        final ofs = lines.where((l) => l['productionOrderId'] != null).fold(<int, String>{}, (m, l) => m..[l['productionOrderId'] as int] = '${l['productionReference']}');
+        return stepLink(context, 'Abrir qual ordem de fabricação?', [
+          for (final e in ofs.entries) (label: e.value, open: () => openProductionOrder(context, s, e.key).then((_) => _load())),
+        ]);
+      case 6:
+        return stepLink(context, 'Abrir qual certificado?', [
+          for (final c in _certs.where((c) => c['status'] != 'Cancelled'))
+            (label: '${c['reference']} · ${c['description']}', open: () => openCertificate(context, s, c['id'] as int).then((_) => _load())),
+        ]);
+      case 7:
+        return stepLink(context, 'Abrir qual entrega?', [
+          for (final d in deliveries.where((d) => d['status'] != 'Cancelled'))
+            (label: '${d['reference']} · ${deliveryStatuses[d['status']] ?? d['status']}', open: () => openDelivery(context, s, d['id'] as int).then((_) => _load())),
+        ]);
+      default:
+        return null;
+    }
+  }
+
   Widget _body(Map<String, dynamic> o) {
     final (step, failed) = orderPath(o['status'], ready: o['ready'] == true, certified: _certified);
     final lines = (o['lines'] as List).cast<Map<String, dynamic>>();
@@ -655,7 +687,12 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       main: [
         _orderHeader(o, credit),
         gap,
-        StagePath(steps: flowSteps, current: step, failedLabel: failed),
+        StagePath(
+          steps: flowSteps,
+          current: step,
+          failedLabel: failed,
+          onStep: (i) => _stepLink(i, o, lines, deliveries),
+        ),
         gap,
         _nextStep(o),
         if (o['status'] != 'Cancelled') ...[gap, PrintPanel(docs: _printDocs(o))],

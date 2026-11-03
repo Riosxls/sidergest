@@ -36,6 +36,7 @@ class FieldSpec {
     this.daysFor,
     this.dateFor,
     this.obscure = false,
+    this.advanced = false,
   });
 
   final String key;
@@ -55,6 +56,9 @@ class FieldSpec {
 
   /// Hides the typed text (passwords).
   final bool obscure;
+
+  /// Rarely changed: shown under "Mais campos" in a form instead of next to the main fields.
+  final bool advanced;
 }
 
 /// One column of a record list or table: header, value reader and alignment.

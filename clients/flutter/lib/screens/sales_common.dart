@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../labels.dart';
@@ -174,3 +176,19 @@ Future<void> replaceWithSalesOrder(BuildContext context, Session session, int id
 /// Same as [openQuote], in the place of the page that calls it (a quote version that a new revision has just replaced).
 Future<void> replaceWithQuote(BuildContext context, Session session, int id) =>
     replaceRecord<void>(context, 'quote', id, (_) => QuoteScreen(session: session, id: id));
+
+/// What a step of the path opens: the only record there is, or a choice among several. Null when there is nothing to open.
+VoidCallback? stepLink(BuildContext context, String title, List<({String label, Future<void> Function() open})> options) {
+  if (options.isEmpty) return null;
+  if (options.length == 1) return () => unawaited(options.first.open());
+  return () async {
+    final picked = await showDialog<({String label, Future<void> Function() open})>(
+      context: context,
+      builder: (c) => SimpleDialog(
+        title: Text(title),
+        children: [for (final o in options) SimpleDialogOption(onPressed: () => Navigator.pop(c, o), child: Text(o.label))],
+      ),
+    );
+    if (picked != null) await picked.open();
+  };
+}
