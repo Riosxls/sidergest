@@ -39,6 +39,11 @@ class FieldSpec {
     this.advanced = false,
     this.uppercase = false,
     this.lockWhenEditing = false,
+    this.min,
+    this.max,
+    this.positive = false,
+    this.digitsOnly = false,
+    this.money = false,
   });
 
   final String key;
@@ -67,15 +72,31 @@ class FieldSpec {
 
   /// Can be typed when the record is created but not changed afterwards (a revision that has its own history).
   final bool lockWhenEditing;
+
+  /// Smallest and largest number accepted (checked before the form is sent).
+  final num? min;
+  final num? max;
+
+  /// Must be greater than zero.
+  final bool positive;
+
+  /// Only digits can be typed (days, counts).
+  final bool digitsOnly;
+
+  /// A money amount: shown with two decimals when the form opens.
+  final bool money;
 }
 
 /// One column of a record list or table: header, value reader and alignment.
 class ColumnSpec {
-  const ColumnSpec(this.label, this.value, {this.numeric = false});
+  const ColumnSpec(this.label, this.value, {this.numeric = false, this.cell});
 
   final String label;
   final String Function(Map<String, dynamic> e) value;
   final bool numeric;
+
+  /// A widget for the cell of a list (a status chip); [value] stays the text used for sorting and on phones.
+  final Widget Function(BuildContext context, Map<String, dynamic> e)? cell;
 }
 
 /// Declarative description of a CRUD entity (endpoint, columns and form fields) rendered by the generic list and form widgets.
@@ -165,7 +186,8 @@ String fmtPeriod(Object? p) => p is int ? '${_two(p % 100)}/${p ~/ 100}' : fmt(p
 /// Reads a typed number the Brazilian way: "1.234,56" is 1234.56 and "1.500" is 1500 (dots are thousands separators when
 /// three digits follow each one). "1,234.56" and "12.5" are read as typed in the other convention.
 num? parseDecimal(String s) {
-  final t = s.trim();
+  // A pasted amount ("R$ 12,50", "5 %") reads as the number in it.
+  final t = s.replaceAll(RegExp(r'R\$|%|\s'), '');
   final comma = t.lastIndexOf(','), dot = t.lastIndexOf('.');
   if (comma >= 0 && dot > comma) return num.tryParse(t.replaceAll(',', ''));
   if (comma >= 0) return num.tryParse(t.replaceAll('.', '').replaceAll(',', '.'));

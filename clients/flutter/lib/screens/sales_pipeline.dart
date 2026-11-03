@@ -77,8 +77,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
   }
 
   Future<void> _new() async {
-    final q = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => QuoteEditorScreen(session: s)));
-    if (q != null && mounted) await openQuote(context, s, q['id'] as int);
+    await newQuote(context, s);
     _reload();
   }
 
@@ -252,7 +251,13 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
                 IconButton(tooltip: 'Atualizar', onPressed: _reload, icon: const Icon(Icons.refresh)),
                 if (s.canSell)
                   FilledButton.icon(key: const ValueKey('pipeline-new'), onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo orçamento')),
-                Text('Arraste um cartão para a próxima etapa ou use a seta do cartão.', style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                  // A phone has no mouse to drag with: the card is held (long press) before it moves.
+                  const {TargetPlatform.android, TargetPlatform.iOS}.contains(Theme.of(context).platform)
+                      ? 'Segure um cartão e arraste para a próxima etapa, ou use a seta do cartão.'
+                      : 'Arraste um cartão para a próxima etapa ou use a seta do cartão.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
             ),
           ),

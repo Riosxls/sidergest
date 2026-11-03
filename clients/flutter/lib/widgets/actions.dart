@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -106,10 +108,19 @@ Future<Map<String, dynamic>?> submitForm(
   },
 );
 
+/// Lets the screen around a [LinesEditor] open its "add" form (a keyboard shortcut).
+class LinesEditorController {
+  VoidCallback? _add;
+
+  /// Opens the form of a new line; does nothing while adding is not allowed.
+  void add() => _add?.call();
+}
+
 /// Editable table of child lines (items of an order, operations...) with add, edit and remove through an [EntityFormDialog].
 class LinesEditor extends StatelessWidget {
   const LinesEditor({
     super.key,
+    this.controller,
     required this.api,
     required this.title,
     required this.fields,
@@ -122,8 +133,17 @@ class LinesEditor extends StatelessWidget {
     this.addLabel = 'Adicionar linha',
     this.addEnabled = true,
     this.disabledHint,
+    this.submitLabel = 'Salvar',
+    this.addAnotherLabel,
+    this.carryKeys = const [],
+    this.duplicateKey,
+    this.staleOnChange = const {},
+    this.onPick,
+    this.hintFor,
+    this.rowColor,
   });
 
+  final LinesEditorController? controller;
   final ApiClient api;
   final String title;
   final List<FieldSpec> fields;
@@ -137,23 +157,88 @@ class LinesEditor extends StatelessWidget {
   final bool addEnabled;
   final String? disabledHint;
 
-  Future<void> _edit(BuildContext context, [int? index]) async {
+  /// Text of the form's main button.
+  final String submitLabel;
+
+  /// When set, the new-line form has a second button that adds the line and opens the form for the next one.
+  final String? addAnotherLabel;
+
+  /// Values the next line starts with after "add and new" (the lead time typed on the last one).
+  final List<String> carryKeys;
+
+  /// Field that should be unique among the lines (the product); a repeat is allowed but pointed out.
+  final String? duplicateKey;
+
+  /// Values of a line that belong to one of its fields and must go when that field changes: `{'productId': ['ipiPercent', 'icmsPercent', 'description']}`.
+  final Map<String, List<String>> staleOnChange;
+  final PickHook? onPick;
+  final HintHook? hintFor;
+  final Color? Function(Map<String, dynamic> line)? rowColor;
+
+  /// [current] is the list the screen has now when this runs again after "add and new": this widget still holds the list it was built with.
+  Future<void> _edit(BuildContext context, [int? index, Map<String, dynamic>? seed, List<Map<String, dynamic>>? current]) async {
+    final lines = current ?? this.lines;
+    final adding = index == null;
     final r = await showEntityForm(
       context,
       api: api,
-      title: index == null ? newTitle : (editTitle ?? 'Linha ${index + 1}'),
+      title: adding ? newTitle : (editTitle ?? 'Linha ${index + 1}'),
       fields: fields,
-      initial: index == null ? null : lines[index],
+      initial: adding ? seed : lines[index],
+      draftId: adding ? 'new' : 'line-${index + 1}',
+      submitLabel: adding ? submitLabel : (submitLabel == 'Salvar' ? 'Salvar' : 'Concluir'),
+      saveAndNewLabel: adding ? addAnotherLabel : null,
+      openFirstLookup: adding && addAnotherLabel != null && fields.isNotEmpty && fields.first.type == FieldType.lookup,
+      onPick: onPick,
+      hintFor: hintFor,
       onSubmit: (_) async => null,
     );
     if (r == null) return;
+    final again = r.remove('_again') == true;
     final next = [...lines];
-    if (index == null) {
+    if (adding) {
       next.add(r);
     } else {
-      next[index] = {...lines[index], ...r}; // keeps values the form does not show (taxes from the price table, line spec)
+      final base = {...lines[index]};
+      final form = {...r};
+      // A changed field takes its dependent values along (the taxes and description of the old product).
+      staleOnChange.forEach((key, stale) {
+        if ('${base[key]}' == '${form[key]}') return;
+        for (final k in stale) {
+          base.remove(k);
+          if ('${form[k]}' == '${lines[index][k]}') form.remove(k);
+        }
+      });
+      next[index] = {...base, ...form}; // keeps values the form does not show (taxes from the price table, line spec)
     }
     onChanged(next);
+    final line = adding ? next.last : next[index];
+    if (duplicateKey != null && line[duplicateKey] != null && context.mounted) {
+      final at = next.indexWhere((l) => !identical(l, line) && l[duplicateKey] == line[duplicateKey]);
+      if (at >= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Este produto já está na linha ${at + 1}. Confira se não é repetido.')));
+      }
+    }
+    if (again && context.mounted) {
+      await _edit(context, null, {
+        for (final k in carryKeys)
+          if (r[k] != null) k: r[k],
+      }, next);
+    }
+  }
+
+  void _remove(BuildContext context, int index) {
+    final before = [...lines];
+    onChanged([...lines]..removeAt(index));
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Linha ${index + 1} removida'),
+          persist: false,
+          action: SnackBarAction(label: 'Desfazer', onPressed: () => onChanged(before)),
+        ),
+      );
   }
 
   @override
@@ -161,6 +246,7 @@ class LinesEditor extends StatelessWidget {
     final rows = [
       for (final (i, l) in lines.indexed) {...l, '_n': i + 1},
     ];
+    controller?._add = enabled && addEnabled ? () => unawaited(_edit(context)) : null;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -185,14 +271,20 @@ class LinesEditor extends StatelessWidget {
             SimpleTable(
               columns: [ColumnSpec('#', (e) => '${e['_n']}'), ...columns],
               rows: rows,
+              rowColor: rowColor == null ? null : (e) => rowColor!(lines[(e['_n'] as int) - 1]),
               actions: enabled
                   ? (e) => [
                       IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _edit(context, (e['_n'] as int) - 1)),
-                      IconButton(
-                        tooltip: 'Remover',
-                        icon: const Icon(Icons.delete_outline, size: 20),
-                        onPressed: () => onChanged([...lines]..removeAt((e['_n'] as int) - 1)),
-                      ),
+                      if (addEnabled)
+                        IconButton(
+                          tooltip: 'Duplicar',
+                          icon: const Icon(Icons.copy_outlined, size: 20),
+                          onPressed: () {
+                            final i = (e['_n'] as int) - 1;
+                            onChanged([...lines]..insert(i + 1, {...lines[i]}));
+                          },
+                        ),
+                      IconButton(tooltip: 'Remover', icon: const Icon(Icons.delete_outline, size: 20), onPressed: () => _remove(context, (e['_n'] as int) - 1)),
                     ]
                   : null,
             ),

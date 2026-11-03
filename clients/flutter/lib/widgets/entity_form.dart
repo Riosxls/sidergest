@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show TextInputFormatter, TextEditingValue;
+import 'package:flutter/services.dart' show FilteringTextInputFormatter, LogicalKeyboardKey, TextEditingValue, TextInputFormatter;
 
 import '../api.dart';
 import '../entities.dart';
@@ -21,12 +21,38 @@ Future<Map<String, dynamic>?> showEntityForm(
   Future<void> Function()? onDelete,
   String? deleteMessage,
   bool readOnly = false,
+  String submitLabel = 'Salvar',
+  String? saveAndNewLabel,
+  Object? draftId,
+  bool openFirstLookup = false,
+  PickHook? onPick,
+  HintHook? hintFor,
 }) => showDialog<Map<String, dynamic>>(
   context: context,
   barrierDismissible: true, // backdrop click and Esc ask before discarding edits (DiscardGuard)
-  builder: (_) =>
-      EntityFormDialog(api: api, title: title, fields: fields, initial: initial, onSubmit: onSubmit, onDelete: onDelete, deleteMessage: deleteMessage, readOnly: readOnly),
+  builder: (_) => EntityFormDialog(
+    api: api,
+    title: title,
+    fields: fields,
+    initial: initial,
+    onSubmit: onSubmit,
+    onDelete: onDelete,
+    deleteMessage: deleteMessage,
+    readOnly: readOnly,
+    submitLabel: submitLabel,
+    saveAndNewLabel: saveAndNewLabel,
+    draftId: draftId,
+    openFirstLookup: openFirstLookup,
+    onPick: onPick,
+    hintFor: hintFor,
+  ),
 );
+
+/// Runs after a lookup field picked a record; returns values for the form's still empty text fields (a price found for the product).
+typedef PickHook = Future<Map<String, Object?>?> Function(String key, int? id, Map<String, dynamic>? entity);
+
+/// Helper text of a field that depends on what is typed elsewhere in the form ("Tabela R$ 10,00 · desconto 5%"); null keeps the field's own hint.
+typedef HintHook = String? Function(String key, Map<String, dynamic> values);
 
 Future<bool> confirm(BuildContext context, String message) async =>
     await showDialog<bool>(
@@ -57,6 +83,12 @@ class EntityFormDialog extends StatefulWidget {
     this.onDelete,
     this.deleteMessage,
     this.readOnly = false,
+    this.submitLabel = 'Salvar',
+    this.saveAndNewLabel,
+    this.draftId,
+    this.openFirstLookup = false,
+    this.onPick,
+    this.hintFor,
   });
 
   final ApiClient api;
@@ -69,6 +101,20 @@ class EntityFormDialog extends StatefulWidget {
   /// What the delete confirmation says is lost; its title names the record.
   final String? deleteMessage;
   final bool readOnly;
+
+  /// Text of the main button ("Adicionar item" where nothing is stored until a page is saved).
+  final String submitLabel;
+
+  /// When set, a second button saves and returns `_again: true` so the caller can open the form for the next record.
+  final String? saveAndNewLabel;
+
+  /// Tells apart the drafts of forms that share a title and have no id (the lines of a quote).
+  final Object? draftId;
+
+  /// Opens the picker of the first field when it is a lookup, so a new record starts by choosing it.
+  final bool openFirstLookup;
+  final PickHook? onPick;
+  final HintHook? hintFor;
 
   @override
   State<EntityFormDialog> createState() => _EntityFormDialogState();
@@ -88,7 +134,10 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
   bool _recovered = false;
   bool _lockSaved = false;
 
-  String get _draftKey => 'form:${widget.title}:${widget.initial?['id'] ?? 'new'}';
+  String get _draftKey => 'form:${widget.title}:${widget.initial?['id'] ?? widget.draftId ?? 'new'}';
+
+  /// Keys of the fields on screen, in order; Enter in the last one saves and in the others moves on.
+  List<String> _shown = const [];
 
   /// Called when the session ends under an open form: keeps what was typed so it can be offered again.
   void _saveDraft() {
@@ -141,7 +190,11 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
       final v = widget.initial?[f.key] ?? (widget.initial == null ? f.defaultValue : null);
       if (_isText(f)) {
         _text[f.key] = TextEditingController(
-          text: f.type == FieldType.text ? (v as String? ?? '') : (f.type == FieldType.date ? fmtDay(v) : (f.type == FieldType.time ? fmtTime(v) : fmt(v))),
+          text: f.type == FieldType.text
+              ? (v as String? ?? '')
+              : (f.type == FieldType.date
+                    ? fmtDay(v)
+                    : (f.type == FieldType.time ? fmtTime(v) : (f.money && v is num ? v.toStringAsFixed(2).replaceAll('.', ',') : fmt(v)))),
         );
       } else {
         _values[f.key] = f.type == FieldType.boolean ? (v as bool? ?? false) : v;
@@ -192,12 +245,21 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
         v = _values[f.key];
       }
       if (f.required && v == null) _clientErrors[f.key] = 'Obrigatório';
+      if (v is num && !_clientErrors.containsKey(f.key)) {
+        if (f.positive && v <= 0) {
+          _clientErrors[f.key] = 'Deve ser maior que zero';
+        } else if (f.min != null && v < f.min!) {
+          _clientErrors[f.key] = f.min == 0 ? 'Não pode ser negativo' : 'Mínimo ${fmt(f.min)}';
+        } else if (f.max != null && v > f.max!) {
+          _clientErrors[f.key] = 'Máximo ${fmt(f.max)}';
+        }
+      }
       body[f.key] = v;
     }
     return _clientErrors.isEmpty ? body : null;
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool again = false}) async {
     final body = _body();
     setState(() {
       _serverErrors = {};
@@ -207,7 +269,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
     setState(() => _busy = true);
     try {
       final result = await widget.onSubmit(body);
-      if (mounted) Navigator.pop(context, result ?? {...body, '_labels': Map<String, String>.of(_labels)});
+      if (mounted) Navigator.pop(context, {...(result ?? {...body, '_labels': Map<String, String>.of(_labels)}), if (again) '_again': true});
     } on ApiException catch (e) {
       setState(() {
         _serverErrors = e.fieldErrors.map((k, v) => MapEntry(k.isEmpty ? k : k[0].toLowerCase() + k.substring(1), v));
@@ -268,6 +330,44 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
 
   String? _errorFor(String key) => _clientErrors[key] ?? _serverErrors[key]?.join('; ');
 
+  /// What is typed so far, as numbers and ids where the field is one; read by [FieldSpec]-independent hints of the caller.
+  Map<String, dynamic> _currentValues() {
+    final out = <String, dynamic>{};
+    for (final f in widget.fields) {
+      final t = _text[f.key]?.text.trim();
+      if (t != null) {
+        out[f.key] = t.isEmpty ? null : (f.type == FieldType.decimal ? parseDecimal(t) : (f.type == FieldType.integer ? int.tryParse(t) : t));
+      } else {
+        out[f.key] = _values[f.key];
+      }
+    }
+    return out;
+  }
+
+  bool _isLastShown(String key) => _shown.isEmpty || _shown.last == key;
+
+  void _onEnter(FieldSpec f) {
+    if (widget.readOnly) return;
+    if (_isLastShown(f.key)) {
+      unawaited(_save());
+    } else {
+      FocusScope.of(context).nextFocus();
+    }
+  }
+
+  Future<void> _picked(FieldSpec f, int? id, Map<String, dynamic>? entity) async {
+    final hook = widget.onPick;
+    if (hook == null) return;
+    final fill = await hook(f.key, id, entity);
+    if (fill == null || !mounted) return;
+    setState(() {
+      fill.forEach((k, v) {
+        final c = _text[k];
+        if (c != null && c.text.trim().isEmpty && v != null) c.text = v is String ? v : fmt(v);
+      });
+    });
+  }
+
   void _applyFill(LookupSpec spec, Map<String, dynamic>? entity) {
     if (entity == null) return;
     spec.fill.forEach((target, source) {
@@ -294,16 +394,20 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
         return TextField(
           key: ValueKey('field-${f.key}'),
           controller: _text[f.key],
+          autofocus: !widget.readOnly && widget.initial == null && widget.fields.first.key == f.key && !widget.openFirstLookup,
+          textInputAction: _isLastShown(f.key) ? TextInputAction.done : TextInputAction.next,
           readOnly: widget.readOnly || (f.lockWhenEditing && widget.initial?['id'] != null),
           obscureText: f.obscure,
-          inputFormatters: f.uppercase ? [_UpperCase()] : null,
+          inputFormatters: f.uppercase
+              ? [_UpperCase()]
+              : (f.digitsOnly ? [FilteringTextInputFormatter.digitsOnly] : null),
           textCapitalization: f.uppercase ? TextCapitalization.characters : TextCapitalization.none,
           keyboardType: f.type == FieldType.text
               ? TextInputType.text
               : (f.type == FieldType.date || f.type == FieldType.time ? TextInputType.datetime : const TextInputType.numberWithOptions(decimal: true)),
           decoration: InputDecoration(
             labelText: label,
-            helperText: f.hint,
+            helperText: widget.hintFor?.call(f.key, _currentValues()) ?? f.hint,
             helperMaxLines: 4,
             errorText: error,
             border: const OutlineInputBorder(),
@@ -313,8 +417,9 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
                 ? IconButton(tooltip: 'Calendário', icon: const Icon(Icons.calendar_today, size: 18), onPressed: () => _pickDate(f))
                 : null,
           ),
-          onSubmitted: (_) => widget.readOnly ? null : _save(),
+          onSubmitted: (_) => _onEnter(f),
           onChanged: (_) {
+            if (widget.hintFor != null) setState(() {});
             if (f.daysFor != null || f.dateFor != null) {
               _syncLinked(f);
               _serverErrors.remove(f.daysFor ?? f.dateFor);
@@ -367,19 +472,23 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
           api: widget.api,
           spec: f.lookup!,
           label: label,
-          hint: f.hint,
+          hint: widget.hintFor?.call(f.key, _currentValues()) ?? f.hint,
           error: error,
           value: _values[f.key] as int?,
           enabled: !widget.readOnly,
-          onChanged: (id, entity) => setState(() {
-            _values[f.key] = id;
-            if (entity == null) {
-              _labels.remove(f.key);
-            } else {
-              _labels[f.key] = LookupSpec.display(entity);
-            }
-            _applyFill(f.lookup!, entity);
-          }),
+          autoOpen: widget.openFirstLookup && !widget.readOnly && widget.fields.first.key == f.key && _values[f.key] == null,
+          onChanged: (id, entity) {
+            setState(() {
+              _values[f.key] = id;
+              if (entity == null) {
+                _labels.remove(f.key);
+              } else {
+                _labels[f.key] = LookupSpec.display(entity);
+              }
+              _applyFill(f.lookup!, entity);
+            });
+            unawaited(_picked(f, id, entity));
+          },
           initialDisplay: _labels[f.key],
         );
     }
@@ -401,6 +510,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
         // Fields marked advanced stay folded until asked for, unless they already hold a value or an error.
         bool folded(FieldSpec f) => f.advanced && !_more && !_hasValue(f);
         final extra = [for (final f in widget.fields) if (folded(f)) f];
+        _shown = [for (final f in widget.fields) if (!folded(f)) f.key];
         return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Wrap(
@@ -432,10 +542,14 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
       const Spacer(),
       TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: Text(widget.readOnly ? 'Fechar' : 'Cancelar')),
       if (!widget.readOnly) ...[
+        if (widget.saveAndNewLabel != null) ...[
+          const SizedBox(width: 8),
+          OutlinedButton(key: const ValueKey('form-save-new'), onPressed: _busy ? null : () => _save(again: true), child: Text(widget.saveAndNewLabel!)),
+        ],
         const SizedBox(width: 8),
         FilledButton(
           onPressed: _busy ? null : _save,
-          child: _busy ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Salvar'),
+          child: _busy ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(widget.submitLabel),
         ),
       ],
     ];
@@ -478,7 +592,12 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
               child: Padding(padding: const EdgeInsets.all(20), child: content),
             ),
           );
-    return widget.readOnly ? dialog : DiscardGuard(isDirty: () => _signature() != _initial, child: dialog);
+    if (widget.readOnly) return dialog;
+    // Ctrl+Enter saves from any field.
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.enter, control: true): () => _busy ? null : unawaited(_save())},
+      child: DiscardGuard(isDirty: () => _signature() != _initial, child: dialog),
+    );
   }
 }
 
@@ -501,7 +620,11 @@ class LookupField extends StatefulWidget {
     this.enabled = true,
     this.initialDisplay,
     this.onCustom,
+    this.autoOpen = false,
   });
+
+  /// Opens the picker as soon as the field appears (a new line starts by choosing its product).
+  final bool autoOpen;
 
   final ApiClient api;
   final String? initialDisplay;
@@ -527,6 +650,11 @@ class _LookupFieldState extends State<LookupField> {
   void initState() {
     super.initState();
     _load();
+    if (widget.autoOpen && widget.enabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_pick());
+      });
+    }
   }
 
   Future<void> _load() async {
@@ -569,9 +697,12 @@ class _LookupFieldState extends State<LookupField> {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: widget.enabled ? _pick : null,
-      child: InputDecorator(
+    return Semantics(
+      button: true,
+      enabled: widget.enabled,
+      child: InkWell(
+        onTap: widget.enabled ? _pick : null,
+        child: InputDecorator(
         isEmpty: widget.value == null,
         decoration: InputDecoration(
           labelText: widget.label,
@@ -592,6 +723,7 @@ class _LookupFieldState extends State<LookupField> {
               : const Icon(Icons.search),
         ),
         child: Text(widget.value == null ? '' : (_display ?? '…'), overflow: TextOverflow.ellipsis),
+        ),
       ),
     );
   }
@@ -625,15 +757,43 @@ class LookupPicker extends StatefulWidget {
 }
 
 class _LookupPickerState extends State<LookupPicker> {
+  /// The last records picked from each list, newest first, offered on top when nothing is typed.
+  static final _recent = <String, List<Map<String, dynamic>>>{};
+
   List<Map<String, dynamic>> _items = [];
   String? _error;
   bool _loading = true;
+  bool _typing = false;
   int _request = 0;
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     _search('');
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  /// Waits for a pause in typing before asking the server.
+  void _onType(String q) {
+    _typing = q.trim().isNotEmpty;
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () => _search(q));
+  }
+
+  void _pickItem(Map<String, dynamic> item) {
+    if (item['id'] != null) {
+      final list = _recent.putIfAbsent(widget.path, () => []);
+      list.removeWhere((e) => e['id'] == item['id']);
+      list.insert(0, item);
+      if (list.length > 5) list.removeRange(5, list.length);
+    }
+    Navigator.pop(context, item);
   }
 
   Future<void> _search(String q) async {
@@ -653,11 +813,20 @@ class _LookupPickerState extends State<LookupPicker> {
     }
   }
 
+  /// The list shown: the recently picked records above the rest while nothing is typed, otherwise the search result. Strings are headings.
+  List<Object> _rows() {
+    final recent = _typing ? const <Map<String, dynamic>>[] : (_recent[widget.path] ?? const <Map<String, dynamic>>[]);
+    if (recent.isEmpty) return [..._items];
+    final recentIds = {for (final r in recent) r['id']};
+    return ['Usados recentemente', ...recent, 'Todos', ..._items.where((e) => !recentIds.contains(e['id']))];
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final title = widget.title.replaceAll(' *', '');
+    final rows = _rows();
     return AlertDialog(
       titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
       contentPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -677,7 +846,12 @@ class _LookupPickerState extends State<LookupPicker> {
                 contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
               ),
-              onChanged: _search,
+              onChanged: _onType,
+              // Enter takes the first result.
+              onSubmitted: (_) {
+                final first = _rows().whereType<Map<String, dynamic>>().firstOrNull;
+                if (first != null) _pickItem(first);
+              },
             ),
             const SizedBox(height: 8),
             SizedBox(height: 3, child: _loading ? const LinearProgressIndicator() : null),
@@ -688,10 +862,17 @@ class _LookupPickerState extends State<LookupPicker> {
                       child: Text('Nenhum resultado', style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
                     )
                   : ListView.separated(
-                      itemCount: _items.length,
+                      itemCount: rows.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 2),
                       itemBuilder: (_, i) {
-                        final item = _items[i];
+                        final row = rows[i];
+                        if (row is String) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 8, 14, 2),
+                            child: Text(row, style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                          );
+                        }
+                        final item = row as Map<String, dynamic>;
                         final selected = widget.selectedId != null && item['id'] == widget.selectedId;
                         return ListTile(
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -702,7 +883,7 @@ class _LookupPickerState extends State<LookupPicker> {
                           hoverColor: cs.onSurface.withValues(alpha: 0.06),
                           title: Text(LookupSpec.display(item), style: theme.textTheme.bodyLarge, maxLines: 2, overflow: TextOverflow.ellipsis),
                           trailing: selected ? const Icon(Icons.check) : null,
-                          onTap: () => Navigator.pop(context, item),
+                          onTap: () => _pickItem(item),
                         );
                       },
                     ),

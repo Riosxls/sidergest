@@ -237,7 +237,7 @@ void main() {
     await pumpShell(tester, 'Admin');
     await tester.tap(find.text('Novo orçamento'));
     await tester.pumpAndSettle();
-    expect(find.text('Novo orçamento comercial'), findsOneWidget);
+    expect(find.text('Novo orçamento'), findsOneWidget);
   });
 
   testWidgets('sidebar collapses to icons, remembers it, and marks the active page', (tester) async {

@@ -9,6 +9,7 @@ import '../widgets/load_error.dart';
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
 import 'sales_common.dart';
+import 'sales_quotes.dart' show newQuote;
 
 const customerStatuses = {'true': 'Ativos', 'false': 'Inativos'};
 
@@ -266,7 +267,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
           children: [
             _CustomerCompany(customer: _c, canEdit: s.canCustomers, onEdit: _edit),
             _CustomerAddresses(session: s, customerId: id),
-            _CustomerQuotes(session: s, customerId: id),
+            _CustomerQuotes(session: s, customerId: id, customerName: '${_c['name']}'),
             _CustomerOrders(session: s, customerId: id),
           ],
         ),
@@ -401,18 +402,39 @@ class _CustomerAddressesState extends State<_CustomerAddresses> {
   );
 }
 
-class _CustomerQuotes extends StatelessWidget {
-  const _CustomerQuotes({required this.session, required this.customerId});
+class _CustomerQuotes extends StatefulWidget {
+  const _CustomerQuotes({required this.session, required this.customerId, required this.customerName});
 
   final Session session;
   final int customerId;
+  final String customerName;
+
+  @override
+  State<_CustomerQuotes> createState() => _CustomerQuotesState();
+}
+
+class _CustomerQuotesState extends State<_CustomerQuotes> {
+  final _list = GlobalKey<RecordListState>();
+
+  Session get session => widget.session;
+  int get customerId => widget.customerId;
 
   @override
   Widget build(BuildContext context) => RecordList(
+    key: _list,
     api: session.api,
     path: '/api/sales/quotes',
     query: {'customerId': customerId},
     searchHint: 'Orçamento ou referência do cliente',
+    // A quote for this customer starts with the customer, the default prazo and the delivery address already chosen.
+    fab: session.canSell
+        ? FloatingActionButton.extended(
+            heroTag: 'customer-new-quote',
+            onPressed: () => newQuote(context, session, customer: (id: customerId, name: widget.customerName), onSaved: () => _list.currentState?.reload()),
+            icon: const Icon(Icons.add),
+            label: const Text('Novo orçamento'),
+          )
+        : null,
     columns: [
       col('Orçamento', 'reference'),
       ColumnSpec('Situação', (e) => quoteSituation(e, short: true)),

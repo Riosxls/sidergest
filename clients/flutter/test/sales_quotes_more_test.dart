@@ -33,7 +33,11 @@ Future<void> _pick(WidgetTester tester, Finder field, String option) async {
 }
 
 Future<void> _saveForm(WidgetTester tester) async {
-  await tester.tap(find.text('Salvar').last);
+  // The line form of a quote says "Adicionar item": nothing is stored until the page is saved.
+  // The line form says "Concluir" when it edits an item and "Adicionar item" when it adds one.
+  final done = find.text('Concluir');
+  final add = find.text('Adicionar item');
+  await tester.tap((done.evaluate().isNotEmpty ? done : (add.evaluate().isNotEmpty ? add : find.text('Salvar'))).last);
   await tester.pumpAndSettle();
 }
 
@@ -58,10 +62,10 @@ void main() {
       expect(packSpec({'productId': 1}), {'productId': 1});
     });
 
-    test('quoteAlert picks the most urgent text', () {
+    test('quoteAlert lists every alert, most urgent first', () {
       expect(quoteAlert({'status': 'PendingApproval'}), 'Acima do limite');
       expect(quoteAlert({'status': 'Draft', 'needsApproval': true}), 'Acima do limite');
-      expect(quoteAlert({'status': 'Sent', 'followUp': true, 'expiring': true}), 'Cobrar resposta');
+      expect(quoteAlert({'status': 'Sent', 'followUp': true, 'expiring': true}), 'Cobrar resposta · Vence em breve');
       expect(quoteAlert({'status': 'Sent', 'expiring': true}), 'Vence em breve');
       expect(quoteAlert({'status': 'Sent'}), '');
     });
@@ -145,9 +149,16 @@ void main() {
       expect(find.text('Duplicar'), findsOneWidget);
       expect(find.text('Cancelar'), findsNothing);
       expect(find.text('Excluir'), findsNothing);
+      expect(find.text('Imprimir'), findsOneWidget);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
       final f2 = _fake('Draft');
-      await pumpMore(tester, f2, (s) => QuotesScreen(session: s), role: 'Reader');
-      expect(find.byTooltip('Ações'), findsNothing);
+      await pumpMore(tester, f2, (s) => QuotesScreen(session: s), role: 'Reader', size: const Size(2600, 1800));
+      // A reader can still print a quote, but not change one.
+      await tester.tap(find.byTooltip('Ações'));
+      await tester.pumpAndSettle();
+      expect(find.text('Imprimir'), findsOneWidget);
+      expect(find.text('Duplicar'), findsNothing);
       expect(find.text('Novo orçamento'), findsNothing);
     });
 
@@ -165,7 +176,7 @@ void main() {
     Future<void> openNew(WidgetTester tester, MoreFake f) async {
       await pumpMore(tester, f, (s) => QuotesScreen(session: s));
       await tapText(tester, 'Novo orçamento');
-      expect(find.text('Novo orçamento comercial'), findsOneWidget);
+      expect(find.text('Novo orçamento'), findsOneWidget);
     }
 
     Future<void> pickCustomer(WidgetTester tester) async {
@@ -176,7 +187,6 @@ void main() {
 
     Future<void> addItem(WidgetTester tester, {String qty = '10', String price = '120', String days = '15'}) async {
       await tapKey(tester, 'add-line');
-      await tester.tap(find.byKey(const ValueKey('field-productId-0')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('TB-25 · Tubo 25,4 x 1,5').last);
       await tester.pumpAndSettle();
@@ -192,7 +202,7 @@ void main() {
       await tapKey(tester, 'quote-save');
       expect(find.text('Informe o cliente'), findsOneWidget);
       expect(tester.widget<FilledButton>(find.byKey(const ValueKey('add-line'))).onPressed, isNull);
-      expect(find.text('Escolha o cliente e o prazo para adicionar itens'), findsOneWidget);
+      expect(find.text('Escolha o cliente e o prazo de pagamento para adicionar itens'), findsOneWidget);
       await pickCustomer(tester);
       await tapKey(tester, 'quote-save');
       expect(find.text('Inclua ao menos um item'), findsOneWidget); // the customer's default prazo was applied
@@ -210,7 +220,8 @@ void main() {
       await _pick(tester, find.byType(DropdownButtonFormField<String>).first, 'FOB (frete do cliente)');
       await addItem(tester);
       expect(find.byKey(const ValueKey('quote-approval-banner')), findsNothing);
-      expect(find.textContaining('produtos R\$ 1.200,00'), findsOneWidget);
+      expect(find.text('Produtos'), findsOneWidget);
+      expect(find.text('R\$ 1.200,00'), findsWidgets);
       await tapKey(tester, 'quote-save');
       final b = f.body(f.last('POST', '/api/sales/quotes'));
       expect(b['customerId'], 2);
@@ -218,7 +229,7 @@ void main() {
       expect(b['paymentTermId'], 1);
       expect(b['customPaymentTerm'], isNull);
       expect(b['freight'], 'Fob');
-      expect(b['contactName'], 'Edilto');
+      expect(b['contactName'], 'Marta'); // the contact follows the delivery address chosen, since none was typed
       final line = (b['lines'] as List).single as Map<String, dynamic>;
       expect(line['productId'], 7);
       expect(line['quantity'], 10);
@@ -257,7 +268,6 @@ void main() {
       expect(find.textContaining('O maior desconto sobre a tabela é 20%'), findsOneWidget);
       f.listPrice = 0;
       await tapKey(tester, 'add-line');
-      await tester.tap(find.byKey(const ValueKey('field-productId-0')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('TB-25 · Tubo 25,4 x 1,5').last);
       await tester.pumpAndSettle();
@@ -275,16 +285,16 @@ void main() {
       await addItem(tester);
       await tapKey(tester, 'quote-save');
       expect(find.text('Cliente: bloqueado'), findsOneWidget);
-      expect(find.text('Novo orçamento comercial'), findsOneWidget);
+      expect(find.text('Novo orçamento'), findsOneWidget);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(find.text('Descartar alterações?'), findsOneWidget);
       await tapText(tester, 'Continuar editando');
-      expect(find.text('Novo orçamento comercial'), findsOneWidget);
+      expect(find.byKey(const ValueKey('quote-save')), findsOneWidget);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       await tapText(tester, 'Descartar');
-      expect(find.text('Novo orçamento comercial'), findsNothing);
+      expect(find.byKey(const ValueKey('quote-save')), findsNothing);
     });
 
     testWidgets('editing a draft loads its items and saves with PUT', (tester) async {

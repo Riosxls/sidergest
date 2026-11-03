@@ -43,7 +43,11 @@ class RecordList extends StatefulWidget {
     this.filtersActive = false,
     this.onClearFilters,
     this.emptyAction,
+    this.phoneTile,
   });
+
+  /// Content of a row on a phone, in place of the title and the grey line of label/value pairs.
+  final Widget Function(BuildContext context, Map<String, dynamic> e)? phoneTile;
 
   final ApiClient api;
   final String path;
@@ -458,7 +462,8 @@ class RecordListState extends State<RecordList> {
     showCheckboxColumn: false,
     headingRowHeight: 40,
     dataRowMinHeight: 36,
-    dataRowMaxHeight: 44,
+    // Larger text (accessibility scale) needs taller rows or the cells are cut.
+    dataRowMaxHeight: MediaQuery.textScalerOf(context).scale(44).clamp(44, 132).toDouble(),
     sortColumnIndex: _sortColumn,
     sortAscending: _ascending,
     columns: [
@@ -488,7 +493,7 @@ class RecordListState extends State<RecordList> {
               DataCell(
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 320),
-                  child: Text(c.value(e), overflow: TextOverflow.ellipsis),
+                  child: c.cell != null ? c.cell!(context, e) : Text(c.value(e), overflow: TextOverflow.ellipsis),
                 ),
               ),
             if (widget.rowActions != null) DataCell(_menu(e)),
@@ -525,6 +530,14 @@ class RecordListState extends State<RecordList> {
       final cols = widget.columns;
       final pairs = cols.skip(2).map((c) => (c.label, c.value(e))).where((p) => p.$2.isNotEmpty).toList();
       final muted = TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant);
+      if (widget.phoneTile != null) {
+        return ListTile(
+          tileColor: identical(e, _highlighted(items)) ? Theme.of(context).colorScheme.primaryContainer : widget.rowColor?.call(context, e),
+          title: widget.phoneTile!(context, e),
+          trailing: widget.rowActions == null ? null : _menu(e),
+          onTap: widget.onTap == null ? null : () => _tap(e),
+        );
+      }
       return ListTile(
         tileColor: identical(e, _highlighted(items)) ? Theme.of(context).colorScheme.primaryContainer : widget.rowColor?.call(context, e),
         title: Text(
@@ -593,6 +606,8 @@ class RecordListState extends State<RecordList> {
             ),
             const SizedBox(width: 8),
             Text('$from–$to de ${page.total}'),
+            // Sorting reorders only the rows of this page; say so rather than let it pass for the whole list.
+            if (_sortColumn != null) Padding(padding: const EdgeInsets.only(left: 12), child: Text('· ordenação só nesta página', style: Theme.of(context).textTheme.bodySmall)),
             const Spacer(),
           ],
         ),

@@ -278,12 +278,19 @@ const _serverMessages = {
   'Hourly, Every6Hours, Daily or Weekly': 'De hora em hora, a cada 6 horas, diário ou semanal',
   'Make a backup first: the newest one is missing or older than 1 hour': 'Faça um backup antes: o mais recente não existe ou tem mais de 1 hora',
   'NCM must have 8 digits': 'O NCM deve ter 8 dígitos',
+  'At least one item': 'Inclua ao menos um item',
+  'Customer not found': 'Cliente não encontrado',
+  'Address does not belong to the customer': 'O local de entrega não é deste cliente',
+  'Unknown or inactive payment term': 'Prazo de pagamento desconhecido ou inativo',
 };
 
 final _serverPatterns = <(RegExp, String Function(Match))>[
   (RegExp(r'^At least (\d+) characters$'), (m) => 'Pelo menos ${m[1]} caracteres'),
   (RegExp(r'^At most (\d+) characters$'), (m) => 'No máximo ${m[1]} caracteres'),
   (RegExp(r'^(\d+) digits$'), (m) => '${m[1]} dígitos'),
+  (RegExp(r'^Product (.+) is blocked$'), (m) => 'O produto ${m[1]} está bloqueado'),
+  (RegExp(r'^No price for (.+); give one or register it in the price list$'), (m) => 'Sem preço para ${m[1]}: informe um ou cadastre na tabela de preços'),
+  (RegExp(r'^Customer (.+) is inactive$'), (m) => 'O cliente ${m[1]} está inativo'),
   (RegExp(r'^Must be greater than the last issued number \((\d+)\)$'), (m) => 'Deve ser maior que o último número emitido (${m[1]})'),
 ];
 
@@ -301,7 +308,16 @@ String translateServerText(String s) {
 /// Portuguese captions for the API field names that reach the user in validation messages.
 const _fieldCaptions = {
   'customerId': 'Cliente',
-  'paymentTermId': 'Prazo',
+  'paymentTermId': 'Prazo de pagamento',
+  'customPaymentTerm': 'Prazo de pagamento',
+  'addressId': 'Local de entrega',
+  'lines': 'Itens',
+  'leadTimeDays': 'Prazo de entrega',
+  'ipiPercent': 'IPI',
+  'icmsPercent': 'ICMS',
+  'validityDays': 'Validade',
+  'description': 'Descrição',
+  'feasibilityId': 'Análise de viabilidade',
   'productId': 'Produto',
   'materialId': 'Material',
   'supplierId': 'Fornecedor',
