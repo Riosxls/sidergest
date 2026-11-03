@@ -249,7 +249,13 @@ void main() {
       expect(find.widgetWithText(ListTile, t), findsNothing);
     }
     expect(find.widgetWithText(ListTile, 'Painel'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Parâmetros'), findsOneWidget);
+    // Administration screens are in the avatar menu only.
+    expect(find.widgetWithText(ListTile, 'Parâmetros'), findsNothing);
+    await tester.tap(find.byTooltip('Conta'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('admin-settings')), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
     await openModule(tester, 'Estoque');
     expect(find.widgetWithText(ListTile, 'Saldos'), findsOneWidget);
     expect(find.widgetWithText(ListTile, 'Controle de aço'), findsOneWidget);

@@ -3,11 +3,15 @@ import 'package:flutter/material.dart';
 import '../screens/settings/settings_dialog.dart';
 import '../session.dart';
 
-/// Avatar menu: opens settings and signs out.
+/// Avatar menu: opens settings, the administration screens and signs out.
 class UserMenu extends StatelessWidget {
-  const UserMenu({super.key, required this.session});
+  const UserMenu({super.key, required this.session, this.adminScreens = const [], this.onOpenScreen});
 
   final Session session;
+
+  /// Administration screens the user may open; kept here instead of the sidebar so they are not repeated on every screen.
+  final List<({String id, IconData icon, String title})> adminScreens;
+  final void Function(String id)? onOpenScreen;
 
   String get _initials {
     final name = session.shownName.trim();
@@ -28,6 +32,8 @@ class UserMenu extends StatelessWidget {
             showUserSettings(context, session);
           case 'logout':
             session.logout();
+          default:
+            if (v.startsWith('screen:')) onOpenScreen?.call(v.substring('screen:'.length));
         }
       },
       itemBuilder: (_) => [
@@ -50,6 +56,20 @@ class UserMenu extends StatelessWidget {
           value: 'settings',
           child: Row(children: [Icon(Icons.settings_outlined, size: 20), SizedBox(width: 12), Text('Configurações')]),
         ),
+        if (adminScreens.isNotEmpty) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem<String>(
+            enabled: false,
+            height: 28,
+            child: Text('Administração', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+          ),
+          for (final s in adminScreens)
+            PopupMenuItem<String>(
+              key: ValueKey('admin-${s.id}'),
+              value: 'screen:${s.id}',
+              child: Row(children: [Icon(s.icon, size: 20), const SizedBox(width: 12), Flexible(child: Text(s.title, overflow: TextOverflow.ellipsis))]),
+            ),
+        ],
         const PopupMenuDivider(),
         const PopupMenuItem<String>(
           value: 'logout',

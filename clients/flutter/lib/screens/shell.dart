@@ -739,12 +739,6 @@ class _ShellState extends State<Shell> {
         moduleItems(m.section);
       }
     }
-    final system = _items.where((i) => i.section == 'Sistema');
-    if (system.isNotEmpty) {
-      children.add(const Divider());
-      if (!rail) children.add(_groupLabel('Administração', theme));
-      children.addAll(system.map(one));
-    }
     return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
   }
 
@@ -993,7 +987,14 @@ class _ShellState extends State<Shell> {
             const SizedBox(width: 4),
             AlertBell(center: s.alerts, onNavigate: _go),
             const SizedBox(width: 12),
-            UserMenu(session: s),
+            UserMenu(
+              session: s,
+              adminScreens: [
+                for (final i in _items)
+                  if (i.section == 'Sistema') (id: i.id, icon: i.icon, title: i.title),
+              ],
+              onOpenScreen: _go,
+            ),
             const SizedBox(width: 8),
           ],
         ),

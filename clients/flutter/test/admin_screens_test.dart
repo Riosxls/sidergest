@@ -81,8 +81,11 @@ Future<(Session, List<http.Request>)> pump(WidgetTester tester, String role) asy
   return (session, log);
 }
 
+/// The administration screens live in the avatar menu, not in the sidebar.
 Future<void> open(WidgetTester tester, String title) async {
-  await tester.tap(find.widgetWithText(ListTile, title));
+  await tester.tap(find.byTooltip('Conta'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(PopupMenuItem<String>, title));
   await tester.pumpAndSettle();
 }
 
@@ -90,10 +93,16 @@ void main() {
   testWidgets('non-admin roles do not see the admin screens', (tester) async {
     for (final role in rolePermissions.keys.where((r) => r != 'Admin')) {
       await pump(tester, role);
+      await tester.tap(find.byTooltip('Conta'));
+      await tester.pumpAndSettle();
       for (final t in ['Usuários', 'Permissões', 'Auditoria']) {
-        expect(find.widgetWithText(ListTile, t), findsNothing, reason: '$role/$t');
+        expect(find.widgetWithText(PopupMenuItem<String>, t), findsNothing, reason: '$role/$t');
       }
-      expect(find.widgetWithText(ListTile, 'Parâmetros'), findsOneWidget);
+      expect(find.widgetWithText(PopupMenuItem<String>, 'Parâmetros'), findsOneWidget);
+      // Not repeated in the sidebar.
+      expect(find.widgetWithText(ListTile, 'Parâmetros'), findsNothing);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
     }
   });
 
