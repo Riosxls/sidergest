@@ -179,14 +179,14 @@ void main() {
     expect(find.byKey(const ValueKey('nav-balances')), findsNothing);
     expect(find.text('OFs a liberar'), findsOneWidget);
     expect(find.text('Reservas abertas'), findsNothing);
-    expect(find.widgetWithText(ListTile, 'Visão geral'), findsOneWidget);
+    expect(find.byKey(const ValueKey('nav-module:PCP')), findsOneWidget);
     expect(find.widgetWithText(ListTile, 'Ordens de fabricação'), findsOneWidget);
     expect(find.widgetWithText(ListTile, 'Saldos'), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('nav-production-orders')));
     await tester.pumpAndSettle();
     expect(find.text('PCP › Ordens de fabricação'), findsOneWidget);
-    await tester.tap(find.widgetWithText(ListTile, 'Visão geral'));
+    await tester.tap(find.byKey(const ValueKey('nav-module:PCP')));
     await tester.pumpAndSettle();
     expect(find.text('OFs a liberar'), findsOneWidget);
     await tester.tap(find.widgetWithText(ListTile, 'Painel'));
@@ -245,7 +245,7 @@ void main() {
     await openScreen(tester, 'Estoque', 'balances');
     await tester.tap(find.byTooltip('Recolher menu'));
     await tester.pumpAndSettle();
-    expect(find.text('Saldos'), findsNothing);
+    expect(find.widgetWithText(ListTile, 'Saldos'), findsNothing);
     await tester.tap(find.byTooltip('Saldos'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Expandir menu'));

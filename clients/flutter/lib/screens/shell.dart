@@ -13,6 +13,7 @@ import '../widgets/alerts.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/record_nav.dart';
+import '../widgets/tab_frame.dart';
 import '../widgets/unload_guard.dart';
 import '../widgets/user_menu.dart';
 import 'audit.dart';
@@ -64,10 +65,73 @@ class NavItem {
 
 const hiddenSection = '_module';
 
+/// Screens that share one sidebar entry. The first tab is the entry; every tab stays a screen of its own (links, alerts, pins and search still reach it).
+final tabGroups = <TabGroup>[
+  const TabGroup('Comercial', 'Expedição', Icons.local_shipping_outlined, [
+    (id: 'deliveries', label: 'Entregas'),
+    (id: 'certificates', label: 'Certificados'),
+    (id: 'fiscal-documents', label: 'Notas fiscais'),
+  ]),
+  const TabGroup('Comercial', 'Relatórios', Icons.bar_chart_outlined, [
+    (id: 'report-material-consumption', label: 'Consumo de material'),
+    (id: 'report-billing', label: 'Faturamento'),
+  ]),
+  TabGroup('Comercial', 'Preços e regras', Icons.price_change_outlined, [
+    (id: priceList.path, label: 'Tabela de preços'),
+    (id: monthlyPrices.path, label: 'Preços mensais da NF'),
+    (id: paymentTerms.path, label: 'Prazos'),
+    (id: taxRules.path, label: 'Regras de imposto'),
+  ]),
+  TabGroup('Engenharia', 'Materiais', Icons.category_outlined, [
+    (id: materials.path, label: 'Materiais'),
+    (id: materialClasses.path, label: 'Classes'),
+    (id: materialGroups.path, label: 'Grupos'),
+    (id: materialSubgroups.path, label: 'Subgrupos'),
+  ]),
+  TabGroup('Engenharia', 'Processo e recursos', Icons.precision_manufacturing_outlined, [
+    (id: machines.path, label: 'Máquinas'),
+    (id: workCenters.path, label: 'Centros de trabalho'),
+    (id: tools.path, label: 'Ferramentas'),
+    (id: standardOperations.path, label: 'Operações padrão'),
+  ]),
+  TabGroup('Estoque', 'Saldos', Icons.inventory_outlined, [
+    (id: 'balances', label: 'Saldos'),
+    (id: 'low-stock', label: 'Estoque mínimo'),
+    (id: 'reservations', label: 'Reservas'),
+    (id: stockLocations.path, label: 'Locais'),
+  ]),
+  const TabGroup('Estoque', 'Movimentações', Icons.swap_horiz, [(id: 'documents', label: 'Movimentações'), (id: 'closing', label: 'Fechamento e custo médio')]),
+  const TabGroup('Suprimentos', 'Pedidos de compra', Icons.receipt_long_outlined, [(id: 'orders', label: 'Pedidos'), (id: 'overdue', label: 'Em atraso')]),
+  const TabGroup('PCP', 'Ordens de fabricação', Icons.assignment_outlined, [
+    (id: 'production-orders', label: 'Ordens'),
+    (id: 'outside-processing', label: 'Beneficiamento externo'),
+  ]),
+  TabGroup('PCP', 'Cadastros', Icons.groups_outlined, [
+    (id: employees.path, label: 'Funcionários'),
+    (id: shifts.path, label: 'Turnos'),
+    (id: occurrences.path, label: 'Ocorrências'),
+    (id: holidays.path, label: 'Feriados'),
+  ]),
+];
+
+TabGroup? tabGroupOf(String id) {
+  for (final g in tabGroups) {
+    if (g.has(id)) return g;
+  }
+  return null;
+}
+
 List<NavItem> navItems() {
   final base = _screens();
   final links = {
-    for (final m in modules) m.section: [for (final i in base.where((i) => i.section == m.section)) ModuleLink(i.id, i.icon, i.title)],
+    for (final m in modules) m.section: [
+      for (final i in base.where((i) => i.section == m.section))
+        // A group is one card, on its first tab.
+        if (tabGroupOf(i.id) == null)
+          ModuleLink(i.id, i.icon, i.title)
+        else if (tabGroupOf(i.id)!.tabs.first.id == i.id)
+          ModuleLink(i.id, tabGroupOf(i.id)!.icon, tabGroupOf(i.id)!.title),
+    ],
   };
   return [
     ...base,
@@ -562,11 +626,11 @@ class _ShellState extends State<Shell> {
 
   NavItem get _item => _items.firstWhere((i) => i.id == _current);
 
-  Widget _railItem(NavItem d, ColorScheme cs, VoidCallback tap) {
-    final active = d.id == _current;
+  Widget _railItem(NavItem d, ColorScheme cs, VoidCallback tap, {String? title, IconData? icon, bool? selected}) {
+    final active = selected ?? d.id == _current;
     return Tooltip(
       key: active ? _activeKey : null,
-      message: d.title,
+      message: title ?? d.title,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
         child: Material(
@@ -575,15 +639,15 @@ class _ShellState extends State<Shell> {
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
             onTap: tap,
-            child: SizedBox(height: 40, child: Icon(d.icon, color: active ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
+            child: SizedBox(height: 40, child: Icon(icon ?? d.icon, color: active ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
           ),
         ),
       ),
     );
   }
 
-  Widget _tile(NavItem d, ColorScheme cs, VoidCallback tap, {String? title}) {
-    final active = d.id == _current;
+  Widget _tile(NavItem d, ColorScheme cs, VoidCallback tap, {String? title, IconData? icon, bool? selected}) {
+    final active = selected ?? d.id == _current;
     return Padding(
       key: active ? _activeKey : null,
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -594,7 +658,7 @@ class _ShellState extends State<Shell> {
           key: ValueKey('nav-${d.id}'),
           dense: true,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          leading: Icon(d.icon),
+          leading: Icon(icon ?? d.icon),
           title: Text(
             title ?? d.title,
             maxLines: 1,
@@ -621,10 +685,20 @@ class _ShellState extends State<Shell> {
 
   /// Comercial has too many screens for one flat list; the rest of the modules are short enough to stay ungrouped.
   static const _comercialGroups = {
-    'Vendas': ['customers', 'sales-pipeline', 'sales-quotes', 'viability', 'sales-orders', 'deliveries'],
-    'Fiscal e qualidade': ['certificates', 'fiscal-documents'],
+    'Vendas': ['customers', 'sales-pipeline', 'sales-quotes', 'viability', 'sales-orders', 'deliveries', 'certificates', 'fiscal-documents'],
     'Relatórios': ['report-material-consumption', 'report-billing'],
   };
+
+  /// The tab group [id] belongs to and the first of its tabs this user can open; null when fewer than two tabs show.
+  ({TabGroup group, String first})? _shownGroup(String id) {
+    final g = tabGroupOf(id);
+    if (g == null) return null;
+    final shown = [
+      for (final t in g.tabs)
+        if (_items.any((i) => i.id == t.id)) t.id,
+    ];
+    return shown.length < 2 ? null : (group: g, first: shown.first);
+  }
 
   String? _group(NavItem i) {
     if (i.section != 'Comercial') return null;
@@ -647,13 +721,16 @@ class _ShellState extends State<Shell> {
     final cs = theme.colorScheme;
     final children = <Widget>[];
 
-    Widget one(NavItem d, {String? title}) {
+    Widget one(NavItem d, {String? title, TabGroup? group}) {
       void tap() {
         _go(d.id);
         if (closeDrawer) Navigator.pop(context);
       }
 
-      return rail ? _railItem(d, cs, tap) : _tile(d, cs, tap, title: title);
+      final selected = group?.has(_current);
+      return rail
+          ? _railItem(d, cs, tap, title: group?.title, icon: group?.icon, selected: selected)
+          : _tile(d, cs, tap, title: title ?? group?.title, icon: group?.icon, selected: selected);
     }
 
     final dashboard = _items.firstWhere((i) => i.id == 'dashboard');
@@ -690,10 +767,13 @@ class _ShellState extends State<Shell> {
     void moduleItems(String section) {
       String? lastGroup;
       for (final i in _items.where((i) => i.section == section)) {
+        final tg = _shownGroup(i.id);
+        // Only the first tab of a group has a sidebar entry; the others are reached from the tabs on the screen.
+        if (tg != null && tg.first != i.id) continue;
         final g = _group(i);
         if (g != null && g != lastGroup) children.add(rail ? const Divider(indent: 16, endIndent: 16) : _groupLabel(g, theme));
         lastGroup = g;
-        children.add(one(i));
+        children.add(one(i, group: tg?.group));
       }
     }
 
@@ -716,20 +796,29 @@ class _ShellState extends State<Shell> {
         children.add(one(home, title: m.section));
         continue;
       }
+      // The module name opens its overview.
       children.add(
         Padding(
           key: ValueKey('nav-section-${m.section}'),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Row(
-            children: [
-              Icon(m.icon, size: 20, color: cs.primary),
-              const SizedBox(width: 12),
-              Text(m.section, style: theme.textTheme.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w700)),
-            ],
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 2),
+          child: Tooltip(
+            message: 'Visão geral de ${m.section}',
+            child: ListTile(
+              key: ValueKey('nav-${home.id}'),
+              dense: true,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              leading: Icon(m.icon, color: cs.primary),
+              title: Text(m.section, style: theme.textTheme.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w700)),
+              selected: _current == home.id,
+              selectedTileColor: cs.secondaryContainer,
+              onTap: () {
+                _go(home.id);
+                if (closeDrawer) Navigator.pop(context);
+              },
+            ),
           ),
         ),
       );
-      children.add(one(home, title: 'Visão geral'));
       moduleItems(m.section);
     }
     return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
@@ -905,9 +994,24 @@ class _ShellState extends State<Shell> {
           _PageSlot(
             key: ValueKey(e.key),
             active: e.key == _key(_current, _filter),
-            child: _items.firstWhere((i) => i.id == e.value.id).build(s, e.value.filter, _go),
+            child: _framed(e.value.id, _items.firstWhere((i) => i.id == e.value.id).build(s, e.value.filter, _go)),
           ),
       ],
+    );
+  }
+
+  /// A screen of a tab group gets the strip with its sibling tabs.
+  Widget _framed(String id, Widget screen) {
+    final g = _shownGroup(id)?.group;
+    if (g == null) return screen;
+    return TabFrame(
+      tabs: [
+        for (final t in g.tabs)
+          if (_items.any((i) => i.id == t.id)) t,
+      ],
+      current: id,
+      onSelect: _go,
+      child: screen,
     );
   }
 

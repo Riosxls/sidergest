@@ -17,6 +17,7 @@ Future<void> chord(WidgetTester tester, LogicalKeyboardKey mod, LogicalKeyboardK
 }
 
 void main() {
+  tabGroupTests();
   testWidgets('a link back to a record with unsaved edits asks before closing the pages above it', (tester) async {
     final trail = RecordTrail();
     var dirty = true;
@@ -128,5 +129,20 @@ void main() {
     await esc(tester);
     expect(find.text('registro aberto'), findsNothing);
     expect(find.byKey(const ValueKey('link-production-orders')), findsNothing);
+  });
+}
+
+void tabGroupTests() {
+  testWidgets('screens that belong together share one sidebar entry and a tab strip', (tester) async {
+    await pumpShell(tester, 'Admin');
+    await openScreen(tester, 'Estoque', 'balances');
+    expect(find.byKey(const ValueKey('nav-low-stock')), findsNothing);
+    expect(find.byKey(const ValueKey('nav-reservations')), findsNothing);
+    expect(find.byKey(const ValueKey('tab-balances')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('tab-low-stock')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<ChoiceChip>(find.byKey(const ValueKey('tab-low-stock'))).selected, isTrue);
+    // The sidebar entry stays marked while another tab shows.
+    expect(tester.widget<ListTile>(find.byKey(const ValueKey('nav-balances'))).selected, isTrue);
   });
 }
