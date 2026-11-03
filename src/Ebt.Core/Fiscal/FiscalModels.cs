@@ -22,7 +22,17 @@ public sealed record OutsideInvoiceOptions(decimal UnitValue, string? Cfop = nul
 
 public sealed record NfeParty(string Name, string Document, string? StateRegistration, bool IcmsContributor, string? Street, string? Number, string? Complement, string? District, string? City, string? CityIbgeCode, string Uf, string? ZipCode, string? Email, string? Phone);
 
-public sealed record NfeTransport(int FreightMode, string? Carrier, string? VehiclePlate, int Packages, decimal? GrossWeightKg);
+/// <param name="GrossWeightKg">pesoB.</param>
+/// <param name="NetWeightKg">pesoL.</param>
+/// <param name="CarrierDocument">CNPJ/CPF of the carrier, from the carrier registry when the delivery's carrier name matches.</param>
+/// <param name="VehicleUf">UF of the plate; falls back to the carrier UF, never to the issuer's.</param>
+public sealed record NfeTransport(int FreightMode, string? Carrier, string? VehiclePlate, int Packages, decimal? GrossWeightKg, decimal? NetWeightKg = null, string? CarrierDocument = null, string? CarrierStateRegistration = null,
+    string? CarrierAddress = null, string? CarrierCity = null, string? CarrierUf = null, string? VehicleUf = null);
+
+public sealed record ReturnLineInput(int ItemId, decimal Quantity);
+
+/// <param name="Lines">Lines of the sale NF (fiscal document line ids) with the quantity coming back.</param>
+public sealed record ReturnInput(IReadOnlyList<ReturnLineInput> Lines, int LocationId, string? Reason);
 
 /// <param name="AuthorizedXml">nfeProc (signed NFe + protNFe) when SEFAZ authorized; null for the stub.</param>
 public sealed record SefazResult(bool Authorized, string Status, string Message, string? Protocol, bool Simulated, string? AuthorizedXml = null);
@@ -48,6 +58,9 @@ public interface ISefazClient
 
     /// <summary>Registers the cancellation event (110111) of an authorized NF-e.</summary>
     Task<SefazResult> CancelAsync(string accessKey, string authorizationProtocol, string reason, SefazEnvironment environment, CancellationToken ct);
+
+    /// <summary>Registers a carta de correção (CC-e, event 110110) with sequence number <paramref name="sequence"/> (1..20) for an authorized NF-e.</summary>
+    Task<SefazResult> CorrectAsync(string accessKey, int sequence, string text, SefazEnvironment environment, CancellationToken ct);
 }
 
 public sealed record FiscalDocumentSummary(int Id, FiscalKind Kind, FiscalStatus Status, string CfopCode, int Series, int Number, string AccessKey, string RecipientName, decimal InvoiceTotal, DateTimeOffset IssuedAt, bool Simulated);

@@ -133,6 +133,7 @@ Future<Uint8List> buildDanfePdf(Map<String, dynamic> d, Map<String, dynamic> iss
                     pw.Text('Documento Auxiliar da\nNota Fiscal Eletrônica', style: _val(6), textAlign: pw.TextAlign.center),
                     pw.SizedBox(height: 3),
                     pw.Text('0 - ENTRADA\n1 - SAÍDA', style: _val(6)),
+                    pw.Text(d['kind'] == 'Return' ? '0' : '1', style: _val(10, true)),
                     pw.SizedBox(height: 2),
                     pw.Text('Nº $numberText', style: _val(9, true)),
                     pw.Text('SÉRIE ${_s(d['series']).padLeft(3, '0')}', style: _val(8, true)),
@@ -166,7 +167,7 @@ Future<Uint8List> buildDanfePdf(Map<String, dynamic> d, Map<String, dynamic> iss
         ),
       ),
       _row([
-        _cell('NATUREZA DA OPERAÇÃO', '${_s(d['cfopCode'])} - ${_s(d['natureOfOperation']).isEmpty ? (d['kind'] == 'OutsideShipment' ? 'REMESSA PARA INDUSTRIALIZAÇÃO' : 'VENDA DE MERCADORIA') : _s(d['natureOfOperation'])}', flex: 5),
+        _cell('NATUREZA DA OPERAÇÃO', '${_s(d['cfopCode'])} - ${_s(d['natureOfOperation']).isEmpty ? (d['kind'] == 'OutsideShipment' ? 'REMESSA PARA INDUSTRIALIZAÇÃO' : d['kind'] == 'Return' ? 'DEVOLUÇÃO DE VENDA DE PRODUÇÃO DO ESTABELECIMENTO' : 'VENDA DE MERCADORIA') : _s(d['natureOfOperation'])}', flex: 5),
         _cell(
           'PROTOCOLO DE AUTORIZAÇÃO DE USO',
           _s(d['protocol']).isEmpty ? 'Aguardando autorização' : '${_s(d['protocol'])}${issuedText.isEmpty ? '' : ' - $issuedText'}',
@@ -269,7 +270,7 @@ Future<Uint8List> buildDanfePdf(Map<String, dynamic> d, Map<String, dynamic> iss
     ],
   );
 
-  final info = [_s(d['additionalInfo']), if (_s(d['statusMessage']).isNotEmpty) _s(d['statusMessage'])].where((e) => e.isNotEmpty).join('\n');
+  final info = [_s(d['additionalInfo']), if (_s(d['referencedAccessKey']).isNotEmpty) 'NF-e referenciada: ${formatAccessKey(_s(d['referencedAccessKey']))}', if (_s(d['statusMessage']).isNotEmpty) _s(d['statusMessage'])].where((e) => e.isNotEmpty).join('\n');
   doc.addPage(
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,

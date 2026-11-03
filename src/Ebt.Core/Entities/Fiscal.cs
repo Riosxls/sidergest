@@ -1,6 +1,7 @@
 namespace Ebt.Core.Entities;
 
-public enum FiscalKind { Sale = 0, OutsideShipment = 1 }
+/// <summary>Return: devolução de venda (finNFe 4, entrada) issued by us for goods a customer sent back; it references the original sale NF.</summary>
+public enum FiscalKind { Sale = 0, OutsideShipment = 1, Return = 2 }
 /// <summary>Pending: number taken and sent (or about to be) to SEFAZ, outcome not known yet. Rejected: SEFAZ refused it and the number could not be given back (it needs inutilização).</summary>
 public enum FiscalStatus { Authorized = 0, Cancelled = 1, Pending = 2, Rejected = 3 }
 /// <summary>NF-e tpAmb values.</summary>
@@ -129,6 +130,18 @@ public class FiscalDocument
     public string? CancelProtocol { get; set; }
     /// <summary>Why the document is Pending or Rejected (SEFAZ code and message, or the reconciliation result).</summary>
     public string? StatusMessage { get; set; }
+    /// <summary>Non-blocking notes recorded at emission (e.g. the monthly price differs from the order price).</summary>
+    public string? Warnings { get; set; }
+    /// <summary>SEFAZ answered duplicidade (204/539): the number is NOT given back; reconcile by access key before anything else.</summary>
+    public bool KeyLookupRequired { get; set; }
+    /// <summary>Return NF: the sale NF it sends back (finNFe 4, NFref) and that NF's access key.</summary>
+    public int? ReferencedDocumentId { get; set; }
+    public FiscalDocument? ReferencedDocument { get; set; }
+    public string? ReferencedAccessKey { get; set; }
+    /// <summary>Return NF: the stock document that put the goods back (reversed when the return NF is cancelled).</summary>
+    public int? StockDocumentId { get; set; }
+    public StockDocument? StockDocument { get; set; }
+    public List<FiscalEvent> Events { get; set; } = new();
     public List<FiscalDocumentLine> Lines { get; set; } = new();
     public List<FiscalInstallment> Installments { get; set; } = new();
 }
@@ -143,6 +156,9 @@ public class FiscalDocumentLine
     public Product? Product { get; set; }
     public int? ProductionOrderId { get; set; }
     public ProductionOrder? ProductionOrder { get; set; }
+    /// <summary>Return NF: the line of the sale NF this line sends back (the quantity balance is checked against it).</summary>
+    public int? ReferencedLineId { get; set; }
+    public FiscalDocumentLine? ReferencedLine { get; set; }
     public required string Code { get; set; }
     public required string Description { get; set; }
     public required string Ncm { get; set; }
@@ -213,4 +229,37 @@ public class FiscalInutilization
     public required string Xml { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public string? CreatedBy { get; set; }
+}
+
+/// <summary>An event registered at SEFAZ for an authorized NF-e (carta de correção, 110110). The cancellation keeps its own columns on the document.</summary>
+public class FiscalEvent
+{
+    public int Id { get; set; }
+    public int DocumentId { get; set; }
+    public FiscalDocument? Document { get; set; }
+    /// <summary>tpEvento, e.g. 110110.</summary>
+    public required string EventType { get; set; }
+    /// <summary>nSeqEvento: 1..20 per document and event type.</summary>
+    public int Sequence { get; set; }
+    public required string Text { get; set; }
+    public required string Protocol { get; set; }
+    public SefazEnvironment Environment { get; set; }
+    public bool Simulated { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public string? CreatedBy { get; set; }
+}
+
+/// <summary>Carrier registry (transportadora): matched by name against the delivery's free-text carrier to fill the NF-e transport group.</summary>
+public class FiscalCarrier
+{
+    public int Id { get; set; }
+    public required string Name { get; set; }
+    /// <summary>CNPJ (14 digits) or CPF (11) of the carrier.</summary>
+    public string? Document { get; set; }
+    public string? StateRegistration { get; set; }
+    public string? Address { get; set; }
+    public string? City { get; set; }
+    public string? Uf { get; set; }
+    /// <summary>UF of the vehicle plate (veicTransp); the carrier UF is used when empty.</summary>
+    public string? VehicleUf { get; set; }
 }

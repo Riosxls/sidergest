@@ -159,9 +159,9 @@ scripts/             start.ps1, stop.ps1
 
 - CFOPs used: **5101** (venda), **5901** (remessa para industrialização), **5124 / 5902** (industrialização por encomenda / retorno), **5920 / 5921** (embalagem). All seeded in `cfops`; only 5101 and 5901 have emission triggers. Sale accepts another CFOP via `ship.cfop`.
 - Emission off by default (`PUT /api/fiscal/settings`, `enabled: true`, needs full emitter data). Next NF number starts at 2581 (`fiscal_settings.next_number`), advances only on authorized NF.
-- Pricing: `monthly_prices` (product x customer x CFOP x month); missing price blocks emission (422). Taxes: `tax_rules` -> order item rates -> CFOP default CSTs.
+- Pricing: the sales order line price is the default; `monthly_prices` (product x customer x CFOP x month) overrides it, and a difference is kept as a warning (`fiscal_documents.warnings` + delivery history `nf-price-warning`). No monthly price: the order price is used; emission is blocked (422) only when neither exists. Taxes: `tax_rules` -> order item rates -> CFOP default CSTs.
 - **Pending: A1 `.pfx` certificate from the accountant.** Until then `StubSefazClient` runs (`simulated = true`; put `#SEFAZ-REJEITAR#` in observations to force rejection in tests). To enable real SEFAZ-SP set `Fiscal__Sefaz__Mode=Sp`, `Fiscal__Sefaz__CertificatePath`, `Fiscal__Sefaz__CertificatePassword` (env only, never in files) and start in Homologation.
-- Not done: DANFE PDF, XSD validation, devolução, CC-e, inutilização, status lookup by access key.
+- Done (all only against the stub, never SEFAZ): DANFE PDF (Flutter), XSD validation, inutilização, lookup by access key (reconcile, also scheduled every 10 min by `FiscalReconcileService`, `Fiscal:Reconcile:Enabled`), devolução (`POST /api/fiscal/documents/{id}/return`, CFOP 1202/2202, finNFe 4, stock back), CC-e (`POST .../correction`, event 110110), carrier registry (`/api/fiscal/carriers`) for the NF transport group, partial unique index on live NFs per delivery. Duplicidade 204/539 keeps the number and flags the NF (`KeyLookupRequired`) until reconciled. Not done: NF complementar, e-mail of the XML, devolução issued by the customer (entrada de terceiros), CC-e in the DANFE.
 
 ## Quality certificates
 

@@ -698,6 +698,38 @@ namespace Ebt.Core.Data.Migrations
                         },
                         new
                         {
+                            Code = "1202",
+                            Active = true,
+                            CofinsCst = "01",
+                            DefaultCofinsPercent = 3m,
+                            DefaultPisPercent = 0.65m,
+                            Description = "Devolução de venda de produção do estabelecimento",
+                            GeneratesInstallments = false,
+                            IcmsCst = "00",
+                            IpiCst = "00",
+                            IpiFramingCode = "999",
+                            Kind = 2,
+                            PisCst = "01",
+                            Taxed = true
+                        },
+                        new
+                        {
+                            Code = "2202",
+                            Active = true,
+                            CofinsCst = "01",
+                            DefaultCofinsPercent = 3m,
+                            DefaultPisPercent = 0.65m,
+                            Description = "Devolução de venda de produção do estabelecimento",
+                            GeneratesInstallments = false,
+                            IcmsCst = "00",
+                            IpiCst = "00",
+                            IpiFramingCode = "999",
+                            Kind = 2,
+                            PisCst = "01",
+                            Taxed = true
+                        },
+                        new
+                        {
                             Code = "5920",
                             Active = true,
                             CofinsCst = "08",
@@ -1326,6 +1358,61 @@ namespace Ebt.Core.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.FiscalCarrier", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("address");
+
+                    b.Property<string>("City")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("city");
+
+                    b.Property<string>("Document")
+                        .HasMaxLength(14)
+                        .HasColumnType("character varying(14)")
+                        .HasColumnName("document");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("StateRegistration")
+                        .HasMaxLength(14)
+                        .HasColumnType("character varying(14)")
+                        .HasColumnName("state_registration");
+
+                    b.Property<string>("Uf")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("uf");
+
+                    b.Property<string>("VehicleUf")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("vehicle_uf");
+
+                    b.HasKey("Id")
+                        .HasName("pk_fiscal_carriers");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_fiscal_carriers_name");
+
+                    b.ToTable("fiscal_carriers", (string)null);
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.FiscalDocument", b =>
                 {
                     b.Property<int>("Id")
@@ -1418,6 +1505,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("issued_by");
 
+                    b.Property<bool>("KeyLookupRequired")
+                        .HasColumnType("boolean")
+                        .HasColumnName("key_lookup_required");
+
                     b.Property<int>("Kind")
                         .HasColumnType("integer")
                         .HasColumnName("kind");
@@ -1464,6 +1555,15 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("character varying(2)")
                         .HasColumnName("recipient_uf");
 
+                    b.Property<string>("ReferencedAccessKey")
+                        .HasMaxLength(44)
+                        .HasColumnType("character varying(44)")
+                        .HasColumnName("referenced_access_key");
+
+                    b.Property<int?>("ReferencedDocumentId")
+                        .HasColumnType("integer")
+                        .HasColumnName("referenced_document_id");
+
                     b.Property<int>("Series")
                         .HasColumnType("integer")
                         .HasColumnName("series");
@@ -1481,9 +1581,18 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("status_message");
 
+                    b.Property<int?>("StockDocumentId")
+                        .HasColumnType("integer")
+                        .HasColumnName("stock_document_id");
+
                     b.Property<int?>("SupplierId")
                         .HasColumnType("integer")
                         .HasColumnName("supplier_id");
+
+                    b.Property<string>("Warnings")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("warnings");
 
                     b.Property<string>("Xml")
                         .IsRequired()
@@ -1507,10 +1616,18 @@ namespace Ebt.Core.Data.Migrations
                         .HasDatabaseName("ix_fiscal_documents_customer_id");
 
                     b.HasIndex("DeliveryId")
-                        .HasDatabaseName("ix_fiscal_documents_delivery_id");
+                        .IsUnique()
+                        .HasDatabaseName("ux_fiscal_documents_live_delivery")
+                        .HasFilter("delivery_id IS NOT NULL AND status IN (0, 2)");
 
                     b.HasIndex("OutsideShipmentId")
                         .HasDatabaseName("ix_fiscal_documents_outside_shipment_id");
+
+                    b.HasIndex("ReferencedDocumentId")
+                        .HasDatabaseName("ix_fiscal_documents_referenced_document_id");
+
+                    b.HasIndex("StockDocumentId")
+                        .HasDatabaseName("ix_fiscal_documents_stock_document_id");
 
                     b.HasIndex("SupplierId")
                         .HasDatabaseName("ix_fiscal_documents_supplier_id");
@@ -1645,6 +1762,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("quantity");
 
+                    b.Property<int?>("ReferencedLineId")
+                        .HasColumnType("integer")
+                        .HasColumnName("referenced_line_id");
+
                     b.Property<int>("Sequence")
                         .HasColumnType("integer")
                         .HasColumnName("sequence");
@@ -1674,11 +1795,78 @@ namespace Ebt.Core.Data.Migrations
                     b.HasIndex("ProductionOrderId")
                         .HasDatabaseName("ix_fiscal_document_lines_production_order_id");
 
+                    b.HasIndex("ReferencedLineId")
+                        .HasDatabaseName("ix_fiscal_document_lines_referenced_line_id");
+
                     b.HasIndex("DocumentId", "Sequence")
                         .IsUnique()
                         .HasDatabaseName("ix_fiscal_document_lines_document_id_sequence");
 
                     b.ToTable("fiscal_document_lines", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.FiscalEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("DocumentId")
+                        .HasColumnType("integer")
+                        .HasColumnName("document_id");
+
+                    b.Property<int>("Environment")
+                        .HasColumnType("integer")
+                        .HasColumnName("environment");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("Protocol")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("protocol");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence");
+
+                    b.Property<bool>("Simulated")
+                        .HasColumnType("boolean")
+                        .HasColumnName("simulated");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("text");
+
+                    b.HasKey("Id")
+                        .HasName("pk_fiscal_events");
+
+                    b.HasIndex("DocumentId", "EventType", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ix_fiscal_events_document_id_event_type_sequence");
+
+                    b.ToTable("fiscal_events", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_fiscal_events_sequence", "sequence BETWEEN 1 AND 20");
+                        });
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.FiscalInstallment", b =>
@@ -6400,6 +6588,18 @@ namespace Ebt.Core.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_fiscal_documents_outside_shipments_outside_shipment_id");
 
+                    b.HasOne("Ebt.Core.Entities.FiscalDocument", "ReferencedDocument")
+                        .WithMany()
+                        .HasForeignKey("ReferencedDocumentId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_fiscal_documents_fiscal_documents_referenced_document_id");
+
+                    b.HasOne("Ebt.Core.Entities.StockDocument", "StockDocument")
+                        .WithMany()
+                        .HasForeignKey("StockDocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_fiscal_documents_stock_documents_stock_document_id");
+
                     b.HasOne("Ebt.Core.Entities.Supplier", "Supplier")
                         .WithMany()
                         .HasForeignKey("SupplierId")
@@ -6411,6 +6611,10 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Delivery");
 
                     b.Navigation("OutsideShipment");
+
+                    b.Navigation("ReferencedDocument");
+
+                    b.Navigation("StockDocument");
 
                     b.Navigation("Supplier");
                 });
@@ -6436,11 +6640,31 @@ namespace Ebt.Core.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_fiscal_document_lines_production_orders_production_order_id");
 
+                    b.HasOne("Ebt.Core.Entities.FiscalDocumentLine", "ReferencedLine")
+                        .WithMany()
+                        .HasForeignKey("ReferencedLineId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_fiscal_document_lines_fiscal_document_lines_referenced_line");
+
                     b.Navigation("Document");
 
                     b.Navigation("Product");
 
                     b.Navigation("ProductionOrder");
+
+                    b.Navigation("ReferencedLine");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.FiscalEvent", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.FiscalDocument", "Document")
+                        .WithMany("Events")
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_fiscal_events_fiscal_documents_document_id");
+
+                    b.Navigation("Document");
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.FiscalInstallment", b =>
@@ -7526,6 +7750,8 @@ namespace Ebt.Core.Data.Migrations
 
             modelBuilder.Entity("Ebt.Core.Entities.FiscalDocument", b =>
                 {
+                    b.Navigation("Events");
+
                     b.Navigation("Installments");
 
                     b.Navigation("Lines");

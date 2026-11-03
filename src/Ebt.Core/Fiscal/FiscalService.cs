@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
+using Ebt.Core.Inventory;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ebt.Core.Fiscal;
@@ -10,7 +11,7 @@ namespace Ebt.Core.Fiscal;
 /// answer is committed the same way, so a crash or lost answer never loses track of a number. A definite rejection gives the number back when possible.
 /// Callers lower stock and update the delivery/shipment in their own transaction; only the lines and the link are written there.
 /// </summary>
-public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContextOptions<EbtDbContext> options)
+public sealed partial class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContextOptions<EbtDbContext> options, StockService stock)
 {
     private static readonly string[] IcmsCalculated = ["00", "20"];
     private static readonly string[] IpiCalculated = ["00", "49", "50", "99"];
@@ -48,12 +49,16 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
 
             var doc = NewDocument(settings, cfop, FiscalKind.Sale, issuedAt, user, recipient, customerId: customer.Id, supplierId: null);
             doc.DeliveryId = delivery.Id;
+            var warnings = new List<string>();
             foreach (var (dl, n) in delivery.Lines.Select((dl, n) => (dl, n)))
             {
                 var ol = order.Lines.First(x => x.Id == dl.OrderLineId);
                 var p = products[ol.ProductId];
-                var price = await MonthlyPriceAsync(p.Id, customer.Id, cfop.Code, local.Year, local.Month, ct)
-                    ?? throw FiscalException.Blocked($"No monthly price for {p.Code} / {customer.Name} / CFOP {cfop.Code} in {local.Month:00}/{local.Year}; register it in the monthly price table before issuing the NF");
+                // The order line price is the default; the monthly price table overrides it (legacy PRECOPECA). A difference is kept as a warning on the NF and the delivery history.
+                var monthly = await MonthlyPriceAsync(p.Id, customer.Id, cfop.Code, local.Year, local.Month, ct);
+                var price = monthly ?? (ol.UnitPrice > 0 ? ol.UnitPrice : throw FiscalException.Blocked($"No price for {p.Code} / {customer.Name}: the order line has none and there is no monthly price for CFOP {cfop.Code} in {local.Month:00}/{local.Year}"));
+                if (monthly is { } m && ol.UnitPrice > 0 && m != ol.UnitPrice)
+                    warnings.Add($"{p.Code}: preço mensal {m:0.00} difere do preço do pedido {ol.UnitPrice:0.00}; NF emitida com o mensal");
                 var rule = rules.Where(r => r.ProductId == p.Id).OrderBy(r => r.CustomerId == null).FirstOrDefault();
                 doc.Lines.Add(new FiscalDocumentLine
                 {
@@ -72,7 +77,13 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
             var ofIds = doc.Lines.Where(l => l.ProductionOrderId != null).Select(l => l.ProductionOrderId!.Value).ToList();
             var ofs = await db.ProductionOrders.AsNoTracking().Where(o => ofIds.Contains(o.Id)).Select(o => o.Reference).ToListAsync(ct);
             doc.AdditionalInfo = Join(order.Reference, $"Entrega ({delivery.Reference})", ofs.Count > 0 ? string.Join(", ", ofs) : null, order.CustomerPo is { } po ? $"Pedido cliente {po}" : null, delivery.Notes, cfop.LegalText);
-            var transport = new NfeTransport(order.Freight == FreightTerms.Cif ? 0 : 1, opt.Carrier ?? delivery.Carrier, opt.VehiclePlate ?? delivery.VehiclePlate, delivery.Packages, opt.GrossWeightKg ?? delivery.GrossWeightKg);
+            if (warnings.Count > 0)
+            {
+                doc.Warnings = Cut(string.Join(" | ", warnings), 500);
+                db.SalesEvents.Add(new SalesEvent { Kind = SalesRecordKind.Delivery, RecordId = delivery.Id, Action = "nf-price-warning", Note = doc.Warnings, User = user, At = DateTimeOffset.UtcNow });
+            }
+            var transport = await TransportAsync(order.Freight == FreightTerms.Cif ? 0 : 1, opt.Carrier ?? delivery.Carrier, opt.VehiclePlate ?? delivery.VehiclePlate, delivery.Packages, opt.GrossWeightKg ?? delivery.GrossWeightKg,
+                delivery.Lines.Select(l => (products[order.Lines.First(x => x.Id == l.OrderLineId).ProductId].NetWeightKg, l.Quantity)).ToList(), ct);
 
             // A shipment that failed after SEFAZ authorized its NF was rolled back, but the authorized NF (committed on its own connection) stayed without a delivery.
             // Shipping again must pick that NF up, not issue a second one for the same goods.
@@ -84,6 +95,7 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
                 if (orphan.InvoiceTotal != doc.InvoiceTotal)
                     throw FiscalException.Conflict($"NF {orphan.Number} was authorized for {delivery.Reference} but never linked to it, and its total ({orphan.InvoiceTotal:0.00}) differs from this shipment ({doc.InvoiceTotal:0.00}). Cancel that NF before shipping again");
                 orphan.DeliveryId = delivery.Id;
+                orphan.Warnings ??= doc.Warnings;
                 foreach (var l in doc.Lines) orphan.Lines.Add(l);
                 foreach (var i in doc.Installments) orphan.Installments.Add(i);
                 await db.SaveChangesAsync(ct);
@@ -134,10 +146,15 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
         return await InTransaction(async () =>
         {
             var settings = await ReadSettingsAsync(ct);
+            // The row stays locked until the transaction ends, so two cancellations (or a cancellation and a CC-e) never reach SEFAZ at once.
+            await LockDocumentAsync(id, ct);
             var doc = await db.FiscalDocuments.FirstOrDefaultAsync(d => d.Id == id, ct) ?? throw FiscalException.NotFound("NF");
+            await db.Entry(doc).ReloadAsync(ct);
             if (doc.Status != FiscalStatus.Authorized) throw FiscalException.Conflict($"NF {doc.Number} is {doc.Status}");
             if (settings.CancelWindowHours > 0 && DateTimeOffset.UtcNow - doc.IssuedAt > TimeSpan.FromHours(settings.CancelWindowHours))
                 throw FiscalException.Conflict($"NF {doc.Number} was issued more than {settings.CancelWindowHours}h ago; SEFAZ no longer accepts the cancellation, issue a return NF instead");
+            if (doc.Kind == FiscalKind.Sale && await db.FiscalDocuments.AnyAsync(r => r.ReferencedDocumentId == id && r.Kind == FiscalKind.Return && (r.Status == FiscalStatus.Authorized || r.Status == FiscalStatus.Pending), ct))
+                throw FiscalException.Conflict($"NF {doc.Number} has a return NF; cancel the return NF first");
             OutsideShipment? shipment = null;
             if (doc.OutsideShipmentId is { } sid)
             {
@@ -146,6 +163,9 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
                     throw FiscalException.Conflict($"NF {doc.Number} has a processing return ({shipment.ReturnedQuantity + shipment.ScrapQuantity:0.####} received); undo the return before cancelling it");
             }
             // Contas a pagar: no abatement/deduction record exists in this system yet, so there is nothing else to check here.
+            // A return NF put goods back into stock: take them out again first (a refusal by SEFAZ rolls it back).
+            if (doc.Kind == FiscalKind.Return && doc.StockDocumentId is { } stockDoc)
+                await stock.ReverseAsync(stockDoc, user ?? "system", $"NF de devolução {doc.Number} cancelada: {why}", ct);
             var verdict = await sefaz.CancelAsync(doc.AccessKey, doc.Protocol, why, doc.Environment, ct);
             if (!verdict.Authorized) throw FiscalException.Rejected(verdict.Status, verdict.Message);
             doc.Status = FiscalStatus.Cancelled;
@@ -179,6 +199,13 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
         }
         if (!verdict.Authorized)
         {
+            if (verdict.Status is "204" or "539")
+            {
+                // Duplicidade: a NF with this number (204) or with this number and another key (539) may already exist at SEFAZ, so the number must not be reused
+                // until the access key is consulted. The document stays Pending, flagged; "Conciliar" resolves it.
+                await HoldForKeyLookupAsync(doc.Id, verdict.Status, verdict.Message);
+                throw new FiscalException(422, $"SEFAZ rejected the NF ({verdict.Status}): {verdict.Message}. The number {doc.Number} was kept: consult the access key (reconcile with SEFAZ) before issuing again");
+            }
             var denied = verdict.Status is "110" or "301" or "302" or "303";
             await ReleaseOrRejectAsync(doc.Id, verdict.Status, verdict.Message, reusable: !denied, ct);
             throw FiscalException.Rejected(verdict.Status, verdict.Message);
@@ -202,6 +229,8 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
         var row = await db.FiscalDocuments.FirstAsync(d => d.Id == doc.Id, ct);
         row.DeliveryId = doc.DeliveryId;
         row.OutsideShipmentId = doc.OutsideShipmentId;
+        row.ReferencedDocumentId = doc.ReferencedDocumentId;
+        row.StockDocumentId = doc.StockDocumentId;
         foreach (var l in doc.Lines) row.Lines.Add(l);
         foreach (var i in doc.Installments) row.Installments.Add(i);
         await db.SaveChangesAsync(ct);
@@ -226,7 +255,7 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
             Kind = doc.Kind, Status = FiscalStatus.Pending, CfopCode = doc.CfopCode, Series = doc.Series, Number = doc.Number, AccessKey = doc.AccessKey, Environment = doc.Environment, Simulated = sefaz.IsSimulated, Protocol = "", IssuedAt = doc.IssuedAt,
             IssuedBy = doc.IssuedBy, CustomerId = doc.CustomerId, SupplierId = doc.SupplierId, RecipientName = doc.RecipientName, RecipientDocument = doc.RecipientDocument, RecipientUf = doc.RecipientUf,
             ProductsTotal = doc.ProductsTotal, FreightTotal = doc.FreightTotal, IcmsBase = doc.IcmsBase, IcmsTotal = doc.IcmsTotal, IpiTotal = doc.IpiTotal, PisTotal = doc.PisTotal, CofinsTotal = doc.CofinsTotal,
-            InvoiceTotal = doc.InvoiceTotal, AdditionalInfo = doc.AdditionalInfo, Xml = doc.Xml
+            InvoiceTotal = doc.InvoiceTotal, AdditionalInfo = doc.AdditionalInfo, Xml = doc.Xml, Warnings = doc.Warnings, ReferencedAccessKey = doc.ReferencedAccessKey
         };
         c.FiscalDocuments.Add(shell);
         s.NextNumber = doc.Number + 1;
@@ -333,6 +362,7 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
                 row.Status = FiscalStatus.Authorized;
                 row.Protocol = r.Protocol ?? throw new InvalidOperationException("SEFAZ reported the NF authorized without a protocol");
                 row.Simulated = r.Simulated;
+                row.KeyLookupRequired = false;
                 if (r.AuthorizedXml is { } proc) row.Xml = proc;
                 var unlinked = row.DeliveryId is null && row.OutsideShipmentId is null;
                 row.StatusMessage = unlinked
@@ -356,7 +386,8 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
             }
             case SefazConsultOutcome.NotFound or SefazConsultOutcome.Denied:
             {
-                var released = await ReleaseOrRejectAsync(id, r.Status, r.Message, reusable: r.Outcome == SefazConsultOutcome.NotFound, ct);
+                // After a duplicidade answer (204/539) SEFAZ not knowing this key does not free the number: another NF holds it.
+                var released = await ReleaseOrRejectAsync(id, r.Status, r.Message, reusable: r.Outcome == SefazConsultOutcome.NotFound && !doc.KeyLookupRequired, ct);
                 if (released) return Result(doc, "released", $"SEFAZ has no record of NF {doc.Number}; the number went back to the sequence", FiscalStatus.Rejected);
                 var after = await db.FiscalDocuments.AsNoTracking().FirstAsync(d => d.Id == id, ct);
                 return Result(after, "rejected", $"SEFAZ {r.Status}: {r.Message}. The number stays used: inutilize it if it will not be reissued", after.Status);
@@ -371,8 +402,35 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
     {
         var ids = await db.FiscalDocuments.AsNoTracking().Where(d => d.Status == FiscalStatus.Pending).OrderBy(d => d.Series).ThenBy(d => d.Number).Select(d => d.Id).ToListAsync(ct);
         var results = new List<ReconcileResult>();
-        foreach (var id in ids) results.Add(await ReconcileAsync(id, minAgeMinutes, ct));
+        foreach (var id in ids)
+        {
+            try { results.Add(await ReconcileAsync(id, minAgeMinutes, ct)); }
+            catch (FiscalException e) when (e.Status == 409 && !ct.IsCancellationRequested) { } // resolved by someone else in the meantime
+        }
         return results;
+    }
+
+    /// <summary>Row lock on one document for the rest of the current transaction (FOR UPDATE).</summary>
+    private async Task LockDocumentAsync(int id, CancellationToken ct) =>
+        await db.Database.SqlQuery<int>($"SELECT id AS \"Value\" FROM fiscal_documents WHERE id = {id} FOR UPDATE").ToListAsync(ct);
+
+    private async Task HoldForKeyLookupAsync(int id, string status, string message)
+    {
+        await using var c = new EbtDbContext(options);
+        var row = await c.FiscalDocuments.FirstAsync(d => d.Id == id, CancellationToken.None);
+        row.KeyLookupRequired = true;
+        row.StatusMessage = Cut($"SEFAZ {status}: {message}. Number kept: consult the access key before reusing it", 500);
+        await c.SaveChangesAsync(CancellationToken.None);
+    }
+
+    /// <summary>Transport group: net weight from the product weights (when every item has one), carrier data from the carrier registry when the delivery's carrier name matches an entry.</summary>
+    private async Task<NfeTransport> TransportAsync(int freightMode, string? carrierName, string? plate, int packages, decimal? grossKg, IReadOnlyList<(decimal? NetWeightKg, decimal Quantity)> items, CancellationToken ct)
+    {
+        decimal? net = items.Count > 0 && items.All(i => i.NetWeightKg is > 0) ? Math.Round(items.Sum(i => i.NetWeightKg!.Value * i.Quantity), 3) : null;
+        if (grossKg is { } g && net is { } n && g < n) grossKg = n; // pesoB can never be below pesoL
+        var name = Clean(carrierName);
+        var carrier = name is null ? null : await db.FiscalCarriers.AsNoTracking().FirstOrDefaultAsync(c => c.Name.ToLower() == name.ToLower(), ct);
+        return new NfeTransport(freightMode, carrier?.Name ?? name, plate, packages, grossKg, net, carrier?.Document, carrier?.StateRegistration, carrier?.Address, carrier?.City, carrier?.Uf, carrier?.VehicleUf);
     }
 
     private static ReconcileResult Result(FiscalDocument d, string outcome, string message, FiscalStatus status, bool unlinked = false) =>
@@ -454,14 +512,15 @@ public sealed class FiscalService(EbtDbContext db, ISefazClient sefaz, DbContext
         if (!cfop.Active) throw FiscalException.Blocked($"CFOP {code} is inactive");
         if (kind == FiscalKind.OutsideShipment && cfop.Kind != FiscalKind.OutsideShipment) throw FiscalException.Blocked($"CFOP {code} is not a remessa para industrialização CFOP");
         if (kind == FiscalKind.Sale && cfop.Kind != FiscalKind.Sale) throw FiscalException.Blocked($"CFOP {code} cannot be used on a sale NF");
+        if (kind == FiscalKind.Return && cfop.Kind != FiscalKind.Return) throw FiscalException.Blocked($"CFOP {code} is not a devolução CFOP");
         return cfop;
     }
 
     private static bool RequireOperationScope(Cfop cfop, FiscalSettings settings, string recipientUf)
     {
         var interstate = !string.Equals(recipientUf, settings.Uf, StringComparison.OrdinalIgnoreCase);
-        if (cfop.Code[0] == '5' && interstate) throw FiscalException.Blocked($"CFOP {cfop.Code} is for operations inside {settings.Uf}, but the recipient is in {recipientUf}; use the 6xxx CFOP");
-        if (cfop.Code[0] == '6' && !interstate) throw FiscalException.Blocked($"CFOP {cfop.Code} is for operations outside {settings.Uf}, but the recipient is in {recipientUf}; use the 5xxx CFOP");
+        if (cfop.Code[0] is '5' or '1' && interstate) throw FiscalException.Blocked($"CFOP {cfop.Code} is for operations inside {settings.Uf}, but the recipient is in {recipientUf}; use the {(cfop.Code[0] == '5' ? "6xxx" : "2xxx")} CFOP");
+        if (cfop.Code[0] is '6' or '2' && !interstate) throw FiscalException.Blocked($"CFOP {cfop.Code} is for operations outside {settings.Uf}, but the recipient is in {recipientUf}; use the {(cfop.Code[0] == '6' ? "5xxx" : "1xxx")} CFOP");
         return interstate;
     }
 

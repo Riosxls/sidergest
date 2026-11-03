@@ -21,12 +21,19 @@ public record TaxRuleOut(int Id, int ProductId, string ProductCode, int? Custome
 public record MonthlyPriceIn(int ProductId, int CustomerId, string CfopCode, int Year, int Month, decimal UnitPrice);
 public record MonthlyPriceOut(int Id, int ProductId, string ProductCode, string ProductName, int CustomerId, string CustomerName, string CfopCode, int Year, int Month, decimal UnitPrice);
 public record FiscalLineOut(int Id, int Sequence, int? ProductId, int? ProductionOrderId, string Code, string Description, string Ncm, string Unit, decimal Quantity, decimal UnitPrice, decimal Total, decimal Freight,
-    string IcmsCst, decimal IcmsBase, decimal IcmsPercent, decimal IcmsValue, string IpiCst, decimal IpiPercent, decimal IpiValue, string PisCst, decimal PisPercent, decimal PisValue, string CofinsCst, decimal CofinsPercent, decimal CofinsValue);
+    string IcmsCst, decimal IcmsBase, decimal IcmsPercent, decimal IcmsValue, string IpiCst, decimal IpiPercent, decimal IpiValue, string PisCst, decimal PisPercent, decimal PisValue, string CofinsCst, decimal CofinsPercent, decimal CofinsValue,
+    decimal ReturnedQuantity = 0m, int? ReferencedLineId = null);
+public record FiscalEventOut(int Id, string EventType, int Sequence, string Text, string Protocol, bool Simulated, DateTimeOffset CreatedAt, string? CreatedBy);
+public record FiscalReturnRef(int Id, int Number, FiscalStatus Status, decimal InvoiceTotal, DateTimeOffset IssuedAt);
+public record CorrectionIn(string? Text);
+public record FiscalCarrierIn(string Name, string? Document, string? StateRegistration, string? Address, string? City, string? Uf, string? VehicleUf);
+public record FiscalCarrierOut(int Id, string Name, string? Document, string? StateRegistration, string? Address, string? City, string? Uf, string? VehicleUf);
 public record FiscalInstallmentOut(int Sequence, DateOnly DueDate, decimal Amount);
 public record FiscalDocumentOut(int Id, FiscalKind Kind, FiscalStatus Status, string CfopCode, int Series, int Number, string AccessKey, string Protocol, SefazEnvironment Environment, bool Simulated, DateTimeOffset IssuedAt, string? IssuedBy,
     int? DeliveryId, string? DeliveryReference, int? OutsideShipmentId, int? CustomerId, int? SupplierId, string RecipientName, string RecipientDocument, string RecipientUf, decimal ProductsTotal, decimal FreightTotal, decimal IcmsBase,
     decimal IcmsTotal, decimal IpiTotal, decimal PisTotal, decimal CofinsTotal, decimal InvoiceTotal, string? AdditionalInfo, DateTimeOffset? CancelledAt, string? CancelledBy, string? CancelReason, string? CancelProtocol, string? StatusMessage,
-    IReadOnlyList<FiscalLineOut> Lines, IReadOnlyList<FiscalInstallmentOut> Installments);
+    IReadOnlyList<FiscalLineOut> Lines, IReadOnlyList<FiscalInstallmentOut> Installments, string? Warnings = null, bool KeyLookupRequired = false, int? ReferencedDocumentId = null, int? ReferencedNumber = null,
+    string? ReferencedAccessKey = null, IReadOnlyList<FiscalReturnRef>? Returns = null, IReadOnlyList<FiscalEventOut>? Events = null);
 public record CancelInvoiceIn(string? Reason, string? Password);
 public record InutilizeIn(int? Series, int From, int To, string? Reason, string? Password);
 public record InutilizationOut(int Id, int Series, int FromNumber, int ToNumber, string Reason, SefazEnvironment Environment, string Protocol, bool Simulated, DateTimeOffset CreatedAt, string? CreatedBy);
@@ -71,6 +78,7 @@ public static class FiscalEndpoints
         MapRules(app);
         MapDocuments(app);
         MapInutilizations(app);
+        MapCarriers(app);
     }
 
     private static void MapInutilizations(WebApplication app)
@@ -282,18 +290,69 @@ public static class FiscalEndpoints
             else await fiscal.CancelAsync(id, i.Reason, who, ct);
             return Results.Ok(await Load(db, id, ct));
         }).RequireAuthorization(FiscalPolicies.Cancel).RequireRateLimiting(Policies.AccountLimiter);
+
+        // Devolução: return NF (finNFe 4, CFOP 1202/2202) of all or part of an authorized sale NF; the goods go back to stock at locationId.
+        g.MapPost("/{id:int}/return", async (int id, ReturnInput i, EbtDbContext db, FiscalService fiscal, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!await db.FiscalDocuments.AnyAsync(d => d.Id == id, ct)) return Results.NotFound();
+            var issued = await fiscal.IssueReturnAsync(id, i, principal.Identity?.Name, ct);
+            return Results.Ok(await Load(db, issued.Id, ct));
+        }).RequireAuthorization(FiscalPolicies.Emit);
+
+        // Carta de correção (CC-e, event 110110) on an authorized NF.
+        g.MapPost("/{id:int}/correction", async (int id, CorrectionIn i, EbtDbContext db, FiscalService fiscal, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!await db.FiscalDocuments.AnyAsync(d => d.Id == id, ct)) return Results.NotFound();
+            await fiscal.CorrectAsync(id, i.Text, principal.Identity?.Name, ct);
+            return Results.Ok(await Load(db, id, ct));
+        }).RequireAuthorization(FiscalPolicies.Emit);
+    }
+
+    private static void MapCarriers(WebApplication app) =>
+        app.MapGroup("/api/fiscal/carriers").WithTags("Fiscal").MapCrud(new CrudSpec<FiscalCarrier, FiscalCarrierIn, FiscalCarrierOut>
+        {
+            Project = c => new FiscalCarrierOut(c.Id, c.Name, c.Document, c.StateRegistration, c.Address, c.City, c.Uf, c.VehicleUf),
+            Create = i => Apply(new FiscalCarrier { Name = i.Name.Trim() }, i),
+            Apply = (i, c) => Apply(c, i),
+            Validate = (i, db, ct) => Task.FromResult(Errors()
+                .Require(Has(i.Name) && i.Name.Trim().Length <= 60, "name", "Required, at most 60 characters")
+                .Require(!Has(i.Document) || Digits(i.Document, 14) || Digits(i.Document, 11), "document", "CNPJ (14 digits) or CPF (11)")
+                .Require(!Has(i.Uf) || NfeKey.UfCodes.ContainsKey(i.Uf.Trim().ToUpperInvariant()), "uf", "Unknown UF")
+                .Require(!Has(i.VehicleUf) || NfeKey.UfCodes.ContainsKey(i.VehicleUf.Trim().ToUpperInvariant()), "vehicleUf", "Unknown UF")),
+            Search = (q, s) => q.Where(c => EF.Functions.ILike(c.Name, Like(s)) || (c.Document != null && c.Document.Contains(s))),
+            Order = q => q.OrderBy(c => c.Name),
+            WritePolicy = FiscalPolicies.Emit
+        });
+
+    private static FiscalCarrier Apply(FiscalCarrier c, FiscalCarrierIn i)
+    {
+        c.Name = i.Name.Trim();
+        c.Document = Numeric(i.Document);
+        c.StateRegistration = Numeric(i.StateRegistration);
+        c.Address = Clean(i.Address);
+        c.City = Clean(i.City);
+        c.Uf = Clean(i.Uf)?.ToUpperInvariant();
+        c.VehicleUf = Clean(i.VehicleUf)?.ToUpperInvariant();
+        return c;
     }
 
     private static async Task<FiscalDocumentOut?> Load(EbtDbContext db, int id, CancellationToken ct)
     {
-        var d = await db.FiscalDocuments.AsNoTracking().Include(x => x.Lines).Include(x => x.Installments).Include(x => x.Delivery).AsSplitQuery().FirstOrDefaultAsync(x => x.Id == id, ct);
+        var d = await db.FiscalDocuments.AsNoTracking().Include(x => x.Lines).Include(x => x.Installments).Include(x => x.Delivery).Include(x => x.Events).AsSplitQuery().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (d is null) return null;
+        var returned = d.Kind == FiscalKind.Sale ? await FiscalService.ReturnedByLineAsync(db, d.Lines.Select(l => l.Id).ToList(), ct) : [];
+        var returns = d.Kind == FiscalKind.Sale
+            ? await db.FiscalDocuments.AsNoTracking().Where(r => r.ReferencedDocumentId == id).OrderBy(r => r.Number).Select(r => new FiscalReturnRef(r.Id, r.Number, r.Status, r.InvoiceTotal, r.IssuedAt)).ToListAsync(ct)
+            : [];
+        var referencedNumber = d.ReferencedDocumentId is { } rid ? await db.FiscalDocuments.AsNoTracking().Where(r => r.Id == rid).Select(r => (int?)r.Number).FirstOrDefaultAsync(ct) : null;
         return new FiscalDocumentOut(d.Id, d.Kind, d.Status, d.CfopCode, d.Series, d.Number, d.AccessKey, d.Protocol, d.Environment, d.Simulated, d.IssuedAt, d.IssuedBy, d.DeliveryId, d.Delivery?.Reference, d.OutsideShipmentId, d.CustomerId,
             d.SupplierId, d.RecipientName, d.RecipientDocument, d.RecipientUf, d.ProductsTotal, d.FreightTotal, d.IcmsBase, d.IcmsTotal, d.IpiTotal, d.PisTotal, d.CofinsTotal, d.InvoiceTotal, d.AdditionalInfo, d.CancelledAt, d.CancelledBy,
             d.CancelReason, d.CancelProtocol, d.StatusMessage,
             d.Lines.OrderBy(l => l.Sequence).Select(l => new FiscalLineOut(l.Id, l.Sequence, l.ProductId, l.ProductionOrderId, l.Code, l.Description, l.Ncm, l.Unit, l.Quantity, l.UnitPrice, l.Total, l.Freight, l.IcmsCst, l.IcmsBase, l.IcmsPercent,
-                l.IcmsValue, l.IpiCst, l.IpiPercent, l.IpiValue, l.PisCst, l.PisPercent, l.PisValue, l.CofinsCst, l.CofinsPercent, l.CofinsValue)).ToList(),
-            d.Installments.OrderBy(i => i.Sequence).Select(i => new FiscalInstallmentOut(i.Sequence, i.DueDate, i.Amount)).ToList());
+                l.IcmsValue, l.IpiCst, l.IpiPercent, l.IpiValue, l.PisCst, l.PisPercent, l.PisValue, l.CofinsCst, l.CofinsPercent, l.CofinsValue, returned.GetValueOrDefault(l.Id), l.ReferencedLineId)).ToList(),
+            d.Installments.OrderBy(i => i.Sequence).Select(i => new FiscalInstallmentOut(i.Sequence, i.DueDate, i.Amount)).ToList(),
+            d.Warnings, d.KeyLookupRequired, d.ReferencedDocumentId, referencedNumber, d.ReferencedAccessKey, returns,
+            d.Events.OrderBy(e => e.CreatedAt).Select(e => new FiscalEventOut(e.Id, e.EventType, e.Sequence, e.Text, e.Protocol, e.Simulated, e.CreatedAt, e.CreatedBy)).ToList());
     }
 
     private static FiscalSettingsDto ToDto(FiscalSettings s) => new(s.Enabled, s.Environment, s.CompanyName, s.TradeName, s.Cnpj, s.StateRegistration, s.TaxRegime, s.Street, s.Number, s.Complement, s.District, s.City, s.CityIbgeCode, s.Uf,

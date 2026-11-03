@@ -115,6 +115,31 @@ public class SefazClientTests
         Assert.Contains("<CNPJ>11222333000181</CNPJ>", call.Body);
     }
 
+    [Fact]
+    public async Task Correction_letter_sends_a_signed_110110_event_with_sequence_text_and_terms()
+    {
+        var cert = Certificate();
+        var handler = new Fake((_, _) => Soap($"<retEnvEvento xmlns=\"{NfeSigner.Ns}\" versao=\"1.00\"><cStat>128</cStat><xMotivo>Lote de Evento Processado</xMotivo><retEvento versao=\"1.00\"><infEvento><cStat>135</cStat><xMotivo>Evento registrado</xMotivo><nProt>135268888888888</nProt></infEvento></retEvento></retEnvEvento>"));
+        var client = new SefazSpClient(new SefazOptions(), cert, handler);
+        var r = await client.CorrectAsync(Key, 3, "Onde se le Rua A leia Rua B no endereço de entrega", SefazEnvironment.Homologation, default);
+        Assert.True(r.Authorized);
+        Assert.Equal("135268888888888", r.Protocol);
+        var call = Assert.Single(handler.Calls);
+        Assert.EndsWith("recepcaoevento4.asmx", call.Url);
+        Assert.Contains("<tpEvento>110110</tpEvento>", call.Body);
+        Assert.Contains("<nSeqEvento>3</nSeqEvento>", call.Body);
+        Assert.Contains($"Id=\"ID110110{Key}03\"", call.Body);
+        Assert.Contains("<descEvento>Carta de Correção</descEvento>", call.Body);
+        Assert.Contains("<xCorrecao>Onde se le Rua A leia Rua B no endereço de entrega</xCorrecao>", call.Body);
+        Assert.Contains("<xCondUso>A Carta de Correção é disciplinada pelo § 1º-A do art. 7º do Convênio S/N", call.Body);
+        Assert.Contains("<Signature", call.Body);
+
+        var rejected = await new SefazSpClient(new SefazOptions(), cert, new Fake((_, _) => Soap($"<retEnvEvento xmlns=\"{NfeSigner.Ns}\" versao=\"1.00\"><cStat>128</cStat><xMotivo>Lote</xMotivo><retEvento versao=\"1.00\"><infEvento><cStat>573</cStat><xMotivo>Duplicidade de evento</xMotivo></infEvento></retEvento></retEnvEvento>")))
+            .CorrectAsync(Key, 1, "Texto de correção qualquer aqui", SefazEnvironment.Homologation, default);
+        Assert.False(rejected.Authorized);
+        Assert.Equal("573", rejected.Status);
+    }
+
     private static string Sit(string cStat, string motivo, string extra = "") =>
         $"<retConsSitNFe xmlns=\"{NfeSigner.Ns}\" versao=\"4.00\"><tpAmb>2</tpAmb><cStat>{cStat}</cStat><xMotivo>{motivo}</xMotivo>{extra}</retConsSitNFe>";
 

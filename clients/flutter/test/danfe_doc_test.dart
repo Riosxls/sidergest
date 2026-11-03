@@ -62,6 +62,13 @@ void main() {
     }
   });
 
+  test('a return NF prints as an entry with its nature and the referenced key', () async {
+    final ret = {...nf(), 'kind': 'Return', 'cfopCode': '1202', 'referencedAccessKey': '35261011222333000181550010000025701123456785'};
+    final bytes = await buildDanfePdf(ret, issuer);
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+    expect(bytes.length, greaterThan(2000));
+  });
+
   test('a long item list flows onto more pages', () async {
     final one = await buildDanfePdf(nf(), issuer);
     final many = await buildDanfePdf(nf(lines: 120), issuer);

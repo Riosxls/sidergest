@@ -24,7 +24,7 @@ public sealed class DataResetService(EbtDbContext db, ICurrentUser user)
     {
         [ResetScope.Sales] =
         [
-            "certificate_measures", "quality_certificates", "receivable_payments", "fiscal_installments", "fiscal_document_lines", "fiscal_documents",
+            "certificate_measures", "quality_certificates", "receivable_payments", "fiscal_installments", "fiscal_events", "fiscal_document_lines", "fiscal_documents",
             "delivery_lines", "deliveries", "sales_order_lines", "sales_orders", "quote_request_files", "quote_lines", "quotes",
             "feasibility_studies", "sales_events",
         ],

@@ -14,6 +14,8 @@ public partial class EbtDbContext
     public DbSet<FiscalInstallment> FiscalInstallments => Set<FiscalInstallment>();
     public DbSet<ReceivablePayment> ReceivablePayments => Set<ReceivablePayment>();
     public DbSet<FiscalInutilization> FiscalInutilizations => Set<FiscalInutilization>();
+    public DbSet<FiscalEvent> FiscalEvents => Set<FiscalEvent>();
+    public DbSet<FiscalCarrier> FiscalCarriers => Set<FiscalCarrier>();
 
     partial void ConfigureFiscal(ModelBuilder b)
     {
@@ -46,6 +48,8 @@ public partial class EbtDbContext
                     LegalText = "Suspensão do IPI conforme art. 43 do Decreto 7.212/10. Suspensão do ICMS conforme art. 402 do RICMS/SP. Remessa para industrialização, retorno previsto." },
                 new Cfop { Code = "5902", Description = "Retorno de mercadoria utilizada na industrialização por encomenda", Kind = FiscalKind.Sale, Taxed = false, IcmsCst = "50", IpiCst = "55", PisCst = "09", CofinsCst = "09", IpiFramingCode = "108",
                     LegalText = "Retorno de mercadoria recebida para industrialização." },
+                new Cfop { Code = "1202", Description = "Devolução de venda de produção do estabelecimento", Kind = FiscalKind.Return, Taxed = true, IcmsCst = "00", IpiCst = "00", PisCst = "01", CofinsCst = "01", DefaultPisPercent = 0.65m, DefaultCofinsPercent = 3m },
+                new Cfop { Code = "2202", Description = "Devolução de venda de produção do estabelecimento", Kind = FiscalKind.Return, Taxed = true, IcmsCst = "00", IpiCst = "00", PisCst = "01", CofinsCst = "01", DefaultPisPercent = 0.65m, DefaultCofinsPercent = 3m },
                 new Cfop { Code = "5920", Description = "Remessa de vasilhame ou sacaria", Kind = FiscalKind.Sale, Taxed = false, IcmsCst = "41", IpiCst = "53", PisCst = "08", CofinsCst = "08", IpiFramingCode = "999" },
                 new Cfop { Code = "5921", Description = "Retorno de vasilhame ou sacaria", Kind = FiscalKind.Sale, Taxed = false, IcmsCst = "41", IpiCst = "53", PisCst = "08", CofinsCst = "08", IpiFramingCode = "999" });
         });
@@ -79,8 +83,14 @@ public partial class EbtDbContext
         {
             e.HasIndex(x => new { x.Series, x.Number }).IsUnique();
             e.HasIndex(x => x.AccessKey).IsUnique();
-            e.HasIndex(x => x.DeliveryId);
+            // Two live NFs (Pending or Authorized) for one delivery are impossible; Rejected and Cancelled ones do not count.
+            e.HasIndex(x => x.DeliveryId).IsUnique().HasDatabaseName("ux_fiscal_documents_live_delivery").HasFilter("delivery_id IS NOT NULL AND status IN (0, 2)");
             e.HasIndex(x => x.OutsideShipmentId);
+            e.HasIndex(x => x.ReferencedDocumentId);
+            e.Property(x => x.Warnings).HasMaxLength(500);
+            e.Property(x => x.ReferencedAccessKey).HasMaxLength(44);
+            e.HasOne(x => x.ReferencedDocument).WithMany().HasForeignKey(x => x.ReferencedDocumentId).OnDelete(DeleteBehavior.NoAction); // NoAction: checked at the end of the statement, so a data reset can delete both ends at once
+            e.HasOne(x => x.StockDocument).WithMany().HasForeignKey(x => x.StockDocumentId).OnDelete(DeleteBehavior.Restrict);
             e.Property(x => x.CfopCode).HasMaxLength(4);
             e.Property(x => x.AccessKey).HasMaxLength(44);
             e.Property(x => x.Protocol).HasMaxLength(20);
@@ -111,6 +121,29 @@ public partial class EbtDbContext
             e.HasOne(x => x.Document).WithMany(x => x.Lines).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Product).WithMany().OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.ProductionOrder).WithMany().OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => x.ReferencedLineId);
+            e.HasOne(x => x.ReferencedLine).WithMany().HasForeignKey(x => x.ReferencedLineId).OnDelete(DeleteBehavior.NoAction);
+        });
+        b.Entity<FiscalEvent>(e =>
+        {
+            e.ToTable("fiscal_events", t => t.HasCheckConstraint("ck_fiscal_events_sequence", "sequence BETWEEN 1 AND 20"));
+            e.HasIndex(x => new { x.DocumentId, x.EventType, x.Sequence }).IsUnique();
+            e.Property(x => x.EventType).HasMaxLength(6);
+            e.Property(x => x.Text).HasMaxLength(1000);
+            e.Property(x => x.Protocol).HasMaxLength(20);
+            e.HasOne(x => x.Document).WithMany(x => x.Events).HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<FiscalCarrier>(e =>
+        {
+            e.ToTable("fiscal_carriers");
+            e.HasIndex(x => x.Name).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(60);
+            e.Property(x => x.Document).HasMaxLength(14);
+            e.Property(x => x.StateRegistration).HasMaxLength(14);
+            e.Property(x => x.Address).HasMaxLength(60);
+            e.Property(x => x.City).HasMaxLength(60);
+            e.Property(x => x.Uf).HasMaxLength(2);
+            e.Property(x => x.VehicleUf).HasMaxLength(2);
         });
         b.Entity<FiscalInutilization>(e =>
         {

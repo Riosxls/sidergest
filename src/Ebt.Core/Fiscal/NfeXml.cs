@@ -58,8 +58,9 @@ public static class NfeXml
         var local = doc.IssuedAt.ToOffset(TimeSpan.FromHours(-3));
         var ide = E("ide",
             E("cUF", key[..2]), E("cNF", key.Substring(35, 8)), E("natOp", Cut(cfop.Description, 60)), E("mod", "55"), E("serie", doc.Series.ToString(Inv)), E("nNF", doc.Number.ToString(Inv)),
-            E("dhEmi", local.ToString("yyyy-MM-dd'T'HH:mm:sszzz", Inv)), E("tpNF", "1"), E("idDest", interstate ? "2" : "1"), E("cMunFG", issuer.CityIbgeCode), E("tpImp", "1"), E("tpEmis", "1"),
-            E("cDV", key[43..]), E("tpAmb", ((int)doc.Environment).ToString(Inv)), E("finNFe", "1"), E("indFinal", "0"), E("indPres", "9"), E("procEmi", "0"), E("verProc", "MetaGest 1.0"));
+            E("dhEmi", local.ToString("yyyy-MM-dd'T'HH:mm:sszzz", Inv)), E("tpNF", doc.Kind == FiscalKind.Return ? "0" : "1"), E("idDest", interstate ? "2" : "1"), E("cMunFG", issuer.CityIbgeCode), E("tpImp", "1"), E("tpEmis", "1"),
+            E("cDV", key[43..]), E("tpAmb", ((int)doc.Environment).ToString(Inv)), E("finNFe", doc.Kind == FiscalKind.Return ? "4" : "1"), E("indFinal", "0"), E("indPres", "9"), E("procEmi", "0"), E("verProc", "MetaGest 1.0"),
+            doc.Kind == FiscalKind.Return && doc.ReferencedAccessKey is { Length: 44 } referenced ? E("NFref", E("refNFe", referenced)) : null);
 
         var emit = E("emit", E("CNPJ", issuer.Cnpj), E("xNome", Cut(issuer.CompanyName, 60)), OptE("xFant", Cut(issuer.TradeName, 60)),
             E("enderEmit", E("xLgr", Cut(issuer.Street, 60)), E("nro", Cut(issuer.Number, 60)), OptE("xCpl", Cut(issuer.Complement, 60)), E("xBairro", Cut(issuer.District, 60)), E("cMun", issuer.CityIbgeCode),
@@ -79,10 +80,21 @@ public static class NfeXml
             E("vProd", M(doc.ProductsTotal)), E("vFrete", M(doc.FreightTotal)), E("vSeg", M(0)), E("vDesc", M(0)), E("vII", M(0)), E("vIPI", M(doc.IpiTotal)), E("vIPIDevol", M(0)), E("vPIS", M(doc.PisTotal)),
             E("vCOFINS", M(doc.CofinsTotal)), E("vOutro", M(0)), E("vNF", M(doc.InvoiceTotal))));
 
+        var carrierDoc = Digits(transport.CarrierDocument);
+        var carrierIe = Digits(transport.CarrierStateRegistration);
+        var carrierUf = transport.CarrierUf?.Trim().ToUpperInvariant();
+        var vehicleUf = (Cut(transport.VehicleUf, 2) is { Length: 2 } vuf ? vuf : carrierUf is { Length: 2 } ? carrierUf : issuer.Uf).ToUpperInvariant();
         var transp = E("transp", E("modFrete", transport.FreightMode.ToString(Inv)),
-            Cut(transport.Carrier, 60) is { Length: > 0 } carrier ? E("transporta", E("xNome", carrier)) : null,
-            Digits(transport.VehiclePlate, letters: true) is { Length: > 0 } plate ? E("veicTransp", E("placa", plate), E("UF", issuer.Uf)) : null,
-            transport.Packages > 0 ? E("vol", E("qVol", transport.Packages.ToString(Inv)), transport.GrossWeightKg is { } kg ? E("pesoB", kg.ToString("0.000", Inv)) : null) : null);
+            Cut(transport.Carrier, 60) is { Length: > 0 } || carrierDoc.Length is 11 or 14
+                ? E("transporta", carrierDoc.Length == 14 ? E("CNPJ", carrierDoc) : carrierDoc.Length == 11 ? E("CPF", carrierDoc) : null, OptE("xNome", Cut(transport.Carrier, 60)),
+                    carrierIe.Length >= 2 ? E("IE", carrierIe) : null, OptE("xEnder", Cut(transport.CarrierAddress, 60)), OptE("xMun", Cut(transport.CarrierCity, 60)),
+                    carrierUf is { Length: 2 } && NfeKey.UfCodes.ContainsKey(carrierUf) ? E("UF", carrierUf) : null)
+                : null,
+            Digits(transport.VehiclePlate, letters: true) is { Length: > 0 } plate ? E("veicTransp", E("placa", plate), E("UF", vehicleUf)) : null,
+            transport.Packages > 0 || transport.NetWeightKg is not null || transport.GrossWeightKg is not null
+                ? E("vol", transport.Packages > 0 ? E("qVol", transport.Packages.ToString(Inv)) : null, transport.NetWeightKg is { } net ? E("pesoL", net.ToString("0.000", Inv)) : null,
+                    transport.GrossWeightKg is { } kg ? E("pesoB", kg.ToString("0.000", Inv)) : null)
+                : null);
 
         var cobr = doc.Installments.Count == 0 ? null : E("cobr", E("fat", E("nFat", doc.Number.ToString("000000000", Inv)), E("vOrig", M(doc.InvoiceTotal)), E("vLiq", M(doc.InvoiceTotal))),
             doc.Installments.OrderBy(i => i.Sequence).Select(i => E("dup", E("nDup", i.Sequence.ToString("000", Inv)), E("dVenc", i.DueDate.ToString("yyyy-MM-dd", Inv)), E("vDup", M(i.Amount)))));

@@ -54,7 +54,7 @@ public class FiscalTests(ApiFixture api)
     }
 
     [Fact]
-    public async Task Sale_nf_needs_monthly_price_is_recorded_only_after_authorization_and_can_be_cancelled()
+    public async Task Sale_nf_uses_monthly_price_over_the_order_price_is_recorded_only_after_authorization_and_can_be_cancelled()
     {
         var admin = await api.AdminAsync();
         var customer = await (await admin.Post("/api/customers", new CustomerIn("Cliente " + Code("C"), null, null, ConsumerType.Normal))).Read<CustomerOut>();
@@ -73,9 +73,6 @@ public class FiscalTests(ApiFixture api)
             var settings = await Enable(admin, true);
             var rejected = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today, Notes: StubSefazClient.RejectMarker))).Read<DeliveryOut>();
 
-            var noPrice = await admin.Post($"/api/sales/deliveries/{rejected.Id}/ship", new ShipInput(Today, WithoutCertificate: true));
-            Assert.Equal(HttpStatusCode.UnprocessableEntity, noPrice.StatusCode);
-            Assert.Contains("monthly price", await noPrice.Content.ReadAsStringAsync());
 
             (await admin.Post("/api/fiscal/monthly-prices", new MonthlyPriceIn(tube.Id, customer.Id, "5101", Today.Year, Today.Month, 110m))).EnsureSuccessStatusCode();
             var sefaz = await admin.Post($"/api/sales/deliveries/{rejected.Id}/ship", new ShipInput(Today, WithoutCertificate: true));
@@ -110,6 +107,7 @@ public class FiscalTests(ApiFixture api)
             Assert.Equal(1207.5m, nf.InvoiceTotal);
             var line = Assert.Single(nf.Lines);
             Assert.Equal(110m, line.UnitPrice);
+            Assert.Contains("difere do preço do pedido", nf.Warnings);
             Assert.Equal("73063010", line.Ncm);
             var dup = Assert.Single(nf.Installments);
             Assert.Equal(Today.AddDays(28), dup.DueDate);

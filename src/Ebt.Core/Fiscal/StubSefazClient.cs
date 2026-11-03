@@ -14,6 +14,8 @@ namespace Ebt.Core.Fiscal;
 public sealed class StubSefazClient : ISefazClient
 {
     public const string RejectMarker = "#SEFAZ-REJEITAR#";
+    /// <summary>Answers 204 (duplicidade): the number must not be reused before the access key is consulted.</summary>
+    public const string DuplicateMarker = "#SEFAZ-DUPLICIDADE#";
     public const string TimeoutMarker = "#SEFAZ-TIMEOUT#";
     public const string TimeoutAuthorizedMarker = "#SEFAZ-TIMEOUT-AUTORIZADA#";
 
@@ -28,6 +30,8 @@ public sealed class StubSefazClient : ISefazClient
         catch (System.Xml.XmlException e) { return Task.FromResult(new SefazResult(false, "225", $"Falha no Schema XML: {e.Message}", null, true)); }
         if (xml.Contains(RejectMarker, StringComparison.Ordinal))
             return Task.FromResult(new SefazResult(false, "999", "Rejeição simulada pelo stub", null, true));
+        if (xml.Contains(DuplicateMarker, StringComparison.Ordinal))
+            return Task.FromResult(new SefazResult(false, "204", "Duplicidade de NF-e (simulado)", null, true));
         if (xml.Contains(TimeoutAuthorizedMarker, StringComparison.Ordinal)) authorized[accessKey] = Protocol();
         if (xml.Contains(TimeoutMarker, StringComparison.Ordinal) || xml.Contains(TimeoutAuthorizedMarker, StringComparison.Ordinal))
             throw new FiscalException(502, $"SEFAZ did not answer (simulated timeout). The NF with key {accessKey} may have been authorized: it stays Pending until the reconciliation resolves it");
@@ -42,6 +46,12 @@ public sealed class StubSefazClient : ISefazClient
         cancelled[accessKey] = protocol;
         return Task.FromResult(new SefazResult(true, "135", "Evento registrado e vinculado a NF-e (simulado)", protocol, true));
     }
+
+    /// <summary>Always authorizes (status 135) unless the correction text contains <see cref="RejectMarker"/>.</summary>
+    public Task<SefazResult> CorrectAsync(string accessKey, int sequence, string text, SefazEnvironment environment, CancellationToken ct) =>
+        Task.FromResult(text.Contains(RejectMarker, StringComparison.Ordinal)
+            ? new SefazResult(false, "999", "Rejeição simulada pelo stub", null, true)
+            : new SefazResult(true, "135", "Evento registrado e vinculado a NF-e (simulado)", Protocol(), true));
 
     public Task<SefazResult> InutilizeAsync(string xml, SefazEnvironment environment, CancellationToken ct)
     {

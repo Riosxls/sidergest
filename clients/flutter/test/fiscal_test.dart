@@ -180,9 +180,94 @@ void main() {
       expect(find.byType(PopupMenuButton<VoidCallback>), findsNothing);
     });
 
-    testWidgets('a role without fiscal-cancel cannot cancel an authorized NF', (tester) async {
+    testWidgets('a role without fiscal-cancel cannot cancel an authorized NF but may return and correct it', (tester) async {
       await open(tester, 'Sales', nf());
+      await tester.tap(find.byType(PopupMenuButton<VoidCallback>));
+      await tester.pumpAndSettle();
+      expect(find.text('Cancelar NF'), findsNothing);
+      expect(find.text('Devolver'), findsOneWidget);
+      expect(find.text('Carta de correção'), findsOneWidget);
+    });
+
+    testWidgets('a role without fiscal-emit or fiscal-cancel has no actions menu', (tester) async {
+      await open(tester, 'Stock', nf());
       expect(find.byType(PopupMenuButton<VoidCallback>), findsNothing);
+    });
+
+    testWidgets('a fully returned sale NF no longer offers Devolver and lists its return NFs and corrections', (tester) async {
+      final doc = nf();
+      doc['lines'] = [
+        {...(doc['lines'] as List).first as Map<String, dynamic>, 'id': 70, 'returnedQuantity': 10},
+      ];
+      doc['returns'] = [
+        {'id': 9, 'number': 2590, 'status': 'Authorized', 'invoiceTotal': 1250.5, 'issuedAt': '2026-10-31T10:00:00Z'},
+      ];
+      doc['events'] = [
+        {'id': 1, 'sequence': 1, 'text': 'Onde se le Rua A leia Rua B', 'protocol': '135260000000009', 'createdAt': '2026-10-31T11:00:00Z', 'createdBy': 'ana'},
+      ];
+      doc['warnings'] = 'TB-100: preço mensal 125,05 difere do preço do pedido 120,00';
+      await open(tester, 'Sales', doc);
+      expect(find.text('NFs de devolução'), findsOneWidget);
+      expect(find.text('2590'), findsOneWidget);
+      expect(find.text('Cartas de correção'), findsOneWidget);
+      expect(find.text('Onde se le Rua A leia Rua B'), findsOneWidget);
+      expect(find.text('Devolvido'), findsOneWidget);
+      expect(find.text('Atenção na emissão'), findsOneWidget);
+      await tester.tap(find.byType(PopupMenuButton<VoidCallback>));
+      await tester.pumpAndSettle();
+      expect(find.text('Devolver'), findsNothing);
+      expect(find.text('Carta de correção'), findsOneWidget);
+    });
+
+    testWidgets('a return NF says which NF it references and cannot be returned', (tester) async {
+      await open(tester, 'Sales', {...nf(), 'kind': 'Return', 'cfopCode': '1202', 'referencedDocumentId': 5, 'referencedNumber': 2570, 'referencedAccessKey': '35261012345678000190550010000025701000000017'});
+      expect(find.text('Devolução'), findsWidgets);
+      expect(find.text('Referencia a NF 2570'), findsOneWidget);
+      await tester.tap(find.byType(PopupMenuButton<VoidCallback>));
+      await tester.pumpAndSettle();
+      expect(find.text('Devolver'), findsNothing);
+    });
+
+    testWidgets('a correction letter asks for the text, confirms and posts it', (tester) async {
+      final corrected = {
+        ...nf(),
+        'events': [
+          {'id': 1, 'sequence': 1, 'text': 'Onde se le Rua A leia Rua B', 'protocol': '135260000000009', 'createdAt': '2026-10-31T11:00:00Z', 'createdBy': 'ana'},
+        ],
+      };
+      final log = await open(tester, 'Sales', nf(), (r) async {
+        if (r.method == 'POST' && r.url.path == '/api/fiscal/documents/7/correction') return json(corrected);
+        return null;
+      });
+      await tester.tap(find.byType(PopupMenuButton<VoidCallback>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Carta de correção'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.descendant(of: find.byType(Dialog), matching: find.byType(TextField)), 'Onde se le Rua A leia Rua B');
+      await tester.tap(find.widgetWithText(FilledButton, 'Salvar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Enviar a carta de correção?'), findsOneWidget);
+      expect(log.where((r) => r.method == 'POST'), isEmpty);
+      await tester.tap(find.byKey(const ValueKey('confirm-step')));
+      await tester.pumpAndSettle();
+      final body = jsonDecode(log.singleWhere((r) => r.method == 'POST').body) as Map<String, dynamic>;
+      expect(body['text'], 'Onde se le Rua A leia Rua B');
+      expect(find.text('Cartas de correção'), findsOneWidget);
+    });
+
+    testWidgets('Devolver opens the item dialog with the balance of each line', (tester) async {
+      final doc = nf();
+      doc['lines'] = [
+        {...(doc['lines'] as List).first as Map<String, dynamic>, 'id': 70, 'returnedQuantity': 4},
+      ];
+      await open(tester, 'Sales', doc);
+      await tester.tap(find.byType(PopupMenuButton<VoidCallback>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Devolver'));
+      await tester.pumpAndSettle();
+      expect(find.text('Devolver da NF 2581'), findsOneWidget);
+      expect(find.textContaining('Saldo a devolver: 6'), findsOneWidget);
+      expect(find.textContaining('Motivo da devolução', skipOffstage: false), findsWidgets);
     });
 
     testWidgets('cancelling asks for reason and password and posts both', (tester) async {

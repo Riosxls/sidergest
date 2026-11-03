@@ -61,6 +61,7 @@ builder.Services.AddSingleton<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>
 builder.Services.AddHostedService<QuoteExpiryService>();
 builder.Services.AddSingleton<AlertService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AlertService>());
+builder.Services.AddHostedService<FiscalReconcileService>();
 builder.Services.AddExceptionHandler<StockExceptionHandler>();
 builder.Services.AddExceptionHandler<DatabaseExceptionHandler>();
 builder.Services.AddProblemDetails();

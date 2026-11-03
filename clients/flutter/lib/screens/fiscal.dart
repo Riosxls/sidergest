@@ -14,7 +14,7 @@ import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
 import 'sales_common.dart';
 
-const fiscalKinds = {'Sale': 'Venda', 'OutsideShipment': 'Remessa p/ industrialização'};
+const fiscalKinds = {'Sale': 'Venda', 'OutsideShipment': 'Remessa p/ industrialização', 'Return': 'Devolução'};
 const fiscalStatuses = {'Authorized': 'Autorizada', 'Cancelled': 'Cancelada', 'Pending': 'Pendente na SEFAZ', 'Rejected': 'Rejeitada'};
 
 Future<void> openFiscalDocument(BuildContext context, Session session, int id) =>
@@ -144,6 +144,94 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
     }
   }
 
+  /// Lines of a sale NF that still have something to return: (line, balance).
+  List<(Map<String, dynamic>, num)> _returnable(Map<String, dynamic> d) => [
+    for (final l in (d['lines'] as List).cast<Map<String, dynamic>>())
+      if ((l['quantity'] as num) - ((l['returnedQuantity'] as num?) ?? 0) > 0) (l, (l['quantity'] as num) - ((l['returnedQuantity'] as num?) ?? 0)),
+  ];
+
+  /// Devolução: picks items and quantities (limited to the balance), the stock location and the reason, confirms, then issues the return NF.
+  Future<void> _return() async {
+    final d = _d!;
+    final items = _returnable(d);
+    final picked = await submitForm(
+      context,
+      api: api,
+      title: 'Devolver da NF ${d['number']}',
+      fields: [
+        for (final (l, balance) in items)
+          FieldSpec('q_${l['id']}', '${l['code']} · ${fmt(l['description'])}', type: FieldType.decimal, min: 0, max: balance, hint: 'Saldo a devolver: ${fmtNum(balance, 4)} ${l['unit']}. Vazio = não devolve'),
+        const FieldSpec('locationId', 'Voltar ao estoque em', type: FieldType.lookup, lookup: LookupSpec('/api/stock-locations'), required: true, hint: 'Local que recebe as peças devolvidas'),
+        const FieldSpec('reason', 'Motivo da devolução', required: true, hint: 'Sai na NF de devolução'),
+      ],
+      submit: (b) async => b,
+    );
+    if (picked == null || !mounted) return;
+    final lines = [
+      for (final (l, _) in items)
+        if (picked['q_${l['id']}'] is num && (picked['q_${l['id']}'] as num) > 0) {'itemId': l['id'], 'quantity': picked['q_${l['id']}']},
+    ];
+    if (lines.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Informe a quantidade de pelo menos um item')));
+      return;
+    }
+    final ok = await confirmStep(
+      context,
+      title: 'Emitir a NF de devolução?',
+      message: 'Será emitida uma NF de entrada referenciando a NF ${d['number']}, e as peças voltam ao estoque. Para desfazer só cancelando a NF de devolução, dentro do prazo.',
+      confirmLabel: 'Emitir devolução',
+      icon: Icons.assignment_return_outlined,
+    );
+    if (!ok || !mounted) return;
+    try {
+      final r = await api.post('$base/return', {'lines': lines, 'locationId': picked['locationId'], 'reason': picked['reason']}) as Map<String, dynamic>;
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('NF de devolução ${r['number']} emitida')));
+      await openFiscalDocument(context, s, r['id'] as int);
+      unawaited(_load());
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+    }
+  }
+
+  /// Carta de correção (CC-e): free text of 15 to 1000 characters, numbered 1 to 20 by the SEFAZ.
+  Future<void> _correct() async {
+    final d = _d!;
+    final events = (d['events'] as List?) ?? const [];
+    final r = await submitForm(
+      context,
+      api: api,
+      title: 'Carta de correção da NF ${d['number']}',
+      fields: [
+        FieldSpec(
+          'text',
+          'Texto da correção',
+          required: true,
+          hint: 'De 15 a 1000 caracteres. Não vale para valores, impostos, destinatário ou datas. Correção nº ${events.length + 1} de 20',
+        ),
+      ],
+      submit: (b) async => b,
+    );
+    if (r == null || !mounted) return;
+    final ok = await confirmStep(
+      context,
+      title: 'Enviar a carta de correção?',
+      message: 'A carta é registrada na SEFAZ e não pode ser apagada.',
+      confirmLabel: 'Enviar carta',
+      icon: Icons.edit_note,
+    );
+    if (!ok || !mounted) return;
+    try {
+      final doc = await api.post('$base/correction', {'text': r['text']}) as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() => _d = doc);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Carta de correção registrada')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+    }
+  }
+
   Future<void> _reconcile() async {
     try {
       final r = await api.post('$base/reconcile?minAgeMinutes=0', {}) as Map<String, dynamic>;
@@ -157,8 +245,11 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
   @override
   Widget build(BuildContext context) {
     final d = _d;
-    final canCancel = s.canFiscalCancel && d?['status'] == 'Authorized';
+    final authorized = d?['status'] == 'Authorized';
+    final canCancel = s.canFiscalCancel && authorized;
     final canReconcile = s.canFiscalCancel && d?['status'] == 'Pending';
+    final canReturn = s.canEmitInvoice && authorized && d?['kind'] == 'Sale' && _returnable(d!).isNotEmpty;
+    final canCorrect = s.canEmitInvoice && authorized && ((d?['events'] as List?)?.length ?? 0) < 20;
     return Scaffold(
       appBar: AppBar(
         title: Text(d == null ? 'Nota fiscal' : 'NF ${d['number']} · ${d['recipientName']}', overflow: TextOverflow.ellipsis),
@@ -170,14 +261,25 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
               icon: const Icon(Icons.picture_as_pdf_outlined),
               onPressed: () => printDanfe(context, api, d),
             ),
-          if (canCancel)
+          if (canCancel || canReturn || canCorrect)
             PopupMenuButton<VoidCallback>(
               onSelected: (f) => f(),
               itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: _cancel,
-                  child: const ListTile(leading: Icon(Icons.block), title: Text('Cancelar NF')),
-                ),
+                if (canReturn)
+                  PopupMenuItem(
+                    value: _return,
+                    child: const ListTile(leading: Icon(Icons.assignment_return_outlined), title: Text('Devolver')),
+                  ),
+                if (canCorrect)
+                  PopupMenuItem(
+                    value: _correct,
+                    child: const ListTile(leading: Icon(Icons.edit_note), title: Text('Carta de correção')),
+                  ),
+                if (canCancel)
+                  PopupMenuItem(
+                    value: _cancel,
+                    child: const ListTile(leading: Icon(Icons.block), title: Text('Cancelar NF')),
+                  ),
               ],
             ),
           if (canReconcile) TextButton.icon(onPressed: _reconcile, icon: const Icon(Icons.sync), label: const Text('Conciliar com a SEFAZ')),
@@ -206,6 +308,25 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
           ),
         ],
         if (d['status'] == 'Pending' || d['status'] == 'Rejected' || d['statusMessage'] != null) ...[gap, _statusNote(d)],
+        if (d['warnings'] != null) ...[gap, NextStepCard(title: 'Atenção na emissão', message: '${d['warnings']}', tone: Tone.warning)],
+        if (d['referencedDocumentId'] != null) ...[
+          gap,
+          NextStepCard(
+            title: 'Referencia a NF ${d['referencedNumber']}',
+            message: 'NF de devolução (finNFe 4) da nota de venda ${d['referencedNumber']}. Chave: ${fmt(d['referencedAccessKey'])}',
+            tone: Tone.info,
+            actions: [
+              TextButton.icon(
+                onPressed: () async {
+                  await openFiscalDocument(context, s, d['referencedDocumentId'] as int);
+                  unawaited(_load());
+                },
+                icon: const Icon(Icons.open_in_new),
+                label: Text('Abrir NF ${d['referencedNumber']}'),
+              ),
+            ],
+          ),
+        ],
         if (cancelled) ...[
           gap,
           NextStepCard(
@@ -225,6 +346,36 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
             child: SimpleTable(
               columns: [col('Parcela', 'sequence'), dateCol('Vencimento', 'dueDate'), moneyCol('Valor', 'amount')],
               rows: (d['installments'] as List).cast<Map<String, dynamic>>(),
+            ),
+          ),
+        ],
+        if (((d['returns'] as List?) ?? const []).isNotEmpty) ...[
+          gap,
+          Section(
+            title: 'NFs de devolução',
+            child: SimpleTable(
+              columns: [col('NF', 'number', numeric: true), labelCol('Situação', 'status', fiscalStatuses), moneyCol('Valor', 'invoiceTotal'), dateCol('Emissão', 'issuedAt')],
+              rows: (d['returns'] as List).cast<Map<String, dynamic>>(),
+              actions: (e) => [
+                IconButton(
+                  tooltip: 'Abrir NF ${e['number']}',
+                  icon: const Icon(Icons.open_in_new),
+                  onPressed: () async {
+                    await openFiscalDocument(context, s, e['id'] as int);
+                    unawaited(_load());
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (((d['events'] as List?) ?? const []).isNotEmpty) ...[
+          gap,
+          Section(
+            title: 'Cartas de correção',
+            child: SimpleTable(
+              columns: [col('Nº', 'sequence', numeric: true), dateCol('Enviada em', 'createdAt'), col('Texto', 'text'), col('Protocolo', 'protocol'), col('Por', 'createdBy')],
+              rows: (d['events'] as List).cast<Map<String, dynamic>>(),
             ),
           ),
         ],
@@ -265,7 +416,9 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
         'Rejected' => 'NF rejeitada: número perdido',
         _ => 'Observação',
       },
-      message: d['status'] == 'Pending'
+      message: d['status'] == 'Pending' && d['keyLookupRequired'] == true
+          ? 'A SEFAZ respondeu duplicidade. O número foi mantido: use "Conciliar com a SEFAZ" para consultar a chave antes de reaproveitá-lo. ${fmt(d['statusMessage'])}'
+          : d['status'] == 'Pending'
           ? 'A resposta da SEFAZ não chegou. Use "Conciliar com a SEFAZ" para consultar a chave antes de emitir de novo. ${fmt(d['statusMessage'])}'
           : d['status'] == 'Rejected'
           ? '${fmt(d['statusMessage'])} Se o número não será reaproveitado, use "Inutilizar numeração" na lista de notas.'
@@ -286,6 +439,7 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
           ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
           ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
           moneyCol('Total', 'total'),
+          if (d['kind'] == 'Sale') ColumnSpec('Devolvido', (e) => (e['returnedQuantity'] as num? ?? 0) > 0 ? fmt(e['returnedQuantity']) : '', numeric: true),
           ColumnSpec('ICMS', (e) => '${e['icmsCst']} · ${fmtMoney(e['icmsValue'])}', numeric: true),
           ColumnSpec('IPI', (e) => '${e['ipiCst']} · ${fmtMoney(e['ipiValue'])}', numeric: true),
         ],

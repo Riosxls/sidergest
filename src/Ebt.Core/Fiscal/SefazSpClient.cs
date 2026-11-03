@@ -93,17 +93,27 @@ public sealed class SefazSpClient : ISefazClient, IDisposable
         return new SefazResult(true, status, message, protocol, false, proc.ToString(SaveOptions.DisableFormatting));
     }
 
-    public async Task<SefazResult> CancelAsync(string accessKey, string authorizationProtocol, string reason, SefazEnvironment environment, CancellationToken ct)
+    public Task<SefazResult> CancelAsync(string accessKey, string authorizationProtocol, string reason, SefazEnvironment environment, CancellationToken ct) =>
+        SendEventAsync(accessKey, "110111", 1, environment, [new XElement(N + "descEvento", "Cancelamento"), new XElement(N + "nProt", authorizationProtocol), new XElement(N + "xJust", reason)], ct);
+
+    /// <summary>CC-e (NT 2011.004): descEvento, xCorrecao and the fixed xCondUso text. UNTESTED against the real webservice.</summary>
+    public Task<SefazResult> CorrectAsync(string accessKey, int sequence, string text, SefazEnvironment environment, CancellationToken ct) =>
+        SendEventAsync(accessKey, "110110", sequence, environment, [new XElement(N + "descEvento", "Carta de Correção"), new XElement(N + "xCorrecao", text), new XElement(N + "xCondUso", CorrectionTerms)], ct);
+
+    /// <summary>Fixed "condição de uso" text that must accompany every CC-e (NT 2011.004).</summary>
+    public const string CorrectionTerms = "A Carta de Correção é disciplinada pelo § 1º-A do art. 7º do Convênio S/N, de 15 de dezembro de 1970 e pode ser utilizada para regularização de erro ocorrido na emissão de documento fiscal, desde que o erro não esteja relacionado com: I - as variáveis que determinam o valor do imposto tais como: base de cálculo, alíquota, diferença de preço, quantidade, valor da operação ou da prestação; II - a correção de dados cadastrais que implique mudança do remetente ou do destinatário; III - a data de emissão ou de saída.";
+
+    private async Task<SefazResult> SendEventAsync(string accessKey, string eventType, int sequence, SefazEnvironment environment, XElement[] detail, CancellationToken ct)
     {
         var cnpj = accessKey.Substring(6, 14);
         var uf = accessKey[..2];
-        var id = $"ID110111{accessKey}01";
+        var id = $"ID{eventType}{accessKey}{sequence:00}";
         var at = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-3)).ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture);
         var ev = new XElement(N + "evento", new XAttribute("versao", "1.00"),
             new XElement(N + "infEvento", new XAttribute("Id", id),
                 new XElement(N + "cOrgao", uf), new XElement(N + "tpAmb", (int)environment), new XElement(N + "CNPJ", cnpj), new XElement(N + "chNFe", accessKey),
-                new XElement(N + "dhEvento", at), new XElement(N + "tpEvento", "110111"), new XElement(N + "nSeqEvento", "1"), new XElement(N + "verEvento", "1.00"),
-                new XElement(N + "detEvento", new XAttribute("versao", "1.00"), new XElement(N + "descEvento", "Cancelamento"), new XElement(N + "nProt", authorizationProtocol), new XElement(N + "xJust", reason))));
+                new XElement(N + "dhEvento", at), new XElement(N + "tpEvento", eventType), new XElement(N + "nSeqEvento", sequence), new XElement(N + "verEvento", "1.00"),
+                new XElement(N + "detEvento", new XAttribute("versao", "1.00"), detail)));
         var signed = NfeSigner.SignEvent(ev.ToString(SaveOptions.DisableFormatting), certificate);
         var batch = $"{DateTime.UtcNow:yyMMddHHmmss}{Random.Shared.Next(0, 1000):000}";
         var body = $"<envEvento xmlns=\"{Nfe}\" versao=\"1.00\"><idLote>{batch}</idLote>{StripDeclaration(signed)}</envEvento>";
