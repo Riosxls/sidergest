@@ -10,6 +10,7 @@ import '../session.dart';
 import '../widgets/dash.dart';
 import 'dashboard.dart';
 import 'dashboard_data.dart';
+import 'quick_actions.dart';
 
 /// A navigation entry inside a [ModuleScreen].
 class ModuleLink {
@@ -345,6 +346,10 @@ class _ModuleScreenState extends State<ModuleScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
+                    QuickActionBar(
+                      actions: moduleQuickActions(widget.session, section, go: widget.onNavigate == null ? null : (id) => widget.onNavigate!(id)),
+                      onDone: _refresh,
+                    ),
                     Text('Indicadores', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
                     FutureBuilder<Object>(
