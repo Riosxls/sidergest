@@ -20,7 +20,7 @@ public class SecurityHardeningTests(ApiFixture api)
     // ---- fallback authorization -------------------------------------------------------------------------------------------------------------
 
     /// <summary>The only endpoints a visitor without a token may call. Anything else must be rejected by the fallback policy.</summary>
-    private static readonly string[] AnonymousAllowList = ["GET /", "GET /health", "POST /api/auth/login", "POST /api/auth/refresh", "POST /api/auth/logout"];
+    private static readonly string[] AnonymousAllowList = ["GET /", "GET /health", "GET /health/ready", "POST /api/auth/login", "POST /api/auth/refresh", "POST /api/auth/logout"];
 
     [Fact]
     public async Task Every_endpoint_requires_sign_in_except_the_explicit_allow_list()
