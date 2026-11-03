@@ -155,21 +155,23 @@ void main() {
   testWidgets('a module card opens a screen with only that subject', (tester) async {
     await pumpShell(tester, 'Admin');
     await openModule(tester, 'PCP');
-    expect(find.text('Telas'), findsOneWidget);
-    expect(find.byKey(const ValueKey('link-production-orders')), findsOneWidget);
-    expect(find.byKey(const ValueKey('link-balances')), findsNothing);
+    // The sidebar lists the screens, so the overview does not repeat them as cards.
+    expect(find.text('Telas'), findsNothing);
+    expect(find.byKey(const ValueKey('link-production-orders')), findsNothing);
+    expect(find.byKey(const ValueKey('nav-production-orders')), findsOneWidget);
+    expect(find.byKey(const ValueKey('nav-balances')), findsNothing);
     expect(find.text('OFs a liberar'), findsOneWidget);
     expect(find.text('Reservas abertas'), findsNothing);
     expect(find.widgetWithText(ListTile, 'Visão geral'), findsOneWidget);
     expect(find.widgetWithText(ListTile, 'Ordens de fabricação'), findsOneWidget);
     expect(find.widgetWithText(ListTile, 'Saldos'), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('link-production-orders')));
+    await tester.tap(find.byKey(const ValueKey('nav-production-orders')));
     await tester.pumpAndSettle();
     expect(find.text('PCP › Ordens de fabricação'), findsOneWidget);
     await tester.tap(find.widgetWithText(ListTile, 'Visão geral'));
     await tester.pumpAndSettle();
-    expect(find.text('Telas'), findsOneWidget);
+    expect(find.text('OFs a liberar'), findsOneWidget);
     await tester.tap(find.widgetWithText(ListTile, 'Painel'));
     await tester.pumpAndSettle();
     expect(find.text('Módulos'), findsOneWidget);
@@ -178,10 +180,10 @@ void main() {
   testWidgets('Comercial and Estoque modules expose the new screens', (tester) async {
     await pumpShell(tester, 'Admin');
     await openModule(tester, 'Comercial');
-    expect(find.byKey(const ValueKey('link-viability')), findsOneWidget);
+    expect(find.byKey(const ValueKey('nav-viability')), findsOneWidget);
     await openModule(tester, 'Estoque');
-    expect(find.byKey(const ValueKey('link-steel')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('link-steel')));
+    expect(find.byKey(const ValueKey('nav-steel')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('nav-steel')));
     await tester.pumpAndSettle();
     expect(find.text('Bobinas e lotes'), findsOneWidget);
   });

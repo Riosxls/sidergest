@@ -597,6 +597,7 @@ class _ShellState extends State<Shell> {
         message: title ?? d.title,
         waitDuration: const Duration(milliseconds: 600),
         child: ListTile(
+          key: ValueKey('nav-${d.id}'),
           dense: true,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           leading: Icon(d.icon),

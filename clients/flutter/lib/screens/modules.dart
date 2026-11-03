@@ -92,8 +92,8 @@ class _ModuleScreenState extends State<ModuleScreen> {
   void Function()? _go(String id, [String? filter]) => widget.onNavigate == null ? null : () => widget.onNavigate!(id, filter);
 
   /// [alarm]: a count above zero is a problem, so the tile is drawn red; otherwise it is plain information.
-  GridItem _tile(IconData icon, String label, String value, [void Function()? onTap, bool alarm = false]) =>
-      GridItem(DashTile(icon: icon, label: label, value: value, alert: alarm && value != '0', onTap: onTap));
+  GridItem _tile(IconData icon, String label, String value, [void Function()? onTap, bool alarm = false, String? hint]) =>
+      GridItem(DashTile(icon: icon, label: label, value: value, hint: hint, alert: alarm && value != '0', onTap: onTap));
 
   Widget _content(Object data) {
     final items = switch (data) {
@@ -110,26 +110,22 @@ class _ModuleScreenState extends State<ModuleScreen> {
     return DashGrid(items: items);
   }
 
+  /// What needs action comes first; a count and the money behind it share one tile.
   List<GridItem> _commercial(CommercialDashboard d) => [
-    _tile(Icons.request_quote_outlined, 'Orçamentos abertos', '${d.k('openQuotes').toInt()}', _go('sales-quotes')),
-    _tile(Icons.payments_outlined, 'Valor em propostas', fmtMoney(d.k('openQuotesValue')), _go('sales-quotes')),
-    _tile(Icons.receipt_long_outlined, 'Pedidos abertos', '${d.k('openOrders').toInt()}', _go('sales-orders')),
-    _tile(Icons.attach_money, 'Valor em pedidos', fmtMoney(d.k('openOrdersValue')), _go('sales-orders')),
     _tile(Icons.event_busy_outlined, 'Pedidos atrasados', '${d.k('lateOrders').toInt()}', _go('sales-orders'), true),
-    _tile(Icons.local_shipping_outlined, 'Prontos para expedir', '${d.k('readyToShip').toInt()}', _go('deliveries')),
     _tile(Icons.gavel_outlined, 'Aprovações pendentes', '${d.k('pendingApprovals').toInt()}', _go('sales-quotes')),
+    _tile(Icons.local_shipping_outlined, 'Prontos para expedir', '${d.k('readyToShip').toInt()}', _go('deliveries')),
+    _tile(Icons.request_quote_outlined, 'Orçamentos abertos', '${d.k('openQuotes').toInt()}', _go('sales-quotes'), false, fmtMoney(d.k('openQuotesValue'))),
+    _tile(Icons.receipt_long_outlined, 'Pedidos abertos', '${d.k('openOrders').toInt()}', _go('sales-orders'), false, fmtMoney(d.k('openOrdersValue'))),
     _tile(Icons.draw_outlined, 'Viabilidades em assinatura', '${d.feasibilityInReview}', _go('viability', 'InReview')),
-    // A rate over no quotes means nothing; show a dash until some quote has been decided or is open.
-    _tile(
-      Icons.emoji_events_outlined,
-      'Taxa de conversão',
-      d.kpis['winRate'] == null || (d.k('openQuotes') == 0 && d.stages.values.every((v) => v == 0)) ? '—' : '${((d.kpis['winRate'] as num) * 100).round()}%',
-      _go('sales-pipeline'),
-    ),
+    // Stages with nothing in them are noise; the Funil de vendas screen shows all eight.
     GridItem.bars(
       BarPanel(
         title: 'Funil por etapa',
-        data: {for (final e in d.stages.entries) pipelineStages[e.key] ?? e.key: e.value},
+        data: {
+          for (final e in d.stages.entries)
+            if (e.value > 0) pipelineStages[e.key] ?? e.key: e.value,
+        },
         emptyText: 'Nenhum orçamento ou pedido no funil',
         onRowTap: (_) => _go('sales-pipeline')?.call(),
       ),
@@ -232,22 +228,6 @@ class _ModuleScreenState extends State<ModuleScreen> {
   Widget _links() {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    // With the sidebar showing, the same screens are one click away; keep them as a compact row under the data instead of a wall of cards.
-    if (MediaQuery.sizeOf(context).width >= 900) {
-      return Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final l in widget.links)
-            ActionChip(
-              key: ValueKey('link-${l.id}'),
-              avatar: Icon(l.icon, size: 18, color: cs.primary),
-              label: Text(l.title),
-              onPressed: _go(l.id),
-            ),
-        ],
-      );
-    }
     return LayoutBuilder(
       builder: (context, c) {
         const gap = 12.0;
@@ -334,10 +314,13 @@ class _ModuleScreenState extends State<ModuleScreen> {
                         return _content(snap.data!);
                       },
                     ),
-                    const SizedBox(height: 24),
-                    Text('Telas', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 8),
-                    _links(),
+                    // With the sidebar showing, every screen is already listed there; the cards below are for phones and narrow windows.
+                    if (MediaQuery.sizeOf(context).width < 900) ...[
+                      const SizedBox(height: 24),
+                      Text('Telas', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      _links(),
+                    ],
                   ],
                 ),
               ),

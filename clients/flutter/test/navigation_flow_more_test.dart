@@ -81,11 +81,11 @@ void main() {
     await pumpShell(tester, 'Admin');
     await chord(tester, LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.digit2);
     expect(find.byKey(const ValueKey('module-PCP')), findsNothing);
-    expect(find.byKey(const ValueKey('link-/api/products')), findsOneWidget);
+    expect(find.byKey(const ValueKey('nav-/api/products')), findsOneWidget);
     await chord(tester, LogicalKeyboardKey.altLeft, LogicalKeyboardKey.arrowLeft);
     expect(find.byKey(const ValueKey('module-PCP')), findsOneWidget);
     await chord(tester, LogicalKeyboardKey.altLeft, LogicalKeyboardKey.arrowRight);
-    expect(find.byKey(const ValueKey('link-/api/products')), findsOneWidget);
+    expect(find.byKey(const ValueKey('nav-/api/products')), findsOneWidget);
     await chord(tester, LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.digit0);
     expect(find.byKey(const ValueKey('module-PCP')), findsOneWidget);
   });

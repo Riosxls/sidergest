@@ -111,16 +111,16 @@ void main() {
     await esc(tester);
     expect(find.byKey(const ValueKey('module-PCP')), findsOneWidget);
     await openModule(tester, 'PCP');
-    expect(find.text('Telas'), findsOneWidget);
+    expect(find.text('OFs a liberar'), findsOneWidget);
     await esc(tester);
     expect(find.byKey(const ValueKey('module-PCP')), findsOneWidget);
-    expect(find.text('Telas'), findsNothing);
+    expect(find.text('OFs a liberar'), findsNothing);
   });
 
   testWidgets('Shell: first Esc only unfocuses a text field', (tester) async {
     await pumpShell(tester, 'Admin');
     await openModule(tester, 'PCP');
-    await tester.tap(find.byKey(const ValueKey('link-production-orders')));
+    await tester.tap(find.byKey(const ValueKey('nav-production-orders')));
     await tester.pumpAndSettle();
     final field = find.byType(EditableText);
     expect(field, findsWidgets);
@@ -131,7 +131,7 @@ void main() {
     // Esc steps back one screen: the PCP overview it came from, then the Painel.
     await esc(tester);
     expect(find.byKey(const ValueKey('module-PCP')), findsNothing);
-    expect(find.byKey(const ValueKey('link-production-orders')), findsOneWidget);
+    expect(find.text('OFs a liberar'), findsOneWidget);
     await esc(tester);
     expect(find.byKey(const ValueKey('module-PCP')), findsOneWidget);
   });

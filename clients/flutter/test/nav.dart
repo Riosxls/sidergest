@@ -14,8 +14,11 @@ Future<void> openModule(WidgetTester tester, String module) async {
 
 Future<void> openScreen(WidgetTester tester, String module, String id) async {
   await openModule(tester, module);
-  await tester.ensureVisible(find.byKey(ValueKey('link-$id')));
+  // Narrow layouts list the module's screens as cards; wide ones only have the sidebar.
+  final link = find.byKey(ValueKey('link-$id'));
+  final target = link.evaluate().isNotEmpty ? link : find.byKey(ValueKey('nav-$id'));
+  await tester.ensureVisible(target);
   await tester.pumpAndSettle();
-  await tester.tap(find.byKey(ValueKey('link-$id')));
+  await tester.tap(target);
   await tester.pumpAndSettle();
 }

@@ -72,13 +72,16 @@ ShapeBorder dashCardShape(BuildContext context) => RoundedRectangleBorder(
 
 /// Dashboard card with an icon, a [value] and a [label]; [alert] highlights it.
 class DashTile extends StatelessWidget {
-  const DashTile({super.key, required this.icon, required this.label, required this.value, this.alert = false, this.onTap});
+  const DashTile({super.key, required this.icon, required this.label, required this.value, this.hint, this.alert = false, this.onTap});
 
   static const height = 112.0;
 
   final IconData icon;
   final String label;
   final String value;
+
+  /// Secondary figure beside [value], e.g. the amount behind a count.
+  final String? hint;
   final bool alert;
   final void Function()? onTap;
 
@@ -91,7 +94,7 @@ class DashTile extends StatelessWidget {
     final valueColor = fg ?? (value == '0' ? cs.onSurfaceVariant : null);
     return Semantics(
       button: onTap != null,
-      label: '$value $label',
+      label: hint == null ? '$value $label' : '$value $label, $hint',
       excludeSemantics: true,
       child: Card(
         margin: EdgeInsets.zero,
@@ -128,13 +131,23 @@ class DashTile extends StatelessWidget {
                     alignment: Alignment.bottomLeft,
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text(
-                        value,
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: valueColor,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            value,
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: valueColor,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                          if (hint != null) ...[
+                            const SizedBox(width: 8),
+                            Text(hint!, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                          ],
+                        ],
                       ),
                     ),
                   ),
