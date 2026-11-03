@@ -82,8 +82,9 @@ void main() {
       expect(find.textContaining('Ø25,4 × e1,5 × c'), findsOneWidget);
       expect(find.textContaining('NBR 5599'), findsOneWidget);
       expect(find.text('Itens (1)'), findsOneWidget);
-      expect(find.text('50.000,00 em aberto de 10.500,00'), findsNothing);
-      expect(find.textContaining('em aberto de'), findsOneWidget);
+      expect(find.textContaining('50.000,00 em pedidos'), findsNothing);
+      expect(find.textContaining('em pedidos + '), findsOneWidget);
+      expect(find.textContaining('a receber, de'), findsOneWidget);
     });
 
     testWidgets('Editar opens the editor for the order and saving shows the result', (tester) async {

@@ -23,8 +23,8 @@ public sealed partial class SalesService
         if (!credit.Exceeded) return;
         if (await db.SalesEvents.AnyAsync(e => e.Kind == SalesRecordKind.Order && e.RecordId == o.Id && e.Action == "credit-override", ct)) return;
         if (!overrideCredit)
-            throw SalesException.Conflict($"Credit limit exceeded: limit {credit.Limit:0.00}, open {credit.Open:0.00}; a manager must authorise the {stage}");
-        Log(SalesRecordKind.Order, o.Id, "credit-override", null, null, $"{stage}: limite {credit.Limit:0.00} excedido (aberto {credit.Open:0.00})", user);
+            throw SalesException.Conflict($"Credit limit exceeded: limit {credit.Limit:0.00}, open orders {credit.Open:0.00}, receivable {credit.Receivable:0.00}; a manager must authorise the {stage}");
+        Log(SalesRecordKind.Order, o.Id, "credit-override", null, null, $"{stage}: limite {credit.Limit:0.00} excedido (pedidos em aberto {credit.Open:0.00}, a receber {credit.Receivable:0.00})", user);
     }
 
     public async Task<CreditCheck> CreditAsync(int customerId, int? paymentTermId, decimal thisOrder, int? excludeOrderId, CancellationToken ct = default)
@@ -38,7 +38,8 @@ public sealed partial class SalesService
         var ids = lines.Select(l => l.Id).ToList();
         var shipped = await ShippedAsync(ids, ct);
         var open = lines.Sum(l => Money(Math.Max(0, l.Quantity - shipped.GetValueOrDefault(l.Id)) * l.UnitPrice * (1 + l.IpiPercent / 100m)));
-        return new CreditCheck(limit, open, thisOrder, limit is { } lim && open + thisOrder > lim, customerLimit is not null ? "customer" : termLimit is not null ? "term" : null);
+        var receivable = await new Ebt.Core.Receivables.ReceivablesService(db).OpenBalanceAsync(customerId, ct);
+        return new CreditCheck(limit, open, thisOrder, limit is { } lim && open + receivable + thisOrder > lim, customerLimit is not null ? "customer" : termLimit is not null ? "term" : null, receivable);
     }
 
     public async Task<Dictionary<int, decimal>> ShippedAsync(IReadOnlyCollection<int> orderLineIds, CancellationToken ct = default) =>

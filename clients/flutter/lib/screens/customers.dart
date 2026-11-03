@@ -265,7 +265,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
         ),
         body: TabBarView(
           children: [
-            _CustomerCompany(customer: _c, canEdit: s.canCustomers, onEdit: _edit),
+            _CustomerCompany(session: s, customer: _c, canEdit: s.canCustomers, onEdit: _edit),
             _CustomerAddresses(session: s, customerId: id),
             _CustomerQuotes(session: s, customerId: id, customerName: '${_c['name']}'),
             _CustomerOrders(session: s, customerId: id),
@@ -277,8 +277,9 @@ class _CustomerScreenState extends State<CustomerScreen> {
 }
 
 class _CustomerCompany extends StatelessWidget {
-  const _CustomerCompany({required this.customer, required this.canEdit, required this.onEdit});
+  const _CustomerCompany({required this.session, required this.customer, required this.canEdit, required this.onEdit});
 
+  final Session session;
   final Map<String, dynamic> customer;
   final bool canEdit;
   final VoidCallback onEdit;
@@ -310,7 +311,65 @@ class _CustomerCompany extends StatelessWidget {
                   ('Prazo padrão', fmt(a['paymentTermName'])),
                 ]),
         ),
+        _CustomerReceivable(session: session, customerId: customer['id'] as int),
       ],
+    );
+  }
+}
+
+/// What the customer owes on authorized NFs and how much of it is late; hidden when the figures cannot be read.
+class _CustomerReceivable extends StatefulWidget {
+  const _CustomerReceivable({required this.session, required this.customerId});
+
+  final Session session;
+  final int customerId;
+
+  @override
+  State<_CustomerReceivable> createState() => _CustomerReceivableState();
+}
+
+class _CustomerReceivableState extends State<_CustomerReceivable> {
+  Map<String, dynamic>? _balance;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    Map<String, dynamic>? b;
+    try {
+      final rows = await widget.session.api.get('/api/receivables/balances', {'customerId': widget.customerId});
+      b = rows is List && rows.isNotEmpty ? rows.first as Map<String, dynamic> : null;
+    } catch (_) {
+      b = null;
+    }
+    if (mounted) {
+      setState(() {
+        _balance = b;
+        _loaded = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) return const SizedBox.shrink();
+    final b = _balance;
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Section(
+        title: 'Contas a receber',
+        child: b == null
+            ? const Text('Nada em aberto.')
+            : InfoGrid([
+                ('Em aberto', fmtMoney(b['open'])),
+                ('Vencido', fmtMoney(b['overdue'])),
+                ('Próximo vencimento', fmtDay(b['nextDue'])),
+              ]),
+      ),
     );
   }
 }

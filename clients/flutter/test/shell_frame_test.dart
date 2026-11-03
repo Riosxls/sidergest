@@ -230,7 +230,7 @@ void main() {
     await pumpShell(tester, 'Admin', size: const Size(400, 800));
     await openModule(tester, 'Comercial');
     expect(find.text('Expedição'), findsWidgets);
-    expect(find.text('Entregas · Certificados · Notas fiscais'), findsOneWidget);
+    expect(find.text('Entregas · Certificados · Notas fiscais · Contas a receber'), findsOneWidget);
   });
 
   testWidgets('pinned tabs and the collapsed sidebar: a tab pin names its group, and pins stay reachable as stars', (tester) async {

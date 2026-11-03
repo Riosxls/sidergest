@@ -33,6 +33,7 @@ import 'production_orders.dart';
 import 'quick_actions.dart';
 import 'quotations.dart';
 import 'receipts.dart';
+import 'receivables.dart';
 import 'record_links.dart';
 import 'reports.dart' show BillingSummaryScreen, MaterialConsumptionScreen;
 import 'requisitions.dart';
@@ -71,6 +72,7 @@ final tabGroups = <TabGroup>[
     (id: 'deliveries', label: 'Entregas'),
     (id: 'certificates', label: 'Certificados'),
     (id: 'fiscal-documents', label: 'Notas fiscais'),
+    (id: 'receivables', label: 'Contas a receber'),
   ]),
   const TabGroup('Comercial', 'Relatórios', Icons.bar_chart_outlined, [
     (id: 'report-material-consumption', label: 'Consumo de material'),
@@ -150,6 +152,7 @@ List<NavItem> _screens() => [
   NavItem('deliveries', Icons.local_shipping_outlined, 'Entregas', 'Comercial', (s, f, go) => DeliveriesScreen(session: s)),
   NavItem('certificates', Icons.verified_outlined, 'Certificados de qualidade', 'Comercial', (s, f, go) => CertificatesScreen(session: s)),
   NavItem('fiscal-documents', Icons.description_outlined, 'Notas fiscais', 'Comercial', (s, f, go) => FiscalDocumentsScreen(session: s)),
+  NavItem('receivables', Icons.account_balance_wallet_outlined, 'Contas a receber', 'Comercial', (s, f, go) => ReceivablesScreen(session: s)),
   NavItem('report-material-consumption', Icons.scale_outlined, 'Consumo de material vendido', 'Comercial', (s, f, go) => MaterialConsumptionScreen(session: s)),
   NavItem('report-billing', Icons.bar_chart_outlined, 'Faturamento consolidado', 'Comercial', (s, f, go) => BillingSummaryScreen(session: s)),
   for (final spec in salesMasters) NavItem(spec.path, spec.icon, spec.title, 'Comercial', (s, f, go) => EntityListScreen(session: s, spec: spec)),
@@ -778,7 +781,7 @@ class _ShellState extends State<Shell> {
 
   /// Comercial has too many screens for one flat list; the rest of the modules are short enough to stay ungrouped.
   static const _comercialGroups = {
-    'Vendas': ['customers', 'sales-pipeline', 'sales-quotes', 'viability', 'sales-orders', 'deliveries', 'certificates', 'fiscal-documents'],
+    'Vendas': ['customers', 'sales-pipeline', 'sales-quotes', 'viability', 'sales-orders', 'deliveries', 'certificates', 'fiscal-documents', 'receivables'],
     'Relatórios': ['report-material-consumption', 'report-billing'],
   };
 

@@ -50,7 +50,8 @@ public sealed record QuoteTotals(decimal Products, decimal Ipi, decimal Total, d
 
 public sealed record DuplicateInput(int? CustomerId = null);
 
-public sealed record CreditCheck(decimal? Limit, decimal Open, decimal ThisOrder, bool Exceeded, string? LimitSource = null);
+/// <summary>Exposure = Open (unshipped value of open orders) + Receivable (unpaid duplicatas of authorized NFs) + ThisOrder.</summary>
+public sealed record CreditCheck(decimal? Limit, decimal Open, decimal ThisOrder, bool Exceeded, string? LimitSource = null, decimal Receivable = 0m);
 
 public sealed record OrderLineProgress(int LineId, decimal Quantity, decimal FromStock, decimal Produced, decimal Shipped, decimal Planned, decimal Remaining, decimal Available, string? ProductionReference, ProductionOrderStatus? ProductionStatus, bool Ready);
 

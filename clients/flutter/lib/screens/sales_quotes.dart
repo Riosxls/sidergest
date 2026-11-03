@@ -1353,7 +1353,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         key: const ValueKey('quote-credit-banner'),
         title: 'Limite de crédito',
         message:
-            'Pedidos em aberto ${fmtMoney(c['open'])} + este orçamento ${fmtMoney(c['thisOrder'])} passam do limite de ${fmtMoney(c['limit'])} ${c['limitSource'] == 'customer' ? 'do cliente' : 'do prazo'}. '
+            'Pedidos em aberto ${fmtMoney(c['open'])} + a receber ${fmtMoney(c['receivable'] ?? 0)} + este orçamento ${fmtMoney(c['thisOrder'])} passam do limite de ${fmtMoney(c['limit'])} ${c['limitSource'] == 'customer' ? 'do cliente' : 'do prazo'}. '
             'O pedido de venda só sai com liberação do gerente comercial.',
         tone: Tone.warning,
       ),

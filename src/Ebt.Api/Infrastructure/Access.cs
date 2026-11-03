@@ -26,6 +26,7 @@ public static class Access
         [FiscalPolicies.Prices] = [A, UserRole.SalesManager],
         [FiscalPolicies.Cancel] = [A, UserRole.SalesManager],
         [FiscalPolicies.Emit] = [A, UserRole.Sales, UserRole.SalesManager],
+        [ReceivablePolicies.Post] = [A, UserRole.Sales, UserRole.SalesManager],
         [CertificatePolicies.Issue] = [A, UserRole.Engineering, UserRole.Production, UserRole.SalesManager],
         [SalesPolicies.PriceEdit] = [A, UserRole.SalesManager],
         [SteelPolicies.Write] = [A, UserRole.Stock, UserRole.Purchasing],

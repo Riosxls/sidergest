@@ -12,6 +12,7 @@ public partial class EbtDbContext
     public DbSet<FiscalDocument> FiscalDocuments => Set<FiscalDocument>();
     public DbSet<FiscalDocumentLine> FiscalDocumentLines => Set<FiscalDocumentLine>();
     public DbSet<FiscalInstallment> FiscalInstallments => Set<FiscalInstallment>();
+    public DbSet<ReceivablePayment> ReceivablePayments => Set<ReceivablePayment>();
     public DbSet<FiscalInutilization> FiscalInutilizations => Set<FiscalInutilization>();
 
     partial void ConfigureFiscal(ModelBuilder b)
@@ -117,6 +118,16 @@ public partial class EbtDbContext
             e.HasIndex(x => new { x.Series, x.FromNumber, x.ToNumber });
             e.Property(x => x.Reason).HasMaxLength(255);
             e.Property(x => x.Protocol).HasMaxLength(20);
+        });
+        b.Entity<ReceivablePayment>(e =>
+        {
+            e.ToTable("receivable_payments", t => t.HasCheckConstraint("ck_receivable_payments_amount", "amount > 0"));
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.Property(x => x.Method).HasMaxLength(40);
+            e.Property(x => x.Notes).HasMaxLength(500);
+            e.Property(x => x.ReverseReason).HasMaxLength(500);
+            e.HasIndex(x => x.InstallmentId);
+            e.HasOne(x => x.Installment).WithMany(x => x.Payments).HasForeignKey(x => x.InstallmentId).OnDelete(DeleteBehavior.Cascade);
         });
         b.Entity<FiscalInstallment>(e =>
         {

@@ -801,7 +801,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         ('Prazo', fmt(o['paymentTermName'] ?? o['customPaymentTerm'])),
         ('Frete', freightTerms[o['freight']] ?? fmt(o['freight'])),
         ('Orçamento', fmt(o['quoteReference'])),
-        ('Crédito', credit['limit'] == null ? 'Sem limite' : '${fmtMoney(credit['open'])} em aberto de ${fmtMoney(credit['limit'])}'),
+        ('Crédito', credit['limit'] == null ? 'Sem limite' : '${fmtMoney(credit['open'])} em pedidos + ${fmtMoney(credit['receivable'] ?? 0)} a receber, de ${fmtMoney(credit['limit'])}'),
       ],
     );
 

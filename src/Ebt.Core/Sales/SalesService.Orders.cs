@@ -47,7 +47,7 @@ public sealed partial class SalesService
         await ViabilityRules.ValidateAsync(db, i.CustomerId, lines.Select(l => (l.ProductId, l.FeasibilityId)), null, ct);
         var credit = await CreditAsync(i.CustomerId, i.PaymentTermId, Totals(lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, (decimal?)null))).Total, null, ct);
         if (credit.Exceeded && !overrideCredit)
-            throw SalesException.Conflict($"Credit limit exceeded: limit {credit.Limit:0.00}, open {credit.Open:0.00}, this order {credit.ThisOrder:0.00}");
+            throw SalesException.Conflict($"Credit limit exceeded: limit {credit.Limit:0.00}, open orders {credit.Open:0.00}, receivable {credit.Receivable:0.00}, this order {credit.ThisOrder:0.00}");
         var number = await NextAsync(EbtDbContext.SalesOrderNumbers, ct);
         var today = Today();
         var order = new SalesOrder

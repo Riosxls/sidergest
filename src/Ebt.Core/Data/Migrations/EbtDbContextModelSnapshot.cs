@@ -4399,6 +4399,71 @@ namespace Ebt.Core.Data.Migrations
                     b.ToTable("quote_request_files", (string)null);
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.ReceivablePayment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("InstallmentId")
+                        .HasColumnType("integer")
+                        .HasColumnName("installment_id");
+
+                    b.Property<string>("Method")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("method");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("notes");
+
+                    b.Property<DateOnly>("PaidOn")
+                        .HasColumnType("date")
+                        .HasColumnName("paid_on");
+
+                    b.Property<string>("ReverseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reverse_reason");
+
+                    b.Property<DateTimeOffset?>("ReversedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reversed_at");
+
+                    b.Property<string>("ReversedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("reversed_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_receivable_payments");
+
+                    b.HasIndex("InstallmentId")
+                        .HasDatabaseName("ix_receivable_payments_installment_id");
+
+                    b.ToTable("receivable_payments", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_receivable_payments_amount", "amount > 0");
+                        });
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.RefreshToken", b =>
                 {
                     b.Property<long>("Id")
@@ -6988,6 +7053,18 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Quote");
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.ReceivablePayment", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.FiscalInstallment", "Installment")
+                        .WithMany("Payments")
+                        .HasForeignKey("InstallmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_receivable_payments_fiscal_installments_installment_id");
+
+                    b.Navigation("Installment");
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.RefreshToken", b =>
                 {
                     b.HasOne("Ebt.Core.Entities.AppUser", "User")
@@ -7452,6 +7529,11 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Installments");
 
                     b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.FiscalInstallment", b =>
+                {
+                    b.Navigation("Payments");
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.GoodsReceipt", b =>

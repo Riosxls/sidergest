@@ -169,6 +169,24 @@ public class FiscalDocumentLine
     public decimal CofinsValue { get; set; }
 }
 
+/// <summary>A payment posted against a duplicata (baixa). Partial payments are allowed; a reversal (estorno) keeps the row and stops it from counting.</summary>
+public class ReceivablePayment
+{
+    public int Id { get; set; }
+    public int InstallmentId { get; set; }
+    public FiscalInstallment? Installment { get; set; }
+    public DateOnly PaidOn { get; set; }
+    public decimal Amount { get; set; }
+    /// <summary>How it was received (PIX, boleto, transferência...); free text.</summary>
+    public string? Method { get; set; }
+    public string? Notes { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public string? CreatedBy { get; set; }
+    public DateTimeOffset? ReversedAt { get; set; }
+    public string? ReversedBy { get; set; }
+    public string? ReverseReason { get; set; }
+}
+
 /// <summary>Duplicata of a sale NF.</summary>
 public class FiscalInstallment
 {
@@ -178,6 +196,7 @@ public class FiscalInstallment
     public int Sequence { get; set; }
     public DateOnly DueDate { get; set; }
     public decimal Amount { get; set; }
+    public List<ReceivablePayment> Payments { get; set; } = new();
 }
 
 /// <summary>A range of NF numbers that SEFAZ accepted as inutilizada (numbers skipped for good, e.g. Rejected documents or a crash before sending).</summary>

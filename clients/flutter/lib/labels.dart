@@ -69,6 +69,7 @@ const policyDescriptions = {
   'sales-release': 'Liberar pedidos para produção',
   'sales-ship': 'Confirmar a expedição física das entregas (estoque, vendas)',
   'fiscal-emit': 'Emitir a nota fiscal de venda (na expedição ou depois dela)',
+  'receivables-post': 'Dar baixa e estornar pagamentos nas duplicatas (contas a receber)',
   'certificates-issue': 'Emitir, cancelar e dispensar certificados de qualidade',
   'price-edit': 'Alterar a tabela de preços',
   'customers': 'Manter clientes',

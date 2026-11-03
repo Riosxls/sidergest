@@ -43,6 +43,11 @@ class _Env {
     }
     if (r.method == 'PUT') return _json({..._address(5), ...(jsonDecode(r.body) as Map<String, dynamic>)});
     if (r.method == 'DELETE') return http.Response('', 204);
+    if (path == '/api/receivables/balances') {
+      return _json([
+        {'customerId': 1, 'customerName': 'Metalúrgica Alfa', 'open': 1500, 'overdue': 400, 'nextDue': '2026-11-20'},
+      ]);
+    }
     if (path == '/api/customers/1/addresses') return _json(addresses);
     if (path == '/api/customers/1') return _json(_customer(withCompany: withCompany));
     if (path == '/api/customers') return _json(_page([_customer(withCompany: withCompany)]));
@@ -129,6 +134,13 @@ void main() {
     expect(jsonDecode(env.log.where((r) => r.method == 'PUT').last.body)['active'], false);
     expect(find.textContaining('(inativo)'), findsOneWidget);
     expect(find.byTooltip('Reativar'), findsOneWidget);
+  });
+
+  testWidgets('customer screen shows the open and overdue receivable balance', (tester) async {
+    await _pump(tester, _Env(), (s) => CustomerScreen(session: s, customer: _customer()));
+    expect(find.text('Contas a receber'), findsOneWidget);
+    expect(find.text('R\$ 1.500,00'), findsOneWidget);
+    expect(find.text('R\$ 400,00'), findsOneWidget);
   });
 
   testWidgets('customer without company data points to Editar', (tester) async {
