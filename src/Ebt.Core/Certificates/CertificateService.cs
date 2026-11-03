@@ -138,7 +138,7 @@ public sealed class CertificateService(EbtDbContext db)
     {
         var c = await LoadAsync(id, ct);
         if (c.Status != CertificateStatus.Draft) throw SalesException.Conflict($"Certificate is {c.Status}");
-        if (c.Measures.All(m => m.Found is null)) throw SalesException.Invalid("measures", "Fill in the values found before issuing");
+        if (c.Measures.Count == 0 || c.Measures.Any(m => string.IsNullOrWhiteSpace(m.Found))) throw SalesException.Invalid("measures", "Fill in the value found on every row before issuing (remove the rows that do not apply)");
         c.Status = CertificateStatus.Issued;
         c.IssuedBy = user;
         c.IssuedAt = DateTimeOffset.UtcNow;

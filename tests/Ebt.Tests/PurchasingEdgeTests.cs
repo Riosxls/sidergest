@@ -9,7 +9,7 @@ namespace Ebt.Tests;
 [Collection("purchasing")]
 public class PurchasingEdgeTests(PurchasingFixture api)
 {
-    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
+    private static readonly DateOnly Today = Ebt.Core.Services.Clock.Today();
 
     private static string Code(string prefix) => $"{prefix}{Guid.NewGuid():N}"[..12].ToUpper();
 

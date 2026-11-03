@@ -387,7 +387,7 @@ public static class PurchasingEndpoints
     {
         app.MapGet("/api/purchasing/overdue", async (EbtDbContext db, DateOnly? asOf, int? supplierId, bool? includeTest, CancellationToken ct) =>
         {
-            var day = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            var day = asOf ?? Ebt.Core.Services.Clock.Today();
             var query = db.PurchaseOrderLines.AsNoTracking().Where(l => !l.Closed && l.ReceivedQuantity < l.Quantity && l.DueDate < day
                 && (l.PurchaseOrder!.Status == PurchaseOrderStatus.Open || l.PurchaseOrder.Status == PurchaseOrderStatus.PartiallyReceived));
             if (supplierId is { } sid) query = query.Where(l => l.PurchaseOrder!.SupplierId == sid);
@@ -437,10 +437,10 @@ public static class PurchasingEndpoints
                 .Select(o => new { o.Status, Lines = o.Lines.Select(l => new { l.Quantity, l.UnitPrice, l.DiscountPercent, l.IpiPercent }).ToList() }).ToListAsync(ct);
             var lines = await db.GoodsReceiptLines.AsNoTracking().Where(l => l.GoodsReceipt!.SupplierId == supplierId && l.GoodsReceipt.InvoiceDate >= f && l.GoodsReceipt.InvoiceDate <= t)
                 .Select(l => new { l.GoodsReceiptId, l.Total, l.GoodsReceipt!.ReceivedAt, l.PurchaseOrderLine!.DueDate }).ToListAsync(ct);
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = Ebt.Core.Services.Clock.Today();
             var overdue = await db.PurchaseOrderLines.CountAsync(l => l.PurchaseOrder!.SupplierId == supplierId && !l.Closed && l.ReceivedQuantity < l.Quantity && l.DueDate < today
                 && (l.PurchaseOrder.Status == PurchaseOrderStatus.Open || l.PurchaseOrder.Status == PurchaseOrderStatus.PartiallyReceived), ct);
-            var delays = lines.Select(l => Math.Max(DateOnly.FromDateTime(l.ReceivedAt.UtcDateTime).DayNumber - l.DueDate.DayNumber, 0)).ToList();
+            var delays = lines.Select(l => Math.Max(Ebt.Core.Services.Clock.DateOf(l.ReceivedAt).DayNumber - l.DueDate.DayNumber, 0)).ToList();
             var onTime = delays.Count(d => d == 0);
             return Results.Ok(new SupplierPerformanceOut(supplierId, supplier.Name, orders.Count,
                 orders.Count(o => o.Status is PurchaseOrderStatus.Open or PurchaseOrderStatus.PartiallyReceived),

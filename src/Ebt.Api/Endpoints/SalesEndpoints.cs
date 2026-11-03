@@ -317,8 +317,11 @@ public static class SalesEndpoints
             var cc = ParseAddresses(i.Cc, out var badCc);
             if (badTo is not null || to.Count == 0) return Results.BadRequest(new { message = badTo is null ? "Informe o e-mail do cliente" : $"E-mail inválido: {badTo}", field = "to" });
             if (badCc is not null) return Results.BadRequest(new { message = $"E-mail inválido: {badCc}", field = "cc" });
+            if (to.Count + cc.Count > MaxEmailRecipients) return Results.BadRequest(new { message = $"No máximo {MaxEmailRecipients} destinatários por e-mail", field = "to" });
             var subject = Clean(i.Subject);
-            if (subject is null || subject.Length > 200) return Results.BadRequest(new { message = "Informe o assunto (até 200 caracteres)", field = "subject" });
+            if (subject is null || subject.Length > 200 || subject.Contains('\r') || subject.Contains('\n')) return Results.BadRequest(new { message = "Informe o assunto (até 200 caracteres, em uma linha)", field = "subject" });
+            var body = i.Body ?? "";
+            if (body.Length > MaxEmailBodyChars) return Results.BadRequest(new { message = $"A mensagem passa de {MaxEmailBodyChars} caracteres", field = "body" });
             byte[] pdf;
             try
             {
@@ -329,25 +332,24 @@ public static class SalesEndpoints
                 pdf = [];
             }
             if (pdf.Length is 0 or > MaxEmailPdfBytes) return Results.BadRequest(new { message = "PDF do orçamento vazio ou maior que 10 MB", field = "pdf" });
+            if (pdf.Length < 4 || pdf[0] != '%' || pdf[1] != 'P' || pdf[2] != 'D' || pdf[3] != 'F') return Results.BadRequest(new { message = "O anexo não é um PDF", field = "pdf" });
             var fileName = Path.GetFileName(Clean(i.FileName) ?? $"Orçamento {q.Reference}.pdf");
+            if (fileName.Length == 0 || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) fileName = $"Orçamento {q.Reference}.pdf";
+            if (!fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) fileName += ".pdf";
 
+            // The profile e-mail of the person sending, so the customer's reply reaches them and not the shared mailbox.
+            var username = user.Identity?.Name;
+            var replyTo = username is null ? null : Clean(await db.Users.AsNoTracking().Where(u => u.Username == username).Select(u => u.Email).FirstOrDefaultAsync(ct));
+
+            var list = string.Join(", ", to) + (cc.Count > 0 ? $" (cópia: {string.Join(", ", cc)})" : "");
             try
             {
-                await mail.SendAsync(new OutgoingMail(to, cc, subject, i.Body ?? "", new MailAttachment(fileName, pdf)), ct);
+                // Registers the send (or the history entry) under the quote row lock, then mails; a failed mail rolls the registration back.
+                await svc.EmailAsync(id, string.Join(", ", to), list, Who(user), () => mail.SendAsync(new OutgoingMail(to, cc, subject, body, new MailAttachment(fileName, pdf), replyTo), ct), ct);
             }
             catch (MailException e)
             {
                 return Results.Json(new { message = e.Message }, statusCode: StatusCodes.Status502BadGateway);
-            }
-
-            var list = string.Join(", ", to) + (cc.Count > 0 ? $" (cópia: {string.Join(", ", cc)})" : "");
-            if (canRegister)
-                await svc.SendAsync(id, string.Join(", ", to), $"Enviado por e-mail para {list}", Who(user), ct);
-            else
-            {
-                var current = await db.Quotes.FirstAsync(x => x.Id == id, ct);
-                QuoteEvent(db, current, "emailed", $"E-mail enviado para {list}", Who(user));
-                await db.SaveChangesAsync(ct);
             }
             return Results.Ok(await LoadQuote(db, id, ct));
         }).RequireAuthorization(SalesPolicies.Sell);
@@ -382,6 +384,8 @@ public static class SalesEndpoints
 
     private const long MaxRequestFileBytes = 10 * 1024 * 1024;
     private const int MaxEmailPdfBytes = 10 * 1024 * 1024;
+    private const int MaxEmailRecipients = 10;
+    private const int MaxEmailBodyChars = 10_000;
 
     /// <summary>Splits a typed list ("a@x.com; b@y.com") into addresses. <paramref name="bad"/> is the first entry that is not an e-mail address.</summary>
     private static List<string> ParseAddresses(string? text, out string? bad)
@@ -421,7 +425,7 @@ public static class SalesEndpoints
                 var m1 = m0.AddMonths(1);
                 x = x.Where(o => o.Lines.Any(l => l.DueDate >= m0 && l.DueDate < m1));
             }
-            if (late == true) x = x.Where(o => SalesService.OpenOrder.Contains(o.Status) && o.Lines.Any(l => l.DueDate < DateOnly.FromDateTime(DateTime.UtcNow)));
+            if (late == true) x = x.Where(o => SalesService.OpenOrder.Contains(o.Status) && o.Lines.Any(l => l.DueDate < Ebt.Core.Services.Clock.Today()));
             if (status is { } st) x = x.Where(o => o.Status == st);
             if (open == true) x = x.Where(o => SalesService.OpenOrder.Contains(o.Status));
             if (customerId is { } c) x = x.Where(o => o.CustomerId == c);
@@ -549,7 +553,7 @@ public static class SalesEndpoints
                 if (q.NeedsApproval) badges.Add("discount");
                 if (q.Expiring) badges.Add("expiring");
                 if (q.FollowUp) badges.Add("followup");
-                return new PipelineCard(SalesRecordKind.Quote, q.Id, q.Reference, q.CustomerId, q.CustomerName, q.Total, q.Status.ToString(), q.ValidUntil ?? DateOnly.FromDateTime(q.CreatedAt.UtcDateTime), null, badges);
+                return new PipelineCard(SalesRecordKind.Quote, q.Id, q.Reference, q.CustomerId, q.CustomerName, q.Total, q.Status.ToString(), q.ValidUntil ?? Ebt.Core.Services.Clock.DateOf(q.CreatedAt), null, badges);
             }
             PipelineCard OrderCard(SalesOrderSummaryOut o)
             {

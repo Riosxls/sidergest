@@ -5407,6 +5407,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("notes");
 
+                    b.Property<int?>("OrderId")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_id");
+
                     b.Property<string>("Reference")
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
@@ -5446,6 +5450,9 @@ namespace Ebt.Core.Data.Migrations
 
                     b.HasIndex("Date")
                         .HasDatabaseName("ix_stock_documents_date");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("ix_stock_documents_order_id");
 
                     b.HasIndex("Reference")
                         .HasDatabaseName("ix_stock_documents_reference");
@@ -7231,6 +7238,12 @@ namespace Ebt.Core.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_stock_documents_customers_customer_id");
 
+                    b.HasOne("Ebt.Core.Entities.ProductionOrder", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_stock_documents_production_orders_order_id");
+
                     b.HasOne("Ebt.Core.Entities.StockDocument", "ReversalOf")
                         .WithMany()
                         .HasForeignKey("ReversalOfId")
@@ -7244,6 +7257,8 @@ namespace Ebt.Core.Data.Migrations
                         .HasConstraintName("fk_stock_documents_suppliers_supplier_id");
 
                     b.Navigation("Customer");
+
+                    b.Navigation("Order");
 
                     b.Navigation("ReversalOf");
 

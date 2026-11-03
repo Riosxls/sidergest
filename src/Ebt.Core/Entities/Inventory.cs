@@ -58,6 +58,9 @@ public class StockDocument : IHasSource
     public MovementType Type { get; set; }
     public DateOnly Date { get; set; }
     public string? Reference { get; set; }
+    /// <summary>Production order this document was posted for (issue, return, finished-goods receipt). Legacy rows only carry the order reference in <see cref="Reference"/>.</summary>
+    public int? OrderId { get; set; }
+    public ProductionOrder? Order { get; set; }
     public int? SupplierId { get; set; }
     public Supplier? Supplier { get; set; }
     public int? CustomerId { get; set; }

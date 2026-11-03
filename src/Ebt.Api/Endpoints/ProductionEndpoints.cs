@@ -273,7 +273,7 @@ public static class ProductionEndpoints
         {
             var reference = await db.ProductionOrders.Where(o => o.Id == id).Select(o => o.Reference).FirstOrDefaultAsync(ct);
             if (reference is null) return Results.NotFound();
-            return Results.Ok(await db.StockDocuments.AsNoTracking().Where(d => d.Reference == reference).OrderBy(d => d.Id)
+            return Results.Ok(await db.StockDocuments.AsNoTracking().Where(d => d.OrderId == id || (d.OrderId == null && d.Reference == reference)).OrderBy(d => d.Id)
                 .Select(d => new StockDocumentSummary(d.Id, d.Type, d.Date, d.Reference, d.SupplierId, d.CustomerId, d.ReversalOfId, d.Reversed, d.CreatedBy, d.CreatedAt, d.Movements.Count)).ToListAsync(ct));
         });
 

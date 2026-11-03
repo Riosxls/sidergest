@@ -162,7 +162,7 @@ public class SalesTests(ApiFixture api)
         Assert.True(certificate.Number >= 2146); // numbering continues from the last paper certificate; other tests also issue EBT certificates
         Assert.Contains(certificate.Measures, m => m.Kind == CertificateMeasureKind.Dimensional && m.Name == "Espessura" && m.Specified == "1,50");
         Assert.Equal(HttpStatusCode.BadRequest, (await admin.Post($"/api/sales/certificates/{certificate.Id}/issue", new object())).StatusCode);
-        var measures = certificate.Measures.Select(m => new CertificateMeasureInput(m.Kind, m.Name, m.Specified, m.Name == "C" ? "0,081" : null)).ToList();
+        var measures = certificate.Measures.Select(m => new CertificateMeasureInput(m.Kind, m.Name, m.Specified, m.Name == "C" ? "0,081" : "1")).ToList();
         certificate = await (await admin.Put($"/api/sales/certificates/{certificate.Id}", new CertificateInput(order.Id, CustomerPo: "PO-1", Quantity: 40m, Measures: measures, RawMaterialLot: "700261"))).Read<CertificateOut>();
         certificate = await (await admin.Post($"/api/sales/certificates/{certificate.Id}/issue", new object())).Read<CertificateOut>();
         Assert.Equal(CertificateStatus.Issued, certificate.Status);
@@ -1191,5 +1191,99 @@ public class SalesTests(ApiFixture api)
 
         var reader = await api.UserAsync(UserRole.Reader);
         await AssertStatus(HttpStatusCode.Forbidden, reader.Post($"/api/sales/quotes/{quote.Id}/email", Email()));
+    }
+
+    [Fact]
+    public async Task Quote_email_is_capped_checked_replies_to_the_sender_and_registers_the_send_once()
+    {
+        var mail = new FakeMail();
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var withMail = await api.AdminWithMailAsync(mail);
+        var quote = await (await admin.Post("/api/sales/quotes", Quote(s, 20m))).Read<QuoteOut>();
+        var url = $"/api/sales/quotes/{quote.Id}/email";
+
+        var eleven = string.Join("; ", Enumerable.Range(1, 11).Select(n => $"p{n}@cliente.com"));
+        await AssertStatus(HttpStatusCode.BadRequest, withMail.Post(url, Email(to: eleven)));
+        await AssertStatus(HttpStatusCode.BadRequest, withMail.Post(url, Email(to: string.Join("; ", Enumerable.Range(1, 6).Select(n => $"p{n}@cliente.com")), cc: string.Join("; ", Enumerable.Range(1, 5).Select(n => $"c{n}@cliente.com")))));
+        await AssertStatus(HttpStatusCode.BadRequest, withMail.Post(url, Email() with { Body = new string('x', 10_001) }));
+        await AssertStatus(HttpStatusCode.BadRequest, withMail.Post(url, Email() with { Subject = "linha 1\nBcc: alguem@fora.com" }));
+        await AssertStatus(HttpStatusCode.BadRequest, withMail.Post(url, Email(pdf: Convert.ToBase64String("not a pdf"u8.ToArray()))));
+        Assert.Empty(mail.Sent);
+        Assert.Equal(QuoteStatus.Draft, (await (await admin.GetAsync($"/api/sales/quotes/{quote.Id}")).Read<QuoteOut>()).Status);
+
+        // The file name always ends in .pdf and carries no path; the reply goes to the sender's profile e-mail.
+        (await admin.Put("/api/auth/profile", new ProfileRequest("Administrador", "vendedor@ebt.test"))).EnsureSuccessStatusCode();
+        // Two clicks at once: both mails go out (the second is the explicit resend of a sent quote) but the send is registered a single time.
+        var both = await Task.WhenAll(withMail.Post(url, Email() with { FileName = "..\\evil.exe" }), withMail.Post(url, Email()));
+        Assert.All(both, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        Assert.Equal(2, mail.Sent.Count);
+        Assert.Contains(mail.Sent, m => m.Attachment!.FileName == "evil.exe.pdf");
+        Assert.All(mail.Sent, m => Assert.Equal("vendedor@ebt.test", m.ReplyTo));
+        await using var db = api.NewDb();
+        var actions = await db.SalesEvents.Where(e => e.Kind == SalesRecordKind.Quote && e.RecordId == quote.Id).Select(e => e.Action).ToListAsync();
+        Assert.Single(actions, a => a == "sent");
+        Assert.Single(actions, a => a == "emailed");
+        (await admin.Put("/api/auth/profile", new ProfileRequest("Administrador", null))).EnsureSuccessStatusCode();
+    }
+
+    private async Task<CertificateOut> IssueCertificateAsync(HttpClient admin, CertificateOut draft, bool allFound = true)
+    {
+        var measures = draft.Measures.Select((m, n) => new CertificateMeasureInput(m.Kind, m.Name, m.Specified, allFound || n == 0 ? "1" : null)).ToList();
+        (await admin.Put($"/api/sales/certificates/{draft.Id}", new CertificateInput(draft.OrderId, Measures: measures))).EnsureSuccessStatusCode();
+        return await (await admin.Post($"/api/sales/certificates/{draft.Id}/issue", new object())).Read<CertificateOut>();
+    }
+
+    [Fact]
+    public async Task Shipping_needs_an_issued_certificate_for_every_item_of_the_delivery_and_every_row_found()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin, stock: 100m);
+        (await admin.Post("/api/stock/documents", new StockPost(MovementType.AdjustmentIn, Today, [new StockLine(null, s.Other.Id, s.Shipping.Id, 50m, UnitCost: 5m)], "INV"))).EnsureSuccessStatusCode();
+        var order = await (await admin.Post("/api/sales/orders", new SalesOrderIn(s.Customer.Id, s.Address.Id, [new SalesLineInput(s.Tube.Id, 10m), new SalesLineInput(s.Other.Id, 5m)], "PO-9", s.Term.Id))).Read<SalesOrderOut>();
+        order = await (await admin.Post($"/api/sales/orders/{order.Id}/release", new SalesReleaseIn())).Read<SalesOrderOut>();
+        var delivery = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
+        var made = await (await admin.Post($"/api/sales/certificates/for-delivery/{delivery.Id}", new object())).Read<List<CertificateOut>>();
+
+        // A row without the found value cannot be issued.
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post($"/api/sales/certificates/{made[0].Id}/issue", new object()));
+        var partial = made[0].Measures.Select((m, n) => new CertificateMeasureInput(m.Kind, m.Name, m.Specified, n == 0 ? "1" : null)).ToList();
+        (await admin.Put($"/api/sales/certificates/{made[0].Id}", new CertificateInput(order.Id, Measures: partial))).EnsureSuccessStatusCode();
+        Assert.True(partial.Count > 1);
+        await AssertStatus(HttpStatusCode.BadRequest, admin.Post($"/api/sales/certificates/{made[0].Id}/issue", new object()));
+
+        // One certificate for two items is not enough: the other item has none.
+        await IssueCertificateAsync(admin, made[0]);
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today)));
+        await IssueCertificateAsync(admin, made[1]);
+        (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today))).EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task A_delivery_with_an_unknown_nf_outcome_cannot_be_cancelled()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin, stock: 20m);
+        var order = await ReleasedOrder(admin, s, 10m);
+        var delivery = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
+        (await admin.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, WithoutCertificate: true))).EnsureSuccessStatusCode();
+        int docId;
+        await using (var db = api.NewDb())
+        {
+            var doc = new FiscalDocument
+            {
+                Kind = FiscalKind.Sale, Status = FiscalStatus.Pending, Simulated = true, CfopCode = "5101", Series = 1, Number = 800_000 + Random.Shared.Next(100_000), AccessKey = Guid.NewGuid().ToString("N"),
+                Protocol = "", RecipientName = "Cliente", RecipientDocument = "26133636000103", RecipientUf = "SP", Xml = "<x/>", DeliveryId = delivery.Id, IssuedAt = DateTimeOffset.UtcNow
+            };
+            db.FiscalDocuments.Add(doc);
+            await db.SaveChangesAsync();
+            docId = doc.Id;
+        }
+        var blocked = await admin.Post($"/api/sales/deliveries/{delivery.Id}/cancel", new SalesReasonIn("cliente desistiu"));
+        Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+        Assert.Contains("pendente", await blocked.Content.ReadAsStringAsync());
+
+        await using (var db = api.NewDb()) await db.FiscalDocuments.Where(f => f.Id == docId).ExecuteUpdateAsync(u => u.SetProperty(f => f.Status, FiscalStatus.Rejected));
+        (await admin.Post($"/api/sales/deliveries/{delivery.Id}/cancel", new SalesReasonIn("cliente desistiu"))).EnsureSuccessStatusCode();
     }
 }

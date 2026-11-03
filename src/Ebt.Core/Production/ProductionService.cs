@@ -196,6 +196,14 @@ public sealed partial class ProductionService(EbtDbContext db, StockService stoc
         order.MaterialCost = rec.MaterialCost;
         order.ServiceCost = rec.ServiceCost;
         order.UnitCost = rec.UnitCost;
+        // True-up: the receipts were costed with what had been issued at the time (a partial receipt sees a fraction of the final cost), so they take the final unit cost.
+        if (rec.UnitCost is > 0 and var final)
+        {
+            var receipts = await db.StockMovements.AsNoTracking()
+                .Where(m => m.ProductId == order.ProductId && m.Type == MovementType.ProductionReceipt && (m.Document!.OrderId == order.Id || (m.Document.OrderId == null && m.Document.Reference == order.Reference)))
+                .Select(m => m.Id).ToListAsync(ct);
+            await stock.RestateCostAsync(receipts, final, ct);
+        }
         order.CostClosedAt = DateTimeOffset.UtcNow;
     });
 
@@ -220,7 +228,7 @@ public sealed partial class ProductionService(EbtDbContext db, StockService stoc
 
     private async Task<bool> HasActivityAsync(ProductionOrder order, CancellationToken ct) =>
         await db.ProductionReports.AnyAsync(r => r.OrderId == order.Id, ct)
-        || await db.StockDocuments.AnyAsync(d => d.Reference == order.Reference, ct)
+        || await db.StockDocuments.AnyAsync(d => d.OrderId == order.Id || (d.OrderId == null && d.Reference == order.Reference), ct)
         || await db.OutsideShipments.AnyAsync(s => s.Operation!.OrderId == order.Id, ct);
 
     private async Task<int> LocationAsync(int? requested, int? configured, string fallbackCode, string field, CancellationToken ct)

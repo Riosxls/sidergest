@@ -38,6 +38,8 @@ public partial class EbtDbContext
         {
             e.HasIndex(x => x.Date);
             e.HasIndex(x => x.Reference);
+            e.HasIndex(x => x.OrderId);
+            e.HasOne(x => x.Order).WithMany().OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(x => x.ReversalOfId).IsUnique();
             e.Property(x => x.Reference).HasMaxLength(40);
             e.HasOne(x => x.Supplier).WithMany().OnDelete(DeleteBehavior.Restrict);

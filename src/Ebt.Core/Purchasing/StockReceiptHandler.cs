@@ -16,7 +16,7 @@ public sealed class StockReceiptHandler(EbtDbContext db, StockService stock) : I
         var reference = string.IsNullOrEmpty(receipt.InvoiceSeries) ? $"NF {receipt.InvoiceNumber} / REC {receipt.ReceiptNumber}" : $"NF {receipt.InvoiceNumber}-{receipt.InvoiceSeries} / REC {receipt.ReceiptNumber}";
         var lines = receipt.Lines.Select(l => new StockLine(l.MaterialId, null, locationId, l.Quantity,
             LotCode: l.LotCode, UnitCost: l.UnitCost, IcmsRate: l.IcmsPercent, RequiresInspection: l.RequiresInspection)).ToList();
-        await stock.PostAsync(new StockPost(MovementType.Receipt, DateOnly.FromDateTime(receipt.ReceivedAt.UtcDateTime), lines, reference, receipt.SupplierId),
+        await stock.PostAsync(new StockPost(MovementType.Receipt, Ebt.Core.Services.Clock.DateOf(receipt.ReceivedAt), lines, reference, receipt.SupplierId),
             receipt.ReceivedBy ?? "system", ct);
     }
 

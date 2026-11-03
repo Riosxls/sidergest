@@ -28,7 +28,8 @@ public record StockPost(
     string? Reference = null,
     int? SupplierId = null,
     int? CustomerId = null,
-    string? Notes = null);
+    string? Notes = null,
+    int? OrderId = null);
 
 public readonly record struct StockItem(int? MaterialId, int? ProductId)
 {
@@ -74,7 +75,7 @@ public partial class StockService(EbtDbContext db)
 
             var doc = new StockDocument
             {
-                Type = post.Type, Date = post.Date, Reference = Clean(post.Reference), SupplierId = post.SupplierId, CustomerId = post.CustomerId,
+                Type = post.Type, Date = post.Date, Reference = Clean(post.Reference), OrderId = post.OrderId, SupplierId = post.SupplierId, CustomerId = post.CustomerId,
                 Notes = Clean(post.Notes), CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow
             };
             db.StockDocuments.Add(doc);
@@ -104,7 +105,7 @@ public partial class StockService(EbtDbContext db)
 
             var doc = new StockDocument
             {
-                Type = MovementType.Reversal, Date = original.Date, Reference = original.Reference, SupplierId = original.SupplierId,
+                Type = MovementType.Reversal, Date = original.Date, Reference = original.Reference, OrderId = original.OrderId, SupplierId = original.SupplierId,
                 CustomerId = original.CustomerId, ReversalOfId = original.Id, Notes = Clean(notes), CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow
             };
             original.Reversed = true;
@@ -358,7 +359,7 @@ public partial class StockService(EbtDbContext db)
     private async Task<decimal> CostAsync(StockItem item, StockLine line, DateOnly date, CancellationToken ct)
     {
         if (line.UnitCost is { } c) return c;
-        return item.MaterialId is { } m ? await CurrentAverageAsync(m, date, ct) : 0m;
+        return item.MaterialId is { } m ? await CurrentAverageAsync(m, date, ct) : await ProductAverageAsync(item.ProductId!.Value, ct);
     }
 
     private async Task CheckFreeStockAsync(StockDocument doc, CancellationToken ct)

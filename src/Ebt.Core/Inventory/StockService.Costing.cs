@@ -23,6 +23,31 @@ public partial class StockService
         return qty > 0 ? Math.Round(await priced.SumAsync(x => x.Quantity * x.UnitCost, ct) / qty, 6) : 0m;
     }
 
+    /// <summary>
+    /// Weighted average unit cost of what was put into stock for a finished product (production receipts, opening balance), ignoring unpriced rows. Shipments and other
+    /// outflows of a product carry this cost, so they do not show up valued at zero.
+    /// </summary>
+    public async Task<decimal> ProductAverageAsync(int productId, CancellationToken ct = default)
+    {
+        var priced = db.StockMovements.Where(x => x.ProductId == productId && (x.Type == MovementType.ProductionReceipt || x.Type == MovementType.OpeningBalance) && x.UnitCost > 0);
+        var qty = await priced.SumAsync(x => x.Quantity, ct);
+        return qty > 0 ? Math.Round(await priced.SumAsync(x => x.Quantity * x.UnitCost, ct) / qty, 6) : 0m;
+    }
+
+    /// <summary>Sets the unit cost of existing movements (cost true-up when a production order's cost is closed). Movements of a closed stock period are left alone; returns how many changed.</summary>
+    public async Task<int> RestateCostAsync(IReadOnlyCollection<long> movementIds, decimal unitCost, CancellationToken ct = default)
+    {
+        var last = await LastClosedPeriodAsync(ct) ?? 0;
+        var changed = 0;
+        foreach (var m in await db.StockMovements.Where(x => movementIds.Contains(x.Id)).ToListAsync(ct))
+        {
+            if (PeriodOf(m.Date) <= last) continue;
+            m.UnitCost = Math.Round(unitCost, 6);
+            changed++;
+        }
+        return changed;
+    }
+
     public async Task<StockClosing> ClosePeriodAsync(int period, string user, DateOnly today, CancellationToken ct = default)
     {
         if (period % 100 is < 1 or > 12 || period < 190001) throw StockException.Invalid("Use yyyymm", "period");

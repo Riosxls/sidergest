@@ -12,15 +12,20 @@ public static class LowStock
 {
     private static readonly RequisitionStatus[] OpenRequisition = [RequisitionStatus.PendingApproval, RequisitionStatus.Approved, RequisitionStatus.Quoting, RequisitionStatus.QuoteApproved];
 
-    /// <summary>Active materials with a minimum, where on-hand (all locations, any lot) is below it. The target is the maximum, or the minimum when none is set.</summary>
+    /// <summary>Active materials with a minimum, where free stock (own locations, released lots, minus open reservations) is below it. The target is the maximum, or the minimum when none is set.</summary>
     public static async Task<List<LowStockRow>> ListAsync(EbtDbContext db, IReadOnlyCollection<int>? materialIds, CancellationToken ct)
     {
         var materials = db.Materials.AsNoTracking().Where(m => m.Active && m.MinStock > 0);
         if (materialIds is { Count: > 0 }) materials = materials.Where(m => materialIds.Contains(m.Id));
         var list = await materials.ToListAsync(ct);
         var ids = list.Select(m => m.Id).ToList();
+        // Same filters as StockService.FreeQuantityAsync: own locations only, released lots only, minus what open reservations hold.
         var onHand = await db.StockBalances.AsNoTracking().Where(b => b.MaterialId != null && ids.Contains(b.MaterialId.Value))
+            .Where(b => b.Location!.Kind == StockLocationKind.Internal || b.Location!.Kind == StockLocationKind.Shipping)
+            .Where(b => b.LotId == null || b.Lot!.Status == LotStatus.Released)
             .GroupBy(b => b.MaterialId!.Value).Select(g => new { Id = g.Key, Qty = g.Sum(x => x.Quantity) }).ToDictionaryAsync(x => x.Id, x => x.Qty, ct);
+        var reserved = await db.StockReservations.AsNoTracking().Where(r => r.MaterialId != null && ids.Contains(r.MaterialId.Value) && r.Status == ReservationStatus.Open)
+            .GroupBy(r => r.MaterialId!.Value).Select(g => new { Id = g.Key, Qty = g.Sum(r => r.Quantity - r.Consumed) }).ToDictionaryAsync(x => x.Id, x => x.Qty, ct);
         var lines = await db.PurchaseOrderLines.AsNoTracking()
             .Where(l => l.MaterialId != null && ids.Contains(l.MaterialId.Value) && !l.Closed && l.ReceivedQuantity < l.Quantity
                 && (l.PurchaseOrder!.Status == PurchaseOrderStatus.Open || l.PurchaseOrder.Status == PurchaseOrderStatus.PartiallyReceived))
@@ -31,7 +36,7 @@ public static class LowStock
         var rows = new List<LowStockRow>();
         foreach (var m in list)
         {
-            var have = onHand.GetValueOrDefault(m.Id);
+            var have = onHand.GetValueOrDefault(m.Id) - reserved.GetValueOrDefault(m.Id);
             if (have >= m.MinStock) continue;
             var incoming = lines.Where(l => l.Id == m.Id).Sum(l => string.Equals(l.Unit, m.StockUnit, StringComparison.OrdinalIgnoreCase) ? l.Open : l.Open * m.PurchaseFactor);
             var target = m.MaxStock ?? m.MinStock!.Value;

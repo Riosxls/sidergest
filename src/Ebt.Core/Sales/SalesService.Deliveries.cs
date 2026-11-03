@@ -65,9 +65,9 @@ public sealed partial class SalesService
             var o = await LockOrderAsync(d.OrderId, ct);
             if (o.Status is not (SalesOrderStatus.Released or SalesOrderStatus.PartiallyShipped)) throw SalesException.Conflict($"Order is {o.Status}");
             await EnsureCreditAsync(o, "expedição", overrideCredit, user, ct);
-            var certified = o.CertificateWaived || await db.QualityCertificates.AnyAsync(c => c.OrderId == o.Id && c.Status == CertificateStatus.Issued, ct);
+            var certified = o.CertificateWaived || await CertificatesCoverAsync(o, d, ct);
             if (!certified && !i.WithoutCertificate)
-                throw SalesException.Conflict($"{o.Reference} has no issued quality certificate. Issue one, waive it on the order, or ship without it");
+                throw SalesException.Conflict($"{d.Reference} has items without an issued quality certificate. Issue one for each item, waive it on the order, or ship without it");
             // Only someone who may emit the NF (or any shipper while emission is off) can name an NF number by hand; for others the field would skip the fiscal emission.
             var fiscalOn = await fiscal.EnabledAsync(ct);
             var typedInvoice = canEmitInvoice || !fiscalOn ? Clean(i.InvoiceNumber) : null;
@@ -109,6 +109,19 @@ public sealed partial class SalesService
             await RefreshOrderStatusAsync(o, $"{d.Reference} expedida", user, ct);
             return d;
         }, ct);
+    }
+
+    /// <summary>True when every line of the delivery has an issued certificate: one for that order line, or for its product when the certificate names no line. A certificate linked to another delivery does not count.</summary>
+    private async Task<bool> CertificatesCoverAsync(SalesOrder o, Delivery d, CancellationToken ct)
+    {
+        var issued = await db.QualityCertificates.AsNoTracking()
+            .Where(c => c.OrderId == o.Id && c.Status == CertificateStatus.Issued && (c.DeliveryId == null || c.DeliveryId == d.Id))
+            .Select(c => new { c.OrderLineId, c.ProductId }).ToListAsync(ct);
+        return d.Lines.All(dl =>
+        {
+            var line = o.Lines.First(l => l.Id == dl.OrderLineId);
+            return issued.Any(c => c.OrderLineId == line.Id || (c.OrderLineId is null && c.ProductId == line.ProductId));
+        });
     }
 
     /// <summary>Issues the sale NF of a delivery that was shipped without one (the shipper lacked the right to emit it).</summary>
@@ -160,6 +173,9 @@ public sealed partial class SalesService
             if (d.Status is DeliveryStatus.Cancelled or DeliveryStatus.Delivered) throw SalesException.Conflict($"Delivery is {d.Status}");
             if (!invoiceBeingCancelled && await db.FiscalDocuments.Where(f => f.DeliveryId == id && f.Status == FiscalStatus.Authorized).Select(f => (int?)f.Number).FirstOrDefaultAsync(ct) is { } nfNumber)
                 throw SalesException.Conflict($"NF {nfNumber} is authorized for this delivery; cancel the NF first");
+            // A Pending NF is an unknown SEFAZ outcome: it may be authorized there, so the goods cannot come back before the portal is checked.
+            if (await db.FiscalDocuments.AnyAsync(f => f.DeliveryId == id && f.Status == FiscalStatus.Pending, ct))
+                throw SalesException.Conflict("Há uma NF pendente de retorno da SEFAZ para esta entrega. Confira a situação da nota no portal da SEFAZ antes de cancelar a entrega");
             var from = d.Status;
             if (d.Status == DeliveryStatus.Shipped && d.StockDocumentId is { } doc) await stock.ReverseAsync(doc, user ?? "system", $"{d.Reference} cancelada: {Clean(reason)}", ct);
             d.Status = DeliveryStatus.Cancelled;

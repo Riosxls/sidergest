@@ -143,7 +143,7 @@ public static class ReportsEndpoints
                 PoQty = l.OrderLine.ProductionOrder != null ? l.OrderLine.ProductionOrder.Quantity : 0m,
                 PoCost = l.OrderLine.ProductionOrder != null ? l.OrderLine.ProductionOrder.MaterialCost : null
             }).ToListAsync(ct);
-        return rows.Select(r => new Shipped(r.CustomerId, r.Customer, r.Company, DateOnly.FromDateTime(r.ShippedAt.ToLocalTime().DateTime), r.Quantity, r.Line.UnitPrice, r.Line.IpiPercent, r.Line.IcmsPercent,
+        return rows.Select(r => new Shipped(r.CustomerId, r.Customer, r.Company, Ebt.Core.Services.Clock.DateOf(r.ShippedAt), r.Quantity, r.Line.UnitPrice, r.Line.IpiPercent, r.Line.IcmsPercent,
                 r.ProductId, r.NetWeightKg, r.Line.ProductionOrderId, r.PoRef, r.PoQty, r.PoCost, r.DeliveryReference, r.InvoiceNumber, r.ProductCode))
             .Where(r => r.Date >= from && r.Date <= to).ToList();
     }

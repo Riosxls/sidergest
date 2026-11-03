@@ -30,7 +30,7 @@ public sealed partial class ProductionService
     private async Task<Reconciliation> ReconcileAsync(ProductionOrder order, CancellationToken ct)
     {
         var progress = await ProgressAsync(order, ct);
-        var consumption = await ConsumptionAsync(order.Reference, ct);
+        var consumption = await ConsumptionAsync(order.Id, order.Reference, ct);
         var service = await db.OutsideShipments.Where(s => s.Operation!.OrderId == order.Id).SumAsync(s => s.ServiceValue, ct);
         var scrapByOp = progress.Operations.ToDictionary(o => o.Sequence, o => o.Scrap);
         var materialIds = order.Materials.Select(m => m.MaterialId).OfType<int>().Distinct().ToList();
@@ -63,7 +63,7 @@ public sealed partial class ProductionService
         var transit = await db.OutsideShipments.AsNoTracking().Where(s => opIds.Contains(s.OperationId))
             .GroupBy(s => s.OperationId).Select(g => new { g.Key, Qty = g.Sum(s => s.Quantity - s.ReturnedQuantity - s.ScrapQuantity) }).ToDictionaryAsync(x => x.Key, x => x.Qty, ct);
         var received = await db.StockMovements.AsNoTracking()
-            .Where(m => m.Document!.Reference == order.Reference && m.Type == MovementType.ProductionReceipt && m.ProductId == order.ProductId).SumAsync(m => m.Quantity, ct);
+            .Where(m => (m.Document!.OrderId == order.Id || (m.Document.OrderId == null && m.Document.Reference == order.Reference)) && m.Type == MovementType.ProductionReceipt && m.ProductId == order.ProductId).SumAsync(m => m.Quantity, ct);
         var withTolerance = Round(order.Quantity * (1 + tolerance / 100m));
 
         var ops = new List<OperationProgress>();
@@ -87,7 +87,7 @@ public sealed partial class ProductionService
 
     private async Task<List<MaterialLineState>> MaterialStatesAsync(ProductionOrder order, CancellationToken ct)
     {
-        var consumption = (await ConsumptionAsync(order.Reference, ct)).ToDictionary(c => new StockItem(c.MaterialId, c.ProductId), c => c.Quantity);
+        var consumption = (await ConsumptionAsync(order.Id, order.Reference, ct)).ToDictionary(c => new StockItem(c.MaterialId, c.ProductId), c => c.Quantity);
         var reservationIds = order.Materials.Select(m => m.ReservationId).OfType<int>().ToList();
         var reservations = await db.StockReservations.AsNoTracking().Where(r => reservationIds.Contains(r.Id))
             .ToDictionaryAsync(r => r.Id, r => r.Status == ReservationStatus.Open ? r.Quantity - r.Consumed : 0m, ct);
@@ -110,9 +110,9 @@ public sealed partial class ProductionService
         return result.OrderBy(r => r.OperationSequence).ThenBy(r => r.Id).ToList();
     }
 
-    public async Task<List<ItemConsumption>> ConsumptionAsync(string reference, CancellationToken ct) =>
+    public async Task<List<ItemConsumption>> ConsumptionAsync(int orderId, string reference, CancellationToken ct) =>
         await db.StockMovements.AsNoTracking()
-            .Where(m => m.Document!.Reference == reference && ConsumptionTypes.Contains(m.Type))
+            .Where(m => (m.Document!.OrderId == orderId || (m.Document.OrderId == null && m.Document.Reference == reference)) && ConsumptionTypes.Contains(m.Type))
             .GroupBy(m => new { m.MaterialId, m.ProductId })
             .Select(g => new ItemConsumption(g.Key.MaterialId, g.Key.ProductId, -g.Sum(m => m.Quantity), -g.Sum(m => m.Quantity * m.UnitCost)))
             .ToListAsync(ct);

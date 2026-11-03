@@ -106,6 +106,29 @@ public sealed partial class SalesService
         return "sent";
     });
 
+    /// <summary>
+    /// Mails a quote under the quote row lock. A Draft/Approved quote is registered as sent first and a Sent one only gets the "emailed" history entry; then
+    /// <paramref name="sendMail"/> runs, and if it throws the transaction rolls back so a failed mail leaves the quote untouched. Two simultaneous calls are serialized by the lock.
+    /// </summary>
+    public Task<Quote> EmailAsync(int id, string sentTo, string list, string? user, Func<Task> sendMail, CancellationToken ct = default) =>
+        InTransaction(async () =>
+        {
+            var q = await LockQuoteAsync(id, ct);
+            if (q.Status is QuoteStatus.Draft or QuoteStatus.Approved)
+            {
+                await SendAsync(id, sentTo, $"Enviado por e-mail para {list}", user, ct);
+                if (q.Status != QuoteStatus.Sent) throw SalesException.Conflict("Este orçamento precisa da aprovação do desconto antes de ir ao cliente");
+            }
+            else if (q.Status == QuoteStatus.Sent)
+            {
+                Log(SalesRecordKind.Quote, q.Id, "emailed", q.Status, q.Status, $"E-mail enviado para {list}", user);
+                await db.SaveChangesAsync(ct);
+            }
+            else throw SalesException.Conflict($"Orçamento {q.Status} não pode ser enviado");
+            await sendMail();
+            return q;
+        }, ct);
+
     public Task<Quote> ApproveAsync(int id, string? note, string? user, CancellationToken ct = default) => QuoteStep(id, "approved", note, user, ct, q =>
     {
         if (q.Status != QuoteStatus.PendingApproval) throw SalesException.Conflict($"Quote is {q.Status}");

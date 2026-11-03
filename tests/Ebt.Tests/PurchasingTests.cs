@@ -10,9 +10,11 @@ namespace Ebt.Tests;
 [Collection("purchasing")]
 public class PurchasingTests(PurchasingFixture api)
 {
-    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
+    private static readonly DateOnly Today = Ebt.Core.Services.Clock.Today();
 
     private static string Code(string prefix) => $"{prefix}{Guid.NewGuid():N}"[..12].ToUpper();
+
+    private static async Task AssertStatus(HttpStatusCode expected, Task<HttpResponseMessage> call) => Assert.Equal(expected, (await call).StatusCode);
 
     private static async Task<SupplierOut> Supplier(HttpClient c, string name) =>
         await (await c.Post("/api/suppliers", new SupplierIn(name, null, Code("F"), null))).Read<SupplierOut>();
@@ -138,6 +140,35 @@ public class PurchasingTests(PurchasingFixture api)
         var perf = await (await c.GetAsync($"/api/suppliers/{acme.Id}/performance")).Read<SupplierPerformanceOut>();
         Assert.Equal((1, 2, 2, 100m), (perf.Orders, perf.Receipts, perf.OnTimeLines, perf.OnTimePercent));
         Assert.Equal(31500m, perf.ReceivedValue);
+    }
+
+    [Fact]
+    public async Task An_evening_receipt_counts_on_the_business_day_and_unit_and_price_rules_hold()
+    {
+        var c = await api.AdminAsync();
+        var coil = await Coil(c, inspect: false);
+        var acme = await Supplier(c, "Aços da Noite");
+        var day = Today.AddDays(-1);
+
+        // Only the stock unit or the purchase unit of the material can be ordered.
+        await AssertStatus(HttpStatusCode.BadRequest, c.Post("/api/purchase-orders", new OrderIn(acme.Id, "30", null, [new OrderLineIn(coil.Id, null, "CX", 5m, 6000m, 0m, 18m, 0m, day, null)])));
+        var po = await (await c.Post("/api/purchase-orders", new OrderIn(acme.Id, "30", null, [new OrderLineIn(coil.Id, null, "kg", 5000m, 6m, 0m, 18m, 0m, day, null)]))).Read<OrderOut>();
+        Assert.Equal("KG", po.Lines[0].Unit);
+
+        // 21:30 in Brasília is already the next day in UTC: the receipt still belongs to the business day, so it is on time and the stock document has that date.
+        var evening = Ebt.Core.Services.Clock.FromLocal(day.ToDateTime(new TimeOnly(21, 30)));
+        Assert.Equal(day.AddDays(1), DateOnly.FromDateTime(evening.UtcDateTime));
+        var rec = await (await c.Post("/api/goods-receipts", new ReceiptIn(acme.Id, Code("NF"), "1", day, evening, null, null, "Conferido", [new ReceiptLineIn(po.Lines[0].Id, 2000m, 6.5m, null)]))).Read<ReceiptOut>();
+        Assert.Contains("Conferido", rec.Notes);
+        Assert.Contains("difere do pedido", rec.Notes);
+        await using (var db = api.NewDb())
+            Assert.Equal(day, (await db.StockDocuments.SingleAsync(d => d.Reference!.Contains($"REC {rec.Number}"))).Date);
+        var perf = await (await c.GetAsync($"/api/suppliers/{acme.Id}/performance")).Read<SupplierPerformanceOut>();
+        Assert.Equal((1, 100m), (perf.OnTimeLines, perf.OnTimePercent));
+
+        // The same price as the order leaves no note.
+        var same = await (await c.Post("/api/goods-receipts", new ReceiptIn(acme.Id, Code("NF"), "1", day, evening, null, null, null, [new ReceiptLineIn(po.Lines[0].Id, 1000m, 6m, null)]))).Read<ReceiptOut>();
+        Assert.Null(same.Notes);
     }
 
     [Fact]

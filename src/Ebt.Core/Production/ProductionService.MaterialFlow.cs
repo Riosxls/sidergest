@@ -39,7 +39,7 @@ public sealed partial class ProductionService
                 if (fromReservation > 0) lines.Add(new StockLine(line.MaterialId, line.ComponentProductId, locationId, fromReservation, LotId: r.LotId, ReservationId: state.ReservationId));
                 if (r.Quantity - fromReservation > 0) lines.Add(new StockLine(line.MaterialId, line.ComponentProductId, locationId, r.Quantity - fromReservation, LotId: r.LotId));
             }
-            var doc = await stock.PostAsync(new StockPost(MovementType.Issue, i.Date, lines, order.Reference, Notes: $"Requisição {order.Reference}"), user ?? "system", ct);
+            var doc = await stock.PostAsync(new StockPost(MovementType.Issue, i.Date, lines, order.Reference, Notes: $"Requisição {order.Reference}", OrderId: order.Id), user ?? "system", ct);
             if (order.Status == ProductionOrderStatus.Released) order.Status = ProductionOrderStatus.InProduction;
             await db.SaveChangesAsync(ct);
             return doc;
@@ -54,9 +54,16 @@ public sealed partial class ProductionService
             var order = await LockAsync(id, ct);
             if (order.Status is ProductionOrderStatus.Closed or ProductionOrderStatus.Created) throw ProductionException.Conflict($"Order is {order.Status}");
             var locationId = await LocationAsync(i.LocationId, (await SettingsAsync(ct)).IssueLocationId, DefaultIssueLocationCode, "locationId", ct);
-            var consumption = await ConsumptionAsync(order.Reference, ct);
+            var consumption = await ConsumptionAsync(order.Id, order.Reference, ct);
             var lines = new List<StockLine>();
             var left = consumption.ToDictionary(c => new StockItem(c.MaterialId, c.ProductId), c => c.Quantity);
+            // Net quantity per lot still out on the order (issued minus returned), so a return without a lot goes back to the lot it came from.
+            var byLot = (await db.StockMovements.AsNoTracking()
+                    .Where(m => (m.Document!.OrderId == order.Id || (m.Document.OrderId == null && m.Document.Reference == order.Reference)) && ConsumptionTypes.Contains(m.Type) && m.LotId != null)
+                    .GroupBy(m => new { m.MaterialId, m.ProductId, m.LotId })
+                    .Select(g => new { g.Key.MaterialId, g.Key.ProductId, LotId = g.Key.LotId!.Value, Out = -g.Sum(m => m.Quantity) }).ToListAsync(ct))
+                .Where(x => x.Out > 0).OrderBy(x => x.LotId)
+                .GroupBy(x => new StockItem(x.MaterialId, x.ProductId)).ToDictionary(g => g.Key, g => g.Select(x => (x.LotId, x.Out)).ToList());
             foreach (var (r, idx) in i.Lines.Select((r, idx) => (r, idx)))
             {
                 if (r.Quantity <= 0) throw ProductionException.Invalid($"lines[{idx}].quantity", "Must be greater than zero");
@@ -66,9 +73,25 @@ public sealed partial class ProductionService
                 if (r.Quantity > issued) throw ProductionException.Conflict($"Only {issued:0.####} {line.Unit} of this item is issued to {order.Reference}");
                 left[item] = issued - r.Quantity;
                 var c = consumption.First(x => new StockItem(x.MaterialId, x.ProductId) == item);
-                lines.Add(new StockLine(line.MaterialId, line.ComponentProductId, locationId, r.Quantity, LotId: r.LotId, UnitCost: c.Quantity > 0 ? Math.Round(c.Value / c.Quantity, 6) : 0));
+                var cost = c.Quantity > 0 ? Math.Round(c.Value / c.Quantity, 6) : 0;
+                if (r.LotId is not null || !byLot.TryGetValue(item, out var lots))
+                {
+                    lines.Add(new StockLine(line.MaterialId, line.ComponentProductId, locationId, r.Quantity, LotId: r.LotId, UnitCost: cost));
+                    continue;
+                }
+                // No lot given: back to the lot(s) it was issued from, oldest lot first; whatever is not traceable to a lot returns without one.
+                var rest = r.Quantity;
+                for (var k = 0; k < lots.Count && rest > 0; k++)
+                {
+                    var take = Math.Min(rest, lots[k].Out);
+                    if (take <= 0) continue;
+                    lines.Add(new StockLine(line.MaterialId, line.ComponentProductId, locationId, take, LotId: lots[k].LotId, UnitCost: cost));
+                    lots[k] = (lots[k].LotId, lots[k].Out - take);
+                    rest -= take;
+                }
+                if (rest > 0) lines.Add(new StockLine(line.MaterialId, line.ComponentProductId, locationId, rest, UnitCost: cost));
             }
-            return await stock.PostAsync(new StockPost(MovementType.AdjustmentIn, i.Date, lines, order.Reference, Notes: $"Devolução {order.Reference}"), user ?? "system", ct);
+            return await stock.PostAsync(new StockPost(MovementType.AdjustmentIn, i.Date, lines, order.Reference, Notes: $"Devolução {order.Reference}", OrderId: order.Id), user ?? "system", ct);
         }, ct);
     }
 
@@ -85,13 +108,13 @@ public sealed partial class ProductionService
                 throw ProductionException.Conflict(order.Operations.Count > 0
                     ? $"Only {progress.Receivable:0.####} reported as good at the last operation and not yet in stock"
                     : $"Only {progress.Receivable:0.####} left to receive including tolerance");
-            var consumption = await ConsumptionAsync(order.Reference, ct);
+            var consumption = await ConsumptionAsync(order.Id, order.Reference, ct);
             var service = await db.OutsideShipments.Where(s => s.Operation!.OrderId == id).SumAsync(s => s.ServiceValue, ct);
             var basis = Math.Max(order.Quantity, progress.Received + i.Quantity);
             var unitCost = Math.Round((consumption.Sum(c => c.Value) + service) / basis, 6);
             var doc = await stock.PostAsync(new StockPost(MovementType.ProductionReceipt, i.Date,
                 [new StockLine(null, order.ProductId, locationId, i.Quantity, LotCode: Clean(i.LotCode) ?? order.Reference.Replace(" ", ""), UnitCost: Math.Max(0, unitCost))],
-                order.Reference, CustomerId: order.CustomerId, Notes: $"Entrada PA {order.Reference}"), user ?? "system", ct);
+                order.Reference, CustomerId: order.CustomerId, Notes: $"Entrada PA {order.Reference}", OrderId: order.Id), user ?? "system", ct);
             if (order.Status == ProductionOrderStatus.Released) order.Status = ProductionOrderStatus.InProduction;
             await db.SaveChangesAsync(ct);
             return doc;

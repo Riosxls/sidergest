@@ -4,6 +4,7 @@ using Ebt.Api.Infrastructure;
 using Ebt.Core.Entities;
 using Ebt.Core.Inventory;
 using Ebt.Core.Production;
+using Microsoft.EntityFrameworkCore;
 
 namespace Ebt.Tests;
 
@@ -226,6 +227,54 @@ public class ProductionTests(ApiFixture api)
         Assert.Equal(Math.Round(2500m / 97m, 6), costed.UnitCost);
         Assert.Equal(HttpStatusCode.Conflict, (await Transition(c, order.Id, "close-cost")).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await c.Post($"/api/production/orders/{order.Id}/issues", new IssueInput(Today, s.Store.Id))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Returns_keep_the_lot_documents_carry_the_order_and_cost_closing_trues_up_the_receipts()
+    {
+        var c = await api.AdminAsync();
+        var s = await Arrange(c, componentStock: 100m);
+        var order = await Create(c, s.Product.Id, 10m);
+        await c.Post($"/api/production/orders/{order.Id}/release", new ReleaseIn());
+        var mp = order.Materials.Single(m => m.MaterialId == s.Material.Id);
+
+        (await c.Post($"/api/production/orders/{order.Id}/issues", new IssueInput(Today, s.Store.Id, [new IssueLineInput(mp.Id, 12m)]))).EnsureSuccessStatusCode();
+        var issued = await (await c.GetAsync($"/api/stock/balances?materialId={s.Material.Id}&locationId={s.Store.Id}")).Read<Page<StockBalanceOut>>();
+        var lotId = Assert.Single(issued.Items).LotId;
+        Assert.NotNull(lotId);
+        // The return names no lot: it goes back to the lot the material was issued from.
+        var ret = await (await c.Post($"/api/production/orders/{order.Id}/material-returns", new IssueInput(Today, s.Store.Id, [new IssueLineInput(mp.Id, 2m)]))).Read<StockDocumentSummary>();
+        await using (var db = api.NewDb())
+        {
+            var doc = await db.StockDocuments.Include(d => d.Movements).SingleAsync(d => d.Id == ret.Id);
+            Assert.Equal(order.Id, doc.OrderId);
+            Assert.Equal(lotId, Assert.Single(doc.Movements).LotId);
+        }
+
+        // Receipt of part of the order, then the rest after more material was issued: the first receipt was costed with a fraction of the final cost.
+        Assert.Equal(HttpStatusCode.Created, (await Report(c, order.Id, 10, 10)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await Report(c, order.Id, 20, 4)).StatusCode);
+        var first = await (await c.Post($"/api/production/orders/{order.Id}/receipts", new FinishedGoodsInput(Today, 4m, s.Finished.Id))).Read<StockDocumentSummary>();
+        Assert.Equal(10m, Assert.Single((await (await c.GetAsync($"/api/stock/documents/{first.Id}")).Read<StockDocumentOut>()).Movements).UnitCost);
+        (await c.Post($"/api/production/orders/{order.Id}/issues", new IssueInput(Today, s.Store.Id, [new IssueLineInput(mp.Id, 15m)]))).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Created, (await Report(c, order.Id, 20, 6)).StatusCode);
+        var second = await (await c.Post($"/api/production/orders/{order.Id}/receipts", new FinishedGoodsInput(Today, 6m, s.Finished.Id))).Read<StockDocumentSummary>();
+        Assert.Equal(25m, Assert.Single((await (await c.GetAsync($"/api/stock/documents/{second.Id}")).Read<StockDocumentOut>()).Movements).UnitCost);
+
+        // Documents of imported/legacy rows have no order id: the reference still finds them.
+        await using (var db = api.NewDb()) await db.StockDocuments.Where(d => d.OrderId == order.Id).ExecuteUpdateAsync(u => u.SetProperty(d => d.OrderId, (int?)null));
+        Assert.Equal(25m, (await Get(c, order.Id)).Materials.Single(m => m.Id == mp.Id).Issued);
+        Assert.Equal(10m, (await Get(c, order.Id)).Received);
+
+        await Transition(c, order.Id, "finish");
+        await Transition(c, order.Id, "close");
+        var costed = await (await Transition(c, order.Id, "close-cost")).Read<ProductionOrderOut>();
+        Assert.Equal(25m, costed.UnitCost);
+        Assert.Equal(25m, Assert.Single((await (await c.GetAsync($"/api/stock/documents/{first.Id}")).Read<StockDocumentOut>()).Movements).UnitCost);
+
+        // A shipment-type outflow of the finished product carries its average cost instead of zero.
+        var outflow = await (await c.Post("/api/stock/documents", new StockPost(MovementType.AdjustmentOut, Today, [new StockLine(null, s.Product.Id, s.Finished.Id, 1m)], "TESTE"))).Read<StockDocumentOut>();
+        Assert.Equal(25m, Assert.Single(outflow.Movements).UnitCost);
     }
 
     [Fact]

@@ -63,6 +63,25 @@ public class InventoryTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Low_stock_counts_only_free_usable_stock()
+    {
+        var admin = await api.AdminAsync();
+        var m = await (await admin.Post("/api/materials", new MaterialIn(Code("M"), "Bobina livre", null, null, null, "KG", "KG", 1m, 1.5m, 80m, null, null, null, 100m, 300m, false, true, false))).Read<MaterialOut>();
+        var own = await Location(admin);
+        var thirdParty = await Location(admin, StockLocationKind.ThirdParty);
+        var quarantine = await Location(admin, StockLocationKind.Quarantine);
+        await Post(admin, MovementType.AdjustmentIn, Today, new StockLine(m.Id, null, own.Id, 120m, UnitCost: 5m));
+        await Post(admin, MovementType.AdjustmentIn, Today, new StockLine(m.Id, null, thirdParty.Id, 500m, UnitCost: 5m), new StockLine(m.Id, null, quarantine.Id, 500m, UnitCost: 5m));
+        Assert.DoesNotContain(await (await admin.GetAsync("/api/stock/low-stock")).Read<List<LowStockRow>>(), r => r.MaterialId == m.Id);
+
+        // 50 of the 120 kg are promised to an order: only 70 are free, below the minimum of 100; stock at the third party or in quarantine does not count.
+        (await admin.Post("/api/stock/reservations", new ReservationIn(m.Id, null, null, 50m, "OF TESTE", Today.AddDays(5)))).EnsureSuccessStatusCode();
+        var row = Assert.Single(await (await admin.GetAsync("/api/stock/low-stock")).Read<List<LowStockRow>>(), r => r.MaterialId == m.Id);
+        Assert.Equal(70m, row.OnHand);
+        Assert.Equal(30m, row.Missing);
+    }
+
+    [Fact]
     public async Task Roles_guard_stock_writes()
     {
         var admin = await api.AdminAsync();

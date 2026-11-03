@@ -26,6 +26,8 @@ public sealed record ReceiptInput(int SupplierId, string InvoiceNumber, string? 
 public sealed partial class PurchasingService(EbtDbContext db, IEnumerable<IGoodsReceiptHandler> handlers)
 {
     public const decimal DivergenceTolerance = 0.01m;
+    /// <summary>A receipt price this far (fraction) from the order price is noted on the receipt.</summary>
+    public const decimal PriceTolerance = 0.005m;
 
     private static readonly RequisitionStatus[] Quotable = [RequisitionStatus.Approved, RequisitionStatus.QuoteRejected];
     private static readonly RequisitionStatus[] Orderable = [RequisitionStatus.Approved, RequisitionStatus.QuoteApproved, RequisitionStatus.QuoteRejected];
@@ -241,7 +243,7 @@ public sealed partial class PurchasingService(EbtDbContext db, IEnumerable<IGood
         if (awarded.Count == 0) throw PurchasingException.Conflict("No awarded items left to order from this supplier");
         await ActiveSuppliersAsync([supplierId], ct);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = Ebt.Core.Services.Clock.Today();
         var order = NewOrder(supplierId, awarded.Select(x => x.bid!.PaymentTerms).FirstOrDefault(t => t is not null), notes, user);
         foreach (var (item, bid) in awarded)
         {
@@ -315,9 +317,9 @@ public sealed partial class PurchasingService(EbtDbContext db, IEnumerable<IGood
         if (!Has(i.InvoiceNumber)) throw PurchasingException.Invalid("invoiceNumber", "Required");
         if (i.Lines is not { Count: > 0 }) throw PurchasingException.Invalid("lines", "At least one line");
         if (i.Lines.Select(l => l.PurchaseOrderLineId).Distinct().Count() != i.Lines.Count) throw PurchasingException.Invalid("lines", "Each order line can appear once");
-        var receivedAt = i.ReceivedAt ?? DateTimeOffset.UtcNow;
+        var receivedAt = (i.ReceivedAt ?? DateTimeOffset.UtcNow).ToUniversalTime(); // Npgsql only stores offset 0
         if (receivedAt > DateTimeOffset.UtcNow.AddMinutes(5)) throw PurchasingException.Invalid("receivedAt", "Must not be in the future");
-        if (i.InvoiceDate > DateOnly.FromDateTime(receivedAt.UtcDateTime).AddDays(1)) throw PurchasingException.Invalid("invoiceDate", "Must not be after the receipt date");
+        if (i.InvoiceDate > Ebt.Core.Services.Clock.DateOf(receivedAt).AddDays(1)) throw PurchasingException.Invalid("invoiceDate", "Must not be after the receipt date");
 
         var own = db.Database.CurrentTransaction is null;
         await using var tx = own ? await db.Database.BeginTransactionAsync(ct) : null;
@@ -327,13 +329,14 @@ public sealed partial class PurchasingService(EbtDbContext db, IEnumerable<IGood
         var lines = await db.PurchaseOrderLines.Include(l => l.PurchaseOrder!).ThenInclude(o => o.Lines).Include(l => l.Material).Include(l => l.Requisitions)
             .Where(l => ids.Contains(l.Id)).ToDictionaryAsync(l => l.Id, ct);
         var settings = await db.PurchasingSettings.AsNoTracking().FirstOrDefaultAsync(ct) ?? new PurchasingSettings();
-        var receiptDate = DateOnly.FromDateTime(receivedAt.UtcDateTime);
+        var receiptDate = Ebt.Core.Services.Clock.DateOf(receivedAt);
 
         var receipt = new GoodsReceipt
         {
             SupplierId = i.SupplierId, InvoiceNumber = i.InvoiceNumber.Trim(), InvoiceSeries = Clean(i.InvoiceSeries) ?? "", InvoiceDate = i.InvoiceDate,
             ReceivedAt = receivedAt, ReceivedBy = user, InvoiceTotal = i.InvoiceTotal, DivergenceJustification = Clean(i.DivergenceJustification), Notes = Clean(i.Notes)
         };
+        var priceNotes = new List<string>();
         foreach (var (l, idx) in i.Lines.Select((l, idx) => (l, idx)))
         {
             var f = $"lines[{idx}]";
@@ -351,6 +354,11 @@ public sealed partial class PurchasingService(EbtDbContext db, IEnumerable<IGood
                 throw PurchasingException.Conflict($"Order {order.Number} line {line.LineNumber} is due {line.DueDate:yyyy-MM-dd}; early receipt is not allowed");
 
             var price = l.UnitPrice ?? line.UnitPrice;
+            if (line.Material is { } mat && !string.Equals(line.Unit, mat.StockUnit, StringComparison.OrdinalIgnoreCase) && !string.Equals(line.Unit, mat.PurchaseUnit, StringComparison.OrdinalIgnoreCase))
+                throw PurchasingException.Conflict($"Order {order.Number} line {line.LineNumber} is in {line.Unit}, which is neither the stock nor the purchase unit of {mat.Code}; fix the unit before receiving");
+            // Not blocked (the invoice is what it is), but the difference against the order is recorded on the receipt.
+            if (l.UnitPrice is not null && Math.Abs(price - line.UnitPrice) > Math.Max(0.0001m, line.UnitPrice * PriceTolerance))
+                priceNotes.Add($"Pedido {order.Number} item {line.LineNumber}: preço da nota {price:0.####} difere do pedido {line.UnitPrice:0.####}");
             receipt.Lines.Add(new GoodsReceiptLine
             {
                 PurchaseOrderLine = line, MaterialId = line.MaterialId, Material = line.Material, Quantity = l.Quantity, Unit = line.Unit, UnitPrice = price,
@@ -362,6 +370,7 @@ public sealed partial class PurchasingService(EbtDbContext db, IEnumerable<IGood
             foreach (var r in line.Requisitions) r.Status = status;
         }
 
+        if (priceNotes.Count > 0) receipt.Notes = string.Join(" | ", new[] { receipt.Notes }.Concat(priceNotes).OfType<string>());
         receipt.CalculatedTotal = receipt.Lines.Sum(l => l.Total);
         if (i.InvoiceTotal is { } typed && Math.Abs(typed - receipt.CalculatedTotal) > DivergenceTolerance && receipt.DivergenceJustification is null)
             throw PurchasingException.Invalid("divergenceJustification", $"Invoice total {typed:0.00} differs from calculated {receipt.CalculatedTotal:0.00}; a justification is required");
@@ -465,7 +474,11 @@ public sealed partial class PurchasingService(EbtDbContext db, IEnumerable<IGood
             var m = await db.Materials.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw PurchasingException.Invalid("materialId", "Unknown material");
             if (!m.Active) throw PurchasingException.Conflict($"Material {m.Code} is inactive");
             if (!m.GeneratesPurchaseOrder) throw PurchasingException.Conflict($"Material {m.Code} is not purchased");
-            return (Clean(description) ?? m.Description, Clean(unit)?.ToUpperInvariant() ?? m.PurchaseUnit);
+            var chosen = Clean(unit)?.ToUpperInvariant() ?? m.PurchaseUnit;
+            // Receipts convert quantities with the material's purchase factor, so any other unit would be converted wrongly.
+            if (!string.Equals(chosen, m.StockUnit, StringComparison.OrdinalIgnoreCase) && !string.Equals(chosen, m.PurchaseUnit, StringComparison.OrdinalIgnoreCase))
+                throw PurchasingException.Invalid("unit", $"Material {m.Code} is bought in {m.PurchaseUnit} or {m.StockUnit}, not {chosen}");
+            return (Clean(description) ?? m.Description, chosen);
         }
         if (!Has(description)) throw PurchasingException.Invalid("description", "Required when no material is given");
         if (!Has(unit)) throw PurchasingException.Invalid("unit", "Required when no material is given");
