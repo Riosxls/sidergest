@@ -54,6 +54,13 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
   int? _customerId;
   late Future<Map<String, dynamic>> _future = _fetch();
   String? _hover;
+  final _kanbanScroll = ScrollController();
+
+  @override
+  void dispose() {
+    _kanbanScroll.dispose();
+    super.dispose();
+  }
 
   ApiClient get api => widget.session.api;
   Session get s => widget.session;
@@ -263,8 +270,10 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
           ),
           Expanded(
             child: Scrollbar(
+              controller: _kanbanScroll,
               child: ListView(
                 key: const ValueKey('kanban'),
+                controller: _kanbanScroll,
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.all(12),
                 children: [for (final st in stages) _column(st)],
