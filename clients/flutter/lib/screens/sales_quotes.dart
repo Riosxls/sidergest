@@ -2026,13 +2026,13 @@ class _QuoteScreenState extends State<QuoteScreen> {
           : _rejectionNote(q) != null
           ? 'O gerente recusou o desconto: ${_rejectionNote(q)}. Ajuste os preços e envie de novo.'
           : _mailOn
-          ? 'Confira itens, preços e prazos. Ao enviar por e-mail, o PDF segue ao cliente e a validade começa a contar. Se enviar por outro meio, registre o envio.'
+          ? 'Confira itens, preços e prazos. Ao enviar, o PDF segue por e-mail ao cliente e a validade começa a contar. Se já enviou por outro meio, use "Já enviei por outro meio".'
           : 'Confira itens, preços e prazos. Ao registrar o envio, a validade começa a contar. O e-mail você envia à parte, com o PDF.',
       tone: q['needsApproval'] == true || _rejectionNote(q) != null ? Tone.warning : Tone.info,
       actions: [
         if (sell && q['needsApproval'] != true && _mailOn) ...[
-          _primary('quote-email', 'Enviar por e-mail', Icons.forward_to_inbox, _emailQuote),
-          _secondary('quote-send', 'Registrar envio ao cliente', Icons.send, _send),
+          _primary('quote-email', 'Enviar ao cliente', Icons.forward_to_inbox, _emailQuote),
+          _secondary('quote-send', 'Já enviei por outro meio', Icons.send, _send),
         ] else if (sell)
           _primary('quote-send', q['needsApproval'] == true ? 'Enviar para aprovação' : 'Registrar envio ao cliente', Icons.send, _send),
       ],
@@ -2068,8 +2068,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
           'Aprovado por ${q['approvedBy'] ?? ''} em ${fmtDate(q['approvedAt'])}. Agora ${_mailOn ? 'envie o orçamento ao cliente' : 'registre o envio ao cliente'}. Para mudar algo antes, volte para rascunho.',
       actions: [
         if (sell && _mailOn) ...[
-          _primary('quote-email', 'Enviar por e-mail', Icons.forward_to_inbox, _emailQuote),
-          _secondary('quote-send', 'Registrar envio ao cliente', Icons.send, _send),
+          _primary('quote-email', 'Enviar ao cliente', Icons.forward_to_inbox, _emailQuote),
+          _secondary('quote-send', 'Já enviei por outro meio', Icons.send, _send),
         ] else if (sell)
           _primary('quote-send', 'Registrar envio ao cliente', Icons.send, _send),
         if (sell) _secondary('quote-reopen', 'Voltar para rascunho para editar', Icons.edit_outlined, _reopen),

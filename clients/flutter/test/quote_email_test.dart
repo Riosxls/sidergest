@@ -44,7 +44,7 @@ void main() {
     expect(find.text('Enviar para aprovação'), findsOneWidget);
   });
 
-  testWidgets('"Enviar por e-mail" asks for valid addresses, then posts the PDF and registers the send', (tester) async {
+  testWidgets('"Enviar ao cliente" asks for valid addresses, then posts the PDF and registers the send', (tester) async {
     final f = await _open(tester);
     expect(find.byKey(const ValueKey('quote-email')), findsOneWidget);
     expect(find.byKey(const ValueKey('quote-send')), findsOneWidget);
