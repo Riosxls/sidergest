@@ -260,6 +260,28 @@ public class ProductionTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Occurrence_and_employee_lists_filter_by_kind_and_active()
+    {
+        var c = await api.AdminAsync();
+        var s = await Arrange(c);
+        var stop = await (await c.Post("/api/production/occurrences", new OccurrenceIn(Code("P", 10), "Parada", OccurrenceKind.Downtime, false))).Read<OccurrenceOut>();
+        var scrapOnly = await (await c.GetAsync("/api/production/occurrences?kind=Scrap&take=500")).Read<Page<OccurrenceOut>>();
+        Assert.Contains(scrapOnly.Items, o => o.Id == s.Scrap.Id);
+        Assert.DoesNotContain(scrapOnly.Items, o => o.Id == stop.Id);
+        var downtimeOnly = await (await c.GetAsync("/api/production/occurrences?kind=Downtime&take=500")).Read<Page<OccurrenceOut>>();
+        Assert.Contains(downtimeOnly.Items, o => o.Id == stop.Id);
+        Assert.DoesNotContain(downtimeOnly.Items, o => o.Id == s.Scrap.Id);
+
+        var active = await (await c.Post("/api/production/employees", new EmployeeIn(Code("E", 10), "Ativo " + Code("A", 6), null, null, null, null))).Read<EmployeeOut>();
+        var gone = await (await c.Post("/api/production/employees", new EmployeeIn(Code("E", 10), "Inativo " + Code("I", 6), null, null, null, null, false))).Read<EmployeeOut>();
+        var onlyActive = await (await c.GetAsync("/api/production/employees?active=true&take=500")).Read<Page<EmployeeOut>>();
+        Assert.Contains(onlyActive.Items, e => e.Id == active.Id);
+        Assert.DoesNotContain(onlyActive.Items, e => e.Id == gone.Id);
+        var all = await (await c.GetAsync("/api/production/employees?take=500")).Read<Page<EmployeeOut>>();
+        Assert.Contains(all.Items, e => e.Id == gone.Id);
+    }
+
+    [Fact]
     public async Task Outside_processing_sends_and_returns_with_service_cost()
     {
         var c = await api.AdminAsync();
@@ -277,6 +299,7 @@ public class ProductionTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.Conflict, (await c.Post($"/api/production/orders/{order.Id}/operations/20/outside-shipments", new OutsideSendInput(Today, 51m, null, null))).StatusCode);
         var shipment = await (await c.Post($"/api/production/orders/{order.Id}/operations/20/outside-shipments", new OutsideSendInput(Today, 50m, "1234", null))).Read<OutsideShipmentOut>();
         Assert.Equal(50m, shipment.Open);
+        Assert.Equal(Today.AddDays(5), shipment.DueDate);
         Assert.Equal(0m, (await Get(c, order.Id)).Operations.Single(o => o.Sequence == 20).Remaining);
         Assert.Equal(HttpStatusCode.Conflict, (await c.Put($"/api/production/orders/{order.Id}/operations/20/outsource", new OutsourceInput(supplier.Id, 3))).StatusCode);
 

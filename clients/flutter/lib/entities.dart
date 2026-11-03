@@ -418,7 +418,7 @@ final shifts = EntitySpec(
     ...codeName,
     FieldSpec('startsAt', 'Início', type: FieldType.time),
     FieldSpec('endsAt', 'Fim', type: FieldType.time),
-    FieldSpec('hours', 'Horas', type: FieldType.decimal),
+    FieldSpec('hours', 'Horas', type: FieldType.decimal, hint: 'Informativo: a capacidade da programação usa as horas por dia dos Parâmetros'),
   ],
   columns: [
     col('Código', 'code'),
@@ -461,16 +461,24 @@ final occurrences = EntitySpec(
   path: '/api/production/occurrences',
   icon: Icons.report_problem_outlined,
   fields: const [
-    FieldSpec('code', 'Código', required: true),
+    FieldSpec('code', 'Código', required: true, hint: 'Gravado em maiúsculas'),
     FieldSpec('description', 'Descrição', required: true),
     FieldSpec('kind', 'Tipo', type: FieldType.choice, choices: occurrenceKindLabels, required: true, defaultValue: 'Downtime'),
-    FieldSpec('stopsOrder', 'Para a OF', type: FieldType.boolean, defaultValue: false),
+    // Only a downtime can stop the order, so the switch stays folded until it is needed.
+    FieldSpec(
+      'stopsOrder',
+      'Para a OF ao apontar',
+      type: FieldType.boolean,
+      defaultValue: false,
+      hint: 'Só vale para parada: apontar esta ocorrência coloca a OF em "Parada"',
+      advanced: true,
+    ),
   ],
   columns: [
     col('Código', 'code'),
     col('Descrição', 'description'),
     labelCol('Tipo', 'kind', occurrenceKindLabels),
-    ColumnSpec('Para a OF', (e) => e['stopsOrder'] == true ? 'Sim' : ''),
+    ColumnSpec('Para a OF ao apontar', (e) => e['stopsOrder'] == true ? 'Sim' : ''),
   ],
   searchable: false,
   writePolicy: 'production',
@@ -482,7 +490,7 @@ final holidays = EntitySpec(
   path: '/api/production/holidays',
   icon: Icons.event_busy_outlined,
   fields: const [
-    FieldSpec('date', 'Data', type: FieldType.date, required: true),
+    FieldSpec('date', 'Data', type: FieldType.date, required: true, hint: 'Vale a partir da próxima programação das OFs (Programação e carga > Reprogramar todas)'),
     FieldSpec('name', 'Descrição', required: true),
   ],
   columns: [dateCol('Data', 'date'), col('Descrição', 'name')],

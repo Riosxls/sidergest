@@ -242,6 +242,8 @@ void main() {
     expect(find.text('OF 12 · TB-50'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('of-release')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-step')));
+    await tester.pumpAndSettle();
     expect(find.text('Falta material'), findsOneWidget);
     expect(find.text('50'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('release-force')));

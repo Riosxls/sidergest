@@ -1,55 +1,84 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../entities.dart';
+import '../labels.dart';
 import '../reports/nf_doc.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/record_list.dart';
+import 'orders.dart' show isLate;
 import 'production_orders.dart';
 
 const reportFields = [
   FieldSpec('goodQuantity', 'Quantidade boa', type: FieldType.decimal, required: true),
   FieldSpec('scrapQuantity', 'Refugo', type: FieldType.decimal, defaultValue: 0),
-  FieldSpec('scrapOccurrenceId', 'Motivo do refugo', type: FieldType.lookup, lookup: LookupSpec('/api/production/occurrences')),
-  FieldSpec('employeeId', 'Funcionário', type: FieldType.lookup, lookup: LookupSpec('/api/production/employees')),
+  // Scrap reasons and downtime reasons share one list on the server; each lookup asks for its own kind.
+  FieldSpec(
+    'scrapOccurrenceId',
+    'Motivo do refugo',
+    type: FieldType.lookup,
+    lookup: LookupSpec('/api/production/occurrences', query: {'kind': 'Scrap'}),
+  ),
+  FieldSpec(
+    'employeeId',
+    'Funcionário',
+    type: FieldType.lookup,
+    lookup: LookupSpec('/api/production/employees', query: {'active': true}),
+  ),
   FieldSpec('shiftId', 'Turno', type: FieldType.lookup, lookup: LookupSpec('/api/production/shifts')),
-  FieldSpec('machineId', 'Máquina', type: FieldType.lookup, lookup: LookupSpec('/api/machines'), hint: 'Vazio = máquina da operação'),
   FieldSpec('startTime', 'Início', type: FieldType.time),
   FieldSpec('endTime', 'Fim', type: FieldType.time),
-  FieldSpec('hours', 'Horas trabalhadas', type: FieldType.decimal, hint: 'Vazio = calculado pelo início/fim'),
-  FieldSpec('setupHours', 'Setup (h)', type: FieldType.decimal),
-  FieldSpec('operators', 'Operadores', type: FieldType.decimal),
-  FieldSpec('downtimeHours', 'Parada (h)', type: FieldType.decimal),
-  FieldSpec('downtimeOccurrenceId', 'Motivo da parada', type: FieldType.lookup, lookup: LookupSpec('/api/production/occurrences')),
-  FieldSpec('weightKg', 'Peso (kg)', type: FieldType.decimal),
-  FieldSpec('notes', 'Observações'),
+  // What the operator rarely fills in stays folded under "Mais campos".
+  FieldSpec('machineId', 'Máquina', type: FieldType.lookup, lookup: LookupSpec('/api/machines'), hint: 'Vazio = máquina da operação', advanced: true),
+  FieldSpec('hours', 'Horas trabalhadas', type: FieldType.decimal, hint: 'Vazio = calculado pelo início/fim', advanced: true),
+  FieldSpec('setupHours', 'Setup (h)', type: FieldType.decimal, advanced: true),
+  FieldSpec('operators', 'Operadores', type: FieldType.decimal, advanced: true),
+  FieldSpec('downtimeHours', 'Parada (h)', type: FieldType.decimal, advanced: true),
+  FieldSpec(
+    'downtimeOccurrenceId',
+    'Motivo da parada',
+    type: FieldType.lookup,
+    lookup: LookupSpec('/api/production/occurrences', query: {'kind': 'Downtime'}),
+    advanced: true,
+  ),
+  FieldSpec('weightKg', 'Peso (kg)', type: FieldType.decimal, advanced: true),
+  FieldSpec('notes', 'Observações', advanced: true),
 ];
 
-Future<Map<String, dynamic>?> showReportForm(BuildContext context, Session s, Map<String, dynamic> order, Map<String, dynamic> op) => submitForm(
-  context,
-  api: s.api,
-  title: 'Apontamento · ${order['reference']} · operação ${op['sequence']}${op['description'] == null ? '' : ' ${op['description']}'}',
-  fields: const [
-    FieldSpec('date', 'Data', type: FieldType.date, required: true),
-    ...reportFields,
-  ],
-  initial: {'date': isoDate(DateTime.now()), 'scrapQuantity': 0, 'goodQuantity': (op['remaining'] as num? ?? 0) > 0 ? op['remaining'] : null},
-  submit: (b) =>
-      s.api.post('/api/production/reports', {...b, 'orderId': order['id'], 'operationSequence': op['sequence'], 'scrapQuantity': b['scrapQuantity'] ?? 0}),
-);
-
-Future<void> newReport(BuildContext context, Session s) async {
-  final picked = await showDialog<Map<String, dynamic>>(
-    context: context,
-    builder: (_) => LookupPicker(api: s.api, path: '/api/production/orders', title: 'Ordem de fabricação', query: const {'open': true}),
+Future<Map<String, dynamic>?> showReportForm(BuildContext context, Session s, Map<String, dynamic> order, Map<String, dynamic> op) async {
+  final r = await submitForm(
+    context,
+    api: s.api,
+    title: 'Apontamento · ${order['reference']} · operação ${op['sequence']}${op['description'] == null ? '' : ' ${op['description']}'}',
+    fields: const [
+      FieldSpec('date', 'Data', type: FieldType.date, required: true),
+      ...reportFields,
+    ],
+    initial: {'date': isoDate(DateTime.now()), 'scrapQuantity': 0, 'goodQuantity': (op['remaining'] as num? ?? 0) > 0 ? op['remaining'] : null},
+    submit: (b) =>
+        s.api.post('/api/production/reports', {...b, 'orderId': order['id'], 'operationSequence': op['sequence'], 'scrapQuantity': b['scrapQuantity'] ?? 0}),
   );
-  if (picked == null || !context.mounted) return;
-  final order = await runAction(context, () => s.api.get('/api/production/orders/${picked['id']}'));
-  if (order is! Map<String, dynamic> || !context.mounted) return;
-  final ops = (order['operations'] as List).cast<Map<String, dynamic>>().where((o) => o['external'] != true).toList();
-  if (ops.isEmpty) return showError(context, '${order['reference']} não tem operação interna para apontar');
+  if (r != null && context.mounted) {
+    final left = ((op['remaining'] as num?) ?? 0) - ((r['goodQuantity'] as num?) ?? 0) - ((r['scrapQuantity'] as num?) ?? 0);
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Apontamento registrado${op['remaining'] == null ? '' : ' · saldo da operação ${fmt(left < 0 ? 0 : left)}'}')));
+  }
+  return r;
+}
+
+/// Picks the operation of an open order and opens the report form on it. Only a running order takes reports.
+Future<void> reportOnOrder(BuildContext context, Session s, Map<String, dynamic> order) async {
+  if (!runningProductionStatuses.contains(order['status'])) {
+    return showError(
+      context,
+      '${order['reference']} está ${(productionStatuses[order['status']] ?? '${order['status']}').toLowerCase()}: só OF liberada ou em produção recebe apontamento',
+    );
+  }
+  final ops = (order['operations'] as List).cast<Map<String, dynamic>>().where((o) => o['external'] != true && ((o['remaining'] as num?) ?? 0) > 0).toList();
+  if (ops.isEmpty) return showError(context, '${order['reference']} não tem operação interna com saldo para apontar');
   final op = ops.length == 1
       ? ops.first
       : await showDialog<Map<String, dynamic>>(
@@ -67,6 +96,17 @@ Future<void> newReport(BuildContext context, Session s) async {
         );
   if (op == null || !context.mounted) return;
   await showReportForm(context, s, order, op);
+}
+
+Future<void> newReport(BuildContext context, Session s) async {
+  final picked = await showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (_) => LookupPicker(api: s.api, path: '/api/production/orders', title: 'Ordem de fabricação', query: const {'open': true}),
+  );
+  if (picked == null || !context.mounted) return;
+  final order = await runAction(context, () => s.api.get('/api/production/orders/${picked['id']}'));
+  if (order is! Map<String, dynamic> || !context.mounted) return;
+  await reportOnOrder(context, s, order);
 }
 
 /// Production reports list, optionally limited to one order.
@@ -89,14 +129,21 @@ class _ReportsViewState extends State<ReportsView> {
   Session get s => widget.session;
 
   Future<void> _new() async {
-    await newReport(context, s);
+    final order = widget.order;
+    if (order == null) {
+      await newReport(context, s);
+    } else {
+      await reportOnOrder(context, s, order);
+    }
     unawaited(_list.currentState?.reload());
     widget.onChanged?.call();
   }
 
   Future<void> _open(Map<String, dynamic> r) async {
     final cs = Theme.of(context).colorScheme;
-    final delete = await showDialog<bool>(
+    // In the standalone list the OF of a report is one tap away.
+    final openOrder = widget.order == null && r['orderId'] is int;
+    final action = await showDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text('Apontamento ${r['reference']} · op. ${r['operationSequence']}'),
@@ -123,23 +170,40 @@ class _ReportsViewState extends State<ReportsView> {
           if (s.canProduce)
             TextButton(
               key: const ValueKey('report-delete'),
-              onPressed: () => Navigator.pop(c, true),
+              onPressed: () => Navigator.pop(c, 'delete'),
               style: TextButton.styleFrom(foregroundColor: cs.error),
               child: const Text('Excluir'),
             ),
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Fechar')),
+          if (openOrder)
+            TextButton(key: const ValueKey('report-open-order'), onPressed: () => Navigator.pop(c, 'order'), child: Text('Abrir ${r['reference']}')),
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Fechar')),
         ],
       ),
     );
-    if (delete != true || !mounted) return;
+    if (!mounted) return;
+    if (action == 'order') {
+      await openProductionOrder(context, s, r['orderId'] as int);
+      unawaited(_list.currentState?.reload());
+      return;
+    }
+    if (action != 'delete') return;
     if (!await confirm(context, 'Excluir este apontamento?') || !mounted) return;
     await runAction(context, () => s.api.delete('/api/production/reports/${r['id']}'), success: 'Apontamento excluído');
+    unawaited(_list.currentState?.reload());
     widget.onChanged?.call();
   }
 
+  /// Cancelling the picker keeps the date the chip already has; the chip's own x clears it.
   Future<void> _pickDate(bool from) async {
-    final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100));
-    setState(() => from ? _from = d == null ? null : isoDate(d) : _to = d == null ? null : isoDate(d));
+    final current = DateTime.tryParse((from ? _from : _to) ?? '');
+    final d = await showDatePicker(context: context, initialDate: current ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100));
+    if (d == null || !mounted) return;
+    final iso = isoDate(d);
+    if (from ? (_to != null && iso.compareTo(_to!) > 0) : (_from != null && iso.compareTo(_from!) < 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A data inicial não pode ser depois da data final')));
+      return;
+    }
+    setState(() => from ? _from = iso : _to = iso);
   }
 
   @override
@@ -151,13 +215,34 @@ class _ReportsViewState extends State<ReportsView> {
       path: '/api/production/reports',
       query: {'orderId': order?['id'], 'from': _from, 'to': _to},
       searchable: false,
-      emptyText: 'Nenhum apontamento',
+      emptyText: order == null ? 'Nenhum apontamento' : 'Nenhum apontamento nesta OF. Use "Apontar" na aba Operações ou o botão abaixo.',
+      filtersActive: _from != null || _to != null,
+      onClearFilters: () => setState(() {
+        _from = null;
+        _to = null;
+      }),
       filters: [
-        ActionChip(avatar: const Icon(Icons.event, size: 18), label: Text(_from == null ? 'De' : 'De ${fmtDay(_from)}'), onPressed: () => _pickDate(true)),
-        ActionChip(avatar: const Icon(Icons.event, size: 18), label: Text(_to == null ? 'Até' : 'Até ${fmtDay(_to)}'), onPressed: () => _pickDate(false)),
+        InputChip(
+          avatar: const Icon(Icons.event, size: 18),
+          label: Text(_from == null ? 'De' : 'De ${fmtDay(_from)}'),
+          onPressed: () => _pickDate(true),
+          onDeleted: _from == null ? null : () => setState(() => _from = null),
+        ),
+        InputChip(
+          avatar: const Icon(Icons.event, size: 18),
+          label: Text(_to == null ? 'Até' : 'Até ${fmtDay(_to)}'),
+          onPressed: () => _pickDate(false),
+          onDeleted: _to == null ? null : () => setState(() => _to = null),
+        ),
       ],
-      fab: s.canProduce && order == null
-          ? FloatingActionButton.extended(heroTag: 'new-report', onPressed: _new, icon: const Icon(Icons.edit_note), label: const Text('Novo apontamento'))
+      // On an order only a running one takes reports; on the standalone list the order is picked first.
+      fab: s.canProduce && (order == null || runningProductionStatuses.contains(order['status']))
+          ? FloatingActionButton.extended(
+              heroTag: order == null ? 'new-report' : 'new-report-of',
+              onPressed: _new,
+              icon: const Icon(Icons.edit_note),
+              label: Text(order == null ? 'Novo apontamento' : 'Apontar operação'),
+            )
           : null,
       columns: [
         dateCol('Data', 'date'),
@@ -199,24 +284,47 @@ class ShipmentsView extends StatefulWidget {
 }
 
 class _ShipmentsViewState extends State<ShipmentsView> {
+  final _list = GlobalKey<RecordListState>();
   late bool _open = widget.orderId == null;
 
   Session get s => widget.session;
 
+  bool _late(Map<String, dynamic> e) => e['dueDate'] != null && (e['open'] as num) > 0 && isLate(e['dueDate']);
+
+  /// Only the actions that do something here: a return while the shipment is open, the OF when it is not already the page, the NF paper.
   Future<void> _tap(Map<String, dynamic> e) async {
+    final canReturn = s.canProduce && (e['open'] as num) > 0;
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(leading: const Icon(Icons.open_in_new), title: const Text('Abrir'), onTap: () => Navigator.pop(ctx, 'open')),
+            if (canReturn)
+              ListTile(
+                key: const ValueKey('shipment-return'),
+                leading: const Icon(Icons.assignment_returned_outlined),
+                title: const Text('Registrar retorno'),
+                onTap: () => Navigator.pop(ctx, 'return'),
+              ),
+            if (widget.orderId == null)
+              ListTile(
+                key: const ValueKey('shipment-open-order'),
+                leading: const Icon(Icons.open_in_new),
+                title: Text('Abrir ${e['reference']}'),
+                onTap: () => Navigator.pop(ctx, 'order'),
+              ),
             ListTile(leading: const Icon(Icons.print_outlined), title: const Text('Imprimir NF de remessa'), onTap: () => Navigator.pop(ctx, 'nf')),
           ],
         ),
       ),
     );
     if (action == null || !mounted) return;
+    if (action == 'order') {
+      await openProductionOrder(context, s, e['orderId'] as int);
+      unawaited(_list.currentState?.reload());
+      return;
+    }
     if (action == 'nf') {
       await printNf(
         context,
@@ -226,41 +334,59 @@ class _ShipmentsViewState extends State<ShipmentsView> {
       );
       return;
     }
-    if (!s.canProduce || (e['open'] as num) <= 0) {
-      if (widget.orderId == null) await openProductionOrder(context, s, e['orderId'] as int);
-      return;
-    }
+    if (!canReturn) return;
     final r = await submitForm(
       context,
       api: s.api,
-      title: 'Retorno de ${e['supplierName']} · ${e['reference']} op. ${e['operationSequence']}',
+      title: 'Retorno de ${e['supplierName']} · ${e['reference']} op. ${e['operationSequence']} · em aberto ${fmt(e['open'])}',
       fields: [
         FieldSpec('date', 'Data', type: FieldType.date, required: true, defaultValue: isoDate(DateTime.now())),
         FieldSpec('goodQuantity', 'Quantidade boa', type: FieldType.decimal, required: true, defaultValue: e['open']),
         const FieldSpec('scrapQuantity', 'Refugo', type: FieldType.decimal, required: true, defaultValue: 0),
-        const FieldSpec('scrapOccurrenceId', 'Motivo do refugo', type: FieldType.lookup, lookup: LookupSpec('/api/production/occurrences')),
-        const FieldSpec('serviceUnitPrice', 'Preço do serviço (R\$/peça)', type: FieldType.decimal, required: true, defaultValue: 0),
+        const FieldSpec(
+          'scrapOccurrenceId',
+          'Motivo do refugo',
+          type: FieldType.lookup,
+          lookup: LookupSpec('/api/production/occurrences', query: {'kind': 'Scrap'}),
+        ),
+        // No default: a price of 0 would pass and zero the service cost of the OF.
+        const FieldSpec(
+          'serviceUnitPrice',
+          'Preço do serviço (R\$/peça)',
+          type: FieldType.decimal,
+          required: true,
+          hint: 'Valor por peça cobrado pelo fornecedor',
+        ),
         const FieldSpec('invoiceNumber', 'NF de retorno'),
-        const FieldSpec('notes', 'Observações'),
+        const FieldSpec('notes', 'Observações', advanced: true),
       ],
       submit: (b) => s.api.post('/api/production/outside-shipments/${e['id']}/returns', b),
     );
-    if (r != null) widget.onChanged?.call();
+    if (r == null) return;
+    // The form is a dialog, so the list is not told that something changed: reload it here.
+    unawaited(_list.currentState?.reload());
+    widget.onChanged?.call();
   }
 
   @override
   Widget build(BuildContext context) => RecordList(
+    key: _list,
     api: s.api,
     path: '/api/production/outside-shipments',
     query: {'orderId': widget.orderId, 'open': _open ? true : null},
     searchable: false,
     emptyText: 'Nenhuma remessa a terceiros',
+    filtersActive: _open,
+    onClearFilters: () => setState(() => _open = false),
     filters: [FilterChip(label: const Text('Somente em aberto'), selected: _open, onSelected: (v) => setState(() => _open = v))],
+    // A shipment still open after its expected return date (sent + the supplier lead time of the operation) is late.
+    rowColor: (context, e) => _late(e) ? Theme.of(context).colorScheme.errorContainer : null,
     columns: [
       col('OF', 'reference'),
       col('Op.', 'operationSequence'),
       col('Fornecedor', 'supplierName'),
       dateCol('Enviado', 'sentOn'),
+      ColumnSpec('Retorno previsto', (e) => e['dueDate'] == null ? '' : '${fmtDay(e['dueDate'])}${_late(e) ? ' · atrasada' : ''}'),
       col('Enviado (qtd)', 'quantity', numeric: true),
       col('Retornado', 'returnedQuantity', numeric: true),
       col('Refugo', 'scrapQuantity', numeric: true),
@@ -282,7 +408,7 @@ class OutsideProcessingScreen extends StatelessWidget {
   Widget build(BuildContext context) => ShipmentsView(session: session);
 }
 
-Future<void> showScheduleResult(BuildContext context, List<Map<String, dynamic>> rows) {
+Future<void> showScheduleResult(BuildContext context, List<Map<String, dynamic>> rows, {Session? session}) {
   final cs = Theme.of(context).colorScheme;
   final late = rows.where((r) => r['late'] == true).length;
   return showDialog(
@@ -303,6 +429,22 @@ Future<void> showScheduleResult(BuildContext context, List<Map<String, dynamic>>
             ],
             rows: rows,
             rowColor: (e) => e['late'] == true ? cs.errorContainer : null,
+            // From a late OF in this list straight to its page, without hunting for it afterwards.
+            actions: session == null
+                ? null
+                : (e) => [
+                    IconButton(
+                      key: ValueKey('schedule-open-${e['orderId']}'),
+                      tooltip: 'Abrir ${e['reference']}',
+                      icon: const Icon(Icons.open_in_new, size: 20),
+                      onPressed: e['orderId'] is int
+                          ? () {
+                              Navigator.pop(c);
+                              unawaited(openProductionOrder(context, session, e['orderId'] as int));
+                            }
+                          : null,
+                    ),
+                  ],
           ),
         ),
       ),
@@ -342,7 +484,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
     if (!await confirm(context, 'Reprogramar todas as OFs abertas a partir de hoje?') || !mounted) return;
     final r = await runAction(context, () => s.api.post('/api/production/schedule', {}));
     if (r is! List || !mounted) return;
-    await showScheduleResult(context, r.cast<Map<String, dynamic>>());
+    await showScheduleResult(context, r.cast<Map<String, dynamic>>(), session: s);
     _reload();
   }
 
@@ -359,6 +501,8 @@ class _PlanningScreenState extends State<PlanningScreen> {
     final weeks = rows.map((r) => '${r['weekStart']}').toSet().toList()..sort();
     final codes = rows.map((r) => '${r['code']}').toSet().toList()..sort();
     final cell = {for (final r in rows) '${r['code']}|${r['weekStart']}': r};
+    final now = DateTime.now();
+    final thisWeek = isoDate(DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1)));
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
@@ -367,7 +511,15 @@ class _PlanningScreenState extends State<PlanningScreen> {
         dataRowMaxHeight: 48,
         columns: [
           DataColumn(label: Text(_groupBy == 'machine' ? 'Máquina' : 'Centro de trabalho')),
-          for (final w in weeks) DataColumn(label: Text('Sem. ${fmtDay(w).substring(0, 5)}'), numeric: true),
+          // The week that holds today is marked so the grid reads from "now".
+          for (final w in weeks)
+            DataColumn(
+              label: Text(
+                'Sem. ${fmtDay(w).substring(0, 5)}${w == thisWeek ? ' (atual)' : ''}',
+                style: w == thisWeek ? TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.primary) : null,
+              ),
+              numeric: true,
+            ),
         ],
         rows: [
           for (final c in codes)
@@ -443,7 +595,17 @@ class _PlanningScreenState extends State<PlanningScreen> {
       const SizedBox(height: 12),
       Section(
         title: 'Carga semanal (% da capacidade)',
-        child: FutureView<dynamic>(future: _load, onRetry: _reload, builder: (_, r) => _grid((r as List).cast<Map<String, dynamic>>())),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'A capacidade de cada semana é horas por dia (Parâmetros) × dias úteis; feriados cadastrados (Cadastros > Feriados) ficam de fora. Destaque forte a partir de 85 % da capacidade; vermelho acima de 100 %.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            FutureView<dynamic>(future: _load, onRetry: _reload, builder: (_, r) => _grid((r as List).cast<Map<String, dynamic>>())),
+          ],
+        ),
       ),
     ],
   );

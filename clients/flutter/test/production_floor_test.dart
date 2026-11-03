@@ -18,6 +18,7 @@ Map<String, dynamic> _page(List<Map<String, dynamic>> items) => {'items': items,
 
 final _report = {
   'id': 31,
+  'orderId': 7,
   'reference': 'OF 12',
   'operationSequence': 10,
   'date': '2026-10-28',
@@ -50,7 +51,7 @@ final _shipment = {
   'invoiceNumber': '123',
 };
 
-Map<String, dynamic> _order(List<Map<String, dynamic>> ops) => {
+Map<String, dynamic> _order(List<Map<String, dynamic>> ops, {String status = 'Released'}) => {
   'id': 7,
   'kind': 'Standard',
   'number': 12,
@@ -63,7 +64,7 @@ Map<String, dynamic> _order(List<Map<String, dynamic>> ops) => {
   'customerName': null,
   'quantity': 100,
   'dueDate': '2026-01-10',
-  'status': 'Released',
+  'status': status,
   'parentOrderId': null,
   'createdAt': '2026-10-20T10:00:00Z',
   'good': 0,
@@ -102,6 +103,7 @@ Map<String, dynamic> _op(int seq, {String? description, bool external = false, n
 class _Fake {
   final log = <http.Request>[];
   var role = 'Production';
+  String orderStatus = 'Released';
   List<Map<String, dynamic>> reports = [_report];
   List<Map<String, dynamic>> shipments = [_shipment];
   List<Map<String, dynamic>> ops = [_op(10, description: 'Perfilar'), _op(20, description: 'Trefilar')];
@@ -121,14 +123,18 @@ class _Fake {
     final p = r.url.path;
     final m = r.method;
     if (p == '/api/production/reports' && m == 'GET') return _json(_page(reports));
-    if (p == '/api/production/reports' && m == 'POST') return _json({'id': 99}, 201);
+    if (p == '/api/production/reports' && m == 'POST') return _json({...jsonDecode(r.body) as Map<String, dynamic>, 'id': 99}, 201);
     if (p.startsWith('/api/production/reports/') && m == 'DELETE') return http.Response('', 204);
     if (p == '/api/production/outside-shipments' && m == 'GET') return _json(shipments);
     if (p.endsWith('/returns') && m == 'POST') return _json({'id': 1}, 201);
     if (p == '/api/production/orders' && m == 'GET') {
-      return _json(_page([{'id': 7, 'number': 12, 'reference': 'OF 12'}]));
+      return _json(
+        _page([
+          {'id': 7, 'number': 12, 'reference': 'OF 12'},
+        ]),
+      );
     }
-    if (p == '/api/production/orders/7') return _json(_order(ops));
+    if (p == '/api/production/orders/7') return _json(_order(ops, status: orderStatus));
     if (p == '/api/production/load') {
       if (loadStatus != 200) return _json({'title': 'Erro', 'detail': 'Carga indisponível', 'status': loadStatus}, loadStatus);
       return _json(load);
@@ -143,10 +149,13 @@ Future<Session> _pump(WidgetTester tester, _Fake fake, Widget Function(Session s
   tester.view.physicalSize = const Size(1700, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final session = Session(api: ApiClient(baseUrl: 'http://api.test', client: fake.client, token: 'tok'))
-    ..username = 'u'
-    ..role = fake.role
-    ..permissions = rolePermissions[fake.role]!;
+  final session =
+      Session(
+          api: ApiClient(baseUrl: 'http://api.test', client: fake.client, token: 'tok'),
+        )
+        ..username = 'u'
+        ..role = fake.role
+        ..permissions = rolePermissions[fake.role]!;
   await tester.pumpWidget(
     MaterialApp(
       locale: const Locale('pt', 'BR'),
@@ -270,18 +279,90 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('12 · OF 12'));
       await tester.pumpAndSettle();
-      expect(find.text('OF 12 não tem operação interna para apontar'), findsOneWidget);
+      expect(find.text('OF 12 não tem operação interna com saldo para apontar'), findsOneWidget);
       expect(fake.has('POST', '/api/production/reports'), isFalse);
     });
 
-    testWidgets('an operation without balance leaves the good quantity empty', (tester) async {
+    testWidgets('an operation without balance is not offered for a report', (tester) async {
       final fake = _Fake()..ops = [_op(10, remaining: 0)];
       await _pump(tester, fake, (s) => ReportsScreen(session: s));
       await tester.tap(find.text('Novo apontamento'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('12 · OF 12'));
       await tester.pumpAndSettle();
-      expect(tester.widget<TextField>(find.byKey(const ValueKey('field-goodQuantity'))).controller!.text, '');
+      expect(find.text('OF 12 não tem operação interna com saldo para apontar'), findsOneWidget);
+      expect(find.byKey(const ValueKey('field-goodQuantity')), findsNothing);
+    });
+
+    testWidgets('an OF that is not running does not take a report and says why', (tester) async {
+      final fake = _Fake()..orderStatus = 'Stopped';
+      await _pump(tester, fake, (s) => ReportsScreen(session: s));
+      await tester.tap(find.text('Novo apontamento'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('12 · OF 12'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('só OF liberada ou em produção recebe apontamento'), findsOneWidget);
+      expect(find.byKey(const ValueKey('field-goodQuantity')), findsNothing);
+    });
+
+    testWidgets('the report form folds the rare fields, asks each lookup for its own kind and confirms the saved report', (tester) async {
+      final fake = _Fake();
+      await _pump(tester, fake, (s) => ReportsScreen(session: s));
+      await tester.tap(find.text('Novo apontamento'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('12 · OF 12'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('10 · Perfilar · saldo 60'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('field-goodQuantity')), findsOneWidget);
+      expect(find.byKey(const ValueKey('field-downtimeHours')), findsNothing);
+      expect(find.byKey(const ValueKey('field-weightKg')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('form-more')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('field-downtimeHours')), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('field-goodQuantity')), '50');
+      await tester.tap(find.text('Salvar'));
+      await tester.pumpAndSettle();
+      // 60 left on the operation, 50 reported.
+      expect(find.text('Apontamento registrado · saldo da operação 10'), findsOneWidget);
+    });
+
+    testWidgets('inside a running OF the tab has its own button; a stopped OF has none', (tester) async {
+      final fake = _Fake();
+      await _pump(tester, fake, (s) => ReportsView(session: s, order: _order(fake.ops)));
+      expect(find.text('Apontar operação'), findsOneWidget);
+      expect(find.textContaining('Nenhum apontamento'), findsNothing);
+      await _pump(tester, fake, (s) => ReportsView(session: s, order: {..._order(fake.ops), 'status': 'Stopped'}));
+      expect(find.text('Apontar operação'), findsNothing);
+    });
+
+    testWidgets('from the standalone list a report opens its OF; deleting reloads the list', (tester) async {
+      final fake = _Fake();
+      await _pump(tester, fake, (s) => ReportsScreen(session: s));
+      await tester.tap(find.text('Carlos'));
+      await tester.pumpAndSettle();
+      expect(find.text('Abrir OF 12'), findsOneWidget);
+      final before = fake.log.where((r) => r.method == 'GET' && r.url.path == '/api/production/reports').length;
+      await tester.tap(find.byKey(const ValueKey('report-delete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirmar'));
+      await tester.pumpAndSettle();
+      expect(fake.log.where((r) => r.method == 'GET' && r.url.path == '/api/production/reports').length, greaterThan(before));
+    });
+
+    testWidgets('a date chip that is set can be cleared by itself', (tester) async {
+      final fake = _Fake();
+      await _pump(tester, fake, (s) => ReportsScreen(session: s));
+      await tester.tap(find.text('De'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      final clear = find.descendant(of: find.byType(InputChip), matching: find.byIcon(Icons.clear));
+      expect(clear, findsOneWidget);
+      await tester.tap(clear);
+      await tester.pumpAndSettle();
+      expect(find.text('De'), findsOneWidget);
+      expect(fake.last('GET', '/api/production/reports').url.queryParameters.containsKey('from'), isFalse);
     });
   });
 
@@ -296,23 +377,31 @@ void main() {
       expect(fake.last('GET', '/api/production/outside-shipments').url.queryParameters.containsKey('open'), isFalse);
     });
 
-    testWidgets('empty list shows the empty text', (tester) async {
+    testWidgets('empty list explains the filter and then shows the empty text', (tester) async {
       final fake = _Fake()..shipments = [];
       await _pump(tester, fake, (s) => OutsideProcessingScreen(session: s));
+      expect(find.text('Nada encontrado com a busca e os filtros atuais'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('clear-filters')));
+      await tester.pumpAndSettle();
       expect(find.text('Nenhuma remessa a terceiros'), findsOneWidget);
     });
 
-    testWidgets('a producer registers the return of an open shipment', (tester) async {
+    testWidgets('a producer registers the return of an open shipment and the list reloads', (tester) async {
       final fake = _Fake();
       var changed = 0;
       await _pump(tester, fake, (s) => ShipmentsView(session: s, onChanged: () => changed++));
       await tester.tap(find.text('Galvano Sul'));
       await tester.pumpAndSettle();
       expect(find.text('Imprimir NF de remessa'), findsOneWidget);
-      await tester.tap(find.text('Abrir'));
+      // The sheet names what each entry does.
+      expect(find.text('Abrir OF 12'), findsOneWidget);
+      final loads = fake.log.where((r) => r.method == 'GET' && r.url.path == '/api/production/outside-shipments').length;
+      await tester.tap(find.byKey(const ValueKey('shipment-return')));
       await tester.pumpAndSettle();
-      expect(find.text('Retorno de Galvano Sul · OF 12 op. 20'), findsOneWidget);
+      expect(find.text('Retorno de Galvano Sul · OF 12 op. 20 · em aberto 80'), findsOneWidget);
       expect(tester.widget<TextField>(find.byKey(const ValueKey('field-goodQuantity'))).controller!.text, '80');
+      // No price is assumed: a price of zero would zero the service cost.
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('field-serviceUnitPrice'))).controller!.text, '');
       await tester.enterText(find.byKey(const ValueKey('field-serviceUnitPrice')), '2,5');
       await tester.enterText(find.byKey(const ValueKey('field-invoiceNumber')), 'R77');
       await tester.tap(find.text('Salvar'));
@@ -323,39 +412,56 @@ void main() {
       expect(b['serviceUnitPrice'], 2.5);
       expect(b['invoiceNumber'], 'R77');
       expect(changed, 1);
+      expect(fake.log.where((r) => r.method == 'GET' && r.url.path == '/api/production/outside-shipments').length, greaterThan(loads));
     });
 
-    testWidgets('a reader opening a shipment goes to the order instead of the return form', (tester) async {
+    testWidgets('a reader has no return entry and opens the order from the sheet', (tester) async {
       final fake = _Fake()..role = 'Reader';
       await _pump(tester, fake, (s) => OutsideProcessingScreen(session: s));
       await tester.tap(find.text('Galvano Sul'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Abrir'));
+      expect(find.byKey(const ValueKey('shipment-return')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('shipment-open-order')));
       await tester.pumpAndSettle();
       expect(find.textContaining('Retorno de'), findsNothing);
       expect(fake.has('GET', '/api/production/orders/7'), isTrue);
     });
 
-    testWidgets('a fully returned shipment opens the order even for a producer', (tester) async {
-      final fake = _Fake()..shipments = [{..._shipment, 'open': 0}];
+    testWidgets('a fully returned shipment has no return entry even for a producer', (tester) async {
+      final fake = _Fake()
+        ..shipments = [
+          {..._shipment, 'open': 0},
+        ];
       await _pump(tester, fake, (s) => OutsideProcessingScreen(session: s));
       await tester.tap(find.text('Galvano Sul'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Abrir'));
+      expect(find.byKey(const ValueKey('shipment-return')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('shipment-open-order')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Retorno de'), findsNothing);
       expect(fake.has('GET', '/api/production/orders/7'), isTrue);
     });
 
-    testWidgets('inside an order the shipment tap does not navigate when nothing is open', (tester) async {
-      final fake = _Fake()..shipments = [{..._shipment, 'open': 0}];
+    testWidgets('inside an order the sheet offers no entry that does nothing', (tester) async {
+      final fake = _Fake()
+        ..shipments = [
+          {..._shipment, 'open': 0},
+        ];
       await _pump(tester, fake, (s) => ShipmentsView(session: s, orderId: 7));
       expect(fake.last('GET', '/api/production/outside-shipments').url.queryParameters['orderId'], '7');
       await tester.tap(find.text('Galvano Sul'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Abrir'));
-      await tester.pumpAndSettle();
-      expect(fake.has('GET', '/api/production/orders/7'), isFalse);
+      expect(find.byKey(const ValueKey('shipment-return')), findsNothing);
+      expect(find.byKey(const ValueKey('shipment-open-order')), findsNothing);
+      expect(find.text('Imprimir NF de remessa'), findsOneWidget);
+    });
+
+    testWidgets('a shipment past its expected return is marked late', (tester) async {
+      final fake = _Fake()
+        ..shipments = [
+          {..._shipment, 'dueDate': '2026-10-25'},
+        ];
+      await _pump(tester, fake, (s) => OutsideProcessingScreen(session: s));
+      expect(find.textContaining('atrasada'), findsOneWidget);
     });
 
     testWidgets('dismissing the action sheet does nothing', (tester) async {
@@ -447,7 +553,14 @@ void main() {
       (s) => Builder(
         builder: (c) => TextButton(
           onPressed: () => showScheduleResult(c, [
-            {'reference': 'OF 12', 'dueDate': '2026-01-10', 'adjustedStart': '2026-10-27', 'adjustedEnd': '2026-10-29', 'late': true, 'warnings': ['Sem feriados', 'Capacidade']},
+            {
+              'reference': 'OF 12',
+              'dueDate': '2026-01-10',
+              'adjustedStart': '2026-10-27',
+              'adjustedEnd': '2026-10-29',
+              'late': true,
+              'warnings': ['Sem feriados', 'Capacidade'],
+            },
             {'reference': 'OF 13', 'dueDate': '2026-12-10', 'plannedStart': '2026-11-02', 'plannedEnd': '2026-11-03', 'late': false, 'warnings': []},
           ]),
           child: const Text('abrir'),
@@ -460,5 +573,53 @@ void main() {
     expect(find.text('Sem feriados; Capacidade'), findsOneWidget);
     expect(find.text('Sim'), findsOneWidget);
     expect(find.text('OF 13'), findsOneWidget);
+    // Without a session the rows have no link.
+    expect(find.byIcon(Icons.open_in_new), findsNothing);
+  });
+
+  testWidgets('showScheduleResult with a session opens a late OF from its row', (tester) async {
+    final fake = _Fake();
+    await _pump(
+      tester,
+      fake,
+      (s) => Builder(
+        builder: (c) => TextButton(
+          onPressed: () => showScheduleResult(c, [
+            {
+              'orderId': 7,
+              'reference': 'OF 12',
+              'dueDate': '2026-01-10',
+              'adjustedStart': '2026-10-27',
+              'adjustedEnd': '2026-10-29',
+              'late': true,
+              'warnings': [],
+            },
+          ], session: s),
+          child: const Text('abrir'),
+        ),
+      ),
+    );
+    await tester.tap(find.text('abrir'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('schedule-open-7')));
+    await tester.pumpAndSettle();
+    expect(fake.has('GET', '/api/production/orders/7'), isTrue);
+    expect(find.text('2 OF(s) programada(s)'), findsNothing);
+  });
+
+  group('planejamento (semana atual)', () {
+    testWidgets('the week that holds today is marked and the capacity rule is explained', (tester) async {
+      final now = DateTime.now();
+      final monday = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+      String iso(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+      final fake = _Fake()
+        ..load = [
+          {'id': 1, 'code': 'PERF-1', 'weekStart': iso(monday), 'hours': 30, 'capacity': 40, 'loadPercent': 75, 'operations': 2},
+          {'id': 1, 'code': 'PERF-1', 'weekStart': iso(monday.add(const Duration(days: 7))), 'hours': 30, 'capacity': 40, 'loadPercent': 75, 'operations': 2},
+        ];
+      await _pump(tester, fake, (s) => PlanningScreen(session: s));
+      expect(find.textContaining('(atual)'), findsOneWidget);
+      expect(find.textContaining('horas por dia (Parâmetros)'), findsOneWidget);
+    });
   });
 }

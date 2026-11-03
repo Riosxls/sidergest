@@ -104,6 +104,8 @@ public class SalesTests(ApiFixture api)
         var of = await (await admin.GetAsync($"/api/production/orders/{order.Lines[0].ProductionOrderId}")).Read<ProductionOrderOut>();
         Assert.Equal(70m, of.Quantity);
         Assert.Equal(s.Customer.Id, of.CustomerId);
+        Assert.Equal(order.Id, of.SalesOrderId);
+        Assert.Equal(order.Reference, of.SalesOrderReference);
         Assert.False(order.Ready);
 
         var pipeline = await (await sales.GetAsync($"/api/sales/pipeline?customerId={s.Customer.Id}")).Read<PipelineOut>();

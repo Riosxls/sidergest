@@ -42,14 +42,15 @@ public record ProductionOrderOut(int Id, ProductionOrderKind Kind, int Number, s
     DateOnly? PlannedStart, DateOnly? PlannedEnd, DateOnly? AdjustedStart, DateOnly? AdjustedEnd, ProductionOrderStatus Status, string? StatusReason, int? ParentOrderId, int? PreviousOrderId, int? Bales, string? Notes,
     string? CreatedBy, DateTimeOffset CreatedAt, DateTimeOffset? ReleasedAt, DateTimeOffset? FinishedAt, DateTimeOffset? ClosedAt, string? ClosedBy, DateTimeOffset? CostClosedAt, decimal? MaterialCost, decimal? ServiceCost, decimal? UnitCost,
     decimal Good, decimal Scrap, decimal Received, decimal Receivable, decimal WorkInProcess, IReadOnlyList<ProductionOperationOut> Operations, IReadOnlyList<MaterialLineState> Materials,
-    IReadOnlyList<ProductionOrderSummaryOut> Children, IReadOnlyList<string> Warnings, string? PrimaryTube = null, string? CustomerPo = null);
+    IReadOnlyList<ProductionOrderSummaryOut> Children, IReadOnlyList<string> Warnings, string? PrimaryTube = null, string? CustomerPo = null,
+    int? SalesOrderId = null, string? SalesOrderReference = null, string? ParentOrderReference = null, string? PreviousOrderReference = null);
 public record ReleaseOut(ProductionOrderOut Order, IReadOnlyList<AvailabilityLine> Shortages);
 public record AvailabilityCheckIn(int ProductId, decimal Quantity);
 public record ProductionReportOut(int Id, int OrderId, string Reference, int OperationSequence, DateOnly Date, int? ShiftId, int? EmployeeId, string? EmployeeName, int? MachineId, string? MachineCode, TimeOnly? StartTime, TimeOnly? EndTime,
     decimal? Hours, decimal? SetupHours, decimal? Operators, decimal? DowntimeHours, int? DowntimeOccurrenceId, decimal GoodQuantity, decimal ScrapQuantity, int? ScrapOccurrenceId, decimal? WeightKg, int? OutsideShipmentId,
     string? Notes, string? ReportedBy, DateTimeOffset ReportedAt);
 public record OutsideShipmentOut(int Id, int OrderId, string Reference, int OperationSequence, int SupplierId, string SupplierName, DateOnly SentOn, decimal Quantity, decimal ReturnedQuantity, decimal ScrapQuantity, decimal Open,
-    decimal ServiceValue, string? InvoiceNumber, string? Notes);
+    decimal ServiceValue, string? InvoiceNumber, string? Notes, DateOnly? DueDate = null);
 public record OverrunOut(int Id, int OperationId, decimal Quantity, string Justification, string? ReleasedBy, DateTimeOffset ReleasedAt);
 
 public static class ProductionPolicies
@@ -131,6 +132,7 @@ public static class ProductionEndpoints
                 .Require(i.WorkCenterId is null || await db.WorkCenters.AnyAsync(w => w.Id == i.WorkCenterId, ct), "workCenterId", "Not found")
                 .Require(i.ShiftId is null || await db.Shifts.AnyAsync(s => s.Id == i.ShiftId, ct), "shiftId", "Not found"),
             Search = (q, s) => q.Where(e => EF.Functions.ILike(e.Code, Like(s)) || EF.Functions.ILike(e.Name, Like(s)) || EF.Functions.ILike(e.Nickname!, Like(s))),
+            Filter = (q, query) => bool.TryParse(query["active"], out var active) ? q.Where(e => e.Active == active) : q,
             Order = q => q.OrderBy(e => e.Name),
             BeforeDelete = async (id, db, ct) => await db.ProductionReports.AnyAsync(r => r.EmployeeId == id, ct) ? "Employee has reports; deactivate instead" : null,
             WritePolicy = ProductionPolicies.Plan
@@ -142,6 +144,7 @@ public static class ProductionEndpoints
             Create = i => new ProductionOccurrence { Code = i.Code.Trim().ToUpper(), Description = i.Description.Trim(), Kind = i.Kind, StopsOrder = i.StopsOrder },
             Apply = (i, o) => { o.Code = i.Code.Trim().ToUpper(); o.Description = i.Description.Trim(); o.Kind = i.Kind; o.StopsOrder = i.StopsOrder; },
             Validate = (i, _, _) => Task.FromResult(Errors().Require(Has(i.Code), "code", "Required").Require(Has(i.Description), "description", "Required")),
+            Filter = (q, query) => Enum.TryParse<OccurrenceKind>(query["kind"], true, out var kind) ? q.Where(o => o.Kind == kind) : q,
             Order = q => q.OrderBy(o => o.Code),
             BeforeDelete = async (id, db, ct) => await db.ProductionReports.AnyAsync(r => r.ScrapOccurrenceId == id || r.DowntimeOccurrenceId == id, ct) ? "Occurrence is in use" : null,
             WritePolicy = ProductionPolicies.Plan
@@ -401,7 +404,9 @@ public static class ProductionEndpoints
     {
         var o = await db.ProductionOrders.AsNoTracking().Include(x => x.Product).Include(x => x.Operations).ThenInclude(x => x.Machine).FirstAsync(x => x.Id == id, ct);
         var progress = await svc.ProgressAsync(id, ct);
-        var customerPo = await db.SalesOrderLines.AsNoTracking().Where(l => l.ProductionOrderId == id).Select(l => l.Order!.CustomerPo).FirstOrDefaultAsync(ct);
+        var salesOrder = await db.SalesOrderLines.AsNoTracking().Where(l => l.ProductionOrderId == id).Select(l => new { l.Order!.Id, l.Order.Reference, l.Order.CustomerPo }).FirstOrDefaultAsync(ct);
+        var customerPo = salesOrder?.CustomerPo;
+        var related = await db.ProductionOrders.AsNoTracking().Where(x => x.Id == o.ParentOrderId || x.Id == o.PreviousOrderId).Select(x => new { x.Id, x.Reference }).ToListAsync(ct);
         var materials = await svc.MaterialStatesAsync(id, ct);
         var children = await db.ProductionOrders.AsNoTracking().Where(x => x.ParentOrderId == id).OrderBy(x => x.Number).Select(Summary).ToListAsync(ct);
         var warnings = new List<string>();
@@ -420,7 +425,8 @@ public static class ProductionEndpoints
         }).ToList();
         return new ProductionOrderOut(o.Id, o.Kind, o.Number, o.Reference, o.ProductId, o.Product!.Code, o.Product.Name, o.Product.StockUnit, o.CustomerId, o.Quantity, o.DueDate, o.PlannedStart, o.PlannedEnd, o.AdjustedStart, o.AdjustedEnd,
             o.Status, o.StatusReason, o.ParentOrderId, o.PreviousOrderId, o.Bales, o.Notes, o.CreatedBy, o.CreatedAt, o.ReleasedAt, o.FinishedAt, o.ClosedAt, o.ClosedBy, o.CostClosedAt, o.MaterialCost, o.ServiceCost, o.UnitCost,
-            progress.Good, progress.Scrap, progress.Received, progress.Receivable, progress.WorkInProcess, ops, materials, children, warnings, o.PrimaryTube, customerPo);
+            progress.Good, progress.Scrap, progress.Received, progress.Receivable, progress.WorkInProcess, ops, materials, children, warnings, o.PrimaryTube, customerPo,
+            salesOrder?.Id, salesOrder?.Reference, related.FirstOrDefault(x => x.Id == o.ParentOrderId)?.Reference, related.FirstOrDefault(x => x.Id == o.PreviousOrderId)?.Reference);
     }
 
     private static readonly Expression<Func<ProductionOrder, ProductionOrderSummaryOut>> Summary = o =>
@@ -433,7 +439,8 @@ public static class ProductionEndpoints
 
     private static readonly Expression<Func<OutsideShipment, OutsideShipmentOut>> ShipmentProjection = s =>
         new OutsideShipmentOut(s.Id, s.Operation!.OrderId, s.Operation.Order!.Reference, s.Operation.Sequence, s.SupplierId, s.Supplier!.Name, s.SentOn, s.Quantity, s.ReturnedQuantity, s.ScrapQuantity,
-            s.Quantity - s.ReturnedQuantity - s.ScrapQuantity, s.ServiceValue, s.InvoiceNumber, s.Notes);
+            s.Quantity - s.ReturnedQuantity - s.ScrapQuantity, s.ServiceValue, s.InvoiceNumber, s.Notes,
+            s.Operation.ExternalLeadDays == null ? (DateOnly?)null : s.SentOn.AddDays(s.Operation.ExternalLeadDays.Value));
 
     private static ProductionSettingsDto ToDto(ProductionSettings s) => new(s.OverrunTolerancePercent, s.HoursPerDay, s.WorkSaturdays, s.IssueLocationId, s.ReceiptLocationId);
 }

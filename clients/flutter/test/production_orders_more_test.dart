@@ -76,6 +76,9 @@ class _Fake {
   String release = 'ok';
   List<dynamic> childResult = [];
 
+  /// Extra fields of the order DTO (sales order, parent and previous references...).
+  Map<String, dynamic> extra = {};
+
   Map<String, dynamic> body(http.Request r) => jsonDecode(r.body) as Map<String, dynamic>;
   http.Request last(String method, String path) => log.lastWhere((r) => r.method == method && r.url.path == path);
   bool has(String method, String path) => log.any((r) => r.method == method && r.url.path == path);
@@ -127,6 +130,7 @@ class _Fake {
     'materials': materials,
     'children': children,
     'warnings': warnings,
+    ...extra,
   };
 
   late final client = MockClient((r) async {
@@ -135,8 +139,20 @@ class _Fake {
     final m = r.method;
     if (p == '/api/production/orders' && m == 'GET') return _json(_page(orders));
     if (p == '/api/production/orders' && m == 'POST') return _json({...order(), 'id': 7}, 201);
-    if (p == '/api/products') return _json(_page([{'id': 3, 'code': 'TB-50', 'name': 'Tubo 50x50'}]));
-    if (p == '/api/suppliers') return _json(_page([{'id': 5, 'code': 'F5', 'name': 'Galvano Sul'}]));
+    if (p == '/api/products') {
+      return _json(
+        _page([
+          {'id': 3, 'code': 'TB-50', 'name': 'Tubo 50x50'},
+        ]),
+      );
+    }
+    if (p == '/api/suppliers') {
+      return _json(
+        _page([
+          {'id': 5, 'code': 'F5', 'name': 'Galvano Sul'},
+        ]),
+      );
+    }
     if (p == '/api/production/orders/7' && m == 'GET') {
       if (orderStatus != 200) return _json({'title': 'Erro', 'detail': 'OF indisponível', 'status': orderStatus}, orderStatus);
       return _json(order());
@@ -182,7 +198,17 @@ class _Fake {
         'serviceCost': 200,
         'unitCost': 17,
         'lines': [
-          {'code': 'BOB-80', 'unit': 'KG', 'planned': 250, 'issued': 200, 'inScrap': 0, 'inFinishedGoods': 150, 'balance': 50, 'unitPrice': 6, 'balanceValue': 300},
+          {
+            'code': 'BOB-80',
+            'unit': 'KG',
+            'planned': 250,
+            'issued': 200,
+            'inScrap': 0,
+            'inFinishedGoods': 150,
+            'balance': 50,
+            'unitPrice': 6,
+            'balanceValue': 300,
+          },
         ],
       });
     }
@@ -204,10 +230,13 @@ Future<Session> _pump(WidgetTester tester, _Fake fake, Widget Function(Session s
   tester.view.physicalSize = const Size(1700, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final session = Session(api: ApiClient(baseUrl: 'http://api.test', client: fake.client, token: 'tok'))
-    ..username = 'u'
-    ..role = fake.role
-    ..permissions = rolePermissions[fake.role]!;
+  final session =
+      Session(
+          api: ApiClient(baseUrl: 'http://api.test', client: fake.client, token: 'tok'),
+        )
+        ..username = 'u'
+        ..role = fake.role
+        ..permissions = rolePermissions[fake.role]!;
   await tester.pumpWidget(
     MaterialApp(
       locale: const Locale('pt', 'BR'),
@@ -240,6 +269,11 @@ Future<void> _menu(WidgetTester tester, String item) async {
   await tester.tap(find.byKey(const ValueKey('of-menu')));
   await tester.pumpAndSettle();
   await tester.tap(find.text(item).last);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _confirmStep(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('confirm-step')));
   await tester.pumpAndSettle();
 }
 
@@ -294,7 +328,13 @@ void main() {
 
     testWidgets('initial status filter is applied and a reader has no new button', (tester) async {
       final fake = _Fake()..role = 'Reader';
-      await _pump(tester, fake, (s) => Scaffold(body: ProductionOrdersScreen(session: s, initialStatus: 'Created')));
+      await _pump(
+        tester,
+        fake,
+        (s) => Scaffold(
+          body: ProductionOrdersScreen(session: s, initialStatus: 'Created'),
+        ),
+      );
       final q = fake.last('GET', '/api/production/orders').url.queryParameters;
       expect(q['status'], 'Created');
       expect(q.containsKey('open'), isFalse);
@@ -355,6 +395,10 @@ void main() {
       await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
       await tester.tap(find.byKey(const ValueKey('of-release')));
       await tester.pumpAndSettle();
+      // Releasing says what it does first.
+      expect(find.text('Liberar OF 12?'), findsOneWidget);
+      expect(fake.has('POST', '/api/production/orders/7/release'), isFalse);
+      await _confirmStep(tester);
       expect(fake.body(fake.last('POST', '/api/production/orders/7/release'))['force'], isFalse);
       expect(find.text('OF liberada e material reservado'), findsOneWidget);
       expect(find.byKey(const ValueKey('of-release')), findsNothing);
@@ -365,6 +409,7 @@ void main() {
       await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
       await tester.tap(find.byKey(const ValueKey('of-release')));
       await tester.pumpAndSettle();
+      await _confirmStep(tester);
       expect(find.textContaining('Produto sem estrutura'), findsOneWidget);
       expect(find.text('Falta material'), findsNothing);
 
@@ -372,6 +417,7 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
       await tester.tap(find.byKey(const ValueKey('of-release')));
       await tester.pumpAndSettle();
+      await _confirmStep(tester);
       expect(find.text('Falta material'), findsOneWidget);
       expect(find.text('BOB-81'), findsNothing);
       await tester.tap(find.text('Voltar'));
@@ -397,10 +443,14 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
       await tester.pump(const Duration(seconds: 5));
       await _menu(tester, 'Gerar OFs de subconjuntos');
+      expect(find.text('Gerar OFs de subconjuntos?'), findsOneWidget);
+      expect(fake.has('POST', '/api/production/orders/7/child-orders'), isFalse);
+      await _confirmStep(tester);
       expect(find.text('2 OF(s) filha(s) gerada(s)'), findsOneWidget);
       fake.childResult = [];
       await tester.pump(const Duration(seconds: 5));
       await _menu(tester, 'Gerar OFs de subconjuntos');
+      await _confirmStep(tester);
       expect(find.text('Nenhuma OF filha necessária'), findsOneWidget);
 
       await _menu(tester, 'Programar');
@@ -410,17 +460,22 @@ void main() {
 
       await _menu(tester, 'Cancelar');
       expect(find.text('Cancelar OF 12'), findsOneWidget);
-      await tester.enterText(find.byType(TextField), 'Cliente desistiu');
-      await tester.tap(find.text('Confirmar'));
+      await tester.enterText(find.byKey(const ValueKey('cancel-reason')), 'Cliente desistiu');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('cancel-confirm')));
       await tester.pumpAndSettle();
       var b = fake.body(fake.last('POST', '/api/production/orders/7/cancel'));
       expect(b['reason'], 'Cliente desistiu');
       expect(b['technical'], isFalse);
 
-      await _menu(tester, 'Cancelamento técnico');
-      expect(find.text('Cancelamento técnico OF 12'), findsOneWidget);
-      await tester.enterText(find.byType(TextField), 'Erro de cadastro');
-      await tester.tap(find.text('Confirmar'));
+      // The technical kind is a switch in the same dialog, not a second menu entry.
+      await tester.pump(const Duration(seconds: 5));
+      await _menu(tester, 'Cancelar');
+      expect(find.text('Cancelamento técnico'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('cancel-reason')), 'Erro de cadastro');
+      await tester.tap(find.byKey(const ValueKey('cancel-technical')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('cancel-confirm')));
       await tester.pumpAndSettle();
       b = fake.body(fake.last('POST', '/api/production/orders/7/cancel'));
       expect(b['technical'], isTrue);
@@ -430,8 +485,7 @@ void main() {
       final fake = _Fake();
       await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
       await _menu(tester, 'Cancelar');
-      await tester.tap(find.text('Confirmar'));
-      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(find.byKey(const ValueKey('cancel-confirm'))).onPressed, isNull);
       expect(fake.has('POST', '/api/production/orders/7/cancel'), isFalse);
       expect(find.text('Cancelar OF 12'), findsOneWidget);
     });
@@ -469,7 +523,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(fake.body(fake.last('POST', '/api/production/orders/7/stop'))['reason'], 'Quebra de máquina');
 
+      // Let the earlier snackbars go before the next message is checked.
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pump(const Duration(seconds: 6));
       await _menu(tester, 'Finalizar');
+      // The balance still open on the operations is named before the OF is finished.
+      expect(find.text('Finalizar OF 12?'), findsOneWidget);
+      expect(find.textContaining('saldo nas operações'), findsOneWidget);
+      expect(fake.has('POST', '/api/production/orders/7/finish'), isFalse);
+      await _confirmStep(tester);
       expect(fake.has('POST', '/api/production/orders/7/finish'), isTrue);
       expect(find.text('OF finalizada'), findsOneWidget);
     });
@@ -481,6 +544,8 @@ void main() {
       expect(fake.has('POST', '/api/production/orders/7/reopen'), isTrue);
       await tester.pump(const Duration(seconds: 5));
       await _menu(tester, 'Encerrar');
+      expect(fake.has('POST', '/api/production/orders/7/close'), isFalse);
+      await _confirmStep(tester);
       expect(fake.has('POST', '/api/production/orders/7/close'), isTrue);
       expect(find.text('OF encerrada'), findsOneWidget);
     });
@@ -493,6 +558,8 @@ void main() {
       expect(find.text('Balanço de material'), findsOneWidget);
       expect(find.text('BOB-80'), findsOneWidget);
       await _menu(tester, 'Fechar custo');
+      expect(fake.has('POST', '/api/production/orders/7/close-cost'), isFalse);
+      await _confirmStep(tester);
       expect(fake.has('POST', '/api/production/orders/7/close-cost'), isTrue);
       expect(find.text('Custo fechado'), findsWidgets);
     });
@@ -569,7 +636,7 @@ void main() {
         ..ops = [_op(10), _op(20, description: 'Galvanizar', external: true, supplierId: 5)];
       await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
       await _tab(tester, 'Operações');
-      expect(find.text('Galvanizar (terceiro)'), findsOneWidget);
+      expect(find.text('Galvanizar (externo)'), findsOneWidget);
       expect(find.byKey(const ValueKey('op-send-10')), findsNothing);
       expect(find.byKey(const ValueKey('op-report-20')), findsNothing);
 
@@ -603,6 +670,123 @@ void main() {
       await _tab(tester, 'Operações');
       expect(find.byKey(const ValueKey('op-menu-10')), findsNothing);
       expect(find.byKey(const ValueKey('op-edit-process')), findsNothing);
+    });
+  });
+
+  group('vínculos e avisos', () {
+    testWidgets('the summary names the sales order, the customer PO and the previous OF; the link menu leads to them', (tester) async {
+      final fake = _Fake()
+        ..parentOrderId = 3
+        ..extra = {
+          'salesOrderId': 9,
+          'salesOrderReference': 'PV 9',
+          'customerPo': 'PC-4455',
+          'parentOrderReference': 'OF 3',
+          'previousOrderId': 4,
+          'previousOrderReference': 'OF 4',
+        };
+      await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
+      expect(find.text('PV 9'), findsOneWidget);
+      expect(find.text('PC-4455'), findsOneWidget);
+      expect(find.text('OF anterior OF 4'), findsOneWidget);
+      expect(find.text('OF pai OF 3'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('related-menu')));
+      await tester.pumpAndSettle();
+      expect(find.text('Pedido de venda PV 9'), findsOneWidget);
+      expect(find.text('OF pai OF 3'), findsWidgets);
+      expect(find.text('OF anterior OF 4'), findsWidgets);
+    });
+
+    testWidgets('a stopped OF shows its reason in a banner', (tester) async {
+      final fake = _Fake()
+        ..status = 'Stopped'
+        ..statusReason = 'Quebra de máquina';
+      await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
+      expect(find.byKey(const ValueKey('of-status-reason')), findsOneWidget);
+      expect(find.text('Parada: Quebra de máquina'), findsOneWidget);
+    });
+
+    testWidgets('receiving finished goods offers to open the stock document it created', (tester) async {
+      final fake = _Fake()..status = 'InProduction';
+      await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
+      await tester.tap(find.byKey(const ValueKey('of-receive')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Salvar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Entrada de produto acabado lançada'), findsOneWidget);
+      expect(find.text('Abrir movimentação'), findsOneWidget);
+    });
+
+    testWidgets('generating subassemblies moves to the summary where they are listed', (tester) async {
+      final fake = _Fake()..childResult = [{}];
+      await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
+      await _tab(tester, 'Materiais');
+      await _menu(tester, 'Gerar OFs de subconjuntos');
+      await _confirmStep(tester);
+      expect(find.text('Ordem'), findsOneWidget);
+    });
+
+    testWidgets('a user who moves material but cannot report sees a disabled Apontar with the reason', (tester) async {
+      final fake = _Fake()
+        ..status = 'Released'
+        ..role = 'Stock';
+      await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
+      await _tab(tester, 'Operações');
+      expect(find.byKey(const ValueKey('op-menu-10')), findsNothing);
+      final report = find.byKey(const ValueKey('op-report-10'));
+      expect(report, findsOneWidget);
+      expect(tester.widget<IconButton>(report).onPressed, isNull);
+      expect(tester.widget<IconButton>(report).tooltip, 'Sem permissão para apontar');
+    });
+
+    testWidgets('the process dialog moves rows, numbers them by position and asks before dropping edits', (tester) async {
+      final fake = _Fake()..ops = [_op(10, description: 'Perfilar'), _op(20, description: 'Cortar')];
+      await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
+      await _tab(tester, 'Operações');
+      await tester.tap(find.byKey(const ValueKey('op-edit-process')));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('process-desc-0'))).controller!.text, 'Perfilar');
+      expect(tester.widget<IconButton>(find.byKey(const ValueKey('process-up-0'))).onPressed, isNull);
+      expect(tester.widget<IconButton>(find.byKey(const ValueKey('process-del-0'))).tooltip, contains('não pode ser removida'));
+      await tester.tap(find.byKey(const ValueKey('process-down-0')));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('process-desc-0'))).controller!.text, 'Cortar');
+      // An edit was made: Cancelar asks first.
+      await tester.tap(find.byKey(const ValueKey('process-cancel')));
+      await tester.pumpAndSettle();
+      expect(find.text('Descartar alterações?'), findsOneWidget);
+      await tester.tap(find.text('Continuar editando'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('process-desc-0')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('process-save')));
+      await tester.pumpAndSettle();
+      final lines = (fake.body(fake.last('PUT', '/api/production/orders/7/process'))['operations'] as List).cast<Map<String, dynamic>>();
+      expect(lines.map((l) => l['description']), ['Cortar', 'Perfilar']);
+      expect(lines.map((l) => l['sequence']), [20, 10]);
+    });
+
+    testWidgets('the new OF form folds the rare fields', (tester) async {
+      final fake = _Fake();
+      await _pump(tester, fake, (s) => Scaffold(body: ProductionOrdersScreen(session: s)));
+      await tester.tap(find.text('Nova Ordem de Fabricação'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('field-quantity')), findsOneWidget);
+      expect(find.byKey(const ValueKey('field-primaryTube')), findsNothing);
+      expect(find.byKey(const ValueKey('field-notes')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('form-more')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('field-primaryTube')), findsOneWidget);
+    });
+
+    testWidgets('cancelling the new OF form does not reload the list', (tester) async {
+      final fake = _Fake();
+      await _pump(tester, fake, (s) => Scaffold(body: ProductionOrdersScreen(session: s)));
+      final loads = fake.log.where((r) => r.method == 'GET' && r.url.path == '/api/production/orders').length;
+      await tester.tap(find.text('Nova Ordem de Fabricação'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(fake.log.where((r) => r.method == 'GET' && r.url.path == '/api/production/orders').length, loads);
     });
   });
 

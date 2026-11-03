@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -8,15 +9,20 @@ import '../reports/nf_doc.dart';
 import '../reports/print_docs.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
+import '../widgets/discard_guard.dart' show confirmDiscard;
 import '../widgets/entity_form.dart';
 import '../widgets/load_error.dart';
+import '../widgets/pipeline.dart' show confirmStep;
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
 import 'customers.dart';
 import 'orders.dart';
 import 'product_detail.dart';
+import 'production_cancel_dialog.dart';
 import 'production_floor.dart';
+import 'sales_common.dart' show openSalesOrder;
 import 'stock_documents.dart';
+import 'suppliers.dart' show openSupplier;
 
 const openProductionStatuses = ['Created', 'Released', 'Stopped', 'InProduction'];
 const runningProductionStatuses = ['Released', 'InProduction'];
@@ -35,16 +41,18 @@ const productionOrderFields = [
   FieldSpec('dueDate', 'Data de entrega', type: FieldType.date, required: true),
   FieldSpec('kind', 'Tipo', type: FieldType.choice, choices: productionKinds, required: true, defaultValue: 'Standard'),
   FieldSpec('customerId', 'Cliente', type: FieldType.lookup, lookup: LookupSpec('/api/customers')),
+  // Rarely typed by hand: subassemblies are generated from the parent, and the rest is on the paper only.
   FieldSpec(
     'parentOrderId',
     'OF pai',
     type: FieldType.lookup,
     lookup: LookupSpec('/api/production/orders', query: {'open': true}),
+    advanced: true,
   ),
-  FieldSpec('previousOrderId', 'OF anterior', type: FieldType.lookup, lookup: LookupSpec('/api/production/orders')),
-  FieldSpec('bales', 'Amarrados', type: FieldType.integer),
-  FieldSpec('primaryTube', 'Tubo primário (perfila)', hint: 'Ex.: Rolo 14,00 x 0,90 mm'),
-  FieldSpec('notes', 'Observações'),
+  FieldSpec('previousOrderId', 'OF anterior', type: FieldType.lookup, lookup: LookupSpec('/api/production/orders'), advanced: true),
+  FieldSpec('bales', 'Amarrados', type: FieldType.integer, advanced: true),
+  FieldSpec('primaryTube', 'Tubo primário (perfila)', hint: 'Ex.: Rolo 14,00 x 0,90 mm', advanced: true),
+  FieldSpec('notes', 'Observações', advanced: true),
 ];
 
 const productionUpdateFields = [
@@ -67,8 +75,9 @@ Future<void> newProductionOrder(BuildContext context, Session session, {VoidCall
     fields: productionOrderFields,
     submit: (b) => session.api.post('/api/production/orders', b),
   );
+  if (o == null) return;
   onSaved?.call();
-  if (o == null || o['id'] is! int || !context.mounted) return;
+  if (o['id'] is! int || !context.mounted) return;
   await openProductionOrder(context, session, o['id'] as int);
 }
 
@@ -142,10 +151,12 @@ class ProductionOrderScreen extends StatefulWidget {
   State<ProductionOrderScreen> createState() => _ProductionOrderScreenState();
 }
 
-class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
+class _ProductionOrderScreenState extends State<ProductionOrderScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(length: 6, vsync: this);
   Map<String, dynamic>? _o;
   String? _error;
   int _version = 0;
+  bool _releasing = false;
   Future<dynamic>? _docs;
   Future<dynamic>? _rec;
 
@@ -163,6 +174,12 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -203,6 +220,24 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
   }
 
   Future<void> _release() async {
+    // A second tap before the first answer would release twice.
+    if (_releasing) return;
+    _releasing = true;
+    try {
+      final go = await confirmStep(
+        context,
+        title: 'Liberar ${_o!['reference']}?',
+        message: 'O material do roteiro é reservado e a OF entra na fila da produção. Se faltar material, você decide se libera mesmo assim.',
+        confirmLabel: 'Liberar',
+        icon: Icons.play_arrow,
+      );
+      if (go && mounted) await _releaseNow();
+    } finally {
+      _releasing = false;
+    }
+  }
+
+  Future<void> _releaseNow() async {
     try {
       final r = await api.post('$base/release', {'force': false}) as Map<String, dynamic>;
       if (!mounted) return;
@@ -243,6 +278,8 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
       if (force != true || !mounted) return;
       final r = await runAction(context, () => api.post('$base/release', {'force': true}), success: 'OF liberada com reserva parcial');
       if (r is Map<String, dynamic>) _set(r['order']);
+    } catch (e) {
+      if (mounted) showError(context, friendlyError(e));
     }
   }
 
@@ -250,6 +287,55 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
     final reason = await promptText(context, title: title, label: 'Motivo', required: true);
     if (reason == null || !mounted) return;
     await _post(action, body: {'reason': reason, 'technical': technical});
+  }
+
+  /// Cancel with the reason and, as an option, the technical kind: the OF is dropped for a planning reason and is not counted as a loss.
+  Future<void> _cancel() async {
+    final r = await showDialog<({String reason, bool technical})>(
+      context: context,
+      builder: (_) => CancelOrderDialog(reference: '${_o!['reference']}'),
+    );
+    if (r == null || !mounted) return;
+    await _post('cancel', body: {'reason': r.reason, 'technical': r.technical}, success: 'OF cancelada');
+  }
+
+  /// Finishing with quantity still to be made or waiting in process says so before it is done.
+  Future<void> _finish() async {
+    final o = _o!;
+    final open = (o['operations'] as List).cast<Map<String, dynamic>>().fold<num>(0, (a, op) => a + ((op['remaining'] as num?) ?? 0));
+    final wip = (o['workInProcess'] as num?) ?? 0;
+    final notes = [if (open > 0) 'Ainda há ${fmt(open)} peça(s) de saldo nas operações.', if (wip > 0) 'Há ${fmt(wip)} em processo.'];
+    final go = await confirmStep(
+      context,
+      title: 'Finalizar ${o['reference']}?',
+      message: [...notes, 'Depois de finalizada, a OF não recebe mais apontamentos. Dá para reabri-la enquanto não for encerrada.'].join('\n'),
+      confirmLabel: 'Finalizar',
+      icon: Icons.flag_outlined,
+    );
+    if (go && mounted) await _post('finish', success: 'OF finalizada');
+  }
+
+  Future<void> _closeOrder() async {
+    final go = await confirmStep(
+      context,
+      title: 'Encerrar ${_o!['reference']}?',
+      message: 'A OF sai das listas de abertas e passa a aguardar o fechamento de custo. Não recebe mais entradas nem apontamentos.',
+      confirmLabel: 'Encerrar',
+      icon: Icons.lock_outline,
+    );
+    if (go && mounted) await _post('close', success: 'OF encerrada');
+  }
+
+  Future<void> _closeCost() async {
+    final go = await confirmStep(
+      context,
+      title: 'Fechar o custo de ${_o!['reference']}?',
+      message: 'O custo de material e de serviço de terceiros é gravado como definitivo para esta OF.',
+      confirmLabel: 'Fechar custo',
+      icon: Icons.calculate_outlined,
+      danger: true,
+    );
+    if (go && mounted) await _post('close-cost', success: 'Custo fechado');
   }
 
   Future<void> _edit() async {
@@ -274,17 +360,27 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
   }
 
   Future<void> _children() async {
+    final go = await confirmStep(
+      context,
+      title: 'Gerar OFs de subconjuntos?',
+      message: 'Cria uma OF para cada subconjunto da estrutura de ${_o!['reference']} que ainda não tem uma.',
+      confirmLabel: 'Gerar',
+      icon: Icons.account_tree_outlined,
+    );
+    if (!go || !mounted) return;
     final r = await runAction(context, () => api.post('$base/child-orders', {}));
     if (r is List && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r.isEmpty ? 'Nenhuma OF filha necessária' : '${r.length} OF(s) filha(s) gerada(s)')));
-      unawaited(_load());
+      await _load();
+      // The new orders are listed on the summary, where the user would look for them.
+      if (r.isNotEmpty && mounted) _tabs.animateTo(0);
     }
   }
 
   Future<void> _schedule() async {
     final r = await runAction(context, () => api.post('$base/schedule', {}));
     if (r is! List || !mounted) return;
-    await showScheduleResult(context, r.cast<Map<String, dynamic>>());
+    await showScheduleResult(context, r.cast<Map<String, dynamic>>(), session: s);
     unawaited(_load());
   }
 
@@ -301,7 +397,18 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
       ],
       submit: (b) => api.post('$base/receipts', b),
     );
-    if (r != null) unawaited(_load());
+    if (r == null) return;
+    unawaited(_load());
+    final doc = r['id'];
+    if (mounted && doc is int) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Entrada de produto acabado lançada'),
+          persist: false, // a snackbar with an action would otherwise stay until dismissed and hold back the next message
+          action: SnackBarAction(label: 'Abrir movimentação', onPressed: () => unawaited(openStockDocument(context, s, doc))),
+        ),
+      );
+    }
   }
 
   List<Widget> _actions() {
@@ -316,29 +423,15 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
       if (s.canProduce && open) PopupMenuItem(value: _children, child: const Text('Gerar OFs de subconjuntos')),
       if (s.canProduce && open) PopupMenuItem(value: _schedule, child: const Text('Programar')),
       if (s.canProduce && running) PopupMenuItem(value: () => _reason('stop', 'Parar ${_o!['reference']}'), child: const Text('Parar')),
-      if (s.canProduce && running)
-        PopupMenuItem(
-          value: () => _post('finish', success: 'OF finalizada'),
-          child: const Text('Finalizar'),
-        ),
+      if (s.canProduce && running) PopupMenuItem(value: _finish, child: const Text('Finalizar')),
       if (s.canProduce && status == 'Finished')
         PopupMenuItem(
           value: () => _post('reopen', success: 'OF reaberta'),
           child: const Text('Reabrir'),
         ),
-      if (s.canProduce && status == 'Finished')
-        PopupMenuItem(
-          value: () => _post('close', success: 'OF encerrada'),
-          child: const Text('Encerrar'),
-        ),
-      if (s.canProduce && status == 'Closed' && _o!['costClosedAt'] == null)
-        PopupMenuItem(
-          value: () => _post('close-cost', success: 'Custo fechado'),
-          child: const Text('Fechar custo'),
-        ),
-      if (s.canProduce && open) PopupMenuItem(value: () => _reason('cancel', 'Cancelar ${_o!['reference']}'), child: const Text('Cancelar')),
-      if (s.canProduce && open)
-        PopupMenuItem(value: () => _reason('cancel', 'Cancelamento técnico ${_o!['reference']}', technical: true), child: const Text('Cancelamento técnico')),
+      if (s.canProduce && status == 'Finished') PopupMenuItem(value: _closeOrder, child: const Text('Encerrar')),
+      if (s.canProduce && status == 'Closed' && _o!['costClosedAt'] == null) PopupMenuItem(value: _closeCost, child: const Text('Fechar custo')),
+      if (s.canProduce && open) PopupMenuItem(value: _cancel, child: const Text('Cancelar')),
       if (s.canProduce && status == 'Created') PopupMenuItem(value: _delete, child: const Text('Excluir')),
     ];
     return [
@@ -352,7 +445,15 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
           label: const Text('Retomar'),
         ),
       if (s.canMoveProduction && running)
-        TextButton.icon(key: const ValueKey('of-receive'), onPressed: _receive, icon: const Icon(Icons.move_to_inbox), label: const Text('Entrada PA')),
+        Tooltip(
+          message: 'Entrada de produto acabado no estoque',
+          child: TextButton.icon(
+            key: const ValueKey('of-receive'),
+            onPressed: _receive,
+            icon: const Icon(Icons.move_to_inbox),
+            label: const Text('Entrada PA'),
+          ),
+        ),
       if (menu.isNotEmpty) PopupMenuButton<VoidCallback>(key: const ValueKey('of-menu'), onSelected: (f) => f(), itemBuilder: (_) => menu),
     ];
   }
@@ -360,49 +461,68 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
   @override
   Widget build(BuildContext context) {
     final o = _o;
-    return DefaultTabController(
-      length: 6,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(o == null ? 'Ordem de fabricação' : '${o['reference']} · ${o['productCode']}', overflow: TextOverflow.ellipsis),
-          actions: [
-            if (o != null)
-              RelatedMenu(
-                links: [
-                  RelatedLink(Icons.inventory_2_outlined, 'Produto: ${o['productCode']}', () => openProduct(context, s, o['productId'] as int)),
-                  if (o['customerId'] is int) RelatedLink(Icons.business_outlined, 'Cliente', () => openCustomer(context, s, o['customerId'] as int)),
-                ],
-              ),
-            ..._actions(),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(o == null ? 'Ordem de fabricação' : '${o['reference']} · ${o['productCode']}', overflow: TextOverflow.ellipsis),
+        actions: [
+          if (o != null) RelatedMenu(links: _relatedLinks(o)),
+          ..._actions(),
+        ],
+        bottom: TabBar(
+          controller: _tabs,
+          isScrollable: true,
+          tabs: const [
+            Tab(text: 'Resumo'),
+            Tab(text: 'Operações'),
+            Tab(text: 'Materiais'),
+            Tab(text: 'Apontamentos'),
+            Tab(text: 'Beneficiamento'),
+            Tab(text: 'Custo'),
           ],
-          bottom: const TabBar(
-            isScrollable: true,
-            tabs: [
-              Tab(text: 'Resumo'),
-              Tab(text: 'Operações'),
-              Tab(text: 'Materiais'),
-              Tab(text: 'Apontamentos'),
-              Tab(text: 'Terceiros'),
-              Tab(text: 'Custo'),
-            ],
-          ),
         ),
-        body: _error != null && o == null
-            ? LoadError(message: _error!, onRetry: _load)
-            : o == null
-            ? const Center(child: CircularProgressIndicator())
-            : TabBarView(
-                children: [
-                  _summary(o),
-                  _operations(o),
-                  _materials(o),
-                  ReportsView(key: ValueKey('rep-$_version'), session: s, order: o, onChanged: _load),
-                  ShipmentsView(key: ValueKey('ship-$_version'), session: s, orderId: widget.id, onChanged: _load),
-                  _cost(o),
-                ],
-              ),
       ),
+      body: _error != null && o == null
+          ? LoadError(message: _error!, onRetry: _load)
+          : o == null
+          ? const Center(child: CircularProgressIndicator())
+          : TabBarView(
+              controller: _tabs,
+              children: [
+                _summary(o),
+                _operations(o),
+                _materials(o),
+                ReportsView(key: ValueKey('rep-$_version'), session: s, order: o, onChanged: _load),
+                ShipmentsView(key: ValueKey('ship-$_version'), session: s, orderId: widget.id, onChanged: _load),
+                _cost(o),
+              ],
+            ),
     );
+  }
+
+  /// The records this OF points to: product, customer, the sales order it was made for, parent, previous and child OFs, and the suppliers of outside operations.
+  List<RelatedLink> _relatedLinks(Map<String, dynamic> o) {
+    final children = (o['children'] as List).cast<Map<String, dynamic>>();
+    final suppliers = {
+      for (final op in (o['operations'] as List).cast<Map<String, dynamic>>())
+        if (op['external'] == true && op['supplierId'] is int) op['supplierId'] as int: op['sequence'],
+    };
+    return [
+      RelatedLink(Icons.inventory_2_outlined, 'Produto: ${o['productCode']}', () => openProduct(context, s, o['productId'] as int)),
+      if (o['customerId'] is int) RelatedLink(Icons.business_outlined, 'Cliente', () => openCustomer(context, s, o['customerId'] as int)),
+      if (o['salesOrderId'] is int)
+        RelatedLink(
+          Icons.receipt_long_outlined,
+          'Pedido de venda ${o['salesOrderReference'] ?? ''}',
+          () => openSalesOrder(context, s, o['salesOrderId'] as int),
+        ),
+      if (o['parentOrderId'] is int)
+        RelatedLink(Icons.north, 'OF pai ${o['parentOrderReference'] ?? ''}', () => openProductionOrder(context, s, o['parentOrderId'] as int)),
+      if (o['previousOrderId'] is int)
+        RelatedLink(Icons.undo, 'OF anterior ${o['previousOrderReference'] ?? ''}', () => openProductionOrder(context, s, o['previousOrderId'] as int)),
+      for (final c in children)
+        RelatedLink(Icons.subdirectory_arrow_right, 'OF filha ${c['reference']}', () => openProductionOrder(context, s, c['id'] as int)),
+      for (final e in suppliers.entries) RelatedLink(Icons.local_shipping_outlined, 'Fornecedor da operação ${e.value}', () => openSupplier(context, s, e.key)),
+    ];
   }
 
   Widget _summary(Map<String, dynamic> o) {
@@ -412,6 +532,23 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (['Stopped', 'Cancelled'].contains(o['status']) && o['statusReason'] != null)
+          Card(
+            key: const ValueKey('of-status-reason'),
+            color: cs.errorContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Icon(o['status'] == 'Stopped' ? Icons.pause_circle_outline : Icons.block, color: cs.onErrorContainer),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text('${productionStatuses[o['status']] ?? o['status']}: ${o['statusReason']}', style: TextStyle(color: cs.onErrorContainer)),
+                  ),
+                ],
+              ),
+            ),
+          ),
         if (warnings.isNotEmpty)
           Card(
             color: cs.errorContainer,
@@ -422,6 +559,9 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
           child: InfoGrid([
             ('Situação', '${productionStatuses[o['status']] ?? o['status']}${o['statusReason'] == null ? '' : ' · ${o['statusReason']}'}'),
             ('Tipo', productionKinds[o['kind']] ?? fmt(o['kind'])),
+            ('Pedido de venda', fmt(o['salesOrderReference'])),
+            ('Pedido do cliente', fmt(o['customerPo'])),
+            ('OF anterior', fmt(o['previousOrderReference'])),
             ('Produto', '${o['productCode']} · ${o['productName']}'),
             ('Quantidade', '${fmt(o['quantity'])} ${o['productUnit']}'),
             ('Entrega', fmtDay(o['dueDate'])),
@@ -447,16 +587,22 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
             ('Em processo', fmt(o['workInProcess'])),
           ]),
         ),
-        if (o['parentOrderId'] != null || children.isNotEmpty) ...[
+        if (o['parentOrderId'] != null || o['previousOrderId'] != null || children.isNotEmpty) ...[
           const SizedBox(height: 12),
           Section(
             title: 'Subconjuntos',
             actions: [
+              if (o['previousOrderId'] != null)
+                TextButton.icon(
+                  onPressed: () => openProductionOrder(context, s, o['previousOrderId'] as int).then((_) => _load()),
+                  icon: const Icon(Icons.undo),
+                  label: Text('OF anterior ${o['previousOrderReference'] ?? ''}'.trim()),
+                ),
               if (o['parentOrderId'] != null)
                 TextButton.icon(
                   onPressed: () => openProductionOrder(context, s, o['parentOrderId'] as int).then((_) => _load()),
                   icon: const Icon(Icons.north),
-                  label: const Text('OF pai'),
+                  label: Text('OF pai ${o['parentOrderReference'] ?? ''}'.trim()),
                 ),
             ],
             child: SimpleTable(
@@ -504,7 +650,10 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
   }
 
   Future<void> _editProcess(List<Map<String, dynamic>> ops) async {
-    final lines = await showDialog<List<Map<String, dynamic>>>(context: context, builder: (_) => _ProcessDialog(ops: ops));
+    final lines = await showDialog<List<Map<String, dynamic>>>(
+      context: context,
+      builder: (_) => _ProcessDialog(ops: ops),
+    );
     if (lines == null || !mounted) return;
     final r = await runAction(context, () => api.put('$base/process', {'operations': lines}), success: 'Processo salvo');
     if (r != null) _set(r);
@@ -569,6 +718,15 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
           build: (f) => buildOutsideNfPdf(api, r, f),
         );
       }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Remessa ${r['reference']} registrada'),
+            persist: false,
+            action: SnackBarAction(label: 'Ver remessas', onPressed: () => _tabs.animateTo(4)),
+          ),
+        );
+      }
     }
   }
 
@@ -582,12 +740,17 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
           title: 'Roteiro',
           actions: [
             if (o['status'] == 'Created' && s.canProduce)
-              TextButton.icon(key: const ValueKey('op-edit-process'), onPressed: () => _editProcess(ops), icon: const Icon(Icons.edit_outlined), label: const Text('Editar processo')),
+              TextButton.icon(
+                key: const ValueKey('op-edit-process'),
+                onPressed: () => _editProcess(ops),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Editar processo'),
+              ),
           ],
           child: SimpleTable(
             columns: [
               col('Seq.', 'sequence'),
-              ColumnSpec('Descrição', (e) => '${e['description'] ?? ''}${e['external'] == true ? ' (terceiro)' : ''}'),
+              ColumnSpec('Descrição', (e) => '${e['description'] ?? ''}${e['external'] == true ? ' (externo)' : ''}'),
               col('Máquina', 'machineCode'),
               col('Tolerância', 'tolerance'),
               ColumnSpec('Medidas', (e) => [e['measureStart'], e['measureEnd']].where((m) => m != null).join(' / ')),
@@ -597,38 +760,47 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
               ColumnSpec('Programado', (e) => e['plannedStart'] == null ? '' : '${fmtDay(e['plannedStart'])} a ${fmtDay(e['plannedEnd'])}'),
               col('Boas', 'good', numeric: true),
               col('Refugo', 'scrap', numeric: true),
-              col('Em terceiro', 'inTransit', numeric: true),
+              col('Em beneficiamento', 'inTransit', numeric: true),
               col('Limite', 'limit', numeric: true),
               col('Saldo', 'remaining', numeric: true),
             ],
             rows: ops,
             actionsFirst: true,
-            actions: s.canProduce && open
+            actions: open && (s.canProduce || s.canMoveProduction)
                 ? (op) => [
-                    if (reportable && op['external'] != true)
+                    // A user who can move material but not report sees why the button does nothing.
+                    if (reportable && !s.canProduce)
+                      IconButton(
+                        key: ValueKey('op-report-${op['sequence']}'),
+                        tooltip: 'Sem permissão para apontar',
+                        icon: const Icon(Icons.edit_note, size: 20),
+                        onPressed: null,
+                      ),
+                    if (s.canProduce && reportable && op['external'] != true)
                       IconButton(
                         key: ValueKey('op-report-${op['sequence']}'),
                         tooltip: 'Apontar',
                         icon: const Icon(Icons.edit_note, size: 20),
                         onPressed: () => _report(op),
                       ),
-                    if (reportable && op['external'] == true)
+                    if (s.canProduce && reportable && op['external'] == true)
                       IconButton(
                         key: ValueKey('op-send-${op['sequence']}'),
-                        tooltip: 'Enviar ao terceiro',
+                        tooltip: 'Enviar ao beneficiamento',
                         icon: const Icon(Icons.local_shipping_outlined, size: 20),
                         onPressed: () => _send(op),
                       ),
-                    PopupMenuButton<VoidCallback>(
-                      key: ValueKey('op-menu-${op['sequence']}'),
-                      onSelected: (f) => f(),
-                      itemBuilder: (_) => [
-                        PopupMenuItem(value: () => _outsource(op), child: Text(op['external'] == true ? 'Trocar fornecedor' : 'Beneficiamento externo')),
-                        if (op['external'] == true) PopupMenuItem(value: () => _internal(op), child: const Text('Voltar para interno')),
-                        PopupMenuItem(value: () => _overrun(op), child: const Text('Liberar excedente')),
-                        PopupMenuItem(value: () => _details(op), child: const Text('Tolerância e medidas')),
-                      ],
-                    ),
+                    if (s.canProduce)
+                      PopupMenuButton<VoidCallback>(
+                        key: ValueKey('op-menu-${op['sequence']}'),
+                        onSelected: (f) => f(),
+                        itemBuilder: (_) => [
+                          PopupMenuItem(value: () => _outsource(op), child: Text(op['external'] == true ? 'Trocar fornecedor' : 'Beneficiamento externo')),
+                          if (op['external'] == true) PopupMenuItem(value: () => _internal(op), child: const Text('Voltar para interno')),
+                          PopupMenuItem(value: () => _overrun(op), child: const Text('Liberar excedente')),
+                          PopupMenuItem(value: () => _details(op), child: const Text('Tolerância e medidas')),
+                        ],
+                      ),
                   ]
                 : null,
           ),
@@ -700,8 +872,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
           IconButton(
             tooltip: 'Abrir',
             icon: const Icon(Icons.open_in_new, size: 20),
-            onPressed: () => openStockDocument(context, s, d['id'] as int)
-                .then((_) => _load()),
+            onPressed: () => openStockDocument(context, s, d['id'] as int).then((_) => _load()),
           ),
         ],
       ),
@@ -841,6 +1012,29 @@ class _ProcessRow {
 
 class _ProcessDialogState extends State<_ProcessDialog> {
   late final List<_ProcessRow> _rows = [for (final op in widget.ops) _ProcessRow(op)];
+  String _initial = '';
+
+  /// What the dialog holds, to tell whether leaving would lose an edit.
+  String _signature() => [for (final r in _rows) '${r.sequence}|${r.description.text}|${r.tolerance.text}|${r.start.text}|${r.end.text}'].join('\n');
+
+  bool get _dirty => _signature() != _initial;
+
+  @override
+  void initState() {
+    super.initState();
+    _initial = _signature();
+  }
+
+  void _move(int i, int delta) => setState(() {
+    final r = _rows.removeAt(i);
+    _rows.insert(i + delta, r);
+  });
+
+  Future<void> _cancel() async {
+    if (!_dirty || await confirmDiscard(context)) {
+      if (mounted) Navigator.pop(context);
+    }
+  }
 
   @override
   void dispose() {
@@ -850,7 +1044,12 @@ class _ProcessDialogState extends State<_ProcessDialog> {
     super.dispose();
   }
 
-  Widget _field(TextEditingController c, String label, {Key? key}) => TextField(key: key, controller: c, onChanged: (_) => setState(() {}), decoration: InputDecoration(labelText: label, isDense: true));
+  Widget _field(TextEditingController c, String label, {Key? key}) => TextField(
+    key: key,
+    controller: c,
+    onChanged: (_) => setState(() {}),
+    decoration: InputDecoration(labelText: label, isDense: true),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -872,7 +1071,8 @@ class _ProcessDialogState extends State<_ProcessDialog> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Padding(padding: const EdgeInsets.only(top: 12, right: 8), child: Text('${r.sequence ?? (i + 1) * 10}')),
+                      // The server renumbers 10, 20, 30... by position, so this is the number the operation will have.
+                      Padding(padding: const EdgeInsets.only(top: 12, right: 8), child: Text('${(i + 1) * 10}')),
                       Expanded(flex: 4, child: _field(r.description, 'Descrição da operação', key: ValueKey('process-desc-$i'))),
                       const SizedBox(width: 8),
                       Expanded(flex: 2, child: _field(r.tolerance, 'Requisitos/Tolerância')),
@@ -881,21 +1081,38 @@ class _ProcessDialogState extends State<_ProcessDialog> {
                       const SizedBox(width: 8),
                       Expanded(flex: 2, child: _field(r.end, 'Final')),
                       IconButton(
+                        key: ValueKey('process-up-$i'),
+                        tooltip: 'Subir',
+                        icon: const Icon(Icons.arrow_upward),
+                        onPressed: i == 0 ? null : () => _move(i, -1),
+                      ),
+                      IconButton(
+                        key: ValueKey('process-down-$i'),
+                        tooltip: 'Descer',
+                        icon: const Icon(Icons.arrow_downward),
+                        onPressed: i == _rows.length - 1 ? null : () => _move(i, 1),
+                      ),
+                      IconButton(
                         key: ValueKey('process-del-$i'),
-                        tooltip: 'Remover',
+                        tooltip: r.sequence != null ? 'Operação do roteiro da OF: não pode ser removida aqui' : 'Remover',
                         icon: const Icon(Icons.delete_outline),
                         onPressed: r.sequence != null ? null : () => setState(() => _rows.removeAt(i).dispose()),
                       ),
                     ],
                   ),
                 ),
-              TextButton.icon(key: const ValueKey('process-add'), onPressed: () => setState(() => _rows.add(_ProcessRow(null))), icon: const Icon(Icons.add), label: const Text('Adicionar operação')),
+              TextButton.icon(
+                key: const ValueKey('process-add'),
+                onPressed: () => setState(() => _rows.add(_ProcessRow(null))),
+                icon: const Icon(Icons.add),
+                label: const Text('Adicionar operação'),
+              ),
             ],
           ),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        TextButton(key: const ValueKey('process-cancel'), onPressed: _cancel, child: const Text('Cancelar')),
         FilledButton(
           key: const ValueKey('process-save'),
           onPressed: !valid
