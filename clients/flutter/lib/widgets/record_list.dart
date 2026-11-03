@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api.dart';
 import '../entities.dart';
 import '../prefs.dart';
+import 'record_nav.dart';
 
 /// One entry of a [RecordList] row menu; the list reloads after [run].
 class RowAction {
@@ -88,11 +91,93 @@ class RecordListState extends State<RecordList> {
   final _horizontal = ScrollController();
   int? _sortColumn;
   bool _ascending = true;
+  DateTime? _loadedAt;
+  bool _stale = false;
+  bool _wasActive = true;
+  Timer? _closeTimer;
 
   @override
   void initState() {
     super.initState();
     reload();
+    RecordTrail.closed.addListener(_onPageClosed);
+    unawaited(_restoreView());
+  }
+
+  /// A list kept alive behind another screen, or covered by a record page, reloads when it shows again if it may be out of date.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final active = TickerMode.valuesOf(context).enabled;
+    final at = _loadedAt;
+    if (active && !_wasActive && (_stale || at == null || DateTime.now().difference(at) > const Duration(seconds: 30))) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(reload());
+      });
+    }
+    _wasActive = active;
+  }
+
+  /// A page opened from some list closed: whatever it saved is on the server, so show it.
+  void _onPageClosed() {
+    _closeTimer?.cancel();
+    _closeTimer = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      if (!TickerMode.valuesOf(context).enabled) {
+        _stale = true;
+        return;
+      }
+      final at = _loadedAt;
+      if (at == null || DateTime.now().difference(at) > const Duration(seconds: 1)) unawaited(reload());
+    });
+  }
+
+  static Map<String, String?> _filterValues(RecordList w) => {for (final f in w.filters.whereType<ChoiceFilter>()) f.label: f.value};
+
+  String get _viewKey => 'listView:${widget.path}';
+
+  /// Sort order and "all but not set" filters come back the way the user left them.
+  Future<void> _restoreView() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString(_viewKey);
+      if (raw == null || !mounted) return;
+      final j = jsonDecode(raw) as Map<String, dynamic>;
+      final col = j['sort'];
+      if (col is int && col >= 0 && col < widget.columns.length) {
+        setState(() {
+          _sortColumn = col;
+          _ascending = j['asc'] != false;
+        });
+      }
+      final saved = j['filters'];
+      if (saved is Map) {
+        for (final f in widget.filters.whereType<ChoiceFilter>()) {
+          final v = saved[f.label];
+          // A screen that starts on a value (a deep link from an alert, a default status) keeps it.
+          if (f.value == null && v is String && f.choices.containsKey(v)) f.onChanged(v);
+        }
+      }
+    } catch (e) {
+      debugPrint('record_list: Local storage is best effort; the list opens with its defaults: $e');
+    }
+  }
+
+  Future<void> _saveView() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final filters = {
+        for (final e in _filterValues(widget).entries)
+          if (e.value != null) e.key: e.value,
+      };
+      if (_sortColumn == null && filters.isEmpty) {
+        await p.remove(_viewKey);
+      } else {
+        await p.setString(_viewKey, jsonEncode({'sort': _sortColumn, 'asc': _ascending, 'filters': filters}));
+      }
+    } catch (e) {
+      debugPrint('record_list: Local storage is best effort; the in-memory value stays: $e');
+    }
   }
 
   @override
@@ -102,10 +187,13 @@ class RecordListState extends State<RecordList> {
       _skip = 0;
       reload();
     }
+    if (oldWidget.path == widget.path && !mapEquals(_filterValues(oldWidget), _filterValues(widget))) unawaited(_saveView());
   }
 
   @override
   void dispose() {
+    RecordTrail.closed.removeListener(_onPageClosed);
+    _closeTimer?.cancel();
     _debounce?.cancel();
     _search.dispose();
     _vertical.dispose();
@@ -155,6 +243,8 @@ class RecordListState extends State<RecordList> {
         setState(() {
           _page = page;
           _error = null;
+          _loadedAt = DateTime.now();
+          _stale = false;
         });
       }
     } catch (e) {
@@ -175,6 +265,7 @@ class RecordListState extends State<RecordList> {
 
   Future<void> _tap(Map<String, dynamic> e) async {
     if (widget.onTap == null) return;
+    RecordSiblings.offer([for (final r in _sorted(items)) r['id']]);
     await widget.onTap!(e);
     if (mounted) unawaited(reload());
   }
@@ -311,10 +402,13 @@ class RecordListState extends State<RecordList> {
         DataColumn(
           label: Text(widget.columns[i].label),
           numeric: widget.columns[i].numeric,
-          onSort: (col, asc) => setState(() {
-            _sortColumn = col;
-            _ascending = asc;
-          }),
+          onSort: (col, asc) {
+            setState(() {
+              _sortColumn = col;
+              _ascending = asc;
+            });
+            unawaited(_saveView());
+          },
         ),
       if (widget.rowActions != null) const DataColumn(label: SizedBox.shrink()),
     ],

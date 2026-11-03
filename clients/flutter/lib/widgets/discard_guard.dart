@@ -4,11 +4,34 @@ import 'package:flutter/material.dart';
 
 /// Asks before leaving (back arrow, system back, Esc, tapping outside a dialog) when [isDirty] says there are unsaved edits.
 /// Explicit `Navigator.pop` calls, such as saving, are not intercepted.
-class DiscardGuard extends StatelessWidget {
+class DiscardGuard extends StatefulWidget {
   const DiscardGuard({super.key, required this.isDirty, required this.child});
 
   final bool Function() isDirty;
   final Widget child;
+
+  static final _live = <State>{};
+
+  /// True while any guard on screen reports unsaved edits. Code that closes pages without `maybePop` (a sidebar jump,
+  /// a link back to an open record) checks this and asks with [confirmDiscard] first.
+  static bool get anyDirty => _live.any((s) => (s.widget as DiscardGuard).isDirty());
+
+  @override
+  State<DiscardGuard> createState() => _DiscardGuardState();
+}
+
+class _DiscardGuardState extends State<DiscardGuard> {
+  @override
+  void initState() {
+    super.initState();
+    DiscardGuard._live.add(this);
+  }
+
+  @override
+  void dispose() {
+    DiscardGuard._live.remove(this);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => PopScope(
@@ -16,9 +39,9 @@ class DiscardGuard extends StatelessWidget {
     onPopInvokedWithResult: (didPop, _) async {
       if (didPop) return;
       final navigator = Navigator.of(context);
-      if (!isDirty() || await confirmDiscard(context)) navigator.pop();
+      if (!widget.isDirty() || await confirmDiscard(context)) navigator.pop();
     },
-    child: child,
+    child: widget.child,
   );
 }
 

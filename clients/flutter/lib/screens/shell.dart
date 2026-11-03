@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +10,7 @@ import '../entities.dart';
 import '../session.dart';
 import '../widgets/alerts.dart';
 import '../widgets/command_palette.dart';
+import '../widgets/discard_guard.dart';
 import '../widgets/record_nav.dart';
 import '../widgets/user_menu.dart';
 import 'audit.dart';
@@ -26,6 +30,7 @@ import 'production_orders.dart';
 import 'quick_actions.dart';
 import 'quotations.dart';
 import 'receipts.dart';
+import 'record_links.dart';
 import 'reports.dart' show BillingSummaryScreen, MaterialConsumptionScreen;
 import 'requisitions.dart';
 import 'sales_common.dart' show openQuote, openSalesOrder;
@@ -127,6 +132,9 @@ class Shell extends StatefulWidget {
 
   final Session session;
 
+  /// Where the user of a [Session] was last. Signing in again on the same session soon after (idle lock, expired session) returns there.
+  static final lastLocation = Expando<({String path, DateTime at})>('lastLocation');
+
   @override
   State<Shell> createState() => _ShellState();
 }
@@ -155,6 +163,15 @@ class _ShellState extends State<Shell> {
   final _hero = MaterialApp.createMaterialHeroController();
   final _rev = ValueNotifier<int>(0);
   int _inner = 0;
+  List<String> _records = const [];
+  RecordTop? _top;
+
+  /// Screens undone with Back, so Alt+→ can redo them.
+  final _fwd = <({String id, String? filter})>[];
+
+  /// Modules whose screens are listed in the sidebar.
+  final _open = <String>{};
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   static String _key(String id, String? filter) => '$id/${filter ?? ''}';
 
@@ -168,21 +185,77 @@ class _ShellState extends State<Shell> {
   @override
   void initState() {
     super.initState();
-    if (_items.any((i) => i.id == widget.session.homeScreen)) _current = widget.session.homeScreen;
-    _mount(_current, null);
+    RecordTrail.top.value = null;
+    final start = _startLocation();
+    if (start != null) {
+      _current = start.id;
+      _filter = start.filter;
+    } else if (_items.any((i) => i.id == widget.session.homeScreen)) {
+      _current = widget.session.homeScreen;
+    }
+    _mount(_current, _filter);
+    final section = _sectionOf(_current);
+    if (section != null) _open.add(section);
     _restorePrefs();
     HardwareKeyboard.instance.addHandler(_onKey);
     _innerTrail.pages.addListener(_onInnerPages);
+    _innerTrail.records.addListener(_onRecords);
+    RecordTrail.top.addListener(_onTop);
     widget.session.addListener(_refreshPages);
+    final record = start?.record;
+    if (record != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) openRecordByKind(_navContext, widget.session, record.kind, record.id);
+      });
+    }
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
     _innerTrail.pages.removeListener(_onInnerPages);
+    _innerTrail.records.removeListener(_onRecords);
+    RecordTrail.top.removeListener(_onTop);
     widget.session.removeListener(_refreshPages);
     _rev.dispose();
     super.dispose();
+  }
+
+  void _onRecords() {
+    if (mounted) setState(() => _records = _innerTrail.records.value);
+  }
+
+  void _onTop() {
+    if (!mounted) return;
+    setState(() => _top = RecordTrail.top.value);
+    _syncLocation();
+  }
+
+  /// `/s/<screen>[/r/<kind>/<id>][?f=<filter>]`: the form kept in the address bar (web) and in [Shell.lastLocation].
+  String _location() {
+    final r = _top;
+    return Uri(path: '/s/$_current${_records.isNotEmpty && r != null ? r.path : ''}', queryParameters: _filter == null ? null : {'f': _filter}).toString();
+  }
+
+  void _syncLocation() {
+    final loc = _location();
+    Shell.lastLocation[widget.session] = (path: loc, at: DateTime.now());
+    if (kIsWeb) unawaited(SystemNavigator.routeInformationUpdated(uri: Uri.parse(loc), replace: true));
+  }
+
+  /// Where to open: the address the browser was loaded with, else the place this user left less than 30 minutes ago.
+  ({String id, String? filter, ({String kind, int id})? record})? _startLocation() {
+    final fromWeb = kIsWeb ? WidgetsBinding.instance.platformDispatcher.defaultRouteName : null;
+    final seen = Shell.lastLocation[widget.session];
+    final path = fromWeb != null && fromWeb.startsWith('/s/')
+        ? fromWeb
+        : (seen != null && DateTime.now().difference(seen.at) < const Duration(minutes: 30) ? seen.path : null);
+    if (path == null) return null;
+    final uri = Uri.tryParse(path);
+    final m = uri == null ? null : RegExp(r'^/s/([^/]+)(?:/r/([^/]+)/(\d+))?$').firstMatch(uri.path);
+    if (m == null || !_items.any((i) => i.id == m[1])) return null;
+    final kind = m[2], rid = int.tryParse(m[3] ?? '');
+    return (id: m[1]!, filter: uri!.queryParameters['f'], record: kind != null && rid != null ? (kind: kind, id: rid) : null);
   }
 
   void _onInnerPages() {
@@ -208,11 +281,45 @@ class _ShellState extends State<Shell> {
 
   bool _paletteOpen = false;
 
+  static const _digits = [
+    LogicalKeyboardKey.digit0,
+    LogicalKeyboardKey.digit1,
+    LogicalKeyboardKey.digit2,
+    LogicalKeyboardKey.digit3,
+    LogicalKeyboardKey.digit4,
+    LogicalKeyboardKey.digit5,
+    LogicalKeyboardKey.digit6,
+    LogicalKeyboardKey.digit7,
+    LogicalKeyboardKey.digit8,
+    LogicalKeyboardKey.digit9,
+  ];
+
+  /// Ctrl+K search, Alt+← / Alt+→ back and forward through visited screens, Ctrl+1…9 the modules, Ctrl+0 the Painel.
   bool _onKey(KeyEvent e) {
     if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) return _onEsc();
-    if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.keyK || !HardwareKeyboard.instance.isControlPressed) return false;
-    if (_paletteOpen || !(ModalRoute.of(context)?.isCurrent ?? false)) return false;
-    _openPalette();
+    if (e is! KeyDownEvent) return false;
+    final k = HardwareKeyboard.instance;
+    final free = !_paletteOpen && mounted && (ModalRoute.of(context)?.isCurrent ?? false);
+    if (k.isAltPressed && !k.isControlPressed && !k.isShiftPressed && !k.isMetaPressed) {
+      if (!free) return false;
+      if (e.logicalKey == LogicalKeyboardKey.arrowLeft) return _back();
+      if (e.logicalKey == LogicalKeyboardKey.arrowRight) return _forward();
+      return false;
+    }
+    if (!k.isControlPressed) return false;
+    if (e.logicalKey == LogicalKeyboardKey.keyK) {
+      if (!free) return false;
+      _openPalette();
+      return true;
+    }
+    final d = _digits.indexOf(e.logicalKey);
+    if (d < 0 || !free || k.isAltPressed || k.isShiftPressed) return false;
+    if (d == 0) {
+      _go('dashboard');
+      return true;
+    }
+    if (d > modules.length) return false;
+    _go(modules[d - 1].id);
     return true;
   }
 
@@ -235,6 +342,7 @@ class _ShellState extends State<Shell> {
       if (!mounted) return;
       setState(() {
         _collapsed = p.getBool('navCollapsed') ?? false;
+        _open.addAll(p.getStringList('navOpen') ?? const []);
       });
     } catch (e) {
       debugPrint('shell: Local storage is best effort; the in-memory value stays: $e');
@@ -255,6 +363,20 @@ class _ShellState extends State<Shell> {
 
   /// Goes to a screen from the sidebar, the Painel, the bell or the palette: closes open record pages and remembers where it came from.
   void _go(String id, [String? filter]) {
+    final inner = _innerNav;
+    if (inner != null && inner.canPop() && DiscardGuard.anyDirty) {
+      // popUntil skips PopScope, so ask here before closing a record page with unsaved edits.
+      unawaited(
+        confirmDiscard(context).then((ok) {
+          if (ok && mounted) _goNow(id, filter);
+        }),
+      );
+      return;
+    }
+    _goNow(id, filter);
+  }
+
+  void _goNow(String id, String? filter) {
     _innerNav?.popUntil((r) => r.isFirst);
     if (id == _current && filter == _filter) return;
     if (id == 'dashboard') {
@@ -263,7 +385,17 @@ class _ShellState extends State<Shell> {
       _history.add((id: _current, filter: _filter));
       if (_history.length > 30) _history.removeAt(0);
     }
+    _fwd.clear();
     _show(id, filter);
+  }
+
+  /// Alt+→: a screen undone with Back comes back.
+  bool _forward() {
+    if (_fwd.isEmpty) return false;
+    final t = _fwd.removeLast();
+    _history.add((id: _current, filter: _filter));
+    _show(t.id, t.filter);
+    return true;
   }
 
   /// One step back: the open record page, else the previous screen, else the Painel. False when there is nowhere to go.
@@ -275,10 +407,12 @@ class _ShellState extends State<Shell> {
     }
     if (_history.isNotEmpty) {
       final t = _history.removeLast();
+      _fwd.add((id: _current, filter: _filter));
       _show(t.id, t.filter);
       return true;
     }
     if (_current != 'dashboard') {
+      _fwd.add((id: _current, filter: _filter));
       _show('dashboard', null);
       return true;
     }
@@ -288,11 +422,14 @@ class _ShellState extends State<Shell> {
   void _show(String id, String? filter) {
     _left[_key(_current, _filter)] = DateTime.now();
     _mount(id, filter);
+    final section = _sectionOf(id);
     setState(() {
       _current = id;
       _filter = filter;
+      if (section != null) _open.add(section);
     });
     _rev.value++;
+    _syncLocation();
     if (id != 'dashboard') RecentStore.add(RecentItem('screen', id, _items.firstWhere((i) => i.id == id).title));
   }
 
@@ -319,9 +456,9 @@ class _ShellState extends State<Shell> {
           final customer = await s.api.get('/api/customers/$id') as Map<String, dynamic>;
           if (mounted) await push(CustomerScreen(session: s, customer: customer));
         case 'fiscal-documents':
-          await push(FiscalDocumentScreen(session: s, id: id));
+          await openFiscalDocument(_navContext, s, id);
         case 'certificates':
-          await push(CertificateScreen(session: s, id: id));
+          await openCertificate(_navContext, s, id);
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
@@ -394,8 +531,13 @@ class _ShellState extends State<Shell> {
     );
   }
 
-  String? get _moduleSection =>
-      _item.section == hiddenSection ? _item.id.substring('module:'.length) : (modules.any((m) => m.section == _item.section) ? _item.section : null);
+  String? get _moduleSection => _sectionOf(_current);
+
+  /// The module a screen belongs to, or null for the Painel and the administration screens.
+  String? _sectionOf(String id) {
+    final item = _items.firstWhere((i) => i.id == id);
+    return item.section == hiddenSection ? item.id.substring('module:'.length) : (modules.any((m) => m.section == item.section) ? item.section : null);
+  }
 
   /// Comercial has too many screens for one flat list; the rest of the modules are short enough to stay ungrouped.
   static const _comercialGroups = {
@@ -433,27 +575,50 @@ class _ShellState extends State<Shell> {
 
     final dashboard = _items.firstWhere((i) => i.id == 'dashboard');
     children.add(one(dashboard));
-    final section = _moduleSection;
-    if (section != null) {
-      final module = moduleBySection(section);
-      final home = _items.firstWhere((i) => i.id == module.id);
-      if (rail) {
-        children.add(const Divider());
-      } else {
-        children.add(
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Text(module.section, style: theme.textTheme.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w700)),
-          ),
-        );
-      }
-      children.add(one(home, title: 'Visão geral'));
+    if (closeDrawer) children.add(_recents(theme));
+    final current = _moduleSection;
+
+    void moduleItems(String section) {
       String? lastGroup;
       for (final i in _items.where((i) => i.section == section)) {
         final g = _group(i);
         if (g != null && g != lastGroup) children.add(rail ? const Divider(indent: 16, endIndent: 16) : _groupLabel(g, theme));
         lastGroup = g;
         children.add(one(i));
+      }
+    }
+
+    for (final m in modules) {
+      final home = _items.firstWhere((i) => i.id == m.id);
+      final isCurrent = m.section == current;
+      if (rail) {
+        // A module is one icon that opens its overview; the module being worked in lists its screens under it.
+        if (isCurrent) children.add(const Divider());
+        children.add(one(home));
+        if (isCurrent) {
+          moduleItems(m.section);
+          children.add(const Divider());
+        }
+        continue;
+      }
+      final open = _open.contains(m.section);
+      children.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: ListTile(
+            key: ValueKey('nav-section-${m.section}'),
+            dense: true,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            leading: Icon(m.icon, color: isCurrent ? cs.primary : null),
+            title: Text(m.section, style: theme.textTheme.labelLarge?.copyWith(color: isCurrent ? cs.primary : null, fontWeight: FontWeight.w700)),
+            trailing: Icon(open ? Icons.expand_less : Icons.expand_more),
+            onTap: () => _toggleSection(m.section),
+          ),
+        ),
+      );
+      if (open) {
+        children.add(one(home, title: 'Visão geral'));
+        moduleItems(m.section);
       }
     }
     final system = _items.where((i) => i.section == 'Sistema');
@@ -464,6 +629,169 @@ class _ShellState extends State<Shell> {
     }
     return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
   }
+
+  /// Phone drawer: the last screens and records the user opened.
+  Widget _recents(ThemeData theme) => FutureBuilder<List<RecentItem>>(
+    future: RecentStore.load(),
+    builder: (_, snap) {
+      final list = [
+        for (final r in snap.data ?? const <RecentItem>[])
+          if (r.type != 'screen' || _items.any((i) => i.id == r.id)) r,
+      ].take(4).toList();
+      if (list.isEmpty) return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _groupLabel('Recentes', theme),
+          for (final r in list)
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.history),
+              title: Text(r.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+              onTap: () {
+                Navigator.pop(context);
+                if (r.type == 'screen') {
+                  _go(r.id);
+                } else {
+                  unawaited(_openHit(r.type, int.tryParse(r.id) ?? 0));
+                }
+              },
+            ),
+        ],
+      );
+    },
+  );
+
+  void _toggleSection(String section) {
+    setState(() => _open.contains(section) ? _open.remove(section) : _open.add(section));
+    unawaited(_saveOpen());
+  }
+
+  Future<void> _saveOpen() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setStringList('navOpen', _open.toList());
+    } catch (e) {
+      debugPrint('shell: Local storage is best effort; the in-memory value stays: $e');
+    }
+  }
+
+  /// Breadcrumb in the app bar: the module and screen, then every record page open over it (wide layout). Each step but the last goes back to it.
+  Widget _title(bool wide) {
+    final theme = Theme.of(context);
+    final base = _moduleSection == null || _item.section == hiddenSection ? _item.title : '${_item.section} › ${_item.title}';
+    final recs = wide ? _records : const <String>[];
+    if (recs.isEmpty) return Text(base, overflow: TextOverflow.ellipsis);
+    Widget crumb(String text, VoidCallback? tap) => tap == null
+        ? Text(text, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))
+        : InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: tap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text(text, overflow: TextOverflow.ellipsis, style: TextStyle(color: theme.colorScheme.primary)),
+            ),
+          );
+    return Row(
+      children: [
+        Flexible(child: crumb(base, () => unawaited(_popTo(null)))),
+        for (var i = 0; i < recs.length; i++) ...[
+          const Icon(Icons.chevron_right, size: 18),
+          Flexible(child: crumb(recordLabels[recs[i].split(':')[1]] ?? recs[i], i == recs.length - 1 ? null : () => unawaited(_popTo(recs[i])))),
+        ],
+      ],
+    );
+  }
+
+  /// Closes record pages down to the one named [name] (null: all of them), asking first when one has unsaved edits.
+  Future<void> _popTo(String? name) async {
+    final inner = _innerNav;
+    if (inner == null) return;
+    if (DiscardGuard.anyDirty && !await confirmDiscard(context)) return;
+    if (mounted) inner.popUntil((r) => name == null ? r.isFirst : r.settings.name == name);
+  }
+
+  Future<void> _step(int delta) async {
+    final inner = _innerNav, top = _top;
+    if (inner == null || top == null) return;
+    if (DiscardGuard.anyDirty && !await confirmDiscard(context)) return;
+    if (mounted) stepRecord(inner, widget.session, top, delta);
+  }
+
+  /// Previous / next record of the list the open record page was opened from.
+  List<Widget> _stepButtons() {
+    final top = _top;
+    if (top == null || _records.isEmpty || top.index < 0 || (top.siblings?.length ?? 0) < 2) return const [];
+    final n = top.siblings!.length;
+    return [
+      IconButton(tooltip: 'Registro anterior', onPressed: top.index > 0 ? () => unawaited(_step(-1)) : null, icon: const Icon(Icons.keyboard_arrow_up)),
+      Text('${top.index + 1}/$n', style: Theme.of(context).textTheme.labelMedium),
+      IconButton(tooltip: 'Próximo registro', onPressed: top.index < n - 1 ? () => unawaited(_step(1)) : null, icon: const Icon(Icons.keyboard_arrow_down)),
+      const SizedBox(width: 4),
+    ];
+  }
+
+  void _showAlerts() => showModalBottomSheet<void>(
+    context: context,
+    builder: (ctx) => SafeArea(
+      child: ValueListenableBuilder<List<AlertInfo>>(
+        valueListenable: widget.session.alerts,
+        builder: (_, list, _) => ListView(
+          shrinkWrap: true,
+          children: list.isEmpty
+              ? [const ListTile(title: Text('Nenhum alerta'))]
+              : [
+                  for (final a in list)
+                    ListTile(
+                      leading: Icon(a.icon, color: Theme.of(ctx).colorScheme.error),
+                      title: Text(a.label),
+                      trailing: Text('${a.count}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _go(a.navId, a.filter);
+                      },
+                    ),
+                ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _barButton(IconData icon, String label, VoidCallback onTap, {bool active = false, int badge = 0}) {
+    final cs = Theme.of(context).colorScheme;
+    final color = active ? cs.primary : cs.onSurfaceVariant;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Badge(isLabelVisible: badge > 0, label: Text(badge > 99 ? '99+' : '$badge'), child: Icon(icon, color: color, size: 22)),
+            Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Phone: the four things reached most, always one tap away.
+  Widget _bottomBar() => BottomAppBar(
+    height: 56,
+    padding: EdgeInsets.zero,
+    child: Row(
+      children: [
+        _barButton(Icons.home_outlined, 'Início', () => _go('dashboard'), active: _current == 'dashboard'),
+        _barButton(Icons.search, 'Buscar', _openPalette),
+        ValueListenableBuilder<List<AlertInfo>>(
+          valueListenable: widget.session.alerts,
+          builder: (_, _, _) => Expanded(
+            child: Row(children: [_barButton(Icons.notifications_none, 'Alertas', _showAlerts, badge: widget.session.alerts.total)]),
+          ),
+        ),
+        _barButton(Icons.apps, 'Menu', () => _scaffoldKey.currentState?.openDrawer()),
+      ],
+    ),
+  );
 
   Widget _pages() {
     final s = widget.session;
@@ -502,6 +830,8 @@ class _ShellState extends State<Shell> {
         if (!didPop) _back();
       },
       child: Scaffold(
+        key: _scaffoldKey,
+        bottomNavigationBar: wide ? null : _bottomBar(),
         appBar: AppBar(
           leading: wide
               ? IconButton(
@@ -513,15 +843,11 @@ class _ShellState extends State<Shell> {
           title: Row(
             children: [
               if (_canBack) IconButton(tooltip: _inner > 0 || _history.isNotEmpty ? 'Voltar' : 'Voltar ao Painel', onPressed: _back, icon: const Icon(Icons.arrow_back)),
-              Flexible(
-                child: Text(
-                  _moduleSection == null || _item.section == hiddenSection ? _item.title : '${_item.section} › ${_item.title}',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
+              Flexible(child: _title(wide)),
             ],
           ),
           actions: [
+            if (wide) ..._stepButtons(),
             SearchLauncher(onOpen: _openPalette, compact: !wide),
             const SizedBox(width: 4),
             AlertBell(center: s.alerts, onNavigate: _go),

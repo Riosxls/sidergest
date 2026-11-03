@@ -331,7 +331,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (minutes == _armedMinutes) return;
     _armedMinutes = minutes;
     _timer?.cancel();
-    _timer = minutes > 0 ? Timer.periodic(Duration(minutes: minutes), (_) => _refresh()) : null;
+    _timer = minutes > 0 ? Timer.periodic(Duration(minutes: minutes), (_) {
+      // A screen kept alive behind another one does not poll.
+      if (mounted && TickerMode.valuesOf(context).enabled) _refresh();
+    }) : null;
   }
 
   @override

@@ -49,7 +49,9 @@ class _ModuleScreenState extends State<ModuleScreen> {
       if (mounted) _focus.requestFocus();
     });
     _settle();
-    _timer = Timer.periodic(const Duration(minutes: 2), (_) => _refresh());
+    _timer = Timer.periodic(const Duration(minutes: 2), (_) {
+      if (mounted && TickerMode.valuesOf(context).enabled) _refresh();
+    });
   }
 
   @override
