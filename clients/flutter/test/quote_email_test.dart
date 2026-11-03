@@ -84,4 +84,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('este é um reenvio'), findsOneWidget);
   });
+
+  testWidgets('a refused send shows the mail server message, not a generic server error', (tester) async {
+    final f = await _open(tester);
+    f.overrides['POST /api/sales/quotes/5/email'] = (_) => jsonResp({'message': 'O servidor de e-mail recusou o usuário ou a senha.'}, 502);
+    await tester.tap(find.byKey(const ValueKey('quote-email')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('email-send')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('recusou o usuário ou a senha'), findsOneWidget);
+    expect(find.textContaining('avise o suporte'), findsNothing);
+  });
 }

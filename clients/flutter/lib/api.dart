@@ -208,7 +208,7 @@ class ApiClient {
       final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       final errors = <String, List<String>>{};
       (j['errors'] as Map<String, dynamic>?)?.forEach((k, v) => errors[k] = (v as List).cast<String>().map(translateServerText).toList());
-      final msg = [_serverTitles[j['title']] ?? j['title'], j['detail']].whereType<String>().where((s) => s.isNotEmpty).map(translateServerText).join(': ');
+      final msg = [_serverTitles[j['title']] ?? j['title'], j['detail'] ?? j['message']].whereType<String>().where((s) => s.isNotEmpty).map(translateServerText).join(': ');
       return ApiException(r.statusCode, errors.isNotEmpty ? 'Verifique os campos destacados' : (msg.isEmpty ? _fallback(r.statusCode) : msg), errors);
     } catch (_) {
       return ApiException(r.statusCode, _fallback(r.statusCode));
