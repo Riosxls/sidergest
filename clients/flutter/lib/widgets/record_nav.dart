@@ -126,7 +126,7 @@ class RecordTrail extends NavigatorObserver {
     } else if (newRoute != null) {
       _stack.add(newRoute);
     }
-    _sync(closedPage: oldRoute is PageRoute);
+    _sync();
   }
 }
 

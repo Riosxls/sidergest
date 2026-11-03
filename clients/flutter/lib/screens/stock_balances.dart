@@ -115,11 +115,7 @@ class ItemStockScreen extends StatelessWidget {
                 col('Saldo', 'balanceAfter', numeric: true),
                 ColumnSpec('Custo unit.', (e) => fmtNum(e['unitCost'], 4), numeric: true),
               ],
-              onTap: (e) => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => DocumentScreen(session: session, id: e['documentId'] as int),
-                ),
-              ),
+              onTap: (e) => openStockDocument(context, session, e['documentId'] as int),
             ),
             LotsView(session: session, query: item),
             ReservationsView(session: session, query: item),

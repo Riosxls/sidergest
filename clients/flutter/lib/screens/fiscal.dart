@@ -7,6 +7,7 @@ import '../entities.dart';
 import '../reports/danfe_doc.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
+import '../widgets/load_error.dart';
 import '../widgets/page_column.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
@@ -183,7 +184,7 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
         ],
       ),
       body: _error != null && d == null
-          ? Center(child: Text(_error!))
+          ? LoadError(message: _error!, onRetry: _load)
           : d == null
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(onRefresh: _load, child: _body(d)),

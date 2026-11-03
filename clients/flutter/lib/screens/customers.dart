@@ -5,7 +5,9 @@ import '../entities.dart';
 import '../labels.dart';
 import '../session.dart';
 import '../widgets/entity_form.dart';
+import '../widgets/load_error.dart';
 import '../widgets/record_list.dart';
+import '../widgets/record_nav.dart';
 import 'sales_common.dart';
 
 const customerStatuses = {'true': 'Ativos', 'false': 'Inativos'};
@@ -153,15 +155,26 @@ class _CustomersScreenState extends State<CustomersScreen> {
       ColumnSpec('Situação', (e) => e['active'] == true ? 'Ativo' : 'Inativo'),
     ],
     rowColor: (ctx, e) => e['active'] == true ? null : Theme.of(ctx).colorScheme.surfaceContainerHighest,
-    onTap: (e) => Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CustomerScreen(session: widget.session, customer: e),
-      ),
-    ),
+    onTap: (e) => openCustomer(context, widget.session, e['id'] as int, e),
   );
 }
 
 /// Customer detail: company data, addresses, default prazo and credit limit.
+/// Opens a customer; pass [known] when the list already holds its data, otherwise it is loaded.
+Future<void> openCustomer(BuildContext context, Session session, int id, [Map<String, dynamic>? known]) => pushRecord<void>(
+  context,
+  'customer',
+  id,
+  (_) => known != null ? CustomerScreen(session: session, customer: known) : customerScreenById(session, id),
+);
+
+/// A customer page for an id alone (web address, restored place).
+Widget customerScreenById(Session session, int id) => RecordLoader(
+  title: 'Cliente',
+  load: () => session.api.get('/api/customers/$id'),
+  builder: (c) => CustomerScreen(session: session, customer: c),
+);
+
 class CustomerScreen extends StatefulWidget {
   const CustomerScreen({super.key, required this.session, required this.customer});
 

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api.dart';
@@ -60,6 +61,7 @@ class RecordList extends StatefulWidget {
   /// Per-row ⋮ menu (e.g. quick cancel); an empty list hides the menu for that row.
   final List<RowAction> Function(Map<String, dynamic> e)? rowActions;
   final String emptyText;
+
   /// Rows per page; null follows the personal setting ([AppPrefs.rowsPerPage]).
   final int? pageSize;
 
@@ -95,13 +97,67 @@ class RecordListState extends State<RecordList> {
   bool _stale = false;
   bool _wasActive = true;
   Timer? _closeTimer;
+  int _row = -1;
+  final _listFocus = FocusNode(debugLabel: 'record-list');
+  final _searchFocus = FocusNode();
+
+  Map<String, dynamic>? _highlighted(List<Map<String, dynamic>> items) => _row >= 0 && _row < items.length ? items[_row] : null;
+
+  /// ↑/↓ or J/K move through the rows, Enter opens the highlighted one, / goes to the search box. Only while no field has the focus.
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent || !node.hasPrimaryFocus) return KeyEventResult.ignored;
+    final k = HardwareKeyboard.instance;
+    if (k.isControlPressed || k.isAltPressed || k.isMetaPressed || k.isShiftPressed) return KeyEventResult.ignored;
+    final key = e.logicalKey;
+    if (key == LogicalKeyboardKey.slash && widget.searchable) {
+      _searchFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    final page = _page;
+    final rows = page == null ? const <Map<String, dynamic>>[] : _sorted(page.items);
+    if (rows.isEmpty) return KeyEventResult.ignored;
+    final down = key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.keyJ;
+    final up = key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.keyK;
+    if (down || up) {
+      setState(() => _row = (_row + (down ? 1 : -1)).clamp(0, rows.length - 1));
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToRow());
+      return KeyEventResult.handled;
+    }
+    if ((key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) && _row >= 0 && _row < rows.length && widget.onTap != null) {
+      unawaited(_tap(rows[_row]));
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _scrollToRow() {
+    if (!mounted || !_vertical.hasClients) return;
+    const rowHeight = 44.0;
+    final top = _row * rowHeight, bottom = top + rowHeight;
+    final pos = _vertical.position;
+    if (top < pos.pixels) {
+      _vertical.jumpTo(top);
+    } else if (bottom > pos.pixels + pos.viewportDimension) {
+      _vertical.jumpTo((bottom - pos.viewportDimension).clamp(0, pos.maxScrollExtent));
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     reload();
     RecordTrail.closed.addListener(_onPageClosed);
+    _searchFocus.addListener(_searchFocusChanged);
     unawaited(_restoreView());
+  }
+
+  /// Leaving the search box (Esc, Tab) hands the keys back to the list unless another field took them.
+  void _searchFocusChanged() {
+    if (_searchFocus.hasFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final f = FocusManager.instance.primaryFocus;
+      if (mounted && (f == null || f is FocusScopeNode)) _listFocus.requestFocus();
+    });
   }
 
   /// A list kept alive behind another screen, or covered by a record page, reloads when it shows again if it may be out of date.
@@ -193,6 +249,8 @@ class RecordListState extends State<RecordList> {
   @override
   void dispose() {
     RecordTrail.closed.removeListener(_onPageClosed);
+    _searchFocus.dispose();
+    _listFocus.dispose();
     _closeTimer?.cancel();
     _debounce?.cancel();
     _search.dispose();
@@ -275,74 +333,80 @@ class RecordListState extends State<RecordList> {
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= 900;
     final page = _page;
-    return Scaffold(
-      floatingActionButton: widget.fab,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Wrap(
-                    spacing: 12,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      if (widget.searchable)
-                        SizedBox(
-                          width: wide ? 320 : width - 96,
-                          child: TextField(
-                            key: const ValueKey('record-search'),
-                            controller: _search,
-                            decoration: InputDecoration(
-                              prefixIcon: const Icon(Icons.search),
-                              labelText: widget.searchHint,
-                              isDense: true,
-                              border: const OutlineInputBorder(),
+    return Focus(
+      focusNode: _listFocus,
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: Scaffold(
+        floatingActionButton: widget.fab,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (widget.searchable)
+                          SizedBox(
+                            width: wide ? 320 : width - 96,
+                            child: TextField(
+                              key: const ValueKey('record-search'),
+                              controller: _search,
+                              focusNode: _searchFocus,
+                              decoration: InputDecoration(
+                                prefixIcon: const Icon(Icons.search),
+                                labelText: widget.searchHint,
+                                isDense: true,
+                                border: const OutlineInputBorder(),
+                              ),
+                              onChanged: _onSearch,
                             ),
-                            onChanged: _onSearch,
                           ),
-                        ),
-                      ...widget.filters,
+                        ...widget.filters,
+                      ],
+                    ),
+                  ),
+                  IconButton(tooltip: 'Atualizar', onPressed: reload, icon: const Icon(Icons.refresh)),
+                ],
+              ),
+            ),
+            if (_loading) const LinearProgressIndicator() else const SizedBox(height: 4),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Semantics(
+                  liveRegion: true,
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                      ),
+                      TextButton(onPressed: reload, child: const Text('Tentar novamente')),
                     ],
                   ),
                 ),
-                IconButton(tooltip: 'Atualizar', onPressed: reload, icon: const Icon(Icons.refresh)),
-              ],
-            ),
-          ),
-          if (_loading) const LinearProgressIndicator() else const SizedBox(height: 4),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Semantics(
-                liveRegion: true,
-                child: Row(
-                  children: [
-                    Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                    ),
-                    TextButton(onPressed: reload, child: const Text('Tentar novamente')),
-                  ],
-                ),
               ),
-            ),
-          if (page == null && _error == null) const Expanded(child: Center(child: CircularProgressIndicator())),
-          if (page != null)
-            Expanded(
-              child: page.items.isEmpty
-                  ? _empty()
-                  : wide
-                  ? _table(_sorted(page.items))
-                  : _list(_sorted(page.items)),
-            ),
-          if (page != null && page.total > page.items.length) _pager(page),
-        ],
+            if (page == null && _error == null) const Expanded(child: Center(child: CircularProgressIndicator())),
+            if (page != null)
+              Expanded(
+                child: page.items.isEmpty
+                    ? _empty()
+                    : wide
+                    ? _table(_sorted(page.items))
+                    : _list(_sorted(page.items)),
+              ),
+            if (page != null && page.total > page.items.length) _pager(page),
+          ],
+        ),
       ),
     );
   }
@@ -415,7 +479,9 @@ class RecordListState extends State<RecordList> {
     rows: [
       for (final e in items)
         DataRow(
-          color: WidgetStateProperty.resolveWith((_) => widget.rowColor?.call(context, e)),
+          color: WidgetStateProperty.resolveWith(
+            (_) => identical(e, _highlighted(items)) ? Theme.of(context).colorScheme.primaryContainer : widget.rowColor?.call(context, e),
+          ),
           onSelectChanged: widget.onTap == null ? null : (_) => _tap(e),
           cells: [
             for (final c in widget.columns)
@@ -460,7 +526,7 @@ class RecordListState extends State<RecordList> {
       final pairs = cols.skip(2).map((c) => (c.label, c.value(e))).where((p) => p.$2.isNotEmpty).toList();
       final muted = TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant);
       return ListTile(
-        tileColor: widget.rowColor?.call(context, e),
+        tileColor: identical(e, _highlighted(items)) ? Theme.of(context).colorScheme.primaryContainer : widget.rowColor?.call(context, e),
         title: Text(
           '${cols[0].value(e)}  ${cols.length > 1 ? cols[1].value(e) : ''}',
           maxLines: 2,
@@ -636,10 +702,7 @@ class InfoGrid extends StatelessWidget {
         return Wrap(
           spacing: gap,
           runSpacing: 16,
-          children: [
-            for (final e in shown)
-              SizedBox(width: e.$2.length > longValue || e.$2.contains('\n') ? box.maxWidth : colWidth, child: pair(e)),
-          ],
+          children: [for (final e in shown) SizedBox(width: e.$2.length > longValue || e.$2.contains('\n') ? box.maxWidth : colWidth, child: pair(e))],
         );
       },
     );
@@ -708,7 +771,10 @@ class StatusChip extends StatelessWidget {
     // Tonal outline with a dot so a status never looks like a pressable button.
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      decoration: BoxDecoration(border: Border.all(color: color.withValues(alpha: 0.5)), borderRadius: BorderRadius.circular(999)),
+      decoration: BoxDecoration(
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(999),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -793,19 +859,28 @@ class SimpleTable extends StatelessWidget {
       columnWidths: {for (var i = 0; i < cols.length; i++) i: i == flex ? const FlexColumnWidth() : const IntrinsicColumnWidth()},
       children: [
         TableRow(
-          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: cs.outline))),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: cs.outline)),
+          ),
           children: [
             for (final (i, c) in cols.indexed) cell(c == null ? const SizedBox.shrink() : Text(c.label, style: headerStyle), i, numeric: c?.numeric ?? true),
           ],
         ),
         for (final e in rows)
           TableRow(
-            decoration: BoxDecoration(color: rowColor?.call(e), border: Border(bottom: BorderSide(color: cs.outlineVariant))),
+            decoration: BoxDecoration(
+              color: rowColor?.call(e),
+              border: Border(bottom: BorderSide(color: cs.outlineVariant)),
+            ),
             children: [
               for (final (i, c) in cols.indexed)
                 c == null
                     ? cell(Row(mainAxisSize: MainAxisSize.min, children: actions!(e)), i, numeric: true)
-                    : cell(Text(c.value(e), style: theme.textTheme.bodyMedium, softWrap: !c.numeric), i, numeric: c.numeric),
+                    : cell(
+                        Text(c.value(e), style: theme.textTheme.bodyMedium, softWrap: !c.numeric),
+                        i,
+                        numeric: c.numeric,
+                      ),
             ],
           ),
       ],
@@ -857,7 +932,9 @@ class Section extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600))),
+              Expanded(
+                child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+              ),
               ...actions,
             ],
           ),

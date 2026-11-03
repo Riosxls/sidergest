@@ -5,6 +5,7 @@ import 'screens/login.dart';
 import 'screens/shell.dart';
 import 'session.dart';
 import 'widgets/app_text_scale.dart';
+import 'widgets/drafts.dart';
 import 'widgets/esc_back.dart';
 import 'widgets/idle_guard.dart';
 import 'widgets/record_nav.dart';
@@ -50,7 +51,10 @@ class _EbtAppState extends State<EbtApp> {
   /// Signing out (idle lock, expired session, manual) must not leave a pushed screen or dialog open over the login page.
   void _closeScreensOnSignOut() {
     final now = session.loggedIn;
-    if (_wasLoggedIn && !now) _navigatorKey.currentState?.popUntil((r) => r.isFirst);
+    if (_wasLoggedIn && !now) {
+      DraftRegistry.saveAll();
+      _navigatorKey.currentState?.popUntil((r) => r.isFirst);
+    }
     _wasLoggedIn = now;
   }
 
@@ -61,6 +65,7 @@ class _EbtAppState extends State<EbtApp> {
       builder: (_, _) => MaterialApp(
         title: 'MetaGest',
         navigatorKey: _navigatorKey,
+        initialRoute: '/',
         navigatorObservers: [_escObserver, _trail],
         debugShowCheckedModeBanner: false,
         theme: appTheme(Brightness.light, comfortable: session.comfortable, highContrast: session.highContrast, reduceMotion: session.reduceMotion),

@@ -10,9 +10,12 @@ import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/entity_form.dart';
+import '../widgets/load_error.dart';
 import '../widgets/record_list.dart';
+import '../widgets/record_nav.dart';
 import 'receipts.dart';
 import 'stock_documents.dart';
+import 'suppliers.dart';
 
 bool isLate(Object? due) {
   final d = DateTime.tryParse('$due');
@@ -25,11 +28,7 @@ Future<void> newPurchaseOrder(BuildContext context, Session session, {VoidCallba
   final o = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => OrderEditorScreen(session: session)));
   onSaved?.call();
   if (o == null || !context.mounted) return;
-  await Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => OrderScreen(session: session, id: o['id'] as int),
-    ),
-  );
+  await openPurchaseOrder(context, session, o['id'] as int);
 }
 
 /// Purchase orders list (Suprimentos).
@@ -80,16 +79,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
         col('Linhas', 'lineCount', numeric: true),
       ],
       rowColor: (_, e) => isLate(e['nextDueDate']) ? cs.errorContainer : null,
-      onTap: (e) => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => OrderScreen(session: widget.session, id: e['id'] as int),
-        ),
-      ),
+      onTap: (e) => openPurchaseOrder(context, widget.session, e['id'] as int),
     );
   }
 }
 
 /// Purchase order detail.
+Future<void> openPurchaseOrder(BuildContext context, Session session, int id) =>
+    pushRecord<void>(context, 'purchase-order', id, (_) => OrderScreen(session: session, id: id));
+
 class OrderScreen extends StatefulWidget {
   const OrderScreen({super.key, required this.session, required this.id});
 
@@ -167,6 +165,8 @@ class _OrderScreenState extends State<OrderScreen> {
         appBar: AppBar(
           title: Text(o == null ? 'Pedido' : 'Pedido nº ${o['number']} · ${o['supplierName']}', overflow: TextOverflow.ellipsis),
           actions: [
+            if (o != null && o['supplierId'] is int)
+              RelatedMenu(links: [RelatedLink(Icons.business_outlined, 'Fornecedor: ${o['supplierName']}', () => openSupplier(context, s, o['supplierId'] as int))]),
             if (active && s.canReceive) TextButton.icon(onPressed: _receive, icon: const Icon(Icons.move_to_inbox), label: const Text('Receber NF')),
             if (active && s.canBuy)
               PopupMenuButton<String>(
@@ -186,7 +186,7 @@ class _OrderScreenState extends State<OrderScreen> {
           ),
         ),
         body: _error != null
-            ? Center(child: Text(_error!))
+            ? LoadError(message: _error!, onRetry: _load)
             : o == null
             ? const Center(child: CircularProgressIndicator())
             : TabBarView(
@@ -436,10 +436,6 @@ class OverdueScreen extends StatelessWidget {
       col('Dias de atraso', 'daysLate', numeric: true),
     ],
     rowColor: (ctx, e) => (e['daysLate'] as num) > 15 ? Theme.of(ctx).colorScheme.errorContainer : null,
-    onTap: (e) => Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => OrderScreen(session: session, id: e['purchaseOrderId'] as int),
-      ),
-    ),
+    onTap: (e) => openPurchaseOrder(context, session, e['purchaseOrderId'] as int),
   );
 }

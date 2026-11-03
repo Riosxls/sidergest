@@ -6,6 +6,7 @@ import '../entities.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart' show showError;
+import '../widgets/load_error.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
@@ -410,7 +411,7 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
         ],
       ),
       body: _error != null && l == null
-          ? Center(child: Text(_error!))
+          ? LoadError(message: _error!, onRetry: _load)
           : l == null
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(onRefresh: _load, child: _body(l)),

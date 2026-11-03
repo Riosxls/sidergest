@@ -10,11 +10,13 @@ import '../reports/certificate_doc.dart';
 import '../reports/nf_doc.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
+import '../widgets/load_error.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/print_gate.dart';
 import '../widgets/print_panel.dart';
 import '../widgets/record_list.dart';
 import 'certificates.dart';
+import 'customers.dart';
 import 'fiscal.dart';
 import 'orders.dart';
 import 'sales_common.dart';
@@ -307,6 +309,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       appBar: AppBar(
         title: Text(d == null ? 'Entrega' : '${d['reference']} · ${d['customerName']}', overflow: TextOverflow.ellipsis),
         actions: [
+          if (d != null) RelatedMenu(links: [RelatedLink(Icons.business_outlined, 'Cliente: ${d['customerName']}', () => openCustomer(context, s, d['customerId'] as int))]),
           if (d != null && ['Shipped', 'Delivered'].contains(d['status']))
             IconButton(key: const ValueKey('delivery-print-nf'), tooltip: 'Imprimir NF', icon: const Icon(Icons.print_outlined), onPressed: _printNf),
           if (canCancel)
@@ -322,7 +325,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
         ],
       ),
       body: _error != null && d == null
-          ? Center(child: Text(_error!))
+          ? LoadError(message: _error!, onRetry: _load)
           : d == null
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(onRefresh: _load, child: _body(d)),
@@ -391,11 +394,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
         ),
         if (d['stockDocumentId'] != null)
           TextButton.icon(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => DocumentScreen(session: s, id: d['stockDocumentId'] as int),
-              ),
-            ),
+            onPressed: () => openStockDocument(context, s, d['stockDocumentId'] as int),
             icon: const Icon(Icons.swap_horiz),
             label: const Text('Movimento de estoque'),
           ),

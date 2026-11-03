@@ -12,11 +12,13 @@ import '../reports/print_docs.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
+import '../widgets/load_error.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/print_gate.dart';
 import '../widgets/print_panel.dart';
 import '../widgets/record_list.dart';
 import 'certificates.dart';
+import 'customers.dart';
 import 'production_orders.dart';
 import 'sales_common.dart';
 import 'sales_quotes.dart';
@@ -630,12 +632,13 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       appBar: AppBar(
         title: Text(o == null ? 'Pedido de venda' : '${o['reference']} · ${o['customerName']}', overflow: TextOverflow.ellipsis),
         actions: [
+          if (o != null) RelatedMenu(links: [RelatedLink(Icons.business_outlined, 'Cliente: ${o['customerName']}', () => openCustomer(context, s, o['customerId'] as int))]),
           if (o != null) ..._printActions(o),
           if (menu.isNotEmpty) PopupMenuButton<VoidCallback>(key: const ValueKey('order-menu'), onSelected: (f) => f(), itemBuilder: (_) => menu),
         ],
       ),
       body: _error != null && o == null
-          ? Center(child: Text(_error!))
+          ? LoadError(message: _error!, onRetry: _load)
           : o == null
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(onRefresh: _load, child: _body(o)),

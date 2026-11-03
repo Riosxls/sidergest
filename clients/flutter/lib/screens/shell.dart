@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import '../widgets/alerts.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/record_nav.dart';
+import '../widgets/unload_guard.dart';
 import '../widgets/user_menu.dart';
 import 'audit.dart';
 import 'certificates.dart';
@@ -33,7 +35,7 @@ import 'receipts.dart';
 import 'record_links.dart';
 import 'reports.dart' show BillingSummaryScreen, MaterialConsumptionScreen;
 import 'requisitions.dart';
-import 'sales_common.dart' show openQuote, openSalesOrder;
+import 'sales_common.dart' show openDelivery, openQuote, openSalesOrder;
 import 'sales_orders.dart';
 import 'sales_pipeline.dart';
 import 'sales_quotes.dart';
@@ -123,7 +125,8 @@ List<NavItem> _screens() => [
 /// Screens a user may pick as the one that opens after sign-in, with the label shown in the setting.
 List<({String id, String label})> homeScreenChoices(Session s) => [
   for (final i in navItems())
-    if (!i.admin || s.isAdmin) (id: i.id, label: i.section.isEmpty ? i.title : (i.section == hiddenSection ? 'Visão geral de ${i.title}' : '${i.section}: ${i.title}')),
+    if (!i.admin || s.isAdmin)
+      (id: i.id, label: i.section.isEmpty ? i.title : (i.section == hiddenSection ? 'Visão geral de ${i.title}' : '${i.section}: ${i.title}')),
 ];
 
 /// Main frame after sign-in: sidebar, module routing and the avatar menu.
@@ -173,6 +176,13 @@ class _ShellState extends State<Shell> {
   final _open = <String>{};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  /// Tile of the screen being shown, kept in view when the sidebar is longer than the window.
+  final _activeKey = GlobalKey();
+
+  /// Screens (with their filter) the user starred; listed on top of the sidebar.
+  List<({String id, String? filter})> _pins = [];
+  AppLifecycleListener? _exit;
+
   static String _key(String id, String? filter) => '$id/${filter ?? ''}';
 
   NavigatorState? get _innerNav => _innerKey.currentState;
@@ -202,6 +212,8 @@ class _ShellState extends State<Shell> {
     _innerTrail.records.addListener(_onRecords);
     RecordTrail.top.addListener(_onTop);
     widget.session.addListener(_refreshPages);
+    installUnloadGuard(() => DiscardGuard.anyDirty);
+    if (!kIsWeb) _exit = AppLifecycleListener(onExitRequested: _onExitRequested);
     final record = start?.record;
     if (record != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -217,6 +229,8 @@ class _ShellState extends State<Shell> {
     _innerTrail.records.removeListener(_onRecords);
     RecordTrail.top.removeListener(_onTop);
     widget.session.removeListener(_refreshPages);
+    removeUnloadGuard();
+    _exit?.dispose();
     _rev.dispose();
     super.dispose();
   }
@@ -250,12 +264,69 @@ class _ShellState extends State<Shell> {
     final path = fromWeb != null && fromWeb.startsWith('/s/')
         ? fromWeb
         : (seen != null && DateTime.now().difference(seen.at) < const Duration(minutes: 30) ? seen.path : null);
-    if (path == null) return null;
+    return path == null ? null : _parse(path);
+  }
+
+  ({String id, String? filter, ({String kind, int id})? record})? _parse(String path) {
     final uri = Uri.tryParse(path);
     final m = uri == null ? null : RegExp(r'^/s/([^/]+)(?:/r/([^/]+)/(\d+))?$').firstMatch(uri.path);
     if (m == null || !_items.any((i) => i.id == m[1])) return null;
     final kind = m[2], rid = int.tryParse(m[3] ?? '');
     return (id: m[1]!, filter: uri!.queryParameters['f'], record: kind != null && rid != null ? (kind: kind, id: rid) : null);
+  }
+
+  /// Opens a place copied with "Copiar link" (a full address or just `/s/...`).
+  void _openLocation(String raw) {
+    final i = raw.indexOf('#');
+    final t = _parse(i >= 0 ? raw.substring(i + 1).trim() : raw.trim());
+    if (t == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link não reconhecido.')));
+      return;
+    }
+    _go(t.id, t.filter);
+    final r = t.record;
+    if (r != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) openRecordByKind(_navContext, widget.session, r.kind, r.id);
+      });
+    }
+  }
+
+  Future<void> _copyLink() async {
+    final loc = _location();
+    await Clipboard.setData(ClipboardData(text: kIsWeb ? '${Uri.base.origin}/#$loc' : loc));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copiado')));
+  }
+
+  /// Closing the window with unsaved edits asks first.
+  Future<AppExitResponse> _onExitRequested() async {
+    if (!DiscardGuard.anyDirty || !mounted) return AppExitResponse.exit;
+    return await confirmDiscard(context) ? AppExitResponse.exit : AppExitResponse.cancel;
+  }
+
+  bool get _pinned => _pins.any((p) => p.id == _current && p.filter == _filter);
+
+  void _togglePin() {
+    setState(() {
+      if (_pinned) {
+        _pins = [
+          for (final p in _pins)
+            if (!(p.id == _current && p.filter == _filter)) p,
+        ];
+      } else {
+        _pins = [..._pins, (id: _current, filter: _filter)];
+      }
+    });
+    unawaited(_savePins());
+  }
+
+  Future<void> _savePins() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setStringList('navPins', [for (final x in _pins) '${x.id}\n${x.filter ?? ''}']);
+    } catch (e) {
+      debugPrint('shell: Local storage is best effort; the in-memory value stays: $e');
+    }
   }
 
   void _onInnerPages() {
@@ -343,6 +414,11 @@ class _ShellState extends State<Shell> {
       setState(() {
         _collapsed = p.getBool('navCollapsed') ?? false;
         _open.addAll(p.getStringList('navOpen') ?? const []);
+        _pins = [
+          for (final raw in p.getStringList('navPins') ?? const <String>[])
+            if (_items.any((i) => i.id == raw.split('\n').first))
+              (id: raw.split('\n').first, filter: raw.contains('\n') && raw.split('\n').last.isNotEmpty ? raw.split('\n').last : null),
+        ];
       });
     } catch (e) {
       debugPrint('shell: Local storage is best effort; the in-memory value stays: $e');
@@ -430,18 +506,17 @@ class _ShellState extends State<Shell> {
     });
     _rev.value++;
     _syncLocation();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final c = _activeKey.currentContext;
+      if (c != null && c.mounted) unawaited(Scrollable.ensureVisible(c, duration: const Duration(milliseconds: 200), alignment: 0.3));
+    });
     if (id != 'dashboard') RecentStore.add(RecentItem('screen', id, _items.firstWhere((i) => i.id == id).title));
   }
 
-  void _openProduct(int id) => Navigator.of(_navContext).push(
-    MaterialPageRoute(
-      builder: (_) => ProductDetailScreen(session: widget.session, productId: id),
-    ),
-  );
+  void _openProduct(int id) => openProduct(_navContext, widget.session, id);
 
   Future<void> _openHit(String group, int id) async {
     final s = widget.session;
-    Future<void> push(Widget screen) => Navigator.of(_navContext).push(MaterialPageRoute(builder: (_) => screen));
     try {
       switch (group) {
         case 'products':
@@ -453,12 +528,19 @@ class _ShellState extends State<Shell> {
         case 'quotes':
           await openQuote(_navContext, s, id);
         case 'customers':
-          final customer = await s.api.get('/api/customers/$id') as Map<String, dynamic>;
-          if (mounted) await push(CustomerScreen(session: s, customer: customer));
+          await openCustomer(_navContext, s, id);
         case 'fiscal-documents':
           await openFiscalDocument(_navContext, s, id);
         case 'certificates':
           await openCertificate(_navContext, s, id);
+        case 'suppliers':
+          await openSupplier(_navContext, s, id);
+        case 'purchase-orders':
+          await openPurchaseOrder(_navContext, s, id);
+        case 'deliveries':
+          await openDelivery(_navContext, s, id);
+        default:
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Não foi possível abrir este resultado.')));
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
@@ -481,6 +563,7 @@ class _ShellState extends State<Shell> {
     actions: [for (final a in quickActionsFor(widget.session)) PaletteAction(a.icon, a.label, () => a.run(_navContext))],
     onNavigate: _go,
     onOpenHit: _openHit,
+    onOpenLink: _openLocation,
   );
 
   NavItem get _item => _items.firstWhere((i) => i.id == _current);
@@ -488,6 +571,7 @@ class _ShellState extends State<Shell> {
   Widget _railItem(NavItem d, ColorScheme cs, VoidCallback tap) {
     final active = d.id == _current;
     return Tooltip(
+      key: active ? _activeKey : null,
       message: d.title,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
@@ -507,6 +591,7 @@ class _ShellState extends State<Shell> {
   Widget _tile(NavItem d, ColorScheme cs, VoidCallback tap, {String? title}) {
     final active = d.id == _current;
     return Padding(
+      key: active ? _activeKey : null,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Tooltip(
         message: title ?? d.title,
@@ -556,7 +641,10 @@ class _ShellState extends State<Shell> {
 
   Widget _groupLabel(String text, ThemeData theme) => Padding(
     padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
-    child: Text(text, style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+    child: Text(
+      text,
+      style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600),
+    ),
   );
 
   Widget _menu({bool closeDrawer = false, bool rail = false}) {
@@ -575,6 +663,32 @@ class _ShellState extends State<Shell> {
 
     final dashboard = _items.firstWhere((i) => i.id == 'dashboard');
     children.add(one(dashboard));
+    if (!rail && _pins.isNotEmpty) {
+      children.add(_groupLabel('Fixados', theme));
+      for (final p in _pins) {
+        final item = _items.firstWhere((i) => i.id == p.id);
+        final label = p.filter == null ? item.title : '${item.title} · ${p.filter}';
+        children.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: ListTile(
+              key: ValueKey('nav-pin-${p.id}-${p.filter ?? ''}'),
+              dense: true,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              leading: const Icon(Icons.star, size: 20),
+              title: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
+              selected: p.id == _current && p.filter == _filter,
+              selectedTileColor: cs.secondaryContainer,
+              selectedColor: cs.onSecondaryContainer,
+              onTap: () {
+                _go(p.id, p.filter);
+                if (closeDrawer) Navigator.pop(context);
+              },
+            ),
+          ),
+        );
+      }
+    }
     if (closeDrawer) children.add(_recents(theme));
     final current = _moduleSection;
 
@@ -610,7 +724,10 @@ class _ShellState extends State<Shell> {
             dense: true,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             leading: Icon(m.icon, color: isCurrent ? cs.primary : null),
-            title: Text(m.section, style: theme.textTheme.labelLarge?.copyWith(color: isCurrent ? cs.primary : null, fontWeight: FontWeight.w700)),
+            title: Text(
+              m.section,
+              style: theme.textTheme.labelLarge?.copyWith(color: isCurrent ? cs.primary : null, fontWeight: FontWeight.w700),
+            ),
             trailing: Icon(open ? Icons.expand_less : Icons.expand_more),
             onTap: () => _toggleSection(m.section),
           ),
@@ -683,13 +800,21 @@ class _ShellState extends State<Shell> {
     final recs = wide ? _records : const <String>[];
     if (recs.isEmpty) return Text(base, overflow: TextOverflow.ellipsis);
     Widget crumb(String text, VoidCallback? tap) => tap == null
-        ? Text(text, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))
+        ? Text(
+            text,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          )
         : InkWell(
             borderRadius: BorderRadius.circular(6),
             onTap: tap,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              child: Text(text, overflow: TextOverflow.ellipsis, style: TextStyle(color: theme.colorScheme.primary)),
+              child: Text(
+                text,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: theme.colorScheme.primary),
+              ),
             ),
           );
     return Row(
@@ -766,7 +891,11 @@ class _ShellState extends State<Shell> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Badge(isLabelVisible: badge > 0, label: Text(badge > 99 ? '99+' : '$badge'), child: Icon(icon, color: color, size: 22)),
+            Badge(
+              isLabelVisible: badge > 0,
+              label: Text(badge > 99 ? '99+' : '$badge'),
+              child: Icon(icon, color: color, size: 22),
+            ),
             Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color)),
           ],
         ),
@@ -819,7 +948,9 @@ class _ShellState extends State<Shell> {
             child: Navigator(
               key: _innerKey,
               observers: [_innerTrail],
-              onGenerateRoute: (_) => MaterialPageRoute<void>(builder: (_) => ListenableBuilder(listenable: _rev, builder: (_, _) => _pages())),
+              onGenerateRoute: (_) => MaterialPageRoute<void>(
+                builder: (_) => ListenableBuilder(listenable: _rev, builder: (_, _) => _pages()),
+              ),
             ),
           )
         : _pages();
@@ -842,12 +973,21 @@ class _ShellState extends State<Shell> {
               : null,
           title: Row(
             children: [
-              if (_canBack) IconButton(tooltip: _inner > 0 || _history.isNotEmpty ? 'Voltar' : 'Voltar ao Painel', onPressed: _back, icon: const Icon(Icons.arrow_back)),
+              if (_canBack)
+                IconButton(tooltip: _inner > 0 || _history.isNotEmpty ? 'Voltar' : 'Voltar ao Painel', onPressed: _back, icon: const Icon(Icons.arrow_back)),
               Flexible(child: _title(wide)),
             ],
           ),
           actions: [
             if (wide) ..._stepButtons(),
+            if (_current != 'dashboard')
+              IconButton(
+                key: const ValueKey('pin-screen'),
+                tooltip: _pinned ? 'Desafixar esta tela' : 'Fixar esta tela',
+                onPressed: _togglePin,
+                icon: Icon(_pinned ? Icons.star : Icons.star_border),
+              ),
+            if (wide) IconButton(key: const ValueKey('copy-link'), tooltip: 'Copiar link', onPressed: _copyLink, icon: const Icon(Icons.copy_all_outlined)),
             SearchLauncher(onOpen: _openPalette, compact: !wide),
             const SizedBox(width: 4),
             AlertBell(center: s.alerts, onNavigate: _go),

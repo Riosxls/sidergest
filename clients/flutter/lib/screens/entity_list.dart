@@ -95,11 +95,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
 
   Future<void> _open(Map<String, dynamic> item) async {
     if (!isProduct) return _edit(item);
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ProductDetailScreen(session: widget.session, productId: item['id'] as int),
-      ),
-    );
+    await openProduct(context, widget.session, item['id'] as int);
     unawaited(_load());
   }
 

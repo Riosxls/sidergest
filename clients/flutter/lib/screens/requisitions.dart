@@ -134,20 +134,12 @@ Future<void> showRequisition(BuildContext context, Session session, Map<String, 
       actions: [
         if (r['quotationId'] != null)
           TextButton(
-            onPressed: () => Navigator.of(ctx).push(
-              MaterialPageRoute(
-                builder: (_) => QuotationScreen(session: session, id: r['quotationId'] as int),
-              ),
-            ),
+            onPressed: () => openQuotation(ctx, session, r['quotationId'] as int),
             child: const Text('Abrir cotação'),
           ),
         if (r['purchaseOrderId'] != null)
           TextButton(
-            onPressed: () => Navigator.of(ctx).push(
-              MaterialPageRoute(
-                builder: (_) => OrderScreen(session: session, id: r['purchaseOrderId'] as int),
-              ),
-            ),
+            onPressed: () => openPurchaseOrder(ctx, session, r['purchaseOrderId'] as int),
             child: const Text('Abrir pedido'),
           ),
         if (session.canRequest && _cancellable.contains(r['status']))

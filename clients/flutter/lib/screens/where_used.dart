@@ -41,11 +41,7 @@ class _WhereUsedViewState extends State<WhereUsedView> {
               subtitle: Text('Operação ${r['operationSequence']} · ${fmt(r['quantity'])} ${r['unit']}'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ProductDetailScreen(session: widget.session, productId: r['productId'] as int),
-                  ),
-                );
+                await openProduct(context, widget.session, r['productId'] as int);
                 setState(() {
                   _future = _fetch();
                 });

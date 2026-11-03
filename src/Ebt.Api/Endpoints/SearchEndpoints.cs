@@ -24,6 +24,9 @@ public static class SearchEndpoints
         ("customers", Policies.Read),
         ("fiscal-documents", Policies.Read),
         ("certificates", Policies.Read),
+        ("suppliers", Policies.Read),
+        ("purchase-orders", Policies.Read),
+        ("deliveries", Policies.Read),
     ];
 
     public static void MapSearch(this WebApplication app)
@@ -79,6 +82,21 @@ public static class SearchEndpoints
                     .Where(d => EF.Functions.ILike(d.RecipientName!, like) || d.AccessKey == term || d.Number.ToString() == term)
                     .OrderByDescending(d => d.Series).ThenByDescending(d => d.Number).Take(n).Select(d => new { d.Id, d.Series, d.Number, d.RecipientName }).ToListAsync(ct))
                     .Select(d => new SearchHit(d.Id, $"NF {d.Number}", d.RecipientName)).ToList();
+            case "suppliers":
+                return (await db.Suppliers.AsNoTracking()
+                    .Where(s => EF.Functions.ILike(s.Name, like) || EF.Functions.ILike(s.TradeName!, like) || EF.Functions.ILike(s.LegacyCode!, like))
+                    .OrderBy(s => s.Name).Take(n).Select(s => new { s.Id, s.Name, s.TradeName }).ToListAsync(ct))
+                    .Select(s => new SearchHit(s.Id, s.Name, s.TradeName)).ToList();
+            case "purchase-orders":
+                return (await db.PurchaseOrders.AsNoTracking()
+                    .Where(o => o.Number.ToString() == term || EF.Functions.ILike(o.Supplier!.Name, like))
+                    .OrderByDescending(o => o.Number).Take(n).Select(o => new { o.Id, o.Number, Supplier = o.Supplier!.Name }).ToListAsync(ct))
+                    .Select(o => new SearchHit(o.Id, $"Pedido de compra {o.Number}", o.Supplier)).ToList();
+            case "deliveries":
+                return (await db.Deliveries.AsNoTracking()
+                    .Where(d => EF.Functions.ILike(d.Reference, like) || EF.Functions.ILike(d.Order!.Customer!.Name, like))
+                    .OrderByDescending(d => d.Number).Take(n).Select(d => new { d.Id, d.Reference, Customer = d.Order!.Customer!.Name }).ToListAsync(ct))
+                    .Select(d => new SearchHit(d.Id, d.Reference, d.Customer)).ToList();
             default:
                 return (await db.QualityCertificates.AsNoTracking()
                     .Where(c => EF.Functions.ILike(c.Reference, like) || EF.Functions.ILike(c.Order!.Reference, like) || EF.Functions.ILike(c.Order.Customer!.Name, like)

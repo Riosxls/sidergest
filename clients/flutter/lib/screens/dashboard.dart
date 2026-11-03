@@ -141,7 +141,7 @@ List<DashAlert> buildAlerts(
   final overdue = allOverdue.where((l) => (l['daysLate'] as num) <= legacyOverdueDays).toList();
   final overdueLegacy = allOverdue.where((l) => (l['daysLate'] as num) > legacyOverdueDays).toList();
   String productLabel(Map<String, dynamic> x) => '${x['code']}  ${x['name']}';
-  void openProduct(Map<String, dynamic> p) => push(ProductDetailScreen(session: session, productId: p['id'] as int));
+  void showProduct(Map<String, dynamic> p) => openProduct(context, session, p['id'] as int).then((_) => refresh());
   return [
     if (commercial != null) ...[
       DashAlert(
@@ -271,7 +271,7 @@ List<DashAlert> buildAlerts(
         eng.blockedTotal,
         products.path,
         null,
-        showList('Produtos bloqueados', eng.blocked, productLabel, openProduct, all: products.path, total: eng.blockedTotal),
+        showList('Produtos bloqueados', eng.blocked, productLabel, showProduct, all: products.path, total: eng.blockedTotal),
       ),
       DashAlert(
         'Engenharia',
@@ -280,7 +280,7 @@ List<DashAlert> buildAlerts(
         eng.withoutRoutingTotal,
         products.path,
         null,
-        showList('Produtos sem roteiro', eng.withoutRouting, productLabel, openProduct, all: products.path, total: eng.withoutRoutingTotal),
+        showList('Produtos sem roteiro', eng.withoutRouting, productLabel, showProduct, all: products.path, total: eng.withoutRoutingTotal),
       ),
     ],
   ].where((a) => a.count > 0).toList();

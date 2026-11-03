@@ -7,6 +7,7 @@ import '../labels.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart' show showError;
+import '../widgets/load_error.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
@@ -332,7 +333,7 @@ class _FeasibilityScreenState extends State<FeasibilityScreen> {
         actions: [if (menu.isNotEmpty) PopupMenuButton<VoidCallback>(key: const ValueKey('fav-menu'), onSelected: (v) => v(), itemBuilder: (_) => menu)],
       ),
       body: _error != null && f == null
-          ? Center(child: Text(_error!))
+          ? LoadError(message: _error!, onRetry: _load)
           : f == null
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(onRefresh: _load, child: _body(f)),

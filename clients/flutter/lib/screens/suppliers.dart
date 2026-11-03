@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import '../entities.dart';
 import '../session.dart';
 import '../widgets/entity_form.dart';
+import '../widgets/load_error.dart';
 import '../widgets/record_list.dart';
+import '../widgets/record_nav.dart';
 import 'orders.dart';
 import 'receipts.dart';
 import 'stock_documents.dart';
@@ -43,15 +45,26 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     fab: widget.session.canWrite
         ? FloatingActionButton.extended(heroTag: 'new-sup', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo'))
         : null,
-    onTap: (e) => Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => SupplierScreen(session: widget.session, supplier: e),
-      ),
-    ),
+    onTap: (e) => openSupplier(context, widget.session, e['id'] as int, e),
   );
 }
 
 /// Supplier detail.
+/// Opens a supplier; pass [known] when the list already holds its data, otherwise it is loaded.
+Future<void> openSupplier(BuildContext context, Session session, int id, [Map<String, dynamic>? known]) => pushRecord<void>(
+  context,
+  'supplier',
+  id,
+  (_) => known != null ? SupplierScreen(session: session, supplier: known) : supplierScreenById(session, id),
+);
+
+/// A supplier page for an id alone (web address, restored place).
+Widget supplierScreenById(Session session, int id) => RecordLoader(
+  title: 'Fornecedor',
+  load: () => session.api.get('/api/suppliers/$id'),
+  builder: (s) => SupplierScreen(session: session, supplier: s),
+);
+
 class SupplierScreen extends StatefulWidget {
   const SupplierScreen({super.key, required this.session, required this.supplier});
 

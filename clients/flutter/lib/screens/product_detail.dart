@@ -5,9 +5,14 @@ import '../api.dart';
 import '../entities.dart';
 import '../session.dart';
 import '../widgets/entity_form.dart';
+import '../widgets/load_error.dart';
+import '../widgets/record_nav.dart';
 import 'where_used.dart';
 
 /// Product detail with tabs for data, routing, BOM explosion and revisions.
+Future<void> openProduct(BuildContext context, Session session, int id) =>
+    pushRecord<void>(context, 'product', id, (_) => ProductDetailScreen(session: session, productId: id));
+
 class ProductDetailScreen extends StatefulWidget {
   const ProductDetailScreen({super.key, required this.session, required this.productId});
 
@@ -86,7 +91,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ),
         ),
         body: _error != null
-            ? Center(child: Text(_error!))
+            ? LoadError(message: _error!, onRetry: _load)
             : p == null
             ? const Center(child: CircularProgressIndicator())
             : Column(
@@ -230,7 +235,7 @@ class _RoutingTabState extends State<RoutingTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) return Center(child: Text(_error!));
+    if (_error != null) return LoadError(message: _error!, onRetry: _load);
     final ops = _ops;
     if (ops == null) return const Center(child: CircularProgressIndicator());
     return Scaffold(

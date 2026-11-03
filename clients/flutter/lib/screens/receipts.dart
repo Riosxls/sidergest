@@ -9,6 +9,7 @@ import '../session.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/record_list.dart';
+import '../widgets/record_nav.dart';
 import 'orders.dart';
 import 'stock_documents.dart';
 
@@ -52,15 +53,14 @@ class _ReceiptsViewState extends State<ReceiptsView> {
       ColumnSpec('Divergente', (e) => e['divergent'] == true ? 'Sim' : ''),
     ],
     rowColor: (ctx, e) => e['divergent'] == true ? Theme.of(ctx).colorScheme.tertiaryContainer : null,
-    onTap: (e) => Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ReceiptScreen(session: widget.session, id: e['id'] as int),
-      ),
-    ),
+    onTap: (e) => openReceipt(context, widget.session, e['id'] as int),
   );
 }
 
 /// Goods receipt detail.
+Future<void> openReceipt(BuildContext context, Session session, int id) =>
+    pushRecord<void>(context, 'receipt', id, (_) => ReceiptScreen(session: session, id: id));
+
 class ReceiptScreen extends StatelessWidget {
   const ReceiptScreen({super.key, required this.session, required this.id});
 

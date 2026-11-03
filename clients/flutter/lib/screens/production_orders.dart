@@ -9,9 +9,12 @@ import '../reports/print_docs.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
+import '../widgets/load_error.dart';
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
+import 'customers.dart';
 import 'orders.dart';
+import 'product_detail.dart';
 import 'production_floor.dart';
 import 'stock_documents.dart';
 
@@ -362,7 +365,16 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(o == null ? 'Ordem de fabricação' : '${o['reference']} · ${o['productCode']}', overflow: TextOverflow.ellipsis),
-          actions: _actions(),
+          actions: [
+            if (o != null)
+              RelatedMenu(
+                links: [
+                  RelatedLink(Icons.inventory_2_outlined, 'Produto: ${o['productCode']}', () => openProduct(context, s, o['productId'] as int)),
+                  if (o['customerId'] is int) RelatedLink(Icons.business_outlined, 'Cliente', () => openCustomer(context, s, o['customerId'] as int)),
+                ],
+              ),
+            ..._actions(),
+          ],
           bottom: const TabBar(
             isScrollable: true,
             tabs: [
@@ -376,7 +388,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
           ),
         ),
         body: _error != null && o == null
-            ? Center(child: Text(_error!))
+            ? LoadError(message: _error!, onRetry: _load)
             : o == null
             ? const Center(child: CircularProgressIndicator())
             : TabBarView(
@@ -688,12 +700,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> {
           IconButton(
             tooltip: 'Abrir',
             icon: const Icon(Icons.open_in_new, size: 20),
-            onPressed: () => Navigator.of(context)
-                .push(
-                  MaterialPageRoute(
-                    builder: (_) => DocumentScreen(session: s, id: d['id'] as int),
-                  ),
-                )
+            onPressed: () => openStockDocument(context, s, d['id'] as int)
                 .then((_) => _load()),
           ),
         ],

@@ -11,6 +11,7 @@ import '../widgets/actions.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/record_list.dart';
+import '../widgets/record_nav.dart';
 
 const materialLookup = LookupSpec('/api/materials');
 const productLookup = LookupSpec('/api/products');
@@ -35,11 +36,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     final doc = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => StockPostScreen(session: widget.session)));
     unawaited(_list.currentState?.reload());
     if (doc != null && mounted) {
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => DocumentScreen(session: widget.session, id: doc['id'] as int),
-        ),
-      );
+      await openStockDocument(context, widget.session, doc['id'] as int);
     }
   }
 
@@ -69,16 +66,15 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         ColumnSpec('Situação', (e) => e['reversed'] == true ? 'Estornado' : (e['reversalOfId'] != null ? 'Estorno do nº ${e['reversalOfId']}' : '')),
       ],
       rowColor: (ctx, e) => e['reversed'] == true ? Theme.of(ctx).colorScheme.surfaceContainerHighest : null,
-      onTap: (e) => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => DocumentScreen(session: widget.session, id: e['id'] as int),
-        ),
-      ),
+      onTap: (e) => openStockDocument(context, widget.session, e['id'] as int),
     );
   }
 }
 
 /// Stock document detail.
+Future<void> openStockDocument(BuildContext context, Session session, int id) =>
+    pushRecord<void>(context, 'stock-document', id, (_) => DocumentScreen(session: session, id: id));
+
 class DocumentScreen extends StatefulWidget {
   const DocumentScreen({super.key, required this.session, required this.id});
 

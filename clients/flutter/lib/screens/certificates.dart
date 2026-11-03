@@ -10,9 +10,11 @@ import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/entity_form.dart';
+import '../widgets/load_error.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
+import 'customers.dart';
 import 'sales_common.dart';
 
 Tone certificateTone(Object? s) => switch (s) {
@@ -293,13 +295,14 @@ class _CertificateScreenState extends State<CertificateScreen> {
       appBar: AppBar(
         title: Text(c == null ? 'Certificado' : 'Certificado ${c['reference']} · ${c['customerName']}', overflow: TextOverflow.ellipsis),
         actions: [
+          if (c != null) RelatedMenu(links: [RelatedLink(Icons.business_outlined, 'Cliente: ${c['customerName']}', () => openCustomer(context, s, c['customerId'] as int))]),
           if (c != null)
             PrintButton(key: const ValueKey('certificate-print'), name: 'Certificado de qualidade ${c['reference']}', builder: () => buildCertificatePdf(c)),
           if (menu.isNotEmpty) PopupMenuButton<VoidCallback>(onSelected: (f) => f(), itemBuilder: (_) => menu),
         ],
       ),
       body: _error != null && c == null
-          ? Center(child: Text(_error!))
+          ? LoadError(message: _error!, onRetry: _load)
           : c == null
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(onRefresh: _load, child: _body(c)),
@@ -999,7 +1002,7 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
         ],
       ),
       body: _error != null
-          ? Center(child: Text(_error!))
+          ? LoadError(message: _error!, onRetry: _load)
           : items == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(

@@ -3,12 +3,19 @@ import 'package:flutter/material.dart';
 import '../session.dart';
 import '../widgets/record_nav.dart';
 import 'certificates.dart';
+import 'customers.dart';
 import 'deliveries.dart';
 import 'fiscal.dart';
+import 'orders.dart';
+import 'product_detail.dart';
 import 'production_orders.dart';
+import 'quotations.dart';
+import 'receipts.dart';
 import 'sales_orders.dart';
 import 'sales_quotes.dart';
 import 'steel.dart';
+import 'stock_documents.dart';
+import 'suppliers.dart';
 import 'viability.dart';
 
 /// Names shown in the breadcrumb for each record kind opened with `pushRecord`.
@@ -21,6 +28,13 @@ const recordLabels = {
   'fiscal': 'Nota fiscal',
   'feasibility': 'Viabilidade',
   'steel-lot': 'Lote de aço',
+  'purchase-order': 'Pedido de compra',
+  'quotation': 'Cotação',
+  'receipt': 'Recebimento',
+  'stock-document': 'Movimentação de estoque',
+  'product': 'Produto',
+  'customer': 'Cliente',
+  'supplier': 'Fornecedor',
 };
 
 /// The page of a record kind, or null for an unknown kind (an old bookmark, a hand-edited address).
@@ -33,6 +47,13 @@ Widget? recordScreen(Session s, String kind, int id) => switch (kind) {
   'fiscal' => FiscalDocumentScreen(session: s, id: id),
   'feasibility' => FeasibilityScreen(session: s, id: id),
   'steel-lot' => SteelLotScreen(session: s, id: id),
+  'purchase-order' => OrderScreen(session: s, id: id),
+  'quotation' => QuotationScreen(session: s, id: id),
+  'receipt' => ReceiptScreen(session: s, id: id),
+  'stock-document' => DocumentScreen(session: s, id: id),
+  'product' => ProductDetailScreen(session: s, productId: id),
+  'customer' => customerScreenById(s, id),
+  'supplier' => supplierScreenById(s, id),
   _ => null,
 };
 

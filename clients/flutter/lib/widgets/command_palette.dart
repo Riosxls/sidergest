@@ -92,6 +92,9 @@ const searchGroups = {
   'customers': ('Clientes', Icons.people_outline),
   'fiscal-documents': ('Notas fiscais', Icons.description_outlined),
   'certificates': ('Certificados', Icons.verified_outlined),
+  'suppliers': ('Fornecedores', Icons.business_outlined),
+  'purchase-orders': ('Pedidos de compra', Icons.shopping_cart_outlined),
+  'deliveries': ('Entregas', Icons.local_shipping_outlined),
 };
 
 /// A quick action listed in the command palette.
@@ -172,12 +175,13 @@ Future<void> showCommandPalette(
   required List<PaletteAction> actions,
   required void Function(String id) onNavigate,
   required void Function(String group, int id) onOpenHit,
+  void Function(String link)? onOpenLink,
 }) async {
   final recents = await RecentStore.load();
   if (!context.mounted) return;
   await showDialog<void>(
     context: context,
-    builder: (_) => _Palette(session: session, targets: targets, actions: actions, recents: recents, onNavigate: onNavigate, onOpenHit: onOpenHit),
+    builder: (_) => _Palette(session: session, targets: targets, actions: actions, recents: recents, onNavigate: onNavigate, onOpenHit: onOpenHit, onOpenLink: onOpenLink),
   );
 }
 
@@ -189,6 +193,7 @@ class _Palette extends StatefulWidget {
     required this.recents,
     required this.onNavigate,
     required this.onOpenHit,
+    this.onOpenLink,
   });
 
   final Session session;
@@ -197,6 +202,7 @@ class _Palette extends StatefulWidget {
   final List<RecentItem> recents;
   final void Function(String id) onNavigate;
   final void Function(String group, int id) onOpenHit;
+  final void Function(String link)? onOpenLink;
 
   @override
   State<_Palette> createState() => _PaletteState();
@@ -253,6 +259,10 @@ class _PaletteState extends State<_Palette> {
     bool hit(String s) => key.isEmpty || fold(s).contains(key);
     final titleOf = {for (final t in widget.targets) t.id: t};
     final out = <_Entry>[];
+    // A link copied from another record page ("Copiar link") opens that place.
+    if (widget.onOpenLink != null && RegExp(r'(^|#)/s/\S+').hasMatch(_q)) {
+      out.add(_Entry('Link', Icons.link, 'Abrir link colado', _q, () => _close(() => widget.onOpenLink!(_q))));
+    }
     for (final a in widget.actions.where((a) => hit(a.label))) {
       out.add(_Entry('Ações', a.icon, a.label, null, () => _close(a.run)));
     }

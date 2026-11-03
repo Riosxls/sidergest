@@ -14,11 +14,13 @@ import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/entity_form.dart';
+import '../widgets/load_error.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/print_gate.dart';
 import '../widgets/print_panel.dart';
 import '../widgets/record_list.dart';
 import '../workdays.dart';
+import 'customers.dart';
 import 'sales_common.dart';
 import 'viability.dart';
 
@@ -1618,10 +1620,10 @@ class _QuoteScreenState extends State<QuoteScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(q == null ? 'Orçamento' : '${q['reference']} · ${q['customerName']}', overflow: TextOverflow.ellipsis),
-        actions: _menuActions(),
+        actions: [if (q != null) RelatedMenu(links: [RelatedLink(Icons.business_outlined, 'Cliente: ${q['customerName']}', () => openCustomer(context, s, q['customerId'] as int))]), ..._menuActions()],
       ),
       body: _error != null && q == null
-          ? Center(child: Text(_error!))
+          ? LoadError(message: _error!, onRetry: _load)
           : q == null
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(onRefresh: _load, child: _body(q)),

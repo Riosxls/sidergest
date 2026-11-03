@@ -7,7 +7,9 @@ import '../labels.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
+import '../widgets/load_error.dart';
 import '../widgets/record_list.dart';
+import '../widgets/record_nav.dart';
 import 'orders.dart';
 
 /// Purchasing quotations list.
@@ -24,12 +26,7 @@ class _QuotationsScreenState extends State<QuotationsScreen> {
   final _list = GlobalKey<RecordListState>();
   String? _status = 'Open';
 
-  void _open(int id) => Navigator.of(context)
-      .push(
-        MaterialPageRoute(
-          builder: (_) => QuotationScreen(session: widget.session, id: id),
-        ),
-      )
+  void _open(int id) => openQuotation(context, widget.session, id)
       .then((_) => _list.currentState?.reload());
 
   Future<void> _new() async {
@@ -206,6 +203,9 @@ Map<String, dynamic> zeroPercents(Map<String, dynamic> b) => {
 };
 
 /// Purchasing quotation detail.
+Future<void> openQuotation(BuildContext context, Session session, int id) =>
+    pushRecord<void>(context, 'quotation', id, (_) => QuotationScreen(session: session, id: id));
+
 class QuotationScreen extends StatefulWidget {
   const QuotationScreen({super.key, required this.session, required this.id});
 
@@ -296,11 +296,7 @@ class _QuotationScreenState extends State<QuotationScreen> {
     if (supplierId == null || !mounted) return;
     final o = await runAction(context, () => api.post('/api/purchase-orders/from-quotation', {'quotationId': widget.id, 'supplierId': supplierId}));
     if (o == null || !mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => OrderScreen(session: widget.session, id: o['id'] as int),
-      ),
-    );
+    await openPurchaseOrder(context, widget.session, o['id'] as int);
     unawaited(_load());
   }
 
@@ -332,7 +328,7 @@ class _QuotationScreenState extends State<QuotationScreen> {
           ),
         ),
         body: _error != null
-            ? Center(child: Text(_error!))
+            ? LoadError(message: _error!, onRetry: _load)
             : q == null
             ? const Center(child: CircularProgressIndicator())
             : TabBarView(children: [_bids(), _comparison()]),

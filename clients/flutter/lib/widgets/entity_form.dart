@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import '../api.dart';
 import '../entities.dart';
 import '../workdays.dart';
 import 'discard_guard.dart';
+import 'drafts.dart';
 
 Future<Map<String, dynamic>?> showEntityForm(
   BuildContext context, {
@@ -74,10 +76,51 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
   String? _message;
   bool _busy = false;
   late final String _initial;
+  bool _recovered = false;
+  bool _lockSaved = false;
 
-  String _signature() => jsonEncode([
-    for (final f in widget.fields) _text[f.key]?.text ?? _values[f.key],
-  ]);
+  String get _draftKey => 'form:${widget.title}:${widget.initial?['id'] ?? 'new'}';
+
+  /// Called when the session ends under an open form: keeps what was typed so it can be offered again.
+  void _saveDraft() {
+    if (widget.readOnly || _busy || _signature() == _initial) return;
+    _lockSaved = true;
+    unawaited(
+      DraftStore.save(_draftKey, {
+        'text': {for (final e in _text.entries) e.key: e.value.text},
+        'values': {for (final e in _values.entries) e.key: e.value},
+        'labels': Map<String, String>.of(_labels),
+      }),
+    );
+  }
+
+  Future<void> _restoreDraft() async {
+    if (widget.readOnly) return;
+    final d = await DraftStore.load(_draftKey);
+    if (d == null || !mounted) return;
+    setState(() {
+      final text = d['text'];
+      if (text is Map) {
+        for (final e in text.entries) {
+          _text['${e.key}']?.text = '${e.value}';
+        }
+      }
+      final values = d['values'];
+      if (values is Map) {
+        for (final e in values.entries) {
+          if (_values.containsKey(e.key)) _values['${e.key}'] = e.value;
+        }
+      }
+      final labels = d['labels'];
+      if (labels is Map) _labels.addAll({for (final e in labels.entries) '${e.key}': '${e.value}'});
+      for (final k in _values.keys) {
+        _lookupKeys[k] = (_lookupKeys[k] ?? 0) + 1;
+      }
+      _recovered = true;
+    });
+  }
+
+  String _signature() => jsonEncode([for (final f in widget.fields) _text[f.key]?.text ?? _values[f.key]]);
 
   bool _isText(FieldSpec f) =>
       f.type == FieldType.text || f.type == FieldType.integer || f.type == FieldType.decimal || f.type == FieldType.date || f.type == FieldType.time;
@@ -98,10 +141,14 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
     final labels = widget.initial?['_labels'];
     if (labels is Map) _labels.addAll(labels.cast<String, String>());
     _initial = _signature();
+    DraftRegistry.register(_saveDraft);
+    unawaited(_restoreDraft());
   }
 
   @override
   void dispose() {
+    DraftRegistry.unregister(_saveDraft);
+    if (!_lockSaved && !widget.readOnly) unawaited(DraftStore.clear(_draftKey));
     for (final c in _text.values) {
       c.dispose();
     }
@@ -281,8 +328,14 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
           key: ValueKey('field-${f.key}'),
           initialValue: _values[f.key] as String?,
           isExpanded: true,
-          decoration: InputDecoration(labelText: label, helperText: f.hint,
-            helperMaxLines: 4, errorText: error, border: const OutlineInputBorder(), isDense: true),
+          decoration: InputDecoration(
+            labelText: label,
+            helperText: f.hint,
+            helperMaxLines: 4,
+            errorText: error,
+            border: const OutlineInputBorder(),
+            isDense: true,
+          ),
           items: [
             if (!f.required) const DropdownMenuItem<String?>(value: null, child: Text('—')),
             for (final e in f.choices.entries) DropdownMenuItem<String?>(value: e.key, child: Text(e.value)),
@@ -353,6 +406,17 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
       children: [
         Text(widget.title, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
+        if (_recovered)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.restore, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Rascunho recuperado: nada foi enviado ainda.', style: Theme.of(context).textTheme.bodySmall)),
+              ],
+            ),
+          ),
         Flexible(child: form),
         if (_message != null)
           Padding(
@@ -442,7 +506,15 @@ class _LookupFieldState extends State<LookupField> {
   Future<void> _pick() async {
     final picked = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => LookupPicker(api: widget.api, path: widget.spec.path, title: widget.label, query: widget.spec.query, selectedId: widget.value, create: widget.onCustom == null ? null : askCustomPrazo, createLabel: 'Prazo personalizado'),
+      builder: (_) => LookupPicker(
+        api: widget.api,
+        path: widget.spec.path,
+        title: widget.label,
+        query: widget.spec.query,
+        selectedId: widget.value,
+        create: widget.onCustom == null ? null : askCustomPrazo,
+        createLabel: 'Prazo personalizado',
+      ),
     );
     if (picked == null) return;
     final custom = picked['_custom'];
@@ -483,7 +555,16 @@ class _LookupFieldState extends State<LookupField> {
 
 /// Searchable dialog that lists records of [path] and returns the chosen one; [create] adds a "new" flow.
 class LookupPicker extends StatefulWidget {
-  const LookupPicker({super.key, required this.api, required this.path, required this.title, this.query = const {}, this.selectedId, this.create, this.createLabel = 'Novo'});
+  const LookupPicker({
+    super.key,
+    required this.api,
+    required this.path,
+    required this.title,
+    this.query = const {},
+    this.selectedId,
+    this.create,
+    this.createLabel = 'Novo',
+  });
 
   final ApiClient api;
   final Map<String, dynamic> query;
@@ -559,7 +640,9 @@ class _LookupPickerState extends State<LookupPicker> {
             if (_error != null) Padding(padding: const EdgeInsets.all(8), child: Text(_error!)),
             Expanded(
               child: !_loading && _error == null && _items.isEmpty
-                  ? Center(child: Text('Nenhum resultado', style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)))
+                  ? Center(
+                      child: Text('Nenhum resultado', style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                    )
                   : ListView.separated(
                       itemCount: _items.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 2),

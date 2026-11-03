@@ -22,11 +22,7 @@ Future<void> newProduct(BuildContext context, Session session) async {
   final api = session.api;
   final r = await submitForm(context, api: api, title: 'Novo: ${products.singular}', fields: products.fields, submit: (b) => api.post(products.path, b));
   if (r == null || r['id'] is! int || !context.mounted) return;
-  await Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => ProductDetailScreen(session: session, productId: r['id'] as int),
-    ),
-  );
+  await openProduct(context, session, r['id'] as int);
 }
 
 List<QuickAction> quickActionsFor(Session s) => [
