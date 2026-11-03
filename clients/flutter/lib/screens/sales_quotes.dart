@@ -1141,7 +1141,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     if (r == null || r['id'] == null || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${q['reference']} substituída · nova revisão ${r['reference']} em rascunho')));
     await _load();
-    if (mounted) await openQuote(context, s, r['id'] as int);
+    if (mounted) await replaceWithQuote(context, s, r['id'] as int);
     if (mounted) unawaited(_load());
   }
 
@@ -1177,7 +1177,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     if (order == null || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Pedido ${order['reference']} criado')));
     await _load();
-    if (mounted) await openSalesOrder(context, s, order['id'] as int);
+    if (mounted) await replaceWithSalesOrder(context, s, order['id'] as int);
     unawaited(_load());
   }
 

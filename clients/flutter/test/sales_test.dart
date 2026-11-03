@@ -533,6 +533,27 @@ void main() {
     expect(find.byKey(const ValueKey('order-release')), findsOneWidget);
   });
 
+  testWidgets('after a quote becomes an order, Back leaves the order for where the quote was opened from', (tester) async {
+    final fake = SalesFake()..quoteStatus = 'PurchaseOrder';
+    await pumpScreen(
+      tester,
+      fake,
+      (s) => Builder(builder: (c) => TextButton(onPressed: () => openQuote(c, s, 5), child: const Text('abrir-orcamento'))),
+    );
+    await tester.tap(find.text('abrir-orcamento'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('quote-convert')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-step')));
+    await tester.pumpAndSettle();
+    expect(find.text('PV 9 · BTS Tubos'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    // The finished quote is not shown again, as if the step had been undone.
+    expect(find.text('abrir-orcamento'), findsOneWidget);
+    expect(find.byKey(const ValueKey('quote-convert')), findsNothing);
+  });
+
   testWidgets('order release without stock, then plan a delivery', (tester) async {
     final fake = SalesFake();
     await pumpScreen(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));

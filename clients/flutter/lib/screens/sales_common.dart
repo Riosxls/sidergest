@@ -166,3 +166,11 @@ class SideBySide extends StatelessWidget {
 }
 
 const gap = SizedBox(height: 12);
+
+/// Same as [openSalesOrder], in the place of the page that calls it (a quote that has just become this order).
+Future<void> replaceWithSalesOrder(BuildContext context, Session session, int id) =>
+    replaceRecord<void>(context, 'sales-order', id, (_) => SalesOrderScreen(session: session, id: id));
+
+/// Same as [openQuote], in the place of the page that calls it (a quote version that a new revision has just replaced).
+Future<void> replaceWithQuote(BuildContext context, Session session, int id) =>
+    replaceRecord<void>(context, 'quote', id, (_) => QuoteScreen(session: session, id: id));

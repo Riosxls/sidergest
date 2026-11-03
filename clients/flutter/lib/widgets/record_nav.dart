@@ -149,3 +149,25 @@ Future<T?> pushRecord<T>(BuildContext context, String kind, int id, WidgetBuilde
     ),
   );
 }
+
+/// Opens the record that continues the work of the page it is called from, in that page's place: the flow moved on
+/// (a quote became an order, a revision replaced a version), so Back must not return to the page the step just finished.
+/// A record already open further down the stack is returned to instead, as in [pushRecord].
+Future<T?> replaceRecord<T>(BuildContext context, String kind, int id, WidgetBuilder builder) async {
+  final nav = Navigator.of(context);
+  final name = recordRouteName(kind, id);
+  final trail = nav.widget.observers.whereType<RecordTrail>().firstOrNull;
+  if (trail != null && trail.has(name)) {
+    if (DiscardGuard.anyDirty && !await confirmDiscard(context)) return null;
+    if (nav.mounted) nav.popUntil((r) => r.settings.name == name);
+    return null;
+  }
+  // The page that asks may be a dialog's or a card's context; only a record page on top is replaced.
+  if (!(ModalRoute.of(context)?.isCurrent ?? false)) return pushRecord<T>(context, kind, id, builder);
+  return nav.pushReplacement<T, void>(
+    MaterialPageRoute<T>(
+      settings: RouteSettings(name: name, arguments: RecordSiblings.take(id)),
+      builder: builder,
+    ),
+  );
+}
