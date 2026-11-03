@@ -560,12 +560,14 @@ class _RestoreDialog extends StatefulWidget {
 
 class _RestoreDialogState extends State<_RestoreDialog> {
   final _confirm = TextEditingController();
+  final _password = TextEditingController();
   String? _error;
   bool _busy = false;
 
   @override
   void dispose() {
     _confirm.dispose();
+    _password.dispose();
     super.dispose();
   }
 
@@ -575,7 +577,7 @@ class _RestoreDialogState extends State<_RestoreDialog> {
       _error = null;
     });
     try {
-      final c = BackupCatalog.fromJson(await widget.session.api.post('/api/admin/backups/restore', {'file': widget.item.name, 'confirm': _confirm.text.trim()}));
+      final c = BackupCatalog.fromJson(await widget.session.api.post('/api/admin/backups/restore', {'file': widget.item.name, 'confirm': _confirm.text.trim(), 'password': _password.text}));
       if (mounted) Navigator.pop(context, c.restore);
     } catch (e) {
       if (mounted) setState(() => _error = friendlyError(e));
@@ -587,7 +589,7 @@ class _RestoreDialogState extends State<_RestoreDialog> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final ok = _confirm.text.trim() == restoreConfirmWord && !_busy;
+    final ok = _confirm.text.trim() == restoreConfirmWord && _password.text.isNotEmpty && !_busy;
     return AlertDialog(
       key: const ValueKey('restore-dialog'),
       title: const Text('Restaurar backup'),
@@ -630,6 +632,14 @@ class _RestoreDialogState extends State<_RestoreDialog> {
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(labelText: 'Digite $restoreConfirmWord para confirmar', border: OutlineInputBorder(), isDense: true),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('restore-password'),
+                controller: _password,
+                obscureText: true,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: 'Sua senha de administrador', border: OutlineInputBorder(), isDense: true),
+              ),
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
@@ -666,12 +676,14 @@ class _DeleteDialog extends StatefulWidget {
 
 class _DeleteDialogState extends State<_DeleteDialog> {
   final _confirm = TextEditingController();
+  final _password = TextEditingController();
   String? _error;
   bool _busy = false;
 
   @override
   void dispose() {
     _confirm.dispose();
+    _password.dispose();
     super.dispose();
   }
 
@@ -681,7 +693,7 @@ class _DeleteDialogState extends State<_DeleteDialog> {
       _error = null;
     });
     try {
-      await widget.session.api.post('/api/admin/backups/delete', {'file': widget.item.name, 'confirm': _confirm.text});
+      await widget.session.api.post('/api/admin/backups/delete', {'file': widget.item.name, 'confirm': _confirm.text, 'password': _password.text});
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) setState(() => _error = friendlyError(e));
@@ -693,7 +705,7 @@ class _DeleteDialogState extends State<_DeleteDialog> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final ok = _confirm.text == deleteConfirmWord && !_busy;
+    final ok = _confirm.text == deleteConfirmWord && _password.text.isNotEmpty && !_busy;
     final warn = TextStyle(color: cs.error, fontWeight: FontWeight.w600);
     return AlertDialog(
       key: const ValueKey('delete-dialog'),
@@ -715,6 +727,14 @@ class _DeleteDialogState extends State<_DeleteDialog> {
                 autofocus: true,
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(labelText: 'Digite $deleteConfirmWord para confirmar', border: OutlineInputBorder(), isDense: true),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('delete-password'),
+                controller: _password,
+                obscureText: true,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: 'Sua senha de administrador', border: OutlineInputBorder(), isDense: true),
               ),
               if (_error != null)
                 Padding(

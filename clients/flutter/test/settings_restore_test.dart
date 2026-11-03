@@ -166,6 +166,7 @@ Future<void> _openDialog(WidgetTester tester) async {
 
 Future<void> _confirm(WidgetTester tester) async {
   await tester.enterText(find.byKey(const ValueKey('restore-confirm')), 'RESTAURAR');
+  await tester.enterText(find.byKey(const ValueKey('restore-password')), 'senha-admin');
   await tester.pump();
   await tester.tap(find.byKey(const ValueKey('restore-confirm-run')));
   await tester.pump();
@@ -184,6 +185,7 @@ Future<void> _openDelete(WidgetTester tester, String name) async {
 
 Future<void> _confirmDelete(WidgetTester tester, [String word = 'EXCLUIR']) async {
   await tester.enterText(find.byKey(const ValueKey('delete-confirm')), word);
+  await tester.enterText(find.byKey(const ValueKey('delete-password')), 'senha-admin');
   await tester.pump();
   await tester.tap(find.byKey(const ValueKey('delete-confirm-run')));
   await tester.pump();
@@ -233,7 +235,7 @@ void main() {
     await _confirm(tester);
     final post = s.log.lastWhere((r) => r.method == 'POST');
     expect(post.url.path, '/api/admin/backups/restore');
-    expect(jsonDecode(post.body), {'file': 'ebt-2.dump', 'confirm': 'RESTAURAR'});
+    expect(jsonDecode(post.body), {'file': 'ebt-2.dump', 'confirm': 'RESTAURAR', 'password': 'senha-admin'});
     expect(find.byKey(const ValueKey('restore-running')), findsOneWidget);
     await _unmount(tester);
   });
@@ -394,6 +396,9 @@ void main() {
       expect(run().onPressed, isNull);
       await tester.enterText(find.byKey(const ValueKey('delete-confirm')), 'EXCLUIR');
       await tester.pump();
+      expect(run().onPressed, isNull, reason: 'the password is needed too');
+      await tester.enterText(find.byKey(const ValueKey('delete-password')), 'senha-admin');
+      await tester.pump();
       expect(run().onPressed, isNotNull);
       await _tap(tester, find.text('Cancelar'));
       expect(find.byKey(const ValueKey('delete-dialog')), findsNothing);
@@ -440,7 +445,7 @@ void main() {
       await _settle(tester);
       final post = s.log.lastWhere((r) => r.method == 'POST');
       expect(post.url.path, '/api/admin/backups/delete');
-      expect(jsonDecode(post.body), {'file': 'ebt-1.dump', 'confirm': 'EXCLUIR'});
+      expect(jsonDecode(post.body), {'file': 'ebt-1.dump', 'confirm': 'EXCLUIR', 'password': 'senha-admin'});
       await _settle(tester);
       expect(find.byKey(const ValueKey('delete-dialog')), findsNothing);
       expect(find.text('Excluindo o backup...'), findsOneWidget);

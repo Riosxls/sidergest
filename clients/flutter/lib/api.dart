@@ -120,7 +120,7 @@ class ApiClient {
   final _versions = LruMap<String, String>(300);
   /// Auth endpoints that never trigger a silent refresh (a 401 there is a real answer); /api/auth/me and the rest may refresh.
   static const _noRefresh = ['/api/auth/login', '/api/auth/refresh', '/api/auth/logout'];
-  static final _inProgress = RegExp(r'idempot|request in progress|(a[cç][aã]o|requisi[cç][aã]o|opera[cç][aã]o) (anterior )?(ainda )?(est[aá] )?em andamento');
+  static final _inProgress = RegExp(r'idempot|request in progress|(a[cç][aã]o|requisi[cç][aã]o|opera[cç][aã]o) (anterior )?(ainda )?(j[aá] )?(est[aá] )?em andamento');
   static final _idKey =RegExp(r'^(.*?/\d+)(?:[/?]|$)');
 
   static String? _versionKey(String path) => _idKey.firstMatch(path)?.group(1);
