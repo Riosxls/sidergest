@@ -494,13 +494,15 @@ Future<NfFiscal?> askNfFiscal(BuildContext context, {String number = ''}) {
 }
 
 /// Pergunta os dados fiscais, monta o PDF e abre a impressão.
-Future<void> printNf(BuildContext context, {required String name, String number = '', required Future<Uint8List> Function(NfFiscal) build}) async {
+/// Responde se o papel chegou a ser impresso (false: o usuário cancelou ou deu erro).
+Future<bool> printNf(BuildContext context, {required String name, String number = '', required Future<Uint8List> Function(NfFiscal) build}) async {
   final f = await askNfFiscal(context, number: number);
-  if (f == null || !context.mounted) return;
+  if (f == null || !context.mounted) return false;
   try {
     final bytes = await build(f);
-    await Printing.layoutPdf(name: name, onLayout: (_) async => bytes, format: PdfPageFormat.a4);
+    return await Printing.layoutPdf(name: name, onLayout: (_) async => bytes, format: PdfPageFormat.a4);
   } catch (e) {
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: ${friendlyError(e)}')));
+    return false;
   }
 }

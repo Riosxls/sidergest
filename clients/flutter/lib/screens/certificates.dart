@@ -12,10 +12,13 @@ import '../widgets/discard_guard.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/load_error.dart';
 import '../widgets/pipeline.dart';
+import '../widgets/print_panel.dart' show printPdf;
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
+import '../widgets/record_shortcuts.dart';
 import 'customers.dart';
 import 'sales_common.dart';
+import 'sales_orders.dart' show ReasonDialog;
 
 Tone certificateTone(Object? s) => switch (s) {
   'Draft' => Tone.warning,
@@ -140,7 +143,8 @@ class _CertificateScreenState extends State<CertificateScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  /// Reloads the certificate. [report]: the user asked (F5, refresh button), so a failure is said even when the old data stays on screen.
+  Future<void> _load({bool report = false}) async {
     try {
       final c = await api.get(base) as Map<String, dynamic>;
       if (mounted) {
@@ -150,9 +154,16 @@ class _CertificateScreenState extends State<CertificateScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = friendlyError(e));
+      if (!mounted) return;
+      if (_c != null) {
+        if (report) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao atualizar: ${friendlyError(e)}')));
+        return;
+      }
+      setState(() => _error = friendlyError(e));
     }
   }
+
+  void _refresh() => unawaited(_load(report: true));
 
   Future<void> _edit() async {
     final r = await Navigator.of(context).push<Map<String, dynamic>>(
@@ -192,7 +203,14 @@ class _CertificateScreenState extends State<CertificateScreen> {
 
   Future<void> _link() async {
     final c = _c!;
-    final order = await api.get('/api/sales/orders/${c['orderId']}') as Map<String, dynamic>;
+    final Map<String, dynamic> order;
+    try {
+      order = await api.get('/api/sales/orders/${c['orderId']}') as Map<String, dynamic>;
+    } catch (e) {
+      // A menu callback has nobody above it to catch this: say what happened instead of failing silently.
+      if (mounted) showError(context, e);
+      return;
+    }
     final deliveries = (order['deliveries'] as List).cast<Map<String, dynamic>>().where((d) => d['status'] != 'Cancelled').toList();
     if (!mounted) return;
     if (deliveries.isEmpty) return showError(context, 'O pedido ainda não tem entrega programada');
@@ -215,9 +233,20 @@ class _CertificateScreenState extends State<CertificateScreen> {
   }
 
   Future<void> _cancel() async {
-    final reason = await promptText(context, title: 'Cancelar ${_c!['reference']}', label: 'Motivo', required: true, confirmLabel: 'Cancelar certificado');
-    if (reason == null || !mounted) return;
-    final r = await runAction(context, () => api.post('$base/cancel', {'reason': reason}), success: 'Certificado cancelado');
+    final c = _c!;
+    final answer = await showDialog<({String reason, bool option})>(
+      context: context,
+      builder: (_) => ReasonDialog(
+        title: 'Cancelar ${c['reference']}?',
+        confirmLabel: 'Cancelar certificado',
+        details: [
+          if (c['status'] == 'Issued') 'Um certificado cancelado deixa de valer: o pedido volta a exigir um certificado emitido (ou a dispensa) antes de expedir.',
+          if (c['deliveryReference'] != null) 'Ele sai da entrega ${c['deliveryReference']}.',
+        ],
+      ),
+    );
+    if (answer == null || !mounted) return;
+    final r = await runAction(context, () => api.post('$base/cancel', {'reason': answer.reason}), success: 'Certificado cancelado');
     if (r is Map<String, dynamic> && mounted) setState(() => _c = r);
   }
 
@@ -278,6 +307,7 @@ class _CertificateScreenState extends State<CertificateScreen> {
   @override
   Widget build(BuildContext context) {
     final c = _c;
+    final danger = Theme.of(context).colorScheme.error;
     final menu = <PopupMenuEntry<VoidCallback>>[
       if (s.canCertificate && c?['status'] == 'Draft')
         PopupMenuItem(
@@ -297,13 +327,17 @@ class _CertificateScreenState extends State<CertificateScreen> {
       if (s.canIssueCertificate && c != null && c['status'] != 'Cancelled')
         PopupMenuItem(
           value: _cancel,
-          child: const ListTile(leading: Icon(Icons.block), title: Text('Cancelar certificado')),
+          child: ListTile(leading: const Icon(Icons.block), iconColor: danger, textColor: danger, title: const Text('Cancelar certificado')),
         ),
     ];
-    return Scaffold(
+    return RecordShortcuts(
+      onRefresh: _refresh,
+      onPrint: c == null ? null : () => unawaited(printPdf(context, 'Certificado de qualidade ${c['reference']}', () => buildCertificatePdf(c))),
+      child: Scaffold(
       appBar: AppBar(
         title: Text(c == null ? 'Certificado' : 'Certificado ${c['reference']} · ${c['customerName']}', overflow: TextOverflow.ellipsis),
         actions: [
+          if (c != null) RefreshButton(onPressed: _refresh),
           if (c != null) RelatedMenu(links: [RelatedLink(Icons.business_outlined, 'Cliente: ${c['customerName']}', () => openCustomer(context, s, c['customerId'] as int))]),
           if (c != null)
             PrintButton(key: const ValueKey('certificate-print'), name: 'Certificado de qualidade ${c['reference']}', builder: () => buildCertificatePdf(c)),
@@ -314,7 +348,8 @@ class _CertificateScreenState extends State<CertificateScreen> {
           ? LoadError(message: _error!, onRetry: _load)
           : c == null
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(onRefresh: _load, child: _body(c)),
+          : RefreshIndicator(onRefresh: () => _load(report: true), child: _body(c)),
+      ),
     );
   }
 
@@ -486,6 +521,7 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
     for (final x in [..._fields.values, ..._spec, ..._found]) {
       x.dispose();
     }
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -494,11 +530,35 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
     return t.isEmpty ? null : t;
   }
 
-  Future<void> _save() async {
+  final _scroll = ScrollController();
+
+  /// Shows a validation or server message at the top of the page and brings the page back up to it (the save button is in the app bar).
+  void _fail(String message) {
+    setState(() {
+      _busy = false;
+      _error = message;
+    });
+    if (_scroll.hasClients) unawaited(_scroll.animateTo(0, duration: const Duration(milliseconds: 250), curve: Curves.easeOut));
+  }
+
+  /// Saves the draft. [issue]: "Salvar e emitir", which also issues it (after the same checks and confirmation as the certificate page).
+  Future<void> _save({bool issue = false}) async {
     final date = parseDate(_fields['issueDate']!.text);
     final qty = parseDecimal(_fields['quantity']!.text.trim());
-    if (date == null) return setState(() => _error = 'Data inválida');
-    if (qty == null || qty <= 0) return setState(() => _error = 'Quantidade deve ser maior que zero');
+    if (date == null) return _fail('Data inválida');
+    if (qty == null || qty <= 0) return _fail('Quantidade deve ser maior que zero');
+    if (_v('description') == null) return _fail('Informe a descrição do produto');
+    if (issue) {
+      if (!_found.any((f) => _hasValue(f.text))) return _fail('Preencha ao menos um valor em "Encontrado" (química, dimensional ou ensaios) antes de emitir.');
+      final ok = await confirmStep(
+        context,
+        title: 'Salvar e emitir ${c['reference']}?',
+        message: 'Depois de emitido, os dados não podem mais ser editados.',
+        confirmLabel: 'Emitir',
+        icon: Icons.verified_outlined,
+      );
+      if (!ok || !mounted) return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -526,15 +586,13 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
             {'kind': _measures[i]['kind'], 'name': _measures[i]['name'], 'specified': _spec[i].text.trim(), 'found': _found[i].text.trim()},
         ],
       };
-      final r = await api.put('/api/sales/certificates/${c['id']}', body);
-      if (mounted) Navigator.of(context).pop(r as Map<String, dynamic>);
+      var r = await api.put('/api/sales/certificates/${c['id']}', body) as Map<String, dynamic>;
+      // What was typed is saved: a failure of the issue step below must not ask to discard it.
+      _initial = _signature();
+      if (issue) r = await api.post('/api/sales/certificates/${c['id']}/issue', {}) as Map<String, dynamic>;
+      if (mounted) Navigator.of(context).pop(r);
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = friendlyError(e);
-        });
-      }
+      if (mounted) _fail(friendlyError(e));
     }
   }
 
@@ -638,22 +696,32 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
       children: [
         SizedBox(
           width: 92,
-          child: Text(
-            '${_measures[i]['name']}',
-            style: const TextStyle(fontWeight: FontWeight.w600),
-            overflow: TextOverflow.ellipsis,
+          // The name is cut at 92 px: the tooltip carries the whole of it.
+          child: Tooltip(
+            message: '${_measures[i]['name']}',
+            child: Text(
+              '${_measures[i]['name']}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ),
         Expanded(
-          child: TextField(key: ValueKey('spec-$kind-${_measures[i]['name']}'), controller: _spec[i], decoration: _cell(scheme, found: false)),
+          child: Semantics(
+            label: 'Especificado: ${_measures[i]['name']}',
+            child: TextField(key: ValueKey('spec-$kind-${_measures[i]['name']}'), controller: _spec[i], decoration: _cell(scheme, found: false)),
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: TextField(
-            key: ValueKey('found-$kind-${_measures[i]['name']}'),
-            controller: _found[i],
-            onChanged: (_) => setState(() {}),
-            decoration: _cell(scheme, found: true),
+          child: Semantics(
+            label: 'Encontrado: ${_measures[i]['name']}',
+            child: TextField(
+              key: ValueKey('found-$kind-${_measures[i]['name']}'),
+              controller: _found[i],
+              onChanged: (_) => setState(() {}),
+              decoration: _cell(scheme, found: true),
+            ),
           ),
         ),
         SizedBox(
@@ -836,6 +904,16 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
     appBar: AppBar(
       title: Text('Certificado ${c['reference']} · ${c['orderReference']}'),
       actions: [
+        if (widget.session.canIssueCertificate)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: OutlinedButton.icon(
+              key: const ValueKey('cert-save-issue'),
+              onPressed: _busy ? null : () => _save(issue: true),
+              icon: const Icon(Icons.verified_outlined),
+              label: const Text('Salvar e emitir'),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.only(right: 12),
           child: FilledButton.icon(
@@ -852,12 +930,13 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1240),
         child: ListView(
+          controller: _scroll,
           padding: const EdgeInsets.all(16),
           children: [
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                child: Semantics(liveRegion: true, child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
               ),
             _certificateSection(),
             gap,

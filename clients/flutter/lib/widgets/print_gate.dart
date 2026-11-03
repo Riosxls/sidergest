@@ -40,12 +40,26 @@ class PrintLog {
     }
   }
 
+  static const _atPrefix = 'printed-at:';
+
+  /// The day a paper was marked as handled on this computer, or null when it was not (or an older version marked it).
+  static Future<DateTime?> doneOn(String doc) async {
+    try {
+      final raw = (await SharedPreferences.getInstance()).getString('$_atPrefix$doc');
+      return raw == null ? null : DateTime.tryParse(raw);
+    } catch (e) {
+      debugPrint('print_gate: lookup failed, using fallback: $e');
+      return null;
+    }
+  }
+
   static Future<void> mark(String? doc) async {
     if (doc == null) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final list = prefs.getStringList(_key) ?? <String>[];
       if (!list.contains(doc)) await prefs.setStringList(_key, [...list.length > 500 ? list.sublist(list.length - 500) : list, doc]);
+      await prefs.setString('$_atPrefix$doc', DateTime.now().toIso8601String());
     } catch (e) {
       debugPrint('print_gate: Local storage is best effort; the in-memory value stays: $e');
       // Local storage is best effort; the in-memory value stays.
@@ -70,6 +84,9 @@ Future<bool> savePdf(BuildContext context, String fileName, Future<Uint8List> Fu
 
 /// Before the flow moves on, offers to print or download the paper of the step that is ending, once. Returns true when the flow may go on
 /// (printed, downloaded or ignored) and false when the user went back.
+///
+/// [onPrint] and [onDownload] may answer `false` (a `Future<bool>`) when nothing was printed or saved (the dialog was cancelled, the file picker closed, an error):
+/// the paper then stays unmarked and the gate asks again next time. Callbacks that answer nothing count as done.
 Future<bool> printGate(
   BuildContext context, {
   required String doneKey,
@@ -92,17 +109,31 @@ Future<bool> printGate(
       actions: [
         TextButton(key: const ValueKey('gate-back'), onPressed: () => Navigator.pop(c), child: const Text('Voltar')),
         TextButton(key: const ValueKey('gate-skip'), onPressed: () => Navigator.pop(c, 'skip'), child: Text(continueLabel)),
-        if (onDownload != null) OutlinedButton.icon(key: const ValueKey('gate-download'), onPressed: () => Navigator.pop(c, 'download'), icon: const Icon(Icons.download_outlined), label: const Text('Baixar')),
-        FilledButton.icon(key: const ValueKey('gate-print'), onPressed: () => Navigator.pop(c, 'print'), icon: const Icon(Icons.print_outlined), label: const Text('Imprimir')),
+        if (onDownload != null)
+          OutlinedButton.icon(
+            key: const ValueKey('gate-download'),
+            onPressed: () => Navigator.pop(c, 'download'),
+            icon: const Icon(Icons.download_outlined),
+            label: const Text('Baixar'),
+          ),
+        FilledButton.icon(
+          key: const ValueKey('gate-print'),
+          onPressed: () => Navigator.pop(c, 'print'),
+          icon: const Icon(Icons.print_outlined),
+          label: const Text('Imprimir'),
+        ),
       ],
     ),
   );
   if (choice == null) return false;
+  Object? result;
+  // The callbacks are typed void so closures need not return anything; one that does answer false (printPdf, savePdf) is heard here.
   if (choice == 'print') {
-    await onPrint();
+    result = await Future<Object?>.value(onPrint());
   } else if (choice == 'download') {
-    await onDownload!();
+    result = await Future<Object?>.value(onDownload!());
   }
-  await PrintLog.mark(doneKey);
+  // A cancelled print dialog or file picker did not handle the paper; "ignore" is a decision and does.
+  if (result != false) await PrintLog.mark(doneKey);
   return true;
 }

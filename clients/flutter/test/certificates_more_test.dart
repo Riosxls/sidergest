@@ -372,12 +372,13 @@ void main() {
       final fake = _Fake()..cert = _cert(status: 'Issued', found: true, deliveryId: 2);
       await _pump(tester, fake, (s) => CertificateScreen(session: s, id: 7));
       await _menu(tester, 'Cancelar certificado');
-      expect(find.text('Cancelar 5176-26'), findsOneWidget);
-      await tester.tap(find.text('Cancelar certificado').last);
+      expect(find.text('Cancelar 5176-26?'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('confirm-step'))); // disabled until a reason is typed
       await tester.pumpAndSettle();
       expect(fake.has('POST', '/api/sales/certificates/7/cancel'), isFalse);
-      await tester.enterText(find.byType(TextField), 'Erro de digitação');
-      await tester.tap(find.text('Cancelar certificado').last);
+      await tester.enterText(find.byKey(const ValueKey('reason-field')), 'Erro de digitação');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('confirm-step')));
       await tester.pumpAndSettle();
       expect(fake.body(fake.last('POST', '/api/sales/certificates/7/cancel'))['reason'], 'Erro de digitação');
       expect(find.text('Cancelado'), findsWidgets);
@@ -401,6 +402,21 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('confirm-step')));
       await tester.pumpAndSettle();
       expect(find.text('abrir'), findsOneWidget);
+    });
+
+    testWidgets('the refresh button reloads the certificate and a failed reload is announced', (tester) async {
+      final fake = _Fake();
+      await _pump(tester, fake, (s) => CertificateScreen(session: s, id: 7));
+      int loads() => fake.log.where((r) => r.method == 'GET' && r.url.path == '/api/sales/certificates/7').length;
+      final first = loads();
+      await tester.tap(find.byKey(const ValueKey('record-refresh')));
+      await tester.pumpAndSettle();
+      expect(loads(), first + 1);
+      fake.certStatus = 500;
+      await tester.tap(find.byKey(const ValueKey('record-refresh')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Falha ao atualizar'), findsOneWidget);
+      expect(find.text('Certificado 5176-26 · Incodiesel'), findsOneWidget);
     });
 
     testWidgets('editing from the menu returns the saved certificate to the screen', (tester) async {
@@ -428,6 +444,43 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Quantidade deve ser maior que zero'), findsOneWidget);
       expect(fake.has('PUT', '/api/sales/certificates/7'), isFalse);
+    });
+
+    testWidgets('a draft without a description is refused before the API and the message is announced at the top', (tester) async {
+      final fake = _Fake();
+      await _pump(tester, fake, (s) => CertificateEditorScreen(session: s, certificate: _cert()));
+      await tester.enterText(find.byKey(const ValueKey('cert-description')), '');
+      await tester.tap(find.byKey(const ValueKey('cert-save')));
+      await tester.pumpAndSettle();
+      expect(find.text('Informe a descrição do produto'), findsOneWidget);
+      expect(fake.has('PUT', '/api/sales/certificates/7'), isFalse);
+    });
+
+    testWidgets('Salvar e emitir needs a found value, confirms, then saves and issues in that order', (tester) async {
+      final fake = _Fake();
+      await _pump(tester, fake, (s) => CertificateEditorScreen(session: s, certificate: _cert()));
+      await tester.tap(find.byKey(const ValueKey('cert-save-issue')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Preencha ao menos um valor'), findsOneWidget);
+      expect(fake.has('PUT', '/api/sales/certificates/7'), isFalse);
+      await tester.enterText(find.byKey(const ValueKey('found-Chemical-C')), '0,08');
+      await tester.tap(find.byKey(const ValueKey('cert-save-issue')));
+      await tester.pumpAndSettle();
+      expect(find.text('Salvar e emitir 5176-26?'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('confirm-step')));
+      await tester.pumpAndSettle();
+      final calls = [
+        for (final r in fake.log)
+          if (r.method != 'GET') '${r.method} ${r.url.path}',
+      ];
+      expect(calls, ['PUT /api/sales/certificates/7', 'POST /api/sales/certificates/7/issue']);
+    });
+
+    testWidgets('only a role that may issue sees Salvar e emitir', (tester) async {
+      final fake = _Fake()..role = 'Sales';
+      await _pump(tester, fake, (s) => CertificateEditorScreen(session: s, certificate: _cert()));
+      expect(find.byKey(const ValueKey('cert-save-issue')), findsNothing);
+      expect(find.byKey(const ValueKey('cert-save')), findsOneWidget);
     });
 
     testWidgets('leaving with unsaved edits asks first', (tester) async {

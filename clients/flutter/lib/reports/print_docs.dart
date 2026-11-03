@@ -4,18 +4,60 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
 import '../screens/customers.dart' show fmtDocument;
-import '../widgets/print_gate.dart';
+import '../widgets/print_panel.dart' show printPdf;
 
-// Dados da empresa no cabeçalho dos documentos. Ajustar quando o cadastro da empresa existir no sistema.
-const _companyName = 'EBT';
-const _companyCnpj = 'CNPJ: 00.000.000/0000-00';
-const _companyAddress = 'Endereço: a definir';
+/// Dados da empresa no cabeçalho do orçamento, lidos dos parâmetros fiscais (`GET /api/fiscal/settings`). O que não foi cadastrado não é impresso:
+/// nada de CNPJ ou endereço inventado numa folha que vai ao cliente.
+class _Issuer {
+  const _Issuer({this.name = 'EBT', this.lines = const []});
+
+  final String name;
+  final List<String> lines;
+
+  static Future<_Issuer> load(ApiClient api) async {
+    try {
+      final s = await api.get('/api/fiscal/settings') as Map<String, dynamic>;
+      String v(String key) => _s(s[key]).trim();
+      final name = v('tradeName').isNotEmpty ? v('tradeName') : (v('companyName').isNotEmpty ? v('companyName') : 'EBT');
+      final cnpj = fmtDocument(s['cnpj']);
+      final ie = v('stateRegistration');
+      final street = [v('street'), v('number')].where((e) => e.isNotEmpty).join(', ');
+      final city = [v('city'), v('uf')].where((e) => e.isNotEmpty).join('/');
+      final address = [street, v('district'), city, if (v('zipCode').isNotEmpty) 'CEP ${v('zipCode')}'].where((e) => e.isNotEmpty).join(' - ');
+      return _Issuer(
+        name: name,
+        lines: [
+          if (cnpj.isNotEmpty || ie.isNotEmpty) [if (cnpj.isNotEmpty) 'CNPJ: $cnpj', if (ie.isNotEmpty) 'I.E.: $ie'].join('   '),
+          if (address.isNotEmpty) address,
+          if (v('phone').isNotEmpty) 'Tel.: ${v('phone')}',
+        ],
+      );
+    } catch (e) {
+      // Settings are context: without them the sheet prints the company name only.
+      debugPrint('print_docs: issuer data unavailable, printing the name only: $e');
+      return const _Issuer();
+    }
+  }
+}
+
+/// What makes a quote PDF not final, in words ("RASCUNHO", "SUBSTITUÍDA pela revisão PROP 8A"...), or null for a quote that may go to the customer.
+/// The PDF carries it in a banner on every page; screens can ask before printing one.
+String? quotePrintWarning(Map<String, dynamic> q) {
+  if (q['supersededById'] != null) return 'SUBSTITUÍDA pela revisão ${q['supersededBy'] ?? ''}'.trim();
+  return switch (q['status']) {
+    'Draft' => 'RASCUNHO · ainda não enviado ao cliente',
+    'PendingApproval' => 'RASCUNHO · aguardando a aprovação do gerente',
+    'Approved' => 'RASCUNHO · ainda não enviado ao cliente',
+    'Cancelled' => 'CANCELADO',
+    'Expired' => 'VALIDADE EXPIRADA',
+    _ => null,
+  };
+}
 
 const _generalConditions =
     'Preços sujeitos a confirmação na data do pedido. Impostos conforme legislação vigente. '
@@ -34,24 +76,16 @@ pw.TextStyle _n([double size = 9]) => pw.TextStyle(fontSize: size);
 
 String _s(Object? v) => v == null ? '' : '$v';
 
-pw.Widget _header(String docTitle, String reference) => pw.Column(
+pw.Widget _header(String docTitle, String reference, _Issuer issuer, {String? banner}) => pw.Column(
   crossAxisAlignment: pw.CrossAxisAlignment.start,
   children: [
     pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
-        pw.Container(
-          width: 56,
-          height: 56,
-          alignment: pw.Alignment.center,
-          decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey600)),
-          child: pw.Text('LOGO', style: _n(9)),
-        ),
-        pw.SizedBox(width: 12),
         pw.Expanded(
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [pw.Text(_companyName, style: _b(14)), pw.Text(_companyCnpj, style: _n(8)), pw.Text(_companyAddress, style: _n(8))],
+            children: [pw.Text(issuer.name, style: _b(14)), for (final l in issuer.lines) pw.Text(l, style: _n(8))],
           ),
         ),
         pw.Column(
@@ -60,6 +94,15 @@ pw.Widget _header(String docTitle, String reference) => pw.Column(
         ),
       ],
     ),
+    if (banner != null)
+      pw.Container(
+        width: double.infinity,
+        margin: const pw.EdgeInsets.only(top: 6),
+        padding: const pw.EdgeInsets.symmetric(vertical: 4),
+        alignment: pw.Alignment.center,
+        decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.red700, width: 1.5)),
+        child: pw.Text(banner, style: const pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.red700)),
+      ),
     pw.Divider(thickness: 1),
   ],
 );
@@ -174,6 +217,8 @@ const _itemRight = {3, 5, 6, 7, 8};
 /// Orçamento (PROP N).
 Future<Uint8List> buildQuotePdf(ApiClient api, Map<String, dynamic> q) async {
   final customer = await _customer(api, q['customerId']);
+  final issuer = await _Issuer.load(api);
+  final banner = quotePrintWarning(q);
   final t = q['totals'] as Map<String, dynamic>;
   final lines = (q['lines'] as List).cast<Map<String, dynamic>>();
   final date = q['sentAt'] ?? q['createdAt'];
@@ -201,7 +246,7 @@ Future<Uint8List> buildQuotePdf(ApiClient api, Map<String, dynamic> q) async {
       pw.Padding(padding: const pw.EdgeInsets.only(top: 6), child: pw.Text('* Prazo de entrega em dias úteis, contado a partir da data em que o cliente aprovar este orçamento.', style: const pw.TextStyle(fontSize: 8.5))),
     if (_s(q['notes']).isNotEmpty) _text('Observações', _s(q['notes'])),
     _text('Condições gerais', _s(q['conditions']).isNotEmpty ? _s(q['conditions']) : _generalConditions),
-  ], header: (_) => _header('Orçamento', _s(q['reference'])));
+  ], header: (_) => _header('Orçamento', _s(q['reference']), issuer, banner: banner));
 }
 
 // ---- Formulários internos (modelos oficiais: Pedido Interno de Venda e Ordem de Fabricação) ----
@@ -360,6 +405,22 @@ Future<Uint8List> _forms(String title, List<pw.Widget> pages) async {
   return doc.save();
 }
 
+/// Diâmetro, espessura e comprimento da especificação da linha do pedido ("Ø25,4 × e1,5 × c6000"), ou vazio.
+String _specMeasures(Object? spec) {
+  if (spec is! Map) return '';
+  return [
+    if (spec['outsideDiameter'] != null) 'Ø${fmt(spec['outsideDiameter'])}',
+    if (spec['thickness'] != null) 'e${fmt(spec['thickness'])}',
+    if (spec['length'] != null) 'c${fmt(spec['length'])}',
+  ].join(' × ');
+}
+
+/// Norma e condição de fornecimento da especificação da linha, ou vazio.
+String _specStandard(Object? spec) {
+  if (spec is! Map) return '';
+  return [spec['standard'], if (spec['condition'] != null) deliveryConditions[spec['condition']]].whereType<Object>().join(' · ');
+}
+
 String _qty(num q, String unit) => '${fmtNum(q, q == q.roundToDouble() ? 0 : 3)} $unit'.trim();
 
 /// Pedido interno de venda (PV N). Uma página por item, conforme o modelo.
@@ -378,8 +439,13 @@ Future<Uint8List> buildSalesOrderPdf(ApiClient api, Map<String, dynamic> o) asyn
         final qty = (l['quantity'] as num?) ?? 0;
         final price = (l['unitPrice'] as num?) ?? 0;
         final ipi = (l['ipiPercent'] as num?) ?? 0;
-        final total = double.parse((qty * price * (1 + ipi / 100)).toStringAsFixed(2));
+        // The paper's total includes IPI (the screen's line total does not): it starts from the value the server saved, so both agree on the base.
+        final base = (l['total'] as num?) ?? double.parse((qty * price).toStringAsFixed(2));
+        final total = double.parse((base * (1 + ipi / 100)).toStringAsFixed(2));
         final description = _s(l['description']).isNotEmpty ? _s(l['description']) : _s(l['productCode']);
+        final spec = l['spec'];
+        final measures = _specMeasures(spec);
+        final standard = _specStandard(spec);
         return pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
@@ -389,7 +455,13 @@ Future<Uint8List> buildSalesOrderPdf(ApiClient api, Map<String, dynamic> o) asyn
             _orderedBy(),
             _customerBox(c),
             pw.SizedBox(height: 4),
-            _specBox(dimensions: description, quantity: _qty(qty, _s(l['unit'])), material: _s(l['customerPartNumber']), delivery: fmtDay(l['dueDate']), notes: notes),
+            _specBox(
+              dimensions: measures.isEmpty ? description : '$measures  ·  $description',
+              quantity: _qty(qty, _s(l['unit'])),
+              material: standard,
+              delivery: fmtDay(l['dueDate']),
+              notes: notes,
+            ),
             pw.SizedBox(height: 4),
             _salesTerms(price: fmtMoney(price), perKg: _s(l['unit']).toUpperCase() == 'KG', icms: fmt(l['icmsPercent']), ipi: '${fmt(ipi)}%', total: fmtMoney(total), term: term),
             pw.SizedBox(height: 4),
@@ -653,31 +725,58 @@ Future<Uint8List> buildProductionOrderPdf(ApiClient api, Map<String, dynamic> o)
   return _forms('Ordem de fabricação ${o['reference']}', [page]);
 }
 
-/// App bar print button shared by the three detail screens.
-class PrintButton extends StatelessWidget {
-  const PrintButton({super.key, required this.name, required this.builder, this.enabled = true, this.tooltip = 'Imprimir', this.doneKey});
+/// App bar print button shared by the detail screens. It is busy while the PDF is built, so a second click does not print twice.
+class PrintButton extends StatefulWidget {
+  const PrintButton({super.key, required this.name, required this.builder, this.enabled = true, this.tooltip, this.doneKey, this.warning});
 
   /// When set, printing marks this paper as done (see PrintLog), so the flow does not ask about it again.
   final String? doneKey;
   final String name;
   final Future<Uint8List> Function() builder;
   final bool enabled;
-  final String tooltip;
+
+  /// What the button says on hover; defaults to "Imprimir" plus the document name so several buttons in one bar tell themselves apart.
+  final String? tooltip;
+
+  /// A reason the paper is not final (see [quotePrintWarning]): the user is asked before it is printed anyway.
+  final String? warning;
+
+  @override
+  State<PrintButton> createState() => _PrintButtonState();
+}
+
+class _PrintButtonState extends State<PrintButton> {
+  bool _busy = false;
+
+  Future<void> _print() async {
+    final warning = widget.warning;
+    if (warning != null) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          icon: const Icon(Icons.warning_amber_rounded),
+          title: const Text('Imprimir mesmo assim?'),
+          content: Text('Este documento sai marcado: $warning.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Imprimir')),
+          ],
+        ),
+      );
+      if (go != true || !mounted) return;
+    }
+    setState(() => _busy = true);
+    try {
+      await printPdf(context, widget.name, widget.builder, doneKey: widget.doneKey);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) => IconButton(
-    tooltip: tooltip,
-    icon: const Icon(Icons.print_outlined),
-    onPressed: enabled
-        ? () async {
-            try {
-              final bytes = await builder();
-              await Printing.layoutPdf(name: name, onLayout: (_) async => bytes, format: PdfPageFormat.a4);
-              await PrintLog.mark(doneKey);
-            } catch (e) {
-              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: ${friendlyError(e)}')));
-            }
-          }
-        : null,
+    tooltip: widget.tooltip ?? 'Imprimir ${widget.name}',
+    icon: _busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.print_outlined),
+    onPressed: widget.enabled && !_busy ? _print : null,
   );
 }

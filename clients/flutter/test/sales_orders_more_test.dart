@@ -117,7 +117,7 @@ void main() {
       final fake = MoreFake();
       await pumpMore(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
       await openMenu(tester, 'order-menu', 'Cancelar pedido');
-      await tapText(tester, 'Voltar');
+      await tapText(tester, 'Cancelar');
       expect(fake.called('POST', '/api/sales/orders/9/cancel'), isFalse);
     });
 
@@ -255,7 +255,7 @@ void main() {
       final fake = _released(certified: true);
       await pumpMore(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
       await tapKey(tester, 'order-deliver');
-      await tapText(tester, 'Voltar');
+      await tapText(tester, 'Cancelar');
       expect(fake.called('POST', '/api/sales/orders/9/deliveries'), isFalse);
     });
 
@@ -298,7 +298,7 @@ void main() {
       expect(find.text('Há itens com data de entrega vencida.'), findsOneWidget);
       expect(find.text('30 do estoque + 70 na OF 500'), findsOneWidget);
       expect(find.text('50/100 · exp. 0'), findsOneWidget);
-      expect(find.byKey(const ValueKey('print-of')), findsOneWidget); // single OF: the app bar prints it
+      expect(find.byKey(const ValueKey('print-menu')), findsOneWidget); // OFs in production: one print menu with the pedido and the OF
       expect(find.byKey(const ValueKey('order-print-of-12')), findsOneWidget);
     });
 

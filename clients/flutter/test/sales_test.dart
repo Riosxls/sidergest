@@ -650,7 +650,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('delivery-ship')));
     await tester.pumpAndSettle();
     expect(find.text('Expedir sem certificado?'), findsOneWidget);
-    await tester.tap(find.text('Voltar'));
+    await tester.tap(find.text('Cancelar'));
     await tester.pumpAndSettle();
     expect(fake.log.where((r) => r.url.path.endsWith('/ship')), isEmpty);
     await tester.tap(find.byKey(const ValueKey('delivery-ship')));
