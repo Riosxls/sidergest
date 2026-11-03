@@ -1,0 +1,24 @@
+# Optional front door (compose profile "proxy"): TLS, the Flutter web build and the API on one address.
+# EBT_PUBLIC_HOST is the name users type (default localhost). EBT_CADDY_TLS is "internal" (Caddy's own CA; install its root certificate on the clients,
+# see docs/OPERATIONS.md) or a certificate and key mounted in the container, e.g. "/certs/metagest.crt /certs/metagest.key".
+{$EBT_PUBLIC_HOST:localhost} {
+	tls {$EBT_CADDY_TLS:internal}
+	encode zstd gzip
+
+	# Caddy adds X-Forwarded-For/-Proto/-Host itself; the API trusts them when EBT_BEHIND_PROXY=true.
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+	handle /health* {
+		reverse_proxy api:8080
+	}
+
+	# The Flutter web build (scripts\build-web.ps1). Unknown paths fall back to index.html so the app's own routes survive a reload.
+	handle {
+		root * /srv
+		@shell path / /index.html /flutter_service_worker.js /version.json
+		header @shell Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

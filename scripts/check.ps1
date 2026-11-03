@@ -28,6 +28,14 @@ if (-not $SkipBackend) {
     Push-Location $Root
     Run 'dotnet build' { dotnet build Ebt.sln --nologo -v q }
     if (-not $Coverage) { Run 'dotnet test' { dotnet test Ebt.sln --nologo --no-build } }
+    # Known-vulnerable NuGet packages (direct and transitive): a warning, never a failure, because it needs the network and a new advisory should not block a push.
+    Write-Host '==> vulnerable packages (warning only)' -ForegroundColor Cyan
+    $vuln = @(dotnet list Ebt.sln package --vulnerable --include-transitive 2>&1 | ForEach-Object { "$_" })
+    $rows = @($vuln | Where-Object { $_ -match '^\s*>\s' })
+    if ($rows.Count -gt 0) {
+        Write-Host 'WARNING: vulnerable NuGet packages found:' -ForegroundColor Yellow
+        $rows | ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
+    } else { Write-Host 'No vulnerable packages reported.' }
     Pop-Location
 }
 

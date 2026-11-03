@@ -135,6 +135,8 @@ try {
             throw "The copy at the destination does not match the dump (SHA-256 differs): $CopyTo"
         }
         Say "Copied to $CopyTo (verified)"
+        # Docker Desktop keeps its volumes under the user profile, normally on the system drive: a copy on that same drive does not survive its failure.
+        if ($CopyTo -match '^([A-Za-z]):' -and $env:SystemDrive -and $Matches[1] -ieq $env:SystemDrive.Substring(0, 1)) { Write-Host "AVISO: o destino $CopyTo está no mesmo disco ($env:SystemDrive) do banco de dados (volume do Docker); isso não protege contra falha do disco. Use outro disco, um HD externo ou uma pasta de rede." -ForegroundColor Yellow }
     }
 
     Set-Progress 96 'Limpando cópias antigas...'

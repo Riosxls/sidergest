@@ -220,6 +220,34 @@ function Invoke-DeleteRequest([string]$Container, $Plan) {
     return $true
 }
 
+# Restore drill rules (not part of BackupSchedule.cs): due when there is no drill.json, when the last one is 7 days old, or one day after a failed one.
+function Test-DrillDue($Last, [DateTimeOffset]$Now) {
+    if (-not $Last -or -not $Last.finishedAt) { return $true }
+    $age = $Now - [DateTimeOffset]::Parse([string]$Last.finishedAt)
+    if ($Last.ok) { return $age.TotalDays -ge 7 }
+    return $age.TotalDays -ge 1
+}
+
+# Starts scripts\restore-drill.ps1 in the background when the drill is due and the automatic plan is on (so there are dumps to test); one at a time.
+function Invoke-DrillIfDue($Plan) {
+    if ($script:DrillProc) {
+        if (-not $script:DrillProc.HasExited) { return }
+        Write-AgentLog "restore drill finished, exit code $($script:DrillProc.ExitCode)"
+        $script:DrillProc = $null
+    }
+    if (-not $Plan.Enabled -or ((Get-Date) - $script:LastDrillCheck).TotalMinutes -lt 10) { return }
+    $script:LastDrillCheck = Get-Date
+    $last = $null
+    $path = Join-Path (Join-Path $Root 'backup-status') 'drill.json'
+    if (Test-Path -LiteralPath $path) { try { $last = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json } catch { $last = $null } }
+    if (-not (Test-DrillDue $last ([DateTimeOffset]::UtcNow))) { return }
+    if ($DryRun) { Write-Host 'Restore drill due.'; return }
+    Write-AgentLog 'restore drill start'
+    $q = [string][char]34
+    $script:DrillProc = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ($q + (Join-Path $PSScriptRoot 'restore-drill.ps1') + $q), '-Quiet') -PassThru -WindowStyle Hidden
+    $null = $script:DrillProc.Handle   # keeps the handle so ExitCode is available after it exits
+}
+
 function Invoke-Agent {
     Push-Location $Root
     try {
@@ -247,6 +275,7 @@ from backup_settings where id = 1
         if (Invoke-RestoreRequest $container $plan) { return }
         if (Invoke-DeleteRequest $container $plan) { return }
         if (((Get-Date) - $script:LastListed).TotalMinutes -ge 10) { Publish-BackupList $plan.Destination }
+        Invoke-DrillIfDue $plan
 
         $now = [DateTimeOffset]::UtcNow
         $due = Get-NextDue $plan $now
@@ -307,6 +336,8 @@ if ($MyInvocation.InvocationName -ne '.') {
     Write-AgentLog "agent started"
     $script:LastBeat = [datetime]::MinValue
     $script:LastListed = [datetime]::MinValue
+    $script:LastDrillCheck = [datetime]::MinValue
+    $script:DrillProc = $null
     try {
         do {
             try { Invoke-Agent } catch { $script:Container = $null; Write-AgentLog "error: $($_.Exception.Message)" }

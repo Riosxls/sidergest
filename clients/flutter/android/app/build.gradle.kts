@@ -1,3 +1,12 @@
+import java.util.Properties
+
+// Release signing: android/key.properties (never committed, see docs/OPERATIONS.md) holds storeFile, storePassword, keyAlias and keyPassword.
+// Without it the release build is signed with the debug key and a warning is printed, so builds still work; such an APK must not be distributed.
+val keyProps = Properties()
+val keyPropsFile = rootProject.file("key.properties")
+val hasReleaseKey = keyPropsFile.exists()
+if (hasReleaseKey) keyPropsFile.inputStream().use { keyProps.load(it) }
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -29,11 +38,25 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = file(keyProps.getProperty("storeFile"))
+                storePassword = keyProps.getProperty("storePassword")
+                keyAlias = keyProps.getProperty("keyAlias")
+                keyPassword = keyProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKey) {
+                signingConfigs.getByName("release")
+            } else {
+                logger.warn("WARNING: android/key.properties not found; signing the release build with the DEBUG key. Do not distribute this APK.")
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

@@ -58,6 +58,8 @@ builder.Services.AddSingleton(jwt);
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
 builder.Services.AddHostedService<QuoteExpiryService>();
+builder.Services.AddSingleton<AlertService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AlertService>());
 builder.Services.AddExceptionHandler<StockExceptionHandler>();
 builder.Services.AddExceptionHandler<DatabaseExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -146,6 +148,7 @@ using (var scope = app.Services.CreateScope())
 
 app.MapGet("/", (IConfiguration c, IWebHostEnvironment e) => Results.Redirect(c.GetValue("Swagger:Enabled", e.IsDevelopment()) ? "/swagger" : "/health")).AllowAnonymous().ExcludeFromDescription();
 app.MapGet("/health", async (EbtDbContext db) => await db.Database.CanConnectAsync() ? Results.Ok(new { status = "ok" }) : Results.StatusCode(503)).AllowAnonymous();
+app.MapOpsHealth();
 app.MapAuth();
 app.MapAudit();
 app.MapMaintenance();

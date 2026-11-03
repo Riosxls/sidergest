@@ -111,6 +111,14 @@ New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 # The API container mounts backup-status read-only (only the status file, not the dumps); create it here so Docker does not create it as root.
 New-Item -ItemType Directory -Force -Path (Join-Path $Root 'backup-status') | Out-Null
 
+# Install the versioned git hooks (pre-push gate) once per clone, when this is a git checkout and they are not set yet.
+if ((Test-Path (Join-Path $Root '.git')) -and (Has 'git')) {
+    $hooksPath = (& git -C $Root config --get core.hooksPath 2>$null | Select-Object -First 1)
+    if ($hooksPath -ne 'scripts/hooks') {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'install-hooks.ps1')
+    }
+}
+
 function New-Secret([int]$Bytes = 32) {
     $b = New-Object byte[] $Bytes
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
@@ -153,8 +161,17 @@ if (-not $NoDocker) {
         if ($LASTEXITCODE -ne 0) { Pop-Location; Fail "Pre-start backup failed, so the API was not rebuilt. Fix the backup (see above) or run scripts\backup.ps1 yourself." }
     }
     Step "Starting PostgreSQL (port $DbPort) + API (port $ApiPort) with Docker (first run builds the image, takes a few minutes)"
+    # Same tags as scripts\update.ps1: the image that was running stays as metagest-api:previous when the build produced a different one, the new one is also tagged with the short commit.
+    $oldImage = (& docker image inspect -f '{{.Id}}' metagest-api:latest 2>$null | Select-Object -First 1)
+    if ($LASTEXITCODE -ne 0) { $oldImage = $null }
     & docker compose up -d --build db api
     $code = $LASTEXITCODE
+    if ($code -eq 0) {
+        $newImage = (& docker image inspect -f '{{.Id}}' metagest-api:latest 2>$null | Select-Object -First 1)
+        if ($oldImage -and $newImage -and $oldImage -ne $newImage) { & docker tag $oldImage metagest-api:previous }
+        $gitSha = if (Test-Path (Join-Path $Root '.git')) { (& git -C $Root rev-parse --short HEAD 2>$null | Select-Object -First 1) } else { $null }
+        if ($gitSha -and $newImage) { & docker tag metagest-api:latest "metagest-api:$gitSha" }
+    }
     Pop-Location
     if ($code -ne 0) { Fail "docker compose failed (API port $ApiPort, DB port $DbPort). See the message above; if a port is 'forbidden by access permissions' set EBT_API_PORT / EBT_DB_PORT to another port and retry." }
     'docker' | Set-Content (Join-Path $RunDir 'mode')

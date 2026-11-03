@@ -75,6 +75,93 @@ docker compose start api
 
 Check the login and a recent order before telling anyone the system is back. Test the restore on a spare machine once; an untested backup is a guess.
 
+### Restore drill (does the backup really restore?)
+
+`scripts\restore-drill.ps1` restores the newest verified dump (the backup destination first, then `backups\`) into a throwaway database `metagest_drill_<timestamp>` inside the `db` container, compares row counts of the key tables (`users`, `customers`, `products`, `quotes`, `sales_orders`, `production_orders`, `stock_documents`, `fiscal_documents`, whichever exist) and the migration history with the live database, then drops the throwaway database (always, even on failure). The live database is only read. Counts normally differ a little because the dump is older than the live data; the drill fails only when the restore fails, a key table is missing, the copy has no users or the dump has a migration the live database does not know.
+
+The result goes to `backup-status\drill.json` (`ok`, `startedAt`, `finishedAt`, `dump`, `counts`, `migrations`, `errors`). The backup agent runs it by itself when the automatic plan is on: weekly, and again a day after a failed drill (rules in `Test-DrillDue` in `backup-agent.ps1`). Run it by hand any time: `powershell -File scripts\restore-drill.ps1`. `GET /health/ready` shows the last drill (`backup.drill`) and a failed one raises a warning and the alert mail.
+
+## Updating the API
+
+```
+powershell -File scripts\update.ps1          # after the code is committed
+powershell -File scripts\update.ps1 -Force   # also with uncommitted changes under src\ (image tagged <sha>-dirty)
+```
+
+It refuses to run with uncommitted changes in `src\`, takes a verified backup (`before-rebuild`) and stops if that fails, keeps the running image as `metagest-api:previous`, builds `metagest-api:<sha>` (also `latest`), recreates only the `api` container (the database container is never touched) and waits up to 90 seconds for `GET /health/ready`. If the new API does not become ready it puts `previous` back and exits with an error. `scripts\start.ps1` uses the same tags when it rebuilds.
+
+A rollback restores the old code, not the old data: the new API migrates the schema when it starts, so a migration may already be applied when it fails. If the old code does not work with the migrated database, restore the dump taken at the start of the update (`backups\ebt-before-rebuild-*.dump`, see Restore). Manual rollback: `docker tag metagest-api:previous metagest-api:latest` and `docker compose -p metagest up -d --no-deps --force-recreate --pull never api`.
+
+## Health and alerts
+
+- `GET /health`: the container health check; 200 when the database answers.
+- `GET /health/ready` (anonymous, no secrets): `{status, db, pendingMigrations, backup: {lastOkAt, ageHours, agentSeenAt, drill}, warnings}`. 503 when the database is unreachable or migrations are pending, 200 otherwise. `status` is `ok`, `degraded` (200 with warnings) or `unavailable`. Warnings: `backup_failed` (last run failed), `backup_stale` (plan on, no good backup for 26 hours), `agent_silent` (plan on, no agent heartbeat for 10 minutes), `drill_failed`. They never turn the answer into 503.
+- Alert mail: set `EBT_ALERT_TO` (one or more addresses separated by `;`; needs the `EBT_SMTP_*` mail settings) and recreate the `api`. The API checks the conditions above every 5 minutes (`Alerts__IntervalSeconds`) and, when something is wrong (also database down or pending migrations), sends one mail and repeats it at most every 6 hours; the first check runs 2 minutes after the API starts. The time of the last alert is kept in memory, so restarting the API during a problem can send one more mail. Without the address or without working mail nothing is sent.
+
+## Reverse proxy and web app (optional)
+
+`docker compose --profile proxy up -d caddy` adds Caddy (`caddy\Caddyfile`): TLS on 443 (80 redirects), the Flutter web build as the site and `/api` and `/health` forwarded to the API. The default `docker compose up` does not start it.
+
+1. In `.env`: `EBT_PUBLIC_HOST=metagest.empresa.local` (the name users type), `EBT_BEHIND_PROXY=true`, `EBT_ALLOWED_HOSTS=metagest.empresa.local`, `EBT_CORS_ORIGIN=https://metagest.empresa.local`. Recreate the `api` after changing them (CLAUDE.md, "Rebuilding the API container").
+2. Build the web app for that name: `powershell -File scripts\build-web.ps1` (default `API_URL=https://<EBT_PUBLIC_HOST>`, or `-ApiUrl https://...`). It writes `clients\flutter\build\web`, which Caddy serves read-only. `API_URL` is compiled in: rebuild after changing the name.
+3. `docker compose --profile proxy up -d caddy`. The name must resolve to this computer (DNS or hosts file) and ports 80/443 must be free (`EBT_HTTP_PORT`/`EBT_HTTPS_PORT`).
+4. `EBT_CADDY_TLS=internal` (default) uses Caddy's own certificate authority. Browsers warn until its root certificate is installed on each client: copy it with `docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt .` and import it as a trusted root. The authority lives in the `caddy_data` volume; losing the volume means a new root to install again. For a company or public certificate mount the files into the container and set `EBT_CADDY_TLS=/certs/site.crt /certs/site.key`.
+5. The API port 8080 stays bound to `127.0.0.1`; only Caddy is exposed to the network.
+
+## Android release signing
+
+`scripts\release-android.ps1` builds the signed APK (`-Bundle` also the `.aab`, `-Bump` raises the build number in `pubspec.yaml`, `-ApiUrl https://...` sets the server) and copies it to `releases\` (gitignored) with its SHA-256. Signing reads `clients\flutter\android\key.properties`; without it the build uses the debug key and says so.
+
+Create the key once (keep the password in a password manager):
+
+```
+keytool -genkeypair -v -keystore C:\metagest-keys\metagest-release.jks -alias metagest -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Then `clients\flutter\android\key.properties` (never committed; `key.properties` and `*.jks` are gitignored):
+
+```
+storeFile=C:/metagest-keys/metagest-release.jks
+storePassword=<senha do keystore>
+keyAlias=metagest
+keyPassword=<senha da chave>
+```
+
+**Back up the keystore and its passwords off this computer** (encrypted copy on another machine or in the cloud). An app signed with a lost key can never be updated: users would have to uninstall and reinstall.
+
+## Resource limits
+
+`db` and `api` have memory limits (`EBT_DB_MEM`, default 1g; `EBT_API_MEM`, default 512m) and the API connection string sets `Maximum Pool Size` from `EBT_DB_POOL` (default 40, below Postgres' 100 connections). Raise them in `.env` and recreate the container if logs show out-of-memory kills (`docker inspect -f '{{.State.OOMKilled}}' metagest-api-1`).
+
+## Disaster recovery (the computer is gone)
+
+Expected time: about 1 to 2 hours with the files at hand (Docker Desktop install 15 min, build 5 min, restore a few minutes for a database of this size).
+
+What must exist outside this computer, or there is nothing to recover from:
+
+- the newest dump in the backup destination, **on another physical disk or machine** (`backup.ps1` warns when the destination is on the system drive, which is where Docker keeps the database volume);
+- an encrypted copy of `.env` (7-Zip with AES and a passphrase kept in a password manager or a sealed envelope). It holds `EBT_JWT_KEY`, the passwords and the SMTP settings; a new `.env` also works but signs everyone out;
+- the Android keystore and `key.properties` values (see above), the fiscal A1 certificate and its password when the NF-e is on, and the Caddy root certificate if clients trust it;
+- a second off-site copy of the dumps (cloud folder or a drive taken home), because a fire or theft takes the share too.
+
+Checklist:
+
+1. A Windows PC with Docker Desktop (WSL 2), Git and PowerShell. Clone the repository.
+2. Put `.env` back in the repo root (decrypt the copy). Create `backup-status\` if missing.
+3. `docker compose up -d db`, wait until healthy, copy the newest dump in and restore it into the empty `ebt` database:
+
+   ```
+   docker cp <dump> metagest-db-1:/tmp/restore.dump
+   docker exec metagest-db-1 pg_restore -U ebt -d ebt --clean --if-exists --no-owner /tmp/restore.dump
+   ```
+4. Build and start the API (CLAUDE.md, "Rebuilding the API container"): `docker build --target api -t metagest-api:latest .` then `docker compose -p metagest up -d --no-deps --pull never api`. Migrations run on start.
+5. `curl http://localhost:8080/health/ready` must say `ok` (or `degraded` while the backup agent is not back yet). Sign in and open a recent order.
+6. `powershell -File scripts\install-backup-agent.ps1` (the plan itself is in the restored database; check the destination in Configurações), then `scripts\backup.ps1` once.
+7. Proxy and web app (`scripts\build-web.ps1`, `docker compose --profile proxy up -d caddy`), DNS name, client certificates, then tell users to sign in again.
+8. Run `scripts\restore-drill.ps1` and keep the new machine's first backup off-site.
+
+Keeping the server alive: connect it to a UPS that shuts Windows down cleanly; set the BIOS to power on after a power loss; and let Windows sign in by itself after a restart (`netplwiz`, or Autologon from Sysinternals), because Docker Desktop and the backup agent task start at logon and the containers only come back when it runs. Auto-login means anyone at the keyboard has the session: keep the room locked and lock the screen with the Windows key + L (or the screen-saver lock, which does not stop Docker). Docker Desktop: Settings > General > "Start Docker Desktop when you sign in".
+
 ## Restart behavior
 
 `db` and `api` use `restart: unless-stopped`: they come back after a reboot as soon as Docker Desktop starts. Set Docker Desktop to start with Windows. `stop.bat` stops them on purpose and they stay down until `start.bat`.
@@ -100,7 +187,7 @@ Rotating secrets on the development machine does not carry over: production gets
 
 ## Behind a reverse proxy
 
-Set `EBT_BEHIND_PROXY=true` so the API trusts the forwarded client IP. Without it every user shares one login rate-limit bucket, and ten logins a minute lock everyone out. Set `EBT_ALLOWED_HOSTS` to the real host name.
+Set `EBT_BEHIND_PROXY=true` so the API trusts the forwarded client IP. Without it every user shares one login rate-limit bucket, and ten logins a minute lock everyone out. Set `EBT_ALLOWED_HOSTS` to the real host name (and `EBT_CORS_ORIGIN` to the public `https://` origin). The optional Caddy service above does the TLS part.
 
 ## E-mail (quote sending)
 
