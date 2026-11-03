@@ -87,7 +87,7 @@ class StagePath extends StatelessWidget {
       builder: (context, box) {
         final compact = box.maxWidth < 640;
         final roomy = box.maxWidth / steps.length >= 150;
-        return Row(
+        final bar = Row(
           children: [
             for (final (i, s) in steps.indexed)
               Expanded(
@@ -115,7 +115,8 @@ class StagePath extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             if (i < current)
-                              const Icon(Icons.check, size: 16, color: Colors.white)
+                              // Narrow: the label is gone, so a finished step keeps its own icon (the green says it is done).
+                              Icon(compact && s.icon != null ? s.icon : Icons.check, size: 16, color: Colors.white)
                             else if (s.icon != null)
                               Icon(s.icon, size: 16, color: i == current ? onActive : cs.onSurfaceVariant),
                             if (!compact || i == current) ...[
@@ -142,6 +143,24 @@ class StagePath extends StatelessWidget {
                   ),
                 ),
               ),
+          ],
+        );
+        if (!compact) return bar;
+        // Narrow: only the current step has a label, so a line under the bar says where the record is.
+        final label = failed ? failedLabel! : steps[current.clamp(0, steps.length - 1)].label;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            bar,
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Etapa ${(current + 1).clamp(1, steps.length)} de ${steps.length} · $label',
+                key: const ValueKey('path-caption'),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ),
           ],
         );
       },
@@ -186,7 +205,11 @@ class _TappableState extends State<_Tappable> {
           behavior: HitTestBehavior.opaque,
           onTap: tap,
           child: Container(
-            foregroundDecoration: _focused ? BoxDecoration(border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.tertiary, width: 3))) : null,
+            foregroundDecoration: _focused
+                ? BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.tertiary, width: 3)),
+                  )
+                : null,
             child: widget.child,
           ),
         ),
@@ -433,8 +456,20 @@ class NextStepCard extends StatelessWidget {
 }
 
 /// Header of a record screen: icon, [kind], [title], optional [badge], summary [fields] and [amount].
+///
+/// Rule shared by quote, order and delivery: the [badge] only says what the stage path cannot (a draft, a lost or cancelled record), never a status the path already shows.
 class RecordHeader extends StatelessWidget {
-  const RecordHeader({super.key, required this.icon, required this.kind, required this.title, this.badge, this.fields = const [], this.amount});
+  const RecordHeader({
+    super.key,
+    required this.icon,
+    required this.kind,
+    required this.title,
+    this.badge,
+    this.fields = const [],
+    this.amount,
+    this.amountLabel,
+    this.fieldLinks = const {},
+  });
 
   final IconData icon;
   final String kind;
@@ -444,6 +479,12 @@ class RecordHeader extends StatelessWidget {
   final Widget? badge;
   final List<(String, String)> fields;
   final String? amount;
+
+  /// Small caption above [amount] that says what the number adds up (e.g. "Total + IPI").
+  final String? amountLabel;
+
+  /// Fields (by label) that open the record they name: shown as links.
+  final Map<String, VoidCallback> fieldLinks;
 
   @override
   Widget build(BuildContext context) {
@@ -482,7 +523,21 @@ class RecordHeader extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (amount != null) Text(amount!, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+                if (amount != null)
+                  // On a narrow header the amount shrinks to fit instead of squeezing the title out.
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          if (amountLabel != null) Text(amountLabel!, style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                          Text(amount!, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
             if (fields.isNotEmpty) ...[
@@ -497,7 +552,22 @@ class RecordHeader extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(k, style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                        Text(v, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                        if (fieldLinks[k] case final open?)
+                          InkWell(
+                            key: ValueKey('header-link-$k'),
+                            borderRadius: BorderRadius.circular(4),
+                            onTap: open,
+                            child: Text(
+                              v,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.primary,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          )
+                        else
+                          Text(v, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                       ],
                     ),
                 ],
@@ -510,11 +580,14 @@ class RecordHeader extends StatelessWidget {
   }
 }
 
+/// Asks before a step that is hard to undo. The way out is [cancelLabel] ("Cancelar"): "Voltar" is kept for navigation, and a dialog whose own
+/// action is about going back (e.g. "Voltar para rascunho") reads better with "Manter como está".
 Future<bool> confirmStep(
   BuildContext context, {
   required String title,
   required String message,
   String confirmLabel = 'Confirmar',
+  String cancelLabel = 'Cancelar',
   IconData icon = Icons.help_outline,
   bool danger = false,
 }) async =>
@@ -525,7 +598,7 @@ Future<bool> confirmStep(
         title: Text(title),
         content: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 440), child: Text(message)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Voltar')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(cancelLabel)),
           FilledButton(
             key: const ValueKey('confirm-step'),
             style: danger ? FilledButton.styleFrom(backgroundColor: toneAccent(c, Tone.danger)) : null,

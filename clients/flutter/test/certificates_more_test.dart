@@ -322,7 +322,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('certificate-issue')));
       await tester.pumpAndSettle();
       expect(find.text('Emitir certificado 5176-26?'), findsOneWidget);
-      await tester.tap(find.text('Voltar'));
+      await tester.tap(find.text('Cancelar'));
       await tester.pumpAndSettle();
       expect(fake.has('POST', '/api/sales/certificates/7/issue'), isFalse);
       await tester.tap(find.byKey(const ValueKey('certificate-issue')));

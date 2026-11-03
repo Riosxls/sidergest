@@ -376,7 +376,7 @@ void main() {
       final fake = MoreFake();
       await pumpMore(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
       await tapText(tester, 'Ver orçamento');
-      expect(find.textContaining('PROP 31 · BTS Tubos'), findsOneWidget);
+      expect(find.text('Orçamento PROP 31'), findsOneWidget);
     });
   });
 

@@ -790,8 +790,20 @@ class StatusChip extends StatelessWidget {
 }
 
 /// Read-only table for small, already loaded rows.
+///
+/// The layout follows the width the table is given (the card it sits in), not the window: a record page opens beside the sidebar, so a wide
+/// window can still leave a narrow column. Cells can be selected and copied.
 class SimpleTable extends StatelessWidget {
-  const SimpleTable({super.key, required this.columns, required this.rows, this.actions, this.rowColor, this.actionsFirst = false});
+  const SimpleTable({
+    super.key,
+    required this.columns,
+    required this.rows,
+    this.actions,
+    this.rowColor,
+    this.actionsFirst = false,
+    this.emptyText = 'Nenhum registro',
+    this.hideWhenEmpty = const {},
+  });
 
   final List<ColumnSpec> columns;
   final List<Map<String, dynamic>> rows;
@@ -799,42 +811,63 @@ class SimpleTable extends StatelessWidget {
   final bool actionsFirst;
   final Color? Function(Map<String, dynamic> e)? rowColor;
 
+  /// Shown when there are no [rows]: say what to do or why it is empty ("Nenhuma entrega programada").
+  final String emptyText;
+
+  /// Labels of columns that are left out while every row has nothing in them (empty, a dash or zero), so the others get the room.
+  final Set<String> hideWhenEmpty;
+
+  /// Narrower than this the rows become a list of tiles instead of a table.
+  static const _tableMin = 600.0;
+
+  static bool _blank(String v) {
+    final t = v.trim();
+    return t.isEmpty || t == '—' || t == '-' || RegExp(r'^0([,.]0+)?$').hasMatch(t);
+  }
+
+  List<ColumnSpec> get _shown => [
+    for (final c in columns)
+      if (!hideWhenEmpty.contains(c.label) || rows.any((e) => !_blank(c.value(e)))) c,
+  ];
+
   @override
   Widget build(BuildContext context) {
-    if (rows.isEmpty) return const Padding(padding: EdgeInsets.all(16), child: Text('Nenhum registro'));
-    final wide = MediaQuery.sizeOf(context).width >= 900;
-    if (!wide) {
-      return Column(
-        children: [
-          for (final e in rows)
-            ListTile(
-              tileColor: rowColor?.call(e),
-              title: Text('${columns[0].value(e)}  ${columns.length > 1 ? columns[1].value(e) : ''}'),
-              subtitle: Text(columns.skip(2).map((c) => (c.label, c.value(e))).where((p) => p.$2.isNotEmpty).map((p) => '${p.$1}: ${p.$2}').join(' · ')),
-              trailing: actions == null ? null : Row(mainAxisSize: MainAxisSize.min, children: actions!(e)),
-            ),
-        ],
-      );
-    }
+    if (rows.isEmpty) return Padding(padding: const EdgeInsets.all(16), child: Text(emptyText));
+    final cols = _shown;
     return LayoutBuilder(
       builder: (context, box) {
         // Inside a horizontal scroller there is no width to share: keep the scrolling DataTable there.
-        if (!box.hasBoundedWidth) return _scrolling();
+        if (!box.hasBoundedWidth) return SelectionArea(child: _scrolling(cols));
+        if (box.maxWidth < _tableMin) return SelectionArea(child: _tiles(cols));
         // At least as wide as the card (so the last column ends on its edge); wider than the card when the content needs it, then it scrolls.
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minWidth: box.maxWidth),
-            child: IntrinsicWidth(child: _aligned(context)),
+        return SelectionArea(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: box.maxWidth),
+              child: IntrinsicWidth(child: _aligned(context, cols)),
+            ),
           ),
         );
       },
     );
   }
 
+  Widget _tiles(List<ColumnSpec> cols) => Column(
+    children: [
+      for (final e in rows)
+        ListTile(
+          tileColor: rowColor?.call(e),
+          title: Text('${cols[0].value(e)}  ${cols.length > 1 ? cols[1].value(e) : ''}'),
+          subtitle: Text(cols.skip(2).map((c) => (c.label, c.value(e))).where((p) => p.$2.isNotEmpty).map((p) => '${p.$1}: ${p.$2}').join(' · ')),
+          trailing: actions == null ? null : Row(mainAxisSize: MainAxisSize.min, children: actions!(e)),
+        ),
+    ],
+  );
+
   /// Columns take the width of their content, except the one with the longest text, which takes the rest. The first column starts and the last
   /// ends exactly on the card's content edges, so headers line up with the title above and the totals below.
-  Widget _aligned(BuildContext context) {
+  Widget _aligned(BuildContext context, List<ColumnSpec> columns) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final headerStyle = theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface);
@@ -889,7 +922,7 @@ class SimpleTable extends StatelessWidget {
     );
   }
 
-  Widget _scrolling() => SingleChildScrollView(
+  Widget _scrolling(List<ColumnSpec> columns) => SingleChildScrollView(
     scrollDirection: Axis.horizontal,
     child: DataTable(
       horizontalMargin: 0,
@@ -917,7 +950,8 @@ class SimpleTable extends StatelessWidget {
   );
 }
 
-/// Titled block with optional header [actions].
+/// Titled block with optional header [actions]. The title is a heading for screen readers; when the block is narrow the actions wrap under it
+/// instead of squeezing the title.
 class Section extends StatelessWidget {
   const Section({super.key, required this.title, required this.child, this.actions = const []});
 
@@ -926,26 +960,40 @@ class Section extends StatelessWidget {
   final List<Widget> actions;
 
   @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-              ),
-              ...actions,
-            ],
-          ),
-          const SizedBox(height: 8),
-          child,
-        ],
+  Widget build(BuildContext context) {
+    final heading = Semantics(
+      header: true,
+      child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+    );
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LayoutBuilder(
+              builder: (context, box) {
+                if (actions.isEmpty) return heading;
+                if (box.maxWidth < 520) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      heading,
+                      const SizedBox(height: 4),
+                      Wrap(spacing: 4, runSpacing: 4, children: actions),
+                    ],
+                  );
+                }
+                return Row(children: [Expanded(child: heading), ...actions]);
+              },
+            ),
+            const SizedBox(height: 8),
+            child,
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// Builds [builder] when [future] completes; shows a spinner while waiting and the error with a retry button on failure.

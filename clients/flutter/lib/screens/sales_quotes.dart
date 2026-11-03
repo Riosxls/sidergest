@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
@@ -19,6 +21,8 @@ import '../widgets/pipeline.dart';
 import '../widgets/print_gate.dart';
 import '../widgets/print_panel.dart';
 import '../widgets/record_list.dart';
+import '../widgets/record_shortcuts.dart';
+import '../widgets/record_skeleton.dart';
 import '../workdays.dart';
 import 'customers.dart';
 import 'sales_common.dart';
@@ -798,6 +802,9 @@ class _QuoteScreenState extends State<QuoteScreen> {
 
   Map<String, dynamic>? _credit;
 
+  /// The sales order a converted quote became, for the card that says where it stands.
+  Map<String, dynamic>? _order;
+
   Future<void> _load() async {
     try {
       final q = await api.get(base) as Map<String, dynamic>;
@@ -807,9 +814,30 @@ class _QuoteScreenState extends State<QuoteScreen> {
           _error = null;
         });
         unawaited(_loadCredit(q));
+        unawaited(_loadOrder(q));
       }
     } catch (e) {
-      if (mounted) setState(() => _error = friendlyError(e));
+      if (!mounted) return;
+      if (_q == null) {
+        setState(() => _error = friendlyError(e));
+      } else {
+        // The page keeps what it has; say that it is not up to date.
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao atualizar: ${friendlyError(e)}')));
+      }
+    }
+  }
+
+  /// The order of a converted quote (optional context: the card falls back to a plain sentence without it).
+  Future<void> _loadOrder(Map<String, dynamic> q) async {
+    if (q['status'] != 'Converted' || q['salesOrderId'] == null) {
+      if (_order != null && mounted) setState(() => _order = null);
+      return;
+    }
+    try {
+      final o = await api.get('/api/sales/orders/${q['salesOrderId']}');
+      if (mounted && o is Map<String, dynamic>) setState(() => _order = o);
+    } catch (e) {
+      debugPrint('sales_quotes: Optional context; the card works without it: $e');
     }
   }
 
@@ -865,31 +893,58 @@ class _QuoteScreenState extends State<QuoteScreen> {
       if (ok && mounted) await _act('send', success: 'Enviada para aprovação do gerente');
       return;
     }
+    // This step records that the quote went to the customer; the system sends nothing. The dialog and the message say so.
     final r = await submitForm(
       context,
       api: api,
-      title: 'Enviar ${q['reference']} ao cliente',
+      title: 'Registrar envio de ${q['reference']} ao cliente',
       fields: [
-        FieldSpec('sentTo', 'Enviar para (contato ou e-mail)', required: true, defaultValue: q['contactEmail'] ?? q['contactName']),
+        FieldSpec(
+          'sentTo',
+          'Enviado para (contato ou e-mail)',
+          required: true,
+          defaultValue: q['contactEmail'] ?? q['contactName'],
+          hint: 'O e-mail não sai daqui: baixe o PDF e envie pelo seu programa de e-mail',
+        ),
         const FieldSpec('note', 'Observação'),
       ],
       submit: (b) => api.post('$base/send', b),
     );
+    if (!mounted) return;
     if (r != null && r['reference'] != null) {
       setState(() => _q = r);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Orçamento registrado como enviado · válido até ${fmtDay(r['validUntil'])}. Ele ainda não saiu do sistema: abra o e-mail e anexe o PDF.',
-            ),
-            duration: const Duration(seconds: 10),
-            persist: false, // a snackbar with an action stays until dismissed unless told otherwise
-            action: SnackBarAction(label: 'Abrir e-mail', onPressed: _mail),
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Envio registrado · válido até ${fmtDay(r['validUntil'])}. O sistema não envia o e-mail: baixe o PDF e abra o e-mail para enviá-lo.'),
+          duration: const Duration(seconds: 10),
+          persist: false, // a snackbar with an action stays until dismissed unless told otherwise
+          action: SnackBarAction(label: 'Abrir e-mail', onPressed: _mail),
+        ),
+      );
     }
+  }
+
+  /// The quote as a file to attach to an e-mail: saved through the system dialog on a computer, handed to the share sheet on a phone.
+  Future<void> _downloadPdf() async {
+    final q = _q;
+    if (q == null) return;
+    final name = 'Orçamento ${q['reference']}';
+    final phone = !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
+    if (!phone) {
+      await savePdf(context, '$name.pdf', () => buildQuotePdf(api, q));
+      return;
+    }
+    try {
+      await Printing.sharePdf(bytes: await buildQuotePdf(api, q), filename: '$name.pdf');
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao gerar o PDF: ${friendlyError(e)}')));
+    }
+  }
+
+  Future<void> _printQuote() async {
+    final q = _q;
+    if (q == null) return;
+    await printPdf(context, 'Orçamento ${q['reference']}', () => buildQuotePdf(api, q));
   }
 
   /// Opens the user's mail program with the recipient, subject and text filled in. The PDF still has to be attached (print/share button).
@@ -935,6 +990,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ],
       submit: (b) => api.post('$base/decline', b),
     );
+    if (!mounted) return;
     if (r != null && r['reference'] != null) {
       setState(() => _q = r);
       unawaited(_loadCredit(r));
@@ -949,6 +1005,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       message:
           'A aprovação do gerente é descartada e você pode editar os itens e preços. Depois envie de novo; se o desconto continuar acima do limite, o gerente aprova outra vez.',
       confirmLabel: 'Voltar para rascunho',
+      cancelLabel: 'Manter como está',
       icon: Icons.edit_outlined,
     );
     if (ok && mounted) await _act('reopen', success: 'Orçamento voltou para rascunho');
@@ -970,9 +1027,10 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ],
       submit: (b) => api.post('$base/extend', b),
     );
+    if (!mounted) return;
     if (r != null && r['reference'] != null) {
       setState(() => _q = r);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Validade até ${fmtDay(r['validUntil'])}')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Validade até ${fmtDay(r['validUntil'])}')));
     }
   }
 
@@ -1048,22 +1106,30 @@ class _QuoteScreenState extends State<QuoteScreen> {
         ],
       }),
     );
+    if (!mounted) return;
     if (r != null && r['reference'] != null) {
       setState(() => _q = r);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Pedido de compra registrado'),
-            duration: const Duration(seconds: 12),
-            persist: false,
-            action: s.canSell ? SnackBarAction(label: 'Gerar pedido de venda', onPressed: _convert) : null,
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Pedido de compra registrado'),
+          duration: const Duration(seconds: 12),
+          persist: false,
+          action: s.canSell ? SnackBarAction(label: 'Gerar pedido de venda', onPressed: _convert) : null,
+        ),
+      );
     }
   }
 
+  /// The customer's approval starts the delivery-time clock (working days count from today), so it is confirmed with the date it will carry.
   Future<void> _accept() async {
+    final ok = await confirmStep(
+      context,
+      title: 'Cliente aprovou ${_q!['reference']}?',
+      message: 'Registra a aprovação do cliente em ${fmtDay(isoDate(DateTime.now()))}. Os prazos de entrega em dias úteis passam a contar a partir de hoje.',
+      confirmLabel: 'Registrar aprovação',
+      icon: Icons.thumb_up_alt_outlined,
+    );
+    if (!ok || !mounted) return;
     final r = await runAction(context, () => api.post('$base/accept', {}), success: 'Aprovação do cliente registrada');
     if (r is Map<String, dynamic> && mounted) setState(() => _q = r);
   }
@@ -1157,6 +1223,17 @@ class _QuoteScreenState extends State<QuoteScreen> {
     if (mounted) unawaited(_load());
   }
 
+  /// Fresh answer to "does this quote pass the customer's credit limit?" (false when it cannot be asked).
+  Future<bool> _creditExceeded() async {
+    try {
+      final c = await api.get('$base/credit');
+      return c is Map<String, dynamic> && c['exceeded'] == true;
+    } catch (e) {
+      debugPrint('sales_quotes: The override flow is offered only when the limit is confirmed: $e');
+      return false;
+    }
+  }
+
   Future<void> _convert() async {
     final ok = await confirmStep(
       context,
@@ -1171,7 +1248,10 @@ class _QuoteScreenState extends State<QuoteScreen> {
       order = await api.post('$base/convert', {}) as Map<String, dynamic>;
     } on ApiException catch (e) {
       if (!mounted) return;
-      if (e.status == 409 && e.message.contains('Credit limit') && s.canApproveSales) {
+      // A 409 is not always the credit limit: ask the server whether it is, instead of reading its message.
+      final credit = e.status == 409 && s.canApproveSales && await _creditExceeded();
+      if (!mounted) return;
+      if (credit) {
         final force = await confirmStep(
           context,
           title: 'Limite de crédito excedido',
@@ -1422,9 +1502,10 @@ class _QuoteScreenState extends State<QuoteScreen> {
           ? 'O maior desconto sobre a tabela é ${fmt(q['totals']['maxDiscountPercent'])}%${_maxDiscount == null ? '' : ' (limite ${fmt(_maxDiscount)}%)'}. O envio passa pela aprovação do gerente comercial.'
           : _rejectionNote(q) != null
           ? 'O gerente recusou o desconto: ${_rejectionNote(q)}. Ajuste os preços e envie de novo.'
-          : 'Confira itens, preços e prazos. Ao enviar, a validade começa a contar.',
+          : 'Confira itens, preços e prazos. Ao registrar o envio, a validade começa a contar. O e-mail você envia à parte, com o PDF.',
       tone: q['needsApproval'] == true || _rejectionNote(q) != null ? Tone.warning : Tone.info,
-      actions: [if (sell) _primary('quote-send', q['needsApproval'] == true ? 'Enviar para aprovação' : 'Enviar ao cliente', Icons.send, _send)],
+      actions: [if (sell) _primary('quote-send', q['needsApproval'] == true ? 'Enviar para aprovação' : 'Registrar envio ao cliente', Icons.send, _send)],
+      trailing: [if (q['needsApproval'] != true) _pdfButton()],
     );
   }
 
@@ -1452,13 +1533,18 @@ class _QuoteScreenState extends State<QuoteScreen> {
     final sell = s.canSell;
     return NextStepCard(
       title: 'Desconto aprovado',
-      message: 'Aprovado por ${q['approvedBy'] ?? ''} em ${fmtDate(q['approvedAt'])}. Agora envie ao cliente. Para mudar algo antes, volte para rascunho.',
+      message: 'Aprovado por ${q['approvedBy'] ?? ''} em ${fmtDate(q['approvedAt'])}. Agora registre o envio ao cliente. Para mudar algo antes, volte para rascunho.',
       actions: [
-        if (sell) _primary('quote-send', 'Enviar ao cliente', Icons.send, _send),
+        if (sell) _primary('quote-send', 'Registrar envio ao cliente', Icons.send, _send),
         if (sell) _secondary('quote-reopen', 'Voltar para rascunho para editar', Icons.edit_outlined, _reopen),
       ],
+      trailing: [_pdfButton()],
     );
   }
+
+  /// Download of the quote, next to the e-mail button: the file is what gets attached.
+  Widget _pdfButton() =>
+      TextButton.icon(key: const ValueKey('quote-pdf'), onPressed: _downloadPdf, icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('Baixar PDF'));
 
   Widget _sentStep(Map<String, dynamic> q) {
     final sell = s.canSell;
@@ -1472,6 +1558,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         if (sell) _negative('quote-decline', 'Cliente recusou (venda perdida)', Icons.thumb_down_alt_outlined, _decline),
       ],
       trailing: [
+        _pdfButton(),
         TextButton.icon(key: const ValueKey('quote-mail'), onPressed: _mail, icon: const Icon(Icons.mail_outline), label: const Text('Abrir e-mail')),
         if (sell) TextButton.icon(key: const ValueKey('quote-extend'), onPressed: _extend, icon: const Icon(Icons.event_repeat), label: const Text('Prorrogar validade')),
       ],
@@ -1492,11 +1579,14 @@ class _QuoteScreenState extends State<QuoteScreen> {
     );
   }
 
+  /// Says where the order stands (its situation and what comes next), so the quote is rarely opened only to look.
   Widget _convertedStep(Map<String, dynamic> q) {
+    final order = _order;
+    final snap = order == null ? null : orderSnapshot(order);
     return NextStepCard(
       title: 'Convertida em pedido',
-      message: 'Este orçamento virou o pedido ${q['salesOrderReference'] ?? ''}.',
-      tone: Tone.success,
+      message: snap == null ? 'Este orçamento virou o pedido ${q['salesOrderReference'] ?? ''}.' : 'Este orçamento virou o pedido ${snap.title}. ${snap.message}',
+      tone: snap?.tone == Tone.danger ? Tone.danger : Tone.success,
       actions: [
         if (q['salesOrderId'] != null)
           _primary('quote-open-order', 'Abrir pedido', Icons.open_in_new, () => openSalesOrder(context, s, q['salesOrderId'] as int).then((_) => _load())),
@@ -1564,6 +1654,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
   List<Widget> _menuActions() {
     final q = _q;
     if (q == null) return [];
+    final danger = Theme.of(context).colorScheme.error;
     // Grouped by what the user is trying to do: edit, handle the document, create something new from this quote, change its situation.
     // Outcomes of the customer's answer (approved, wants changes, refused, gave up) are the buttons on the status card, not menu items.
     final edit = <PopupMenuEntry<VoidCallback>>[
@@ -1577,6 +1668,11 @@ class _QuoteScreenState extends State<QuoteScreen> {
       PopupMenuItem(
         value: _preview,
         child: const ListTile(leading: Icon(Icons.description_outlined), title: Text('Ver texto do orçamento')),
+      ),
+      PopupMenuItem(
+        key: const ValueKey('quote-menu-pdf'),
+        value: _downloadPdf,
+        child: const ListTile(leading: Icon(Icons.picture_as_pdf_outlined), title: Text('Baixar PDF')),
       ),
       if (['Sent', 'Accepted', 'PurchaseOrder'].contains(status))
         PopupMenuItem(
@@ -1605,12 +1701,19 @@ class _QuoteScreenState extends State<QuoteScreen> {
       if (s.canSell && ['Draft', 'PendingApproval', 'Approved'].contains(status))
         PopupMenuItem(
           value: () => _reason('cancel', 'Cancelar ${q['reference']}', label: 'Motivo (ex.: emitido por engano)', success: 'Orçamento cancelado'),
-          child: const ListTile(leading: Icon(Icons.block), title: Text('Cancelar orçamento'), subtitle: Text('Só para o que nunca foi enviado ao cliente')),
+          // Destructive entries wear the error colour, like the outcome buttons on the status card.
+          child: ListTile(
+            iconColor: danger,
+            textColor: danger,
+            leading: const Icon(Icons.block),
+            title: const Text('Cancelar orçamento'),
+            subtitle: const Text('Só para o que nunca foi enviado ao cliente'),
+          ),
         ),
       if (s.canSell && canDeleteQuote(s, status, q['revision'] as int? ?? 0))
         PopupMenuItem(
           value: _delete,
-          child: const ListTile(leading: Icon(Icons.delete_outline), title: Text('Excluir')),
+          child: ListTile(iconColor: danger, textColor: danger, leading: const Icon(Icons.delete_outline), title: const Text('Excluir')),
         ),
     ];
     final menu = <PopupMenuEntry<VoidCallback>>[];
@@ -1631,8 +1734,10 @@ class _QuoteScreenState extends State<QuoteScreen> {
     final q = _q;
     return Scaffold(
       appBar: AppBar(
-        title: Text(q == null ? 'Orçamento' : '${q['reference']} · ${q['customerName']}', overflow: TextOverflow.ellipsis),
+        // The customer is in the header (and links to its page); the title says which record this is.
+        title: Text(q == null ? 'Orçamento' : 'Orçamento ${q['reference']}', overflow: TextOverflow.ellipsis),
         actions: [
+          IconButton(key: const ValueKey('quote-refresh'), tooltip: 'Atualizar (F5)', onPressed: _load, icon: const Icon(Icons.refresh)),
           if (q != null)
             RelatedMenu(
               links: [
@@ -1643,11 +1748,15 @@ class _QuoteScreenState extends State<QuoteScreen> {
           ..._menuActions(),
         ],
       ),
-      body: _error != null && q == null
-          ? LoadError(message: _error!, onRetry: _load)
-          : q == null
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(onRefresh: _load, child: _body(q)),
+      body: RecordShortcuts(
+        onRefresh: _load,
+        onPrint: q == null ? null : _printQuote,
+        child: _error != null && q == null
+            ? LoadError(message: _error!, onRetry: _load)
+            : q == null
+            ? const RecordSkeleton()
+            : RefreshIndicator(onRefresh: _load, child: _body(q)),
+      ),
     );
   }
 
@@ -1659,17 +1768,32 @@ class _QuoteScreenState extends State<QuoteScreen> {
   // The stage path already names these statuses; the badge stays for the ones it cannot say (draft, approval, lost with a reason, replaced...).
   badge: const ['Sent', 'Accepted', 'PurchaseOrder', 'Converted'].contains(q['status']) ? null : StatusBadge(quoteSituation(q), tone: quoteToneOf(q)),
   amount: fmtMoney(t['total']),
+  amountLabel: 'Total + IPI',
+  fieldLinks: {'Cliente': () => openCustomer(context, s, q['customerId'] as int)},
   fields: [
     ('Cliente', '${q['customerName']}'),
-    ('Contato', [q['contactName'], q['contactEmail']].whereType<String>().join(' · ')),
-    ('Validade', q['validUntil'] != null ? fmtDay(q['validUntil']) : '${q['validityDays']} dias após envio'),
+    // Contact, validity and freight matter while the quote is being worked; afterwards they sit in Detalhes.
+    if (_working(q)) ('Contato', _contact(q)),
+    if (_validityMatters(q)) ('Validade', _validity(q)),
     ('Prazo', fmt(q['paymentTermName'] ?? q['customPaymentTerm'])),
-    ('Frete', freightTerms[q['freight']] ?? fmt(q['freight'])),
+    if (_working(q)) ('Frete', _freight(q)),
     ('Ref. do cliente', fmt(q['customerReference'])),
     ('Pedido do cliente', fmt(q['customerPo'])),
   ],
 );
   }
+
+  /// Before the customer's answer is final: the quote can still change hands or text.
+  bool _working(Map<String, dynamic> q) => _openStatuses.contains(q['status']);
+
+  /// The validity only matters until the customer answers; after that it is history.
+  bool _validityMatters(Map<String, dynamic> q) => const ['Draft', 'PendingApproval', 'Approved', 'Sent'].contains(q['status']);
+
+  String _contact(Map<String, dynamic> q) => [q['contactName'], q['contactEmail']].whereType<String>().join(' · ');
+
+  String _validity(Map<String, dynamic> q) => q['validUntil'] != null ? fmtDay(q['validUntil']) : '${q['validityDays']} dias após envio';
+
+  String _freight(Map<String, dynamic> q) => freightTerms[q['freight']] ?? fmt(q['freight']);
 
   Widget _itemsSection(Map<String, dynamic> q, Map<String, dynamic> t, List<Map<String, dynamic>> lines) {
     return Section(
@@ -1682,9 +1806,16 @@ class _QuoteScreenState extends State<QuoteScreen> {
           col('Item', 'sequence'),
           ColumnSpec('Produto', (e) => '${e['productCode']}${e['customerPartNumber'] == null ? '' : ' (${e['customerPartNumber']})'}'),
           col('Descrição', 'description'),
-          ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
+          ColumnSpec('Qtd.', (e) => '${fmtQty(e['quantity'])} ${e['unit']}', numeric: true),
           ColumnSpec('Preço Unitário', (e) => fmtMoney(e['unitPrice']), numeric: true),
-          ColumnSpec('Desc. %', (e) => e['discountPercent'] == null || e['discountPercent'] == 0 ? '—' : fmt(e['discountPercent']), numeric: true),
+          // A line above the limit is tinted, and tagged so the colour is not the only sign.
+          ColumnSpec(
+            'Desc. %',
+            (e) => e['discountPercent'] == null || e['discountPercent'] == 0
+                ? '—'
+                : (_maxDiscount != null && _n(e['discountPercent']) > _maxDiscount! ? '⚠ ${fmt(e['discountPercent'])}' : fmt(e['discountPercent'])),
+            numeric: true,
+          ),
           col('IPI %', 'ipiPercent', numeric: true),
           ColumnSpec(
             'Entrega',
@@ -1694,8 +1825,20 @@ class _QuoteScreenState extends State<QuoteScreen> {
           moneyCol('Total', 'total'),
         ],
         rows: lines,
+        emptyText: 'Este orçamento não tem itens.',
+        // Columns that say nothing for every line (no discount, no IPI) make room for the others.
+        hideWhenEmpty: const {'Desc. %', 'IPI %'},
         rowColor: (e) => _maxDiscount != null && _n(e['discountPercent']) > _maxDiscount! ? toneColors(context, Tone.warning).$1 : null,
       ),
+      if (_maxDiscount != null && lines.any((e) => _n(e['discountPercent']) > _maxDiscount!))
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Text(
+            '⚠ Desconto acima do limite de ${fmt(_maxDiscount)}%.',
+            key: const ValueKey('quote-discount-note'),
+            style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+        ),
       if (lines.any((l) => l['leadTimeDays'] != null && l['deliveryDate'] == null))
         Padding(
           padding: const EdgeInsets.only(top: 10),
@@ -1713,7 +1856,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
           ('IPI', fmtMoney(t['ipi'])),
           ('Total', fmtMoney(t['total'])),
           if (_n(t['icms']) > 0) ('ICMS (estimativa)', fmtMoney(t['icms'])),
-          if (_n(t['icms']) > 0) ('Total com ICMS', fmtMoney(_n(t['total']) + _n(t['icms']))),
+          if (_n(t['icms']) > 0) ('Total com ICMS (estimativa)', fmtMoney(_n(t['total']) + _n(t['icms']))),
         ],
         strong: 2,
       ),
@@ -1726,6 +1869,10 @@ class _QuoteScreenState extends State<QuoteScreen> {
     return Section(
   title: 'Detalhes',
   child: InfoGrid([
+    // What the header shows only while the quote is being worked.
+    if (!_working(q)) ('Contato', _contact(q)),
+    if (!_validityMatters(q)) ('Validade', _validity(q)),
+    if (!_working(q)) ('Frete', _freight(q)),
     ('Local de entrega', fmt(q['addressText'])),
     ('Condições gerais', fmt(q['conditions'])),
     ('Observações', fmt(q['notes'])),
@@ -1770,7 +1917,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       side: [
         Section(
           title: 'Histórico',
-          child: TimelineView(entries: timeline(q['history'] as List)),
+          child: TimelineView(entries: timeline(q['history'] as List, kind: 'quote')),
         ),
       ],
     );

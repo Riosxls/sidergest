@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../entities.dart' show fmt, fmtNum;
 import '../labels.dart';
 import '../session.dart';
 import '../widgets/pipeline.dart';
@@ -88,15 +89,74 @@ Tone quoteToneOf(Map<String, dynamic> q) => isSuperseded(q) ? Tone.neutral : quo
   _ => (7, 'Cancelada'),
 };
 
-String statusLabel(Object? s) => quoteStatuses[s] ?? salesOrderStatuses[s] ?? deliveryStatuses[s] ?? '${s ?? ''}';
+/// A status name. [kind] ('quote', 'order' or 'delivery') says whose status it is: the three records share words such as Cancelled, Shipped and
+/// Delivered, and each names them in its own gender ("Cancelada", "Cancelado"). Without it the quote's wording wins, then the order's.
+String statusLabel(Object? s, {String? kind}) {
+  final maps = switch (kind) {
+    'quote' => [quoteStatuses],
+    'order' => [salesOrderStatuses],
+    'delivery' => [deliveryStatuses],
+    _ => [quoteStatuses, salesOrderStatuses, deliveryStatuses],
+  };
+  for (final m in maps) {
+    final v = m[s];
+    if (v != null) return v;
+  }
+  return '${s ?? ''}';
+}
 
-List<TimelineEntry> timeline(List<dynamic> history) => [
+/// History actions whose title already says where the record went ("Conversão em pedido"): the "A → B" line would only repeat it.
+const _titleNamesDestination = {
+  'submitted',
+  'approved',
+  'approval-rejected',
+  'sent',
+  'po-received',
+  'accepted',
+  'declined',
+  'gave-up',
+  'reopened',
+  'cancelled',
+  'expired',
+  'converted',
+  'released',
+  'shipped',
+  'delivered',
+  'balance-closed',
+};
+
+/// Quantity with thousands grouping and no trailing zeros: 12500 -> "12.500", 1500.5 -> "1.500,5".
+String fmtQty(Object? v) {
+  if (v is! num) return fmt(v);
+  if (v == v.roundToDouble()) return fmtNum(v, 0);
+  final s = fmtNum(v, 3);
+  return s.replaceFirst(RegExp(r',?0+$'), '');
+}
+
+/// One line about a sales order for a page that points at it (a converted quote): its situation and what comes next.
+({String title, String message, Tone tone}) orderSnapshot(Map<String, dynamic> o) {
+  final ref = '${o['reference'] ?? ''}'.trim();
+  final status = '${o['status']}';
+  final pct = '${(((o['progress'] as num?) ?? 0) * 100).round()}%';
+  final (situation, next, tone) = switch (status) {
+    'Created' => ('Criado', 'Falta liberar para a produção.', Tone.info),
+    'Released' || 'PartiallyShipped' when o['ready'] == true => (salesOrderStatuses[status]!, 'Pronto para expedir: programe a entrega.', Tone.success),
+    'Released' || 'PartiallyShipped' => (salesOrderStatuses[status]!, 'Em produção, $pct pronto.', o['late'] == true ? Tone.danger : Tone.progress),
+    'Shipped' => ('Expedido', 'Falta confirmar o recebimento pelo cliente.', Tone.progress),
+    'Delivered' => ('Entregue', 'Todas as entregas foram confirmadas.', Tone.success),
+    _ => ('Cancelado', '${o['statusReason'] ?? ''}', Tone.danger),
+  };
+  return (title: [ref, situation].where((p) => p.isNotEmpty).join(' · '), message: next, tone: tone);
+}
+
+/// History as timeline entries. Pass [kind] (see [statusLabel]) so the statuses in "A → B" use the record's own wording.
+List<TimelineEntry> timeline(List<dynamic> history, {String? kind}) => [
   for (final h in history.cast<Map<String, dynamic>>())
     TimelineEntry(
       title: salesActions[h['action']] ?? '${h['action']}',
       subtitle: [
-        if (h['fromStatus'] != null && h['toStatus'] != null && h['fromStatus'] != h['toStatus'])
-          '${statusLabel(h['fromStatus'])} → ${statusLabel(h['toStatus'])}',
+        if (h['fromStatus'] != null && h['toStatus'] != null && h['fromStatus'] != h['toStatus'] && !_titleNamesDestination.contains(h['action']))
+          '${statusLabel(h['fromStatus'], kind: kind)} → ${statusLabel(h['toStatus'], kind: kind)}',
         if (h['note'] != null) '${h['note']}',
       ].join(' · '),
       user: h['user'] as String?,
@@ -147,24 +207,30 @@ class SideBySide extends StatelessWidget {
   final List<Widget> main;
   final List<Widget> side;
 
+  /// Content width from which the history sits beside the main column. It is the width of the page, not of the window: a record page opens
+  /// beside the sidebar, so a 1100 px window leaves only about 800 px, and a main column of 500 px cannot hold an items table.
+  static const sideMinWidth = 1100.0;
+
   @override
-  Widget build(BuildContext context) {
-    if (MediaQuery.sizeOf(context).width < 1100) {
-      return ListView(padding: const EdgeInsets.all(16), children: [...main, const SizedBox(height: 12), ...side]);
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 8, 16), children: main),
-        ),
-        SizedBox(
-          width: 300,
-          child: ListView(padding: const EdgeInsets.fromLTRB(8, 16, 16, 16), children: side),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      if (box.maxWidth < sideMinWidth) {
+        return ListView(padding: const EdgeInsets.all(16), children: [...main, const SizedBox(height: 12), ...side]);
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 8, 16), children: main),
+          ),
+          SizedBox(
+            width: 300,
+            child: ListView(padding: const EdgeInsets.fromLTRB(8, 16, 16, 16), children: side),
+          ),
+        ],
+      );
+    },
+  );
 }
 
 const gap = SizedBox(height: 12);

@@ -118,7 +118,7 @@ void main() {
       await chooseType(tester, 'Requisição (consumo)');
       expect(find.text('Trocar o tipo do lançamento?'), findsOneWidget);
       // Keeping the type keeps the line.
-      await tester.tap(find.text('Voltar'));
+      await tester.tap(find.text('Cancelar'));
       await tester.pumpAndSettle();
       expect(find.text('Linhas (1)'), findsOneWidget);
       await chooseType(tester, 'Requisição (consumo)');

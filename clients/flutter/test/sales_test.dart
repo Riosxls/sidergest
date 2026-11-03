@@ -403,12 +403,20 @@ void main() {
     expect(fake.body(fake.last('POST', '/api/sales/quotes/5/accept')).containsKey('customerPo'), isFalse);
   });
 
-  testWidgets('customer approval on the quote posts right away, without a dialog', (tester) async {
+  testWidgets('customer approval on the quote asks first, saying the date the delivery times start from', (tester) async {
     final fake = SalesFake()..quoteStatus = 'Sent';
     await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
     await tester.tap(find.byKey(const ValueKey('quote-accept')));
     await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.textContaining('passam a contar a partir de hoje'), findsOneWidget);
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+    expect(fake.log.where((r) => r.url.path.endsWith('/accept')), isEmpty);
+    await tester.tap(find.byKey(const ValueKey('quote-accept')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-step')));
+    await tester.pumpAndSettle();
     expect(fake.body(fake.last('POST', '/api/sales/quotes/5/accept')).containsKey('customerPo'), isFalse);
   });
 
@@ -1000,10 +1008,6 @@ void main() {
       expect(find.byTooltip('Altera itens ou preço. Esta versão fica como Substituída (só consulta) e uma nova revisão abre em rascunho.'), findsOneWidget);
     });
 
-    testWidgets('a line without discount shows a dash, not an empty cell', (tester) async {
-      await open(tester, 'Sent');
-      expect(find.text('—'), findsWidgets);
-    });
 
     testWidgets('a draft can still be cancelled from the menu', (tester) async {
       await open(tester, 'Draft');

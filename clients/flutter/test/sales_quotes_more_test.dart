@@ -102,7 +102,7 @@ void main() {
       await tapText(tester, 'Duplicar');
       expect(f.called('POST', '/api/sales/quotes/5/duplicate'), isTrue);
       expect(f.called('GET', '/api/sales/quotes/6'), isTrue);
-      expect(find.textContaining('PROP 31A · BTS Tubos'), findsOneWidget);
+      expect(find.text('Orçamento PROP 31A'), findsOneWidget);
     });
 
     testWidgets('row menu cancels a draft with a reason', (tester) async {
@@ -127,7 +127,7 @@ void main() {
       await tester.pumpAndSettle();
       await tapText(tester, 'Excluir');
       expect(find.text('Excluir PROP 31?'), findsOneWidget);
-      await tapText(tester, 'Voltar');
+      await tapText(tester, 'Cancelar');
       expect(f.called('DELETE', '/api/sales/quotes/5'), isFalse);
       await tester.tap(find.byTooltip('Ações'));
       await tester.pumpAndSettle();
@@ -224,7 +224,7 @@ void main() {
       expect(line['quantity'], 10);
       expect(line['unitPrice'], 120);
       expect(line['leadTimeDays'], 15);
-      expect(find.text('PROP 31 · BTS Tubos'), findsOneWidget);
+      expect(find.text('Orçamento PROP 31'), findsOneWidget);
     });
 
     testWidgets('a custom prazo is sent instead of a prazo id and can be cleared', (tester) async {
@@ -301,7 +301,7 @@ void main() {
       await tapKey(tester, 'quote-save');
       final b = f.body(f.last('PUT', '/api/sales/quotes/5'));
       expect((b['lines'] as List).single['quantity'], 200);
-      expect(find.text('PROP 31 · BTS Tubos'), findsOneWidget);
+      expect(find.text('Orçamento PROP 31'), findsOneWidget);
     });
 
     testWidgets('removing every item blocks saving', (tester) async {
@@ -332,12 +332,12 @@ void main() {
       await _openQuote(tester, f);
       expect(find.text('Pronta para enviar?'), findsOneWidget);
       await tapKey(tester, 'quote-send');
-      expect(find.text('Enviar PROP 31 ao cliente'), findsOneWidget);
+      expect(find.text('Registrar envio de PROP 31 ao cliente'), findsOneWidget);
       expect(tester.widget<TextField>(find.byKey(const ValueKey('field-sentTo'))).controller!.text, 'compras@bts.com');
       await tester.enterText(find.byKey(const ValueKey('field-note')), 'Segue proposta');
       await _saveForm(tester);
       expect(f.body(f.last('POST', '/api/sales/quotes/5/send')), {'sentTo': 'compras@bts.com', 'note': 'Segue proposta'});
-      expect(find.textContaining('Orçamento registrado como enviado'), findsOneWidget);
+      expect(find.textContaining('Envio registrado'), findsOneWidget);
       expect(find.text('Aguardando resposta do cliente'), findsOneWidget);
       await tester.tap(find.widgetWithText(SnackBarAction, 'Abrir e-mail'));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
@@ -355,7 +355,7 @@ void main() {
       await tapKey(tester, 'quote-send');
       expect(find.text('Enviar para aprovação?'), findsOneWidget);
       expect(find.textContaining('O desconto deste orçamento (12%) passa do limite de 5%'), findsOneWidget);
-      await tapText(tester, 'Voltar');
+      await tapText(tester, 'Cancelar');
       expect(f.called('POST', '/api/sales/quotes/5/send'), isFalse);
       await tapKey(tester, 'quote-send');
       await tapKey(tester, 'confirm-step');
@@ -400,7 +400,7 @@ void main() {
       await _openQuote(tester, f);
       expect(find.textContaining('Aprovado por gerente'), findsOneWidget);
       await tapKey(tester, 'quote-reopen');
-      await tapText(tester, 'Voltar');
+      await tapText(tester, 'Manter como está');
       expect(f.called('POST', '/api/sales/quotes/5/reopen'), isFalse);
       await tapKey(tester, 'quote-reopen');
       await tapKey(tester, 'confirm-step');
@@ -449,7 +449,7 @@ void main() {
       expect(f.body(f.last('POST', '/api/sales/quotes/5/revise')), {'note': 'Cliente pediu: preço: Baixar 5%', 'customerPo': null});
       expect(find.text('PROP 31 substituída · nova revisão PROP 31A em rascunho'), findsOneWidget);
       expect(f.called('GET', '/api/sales/quotes/8'), isTrue);
-      expect(find.textContaining('PROP 31A · BTS Tubos'), findsOneWidget);
+      expect(find.text('Orçamento PROP 31A'), findsOneWidget);
     });
 
     testWidgets('revision letter shows in the header of a revised quote', (tester) async {
@@ -463,6 +463,7 @@ void main() {
       final f = _fake('Sent')..overrides['POST /api/sales/quotes/5/accept'] = ((_) => jsonResp({'title': 'Erro', 'detail': 'Validade vencida'}, 409));
       await _openQuote(tester, f);
       await tapKey(tester, 'quote-accept');
+      await tapKey(tester, 'confirm-step');
       expect(find.text('Erro: Validade vencida'), findsOneWidget);
       expect(find.text('Aguardando resposta do cliente'), findsOneWidget);
     });
@@ -524,7 +525,7 @@ void main() {
       expect(find.textContaining('pedido do cliente PO-4521'), findsOneWidget);
       await tapKey(tester, 'quote-convert');
       expect(find.text('Gerar pedido de venda?'), findsOneWidget);
-      await tapText(tester, 'Voltar');
+      await tapText(tester, 'Cancelar');
       expect(f.called('POST', '/api/sales/quotes/5/convert'), isFalse);
       await tapKey(tester, 'quote-convert');
       await tapKey(tester, 'confirm-step');
@@ -543,6 +544,8 @@ void main() {
         }
         return jsonResp({'title': 'Conflito', 'detail': 'Credit limit exceeded'}, 409);
       };
+      // The override flow is offered when the server confirms the limit is exceeded, not by reading the conflict message.
+      f.credit = {'limit': 10000, 'open': 8000, 'thisOrder': 11400, 'exceeded': true, 'limitSource': 'customer'};
       await _openQuote(tester, f, role: 'SalesManager');
       await tapKey(tester, 'quote-convert');
       await tapKey(tester, 'confirm-step');
@@ -568,7 +571,7 @@ void main() {
         ..['salesOrderId'] = 9
         ..['salesOrderReference'] = 'PV 9';
       await _openQuote(tester, f);
-      expect(find.text('Este orçamento virou o pedido PV 9.'), findsOneWidget);
+      expect(find.textContaining('Este orçamento virou o pedido PV 9'), findsOneWidget);
       await tapKey(tester, 'quote-open-order');
       expect(find.text('PV 9 · BTS Tubos'), findsOneWidget);
     });
@@ -593,7 +596,7 @@ void main() {
       f.quote['conditions'] = 'Pagamento em 28 dias';
       await _openQuote(tester, f);
       await menu(tester, 'Ver texto do orçamento');
-      expect(find.text('Orçamento PROP 31'), findsOneWidget);
+      expect(find.descendant(of: find.byType(AlertDialog), matching: find.text('Orçamento PROP 31')), findsOneWidget);
       expect(find.textContaining('ORÇAMENTO COMERCIAL PROP 31', findRichText: true), findsOneWidget);
       expect(find.textContaining('Condições gerais: Pagamento em 28 dias', findRichText: true), findsOneWidget);
       await tapText(tester, 'Copiar');
@@ -627,7 +630,7 @@ void main() {
       await _saveForm(tester);
       expect(f.called('POST', '/api/sales/quotes/5/duplicate'), isTrue);
       expect(find.textContaining('criado como cópia de PROP 31'), findsOneWidget);
-      expect(find.textContaining('PROP 31A · BTS Tubos'), findsOneWidget);
+      expect(find.text('Orçamento PROP 31A'), findsOneWidget);
     });
 
     testWidgets('cancel from the menu needs a reason', (tester) async {
