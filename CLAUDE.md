@@ -19,7 +19,7 @@ EBT (Brazilian steel-tube manufacturer) is replacing its legacy **Emissor NF** s
 - **Never push to GitHub unless Italo asks.** Commit locally only. Do not open PRs unless asked. When he does ask, push to `main` as a fast-forward (`git fetch`, check `origin/main` is an ancestor, then push).
 - Work in `C:\Users\italo\Desktop\sidergest` on branch `main`; this is the folder Italo runs Flutter from. Claude worktrees under `.claude/worktrees/` are disposable copies: a build or edit there does not reach the folder he runs. Never leave work only in a worktree.
 - GitHub CI is disabled on purpose (Italo does not want to spend Actions minutes). Run `dotnet test` and `flutter test` locally instead.
-- Project root `AGENTS.md` (in `C:\Users\italo`) asks for graphify: use `graphify query/path/explain` before raw grep when `graphify-out/graph.json` exists; run `graphify update .` after modifying code. `graphify-out/` is regenerated output: it shows as modified after `graphify update .`; leave those changes out of commits.
+- Project root `AGENTS.md` (in `C:\Users\italo`) asks for graphify: use `graphify query/path/explain` before raw grep when `graphify-out/graph.json` exists; run `graphify update .` after modifying code. `graphify-out/` is tracked only for `graph.json`, `graph.html`, `GRAPH_REPORT.md`, `manifest.json` and the label files; commit them after `graphify update .` when the code changed. `graphify-out/cache/` and the dated snapshot folders (`graphify-out/2026-...`) are ignored.
 - Untracked scratch files (`clients/flutter/devtools_options.yaml`, `flutter_01.png`, `ebt-backup-*.dump` database backups in the repo root) are not part of the project; do not commit them (the dumps contain real data; `*.dump` is gitignored).
 
 ## Dev setup
