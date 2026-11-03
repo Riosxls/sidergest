@@ -51,7 +51,7 @@ services:
       Mail__Password: ${EBT_SMTP_PASSWORD:-}
       Mail__From: ${EBT_SMTP_FROM:-}
       Mail__FromName: ${EBT_SMTP_FROM_NAME:-EBT}
-      Mail__StartTls: ${EBT_SMTP_STARTTLS:-true}
+      Mail__Security: ${EBT_SMTP_SECURITY:-Auto}
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]

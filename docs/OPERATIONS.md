@@ -115,6 +115,7 @@ EBT_SMTP_FROM=orcamentos@empresa.com.br
 ```
 
 - Without `EBT_SMTP_HOST` and `EBT_SMTP_FROM` sending is off and the quote screen shows only "Registrar envio". `GET /api/system/mail` tells the app which.
-- Port 587 with STARTTLS only. Implicit SSL (465) is not supported by the .NET SMTP client; use `EBT_SMTP_STARTTLS=false` only for a relay inside the company network.
+- Encryption follows the port by default (`EBT_SMTP_SECURITY=Auto`): 465 is SSL from the first byte, any other port uses STARTTLS when the server offers it. Force it with `Ssl`, `StartTls` or `None` (a relay inside the company network).
+- Locaweb mailbox (Painel de e-mail > Programa de e-mail): `EBT_SMTP_HOST=email-ssl.com.br`, `EBT_SMTP_PORT=465`, user = the full mailbox address, `EBT_SMTP_FROM` = the same mailbox.
 - Microsoft 365 and Gmail usually need an app password (or SMTP AUTH enabled for the mailbox) instead of the normal password.
 - The password lives only in `.env`/environment, never in the database or the app. Each send is written to the quote history (`sent` or `emailed`, with the addresses).
