@@ -1633,7 +1633,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     if (r is Map<String, dynamic> && mounted) setState(() => _q = r);
   }
 
-  Future<void> _printRequest() async {
+  Future<bool> _printRequest() async {
     final q = _q!;
     try {
       final fileName = q['requestFileName'] as String?;
@@ -1643,14 +1643,15 @@ class _QuoteScreenState extends State<QuoteScreen> {
         text: q['requestText'] as String?,
         title: 'Pedido de compra do cliente ${q['reference']}',
       );
-      if (!mounted) return;
+      if (!mounted) return false;
       if (bytes == null) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Este tipo de arquivo não imprime daqui. Baixe-o e imprima pelo programa que o abre.')));
-        return;
+        return false;
       }
-      await printPdf(context, 'Pedido de compra ${q['reference']}', () async => bytes, doneKey: 'quote:${q['id']}:po');
+      return await printPdf(context, 'Pedido de compra ${q['reference']}', () async => bytes, doneKey: 'quote:${q['id']}:po');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir: ${friendlyError(e)}')));
+      return false;
     }
   }
 
@@ -2197,7 +2198,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       menu.addAll(group);
     }
     return [
-      PrintButton(name: 'Orçamento ${q['reference']}', builder: () => buildQuotePdf(api, q)),
+      PrintButton(name: 'Orçamento ${q['reference']}', warning: quotePrintWarning(q), builder: () => buildQuotePdf(api, q)),
       if (s.canSell && status == 'Draft') IconButton(tooltip: 'Editar', onPressed: _edit, icon: const Icon(Icons.edit_outlined)),
       PopupMenuButton<VoidCallback>(key: const ValueKey('quote-menu'), onSelected: (f) => f(), itemBuilder: (_) => menu),
     ];
