@@ -82,6 +82,7 @@ class StagePath extends StatelessWidget {
     final failed = failedLabel != null;
     // The active step uses the theme's primary colour, which is light in dark mode: its text must be onPrimary, not white.
     final onActive = failed ? Colors.white : cs.onPrimary;
+    // White on the green and red accents measures 4.96:1 and 5.62:1 (WCAG AA is 4.5:1) in both themes, because the accents do not change.
     return LayoutBuilder(
       builder: (context, box) {
         final compact = box.maxWidth < 640;
@@ -93,6 +94,8 @@ class StagePath extends StatelessWidget {
                 child: _Tappable(
                   key: ValueKey('path-tap-$i'),
                   onTap: onStep?.call(i),
+                  label:
+                      'Etapa ${i + 1} de ${steps.length}: ${i == current && failed ? failedLabel! : s.label}, ${i < current ? 'concluída' : (i == current ? (failed ? 'encerrada' : 'atual') : 'a fazer')}',
                   child: Tooltip(
                     message: onStep?.call(i) == null ? s.label : 'Abrir: ${s.label}',
                     child: ClipPath(
@@ -146,20 +149,50 @@ class StagePath extends StatelessWidget {
   }
 }
 
-/// A step that opens something: pointer cursor and a tap; a plain child when [onTap] is null.
-class _Tappable extends StatelessWidget {
-  const _Tappable({super.key, required this.onTap, required this.child});
+/// A step of the path. It is announced with its state ("Etapa 3 de 8: Aprovada pelo cliente, concluída"); when [onTap] is set it is also
+/// a button: pointer cursor, reachable with Tab, opened with Enter or Space, with a bar under it while focused.
+class _Tappable extends StatefulWidget {
+  const _Tappable({super.key, required this.onTap, required this.label, required this.child});
 
   final VoidCallback? onTap;
+  final String label;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => onTap == null
-      ? child
-      : MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: child),
-        );
+  State<_Tappable> createState() => _TappableState();
+}
+
+class _TappableState extends State<_Tappable> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tap = widget.onTap;
+    Widget semantic(Widget child) => Semantics(button: tap != null, label: widget.label, onTap: tap, excludeSemantics: true, child: child);
+    if (tap == null) return semantic(widget.child);
+    return semantic(
+      FocusableActionDetector(
+        mouseCursor: SystemMouseCursors.click,
+        onShowFocusHighlight: (v) => setState(() => _focused = v),
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              tap();
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: tap,
+          child: Container(
+            foregroundDecoration: _focused ? BoxDecoration(border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.tertiary, width: 3))) : null,
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _Chevron extends CustomClipper<Path> {

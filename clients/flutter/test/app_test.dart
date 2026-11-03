@@ -234,7 +234,7 @@ void main() {
     await pumpApp(tester, log);
     tester.view.physicalSize = const Size(400, 800);
     await login(tester, 'senha-correta');
-    await tester.tap(find.byIcon(Icons.menu));
+    await tester.tap(find.byIcon(Icons.apps));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(ListTile, 'Painel'), findsOneWidget);
     expect(find.widgetWithText(ListTile, 'Saldos'), findsNothing);

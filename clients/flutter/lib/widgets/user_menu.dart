@@ -31,6 +31,7 @@ class UserMenu extends StatelessWidget {
           case 'settings':
             showUserSettings(context, session);
           case 'logout':
+            session.signedOutManually = true;
             session.logout();
           default:
             if (v.startsWith('screen:')) onOpenScreen?.call(v.substring('screen:'.length));

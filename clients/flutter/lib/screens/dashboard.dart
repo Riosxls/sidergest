@@ -30,7 +30,7 @@ class ModuleInfo {
 }
 
 const modules = [
-  ModuleInfo('Comercial', Icons.storefront_outlined, 'Propostas, pedidos, entregas e análises de viabilidade'),
+  ModuleInfo('Comercial', Icons.storefront_outlined, 'Orçamentos, pedidos, entregas e análises de viabilidade'),
   ModuleInfo('Engenharia', Icons.architecture, 'Produtos, materiais, roteiros e estruturas'),
   ModuleInfo('Estoque', Icons.inventory_outlined, 'Saldos, lotes, reservas e controle de aço'),
   ModuleInfo('Suprimentos', Icons.shopping_cart_outlined, 'Requisições, cotações, pedidos e recebimentos'),
@@ -148,7 +148,7 @@ List<DashAlert> buildAlerts(
       DashAlert(
         'Comercial',
         Icons.event_busy_outlined,
-        'Pedidos de venda atrasados',
+        'Pedidos atrasados',
         commercial.k('lateOrders').toInt(),
         'sales-orders',
         null,
@@ -158,7 +158,7 @@ List<DashAlert> buildAlerts(
       DashAlert(
         'Comercial',
         Icons.draw_outlined,
-        'Análises de viabilidade em assinatura',
+        'Viabilidades em assinatura',
         commercial.feasibilityInReview,
         'viability',
         'InReview',
@@ -287,6 +287,39 @@ List<DashAlert> buildAlerts(
   ].where((a) => a.count > 0).toList();
 }
 
+/// Reads the five sections and puts the alerts on the bell. The Painel does this itself; the shell calls it when another screen is the one
+/// in use, so the bell and the Alertas button do not stay empty or stale. A section that fails counts as no news; if none loads the bell stays as it was.
+Future<void> refreshAlertCenter(BuildContext context, Session session) async {
+  final api = session.api;
+  Future<T?> safe<T>(Future<T> f) => f.then<T?>(
+    (v) => v,
+    onError: (Object e) {
+      debugPrint('dashboard: alert section failed: $e');
+      return null;
+    },
+  );
+  final d = await Future.wait<Object?>([
+    safe(fetchEngineering(api, dashboardCounted)),
+    safe(fetchStock(api)),
+    safe(fetchPurchasing(api)),
+    safe(fetchProduction(api, legacyDays: legacyOverdueDays)),
+    safe(fetchCommercial(api)),
+  ]);
+  if (!context.mounted || !session.loggedIn || d.every((s) => s == null)) return;
+  // The closures of an alert only matter on the Painel; here only its icon, label, count and target are used.
+  final alerts = buildAlerts(
+    context,
+    session: session,
+    refresh: () async {},
+    eng: d[0] as DashboardData?,
+    stock: d[1] as StockDashboard?,
+    purchasing: d[2] as PurchasingDashboard?,
+    production: d[3] as ProductionDashboard?,
+    commercial: d[4] as CommercialDashboard?,
+  );
+  session.alerts.value = [for (final a in alerts.where((a) => !a.muted)) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter)];
+}
+
 String hhmm(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
 /// Painel: module cards with badges, alerts and quick actions; each module loads its numbers independently.
@@ -312,17 +345,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DateTime? _updated;
   final _focus = FocusNode();
   Timer? _timer;
-  // Primeiros passos can be folded or dismissed; both are remembered on this device.
+  // Primeiros passos can be folded or dismissed; both are remembered on this device, per user (two people share a computer).
   bool _stepsCollapsed = false;
   bool _stepsDismissed = false;
+
+  String _stepsKey(String name) => '$name:${widget.session.username ?? ''}';
 
   Future<void> _loadStepsState() async {
     try {
       final p = await SharedPreferences.getInstance();
       if (!mounted) return;
       setState(() {
-        _stepsCollapsed = p.getBool('onboardingCollapsed') ?? false;
-        _stepsDismissed = p.getBool('onboardingDismissed') ?? false;
+        _stepsCollapsed = p.getBool(_stepsKey('onboardingCollapsed')) ?? false;
+        _stepsDismissed = p.getBool(_stepsKey('onboardingDismissed')) ?? false;
       });
     } catch (e) {
       debugPrint('dashboard: Local storage is best effort; the card stays open: $e');
@@ -332,7 +367,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _saveStepsState(String key, bool value) async {
     try {
       final p = await SharedPreferences.getInstance();
-      await p.setBool(key, value);
+      await p.setBool(_stepsKey(key), value);
     } catch (e) {
       debugPrint('dashboard: Local storage is best effort; the choice lasts until the app closes: $e');
     }
@@ -348,6 +383,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _settle();
     widget.session.addListener(_armTimer);
     _armTimer();
+  }
+
+  bool _active = true;
+
+  /// A page brought back from behind another one (the shell keeps visited screens alive) has lost the keyboard focus: F5 would do nothing until a click.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final on = TickerMode.valuesOf(context).enabled;
+    if (on && !_active) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focus.requestFocus();
+      });
+    }
+    _active = on;
   }
 
   int _armedMinutes = -1;
@@ -393,8 +443,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _settle() async {
     final d = await _all;
     if (!mounted) return;
-    widget.session.alerts.value = [for (final a in _alerts(d).where((a) => !a.muted)) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter)];
-    setState(() => _updated = DateTime.now());
+    // Nothing loaded (server down): keep the bell as it was instead of emptying it.
+    if (d.any((s) => s != null)) {
+      widget.session.alerts.value = [for (final a in _alerts(d).where((a) => !a.muted)) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter)];
+    }
+    // "Atualizado às" only when something was read; a Painel where every section failed is not up to date.
+    setState(() => _updated = d.any((s) => s != null) ? DateTime.now() : null);
   }
 
   Future<void> _refresh() {
@@ -418,19 +472,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!snap.hasData) return const SizedBox.shrink();
       final d = snap.data!;
       final e = d[0] as DashboardData?, st = d[1] as StockDashboard?, pu = d[2] as PurchasingDashboard?, pr = d[3] as ProductionDashboard?;
-      final steps = [
-        ('Cadastrar produtos', 'products', e == null || (e.counts[products] ?? 0) > 0, products.path),
-        ('Cadastrar locais de estoque', 'locations', st == null || st.locations > 0, 'locations'),
+      // A section that did not load says nothing about its step: it is left out, not counted as done (that could hide the card for good).
+      final all = [
+        ('Cadastrar produtos', 'products', e == null ? null : (e.counts[products] ?? 0) > 0, products.path),
+        ('Cadastrar locais de estoque', 'locations', st == null ? null : st.locations > 0, 'locations'),
         (
           'Registrar a primeira requisição ou pedido de compra',
           'purchasing',
-          pu == null || pu.pendingApproval + pu.approved + pu.openQuotations + pu.openOrders + pu.overdue.length > 0,
+          pu == null ? null : pu.pendingApproval + pu.approved + pu.openQuotations + pu.openOrders + pu.overdue.length > 0,
           'requisitions',
         ),
-        ('Criar a primeira ordem de fabricação', 'production', pr == null || pr.openTotal > 0 || pr.shipments.isNotEmpty, 'production-orders'),
+        ('Criar a primeira ordem de fabricação', 'production', pr == null ? null : pr.openTotal > 0 || pr.shipments.isNotEmpty, 'production-orders'),
+      ];
+      final steps = [
+        for (final s in all)
+          if (s.$3 != null) (s.$1, s.$2, s.$3!, s.$4),
       ];
       final done = steps.where((s) => s.$3).length;
-      if (done == steps.length || _stepsDismissed) return const SizedBox.shrink();
+      if (steps.isEmpty || done == steps.length || _stepsDismissed) return const SizedBox.shrink();
       final theme = Theme.of(context);
       final cs = theme.colorScheme;
       return Padding(
@@ -569,7 +628,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 'Comercial':
         return co == null
             ? null
-            : ['${co.k('openQuotes').toInt()} propostas abertas', '${co.k('openOrders').toInt()} pedidos abertos · ${fmtMoney(co.k('openOrdersValue'))}'];
+            : ['${co.k('openQuotes').toInt()} orçamentos abertos', '${co.k('openOrders').toInt()} pedidos abertos · ${fmtMoney(co.k('openOrdersValue'))}'];
       case 'Engenharia':
         return e == null ? null : ['${e.total} produtos', '${e.counts[materials] ?? 0} materiais · ${e.counts[machines] ?? 0} máquinas'];
       case 'Estoque':
@@ -694,9 +753,19 @@ class ModuleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    // One announcement for the whole card; its texts would otherwise be read again after the label.
+    final status = attention > 0
+        ? '$attention ${attention == 1 ? 'pendência' : 'pendências'}'
+        : loading
+        ? 'Carregando'
+        : lines == null
+        ? 'Indisponível no momento'
+        : 'Nada pendente';
     return Semantics(
       button: onTap != null,
-      label: 'Módulo ${module.section}',
+      container: true,
+      excludeSemantics: true,
+      label: ['Módulo ${module.section}', module.blurb, status, ...?(loading ? null : lines)].join('. '),
       child: Card(
         key: ValueKey('module-${module.section}'),
         margin: EdgeInsets.zero,

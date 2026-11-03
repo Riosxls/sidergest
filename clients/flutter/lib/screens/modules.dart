@@ -13,11 +13,14 @@ import 'dashboard_data.dart';
 
 /// A navigation entry inside a [ModuleScreen].
 class ModuleLink {
-  const ModuleLink(this.id, this.icon, this.title);
+  const ModuleLink(this.id, this.icon, this.title, {this.subtitle});
 
   final String id;
   final IconData icon;
   final String title;
+
+  /// For a group of tabs: the names of its tabs.
+  final String? subtitle;
 }
 
 /// Landing page of a module listing its screens.
@@ -73,13 +76,35 @@ class _ModuleScreenState extends State<ModuleScreen> {
   }
 
   Future<void> _settle() async {
+    var ok = true;
     try {
       await _data;
     } catch (e) {
+      ok = false;
       debugPrint('modules: Load errors are shown by the view that owns the future: $e');
       // Load errors are shown by the view that owns the future.
     }
-    if (mounted) setState(() => _updated = DateTime.now());
+    // "Atualizado às" says when the numbers were read; a failed read leaves the last good time (or none).
+    if (mounted) setState(() => _updated = ok ? DateTime.now() : _updated);
+  }
+
+  bool _active = true;
+
+  /// The shell keeps a visited overview alive; when it comes back after a while its numbers are old (ship a delivery, return, and
+  /// "Prontos para expedir" has not moved), and the keyboard focus is gone, so F5 did nothing until a click.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final on = TickerMode.valuesOf(context).enabled;
+    if (on && !_active) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _focus.requestFocus();
+        final at = _updated;
+        if (at == null || DateTime.now().difference(at) > const Duration(seconds: 30)) unawaited(_refresh());
+      });
+    }
+    _active = on;
   }
 
   Future<void> _refresh() {
@@ -240,26 +265,42 @@ class _ModuleScreenState extends State<ModuleScreen> {
             for (final l in widget.links)
               SizedBox(
                 width: width,
-                height: 64,
-                child: Card(
-                  key: ValueKey('link-${l.id}'),
-                  margin: EdgeInsets.zero,
-                  clipBehavior: Clip.antiAlias,
-                  shape: dashCardShape(context),
-                  color: cs.surfaceContainerHigh,
-                  child: InkWell(
-                    onTap: _go(l.id),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      child: Row(
-                        children: [
-                          Icon(l.icon, color: cs.primary),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(l.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyLarge),
-                          ),
-                          Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant),
-                        ],
+                // At least 64 dp, taller when the text is scaled up: a fixed height clipped two lines at the largest text size.
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 64),
+                  child: Card(
+                    key: ValueKey('link-${l.id}'),
+                    margin: EdgeInsets.zero,
+                    clipBehavior: Clip.antiAlias,
+                    shape: dashCardShape(context),
+                    color: cs.surfaceContainerHigh,
+                    child: InkWell(
+                      onTap: _go(l.id),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        child: Row(
+                          children: [
+                            Icon(l.icon, color: cs.primary),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(l.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyLarge),
+                                  if (l.subtitle != null)
+                                    Text(
+                                      l.subtitle!,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -309,7 +350,14 @@ class _ModuleScreenState extends State<ModuleScreen> {
                     FutureBuilder<Object>(
                       future: _data,
                       builder: (context, snap) {
-                        if (snap.hasError) return Text(friendlyError(snap.error!), style: TextStyle(color: theme.colorScheme.error));
+                        if (snap.hasError) {
+                          return Row(
+                            children: [
+                              Expanded(child: Text(friendlyError(snap.error!), style: TextStyle(color: theme.colorScheme.error))),
+                              TextButton.icon(key: const ValueKey('module-retry'), onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+                            ],
+                          );
+                        }
                         if (!snap.hasData) return const LinearProgressIndicator();
                         return _content(snap.data!);
                       },

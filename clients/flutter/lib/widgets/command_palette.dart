@@ -254,6 +254,27 @@ class _PaletteState extends State<_Palette> {
     });
   }
 
+  /// Screens whose name matches come first (exact, then starting with the text, then containing it); screens that only sit under a matching
+  /// module or group come last. A module overview wins a tie, so "Estoque" finds the module before its own screens.
+  List<SearchTarget> _rank(List<SearchTarget> targets, String key) {
+    int score(SearchTarget t) {
+      final title = fold(t.title);
+      final overview = t.section == 'Módulos' ? 0 : 1;
+      if (title == key) return overview;
+      if (title.startsWith(key)) return 2 + overview;
+      if (title.contains(key)) return 4 + overview;
+      if (fold(t.section).contains(key)) return 6 + overview;
+      return -1;
+    }
+
+    final scored = [
+      for (final (i, t) in targets.indexed)
+        if (score(t) >= 0) (score: score(t), index: i, target: t),
+    ];
+    scored.sort((a, b) => a.score != b.score ? a.score.compareTo(b.score) : a.index.compareTo(b.index));
+    return [for (final s in scored) s.target];
+  }
+
   List<_Entry> _entries() {
     final key = fold(_q);
     bool hit(String s) => key.isEmpty || fold(s).contains(key);
@@ -279,7 +300,7 @@ class _PaletteState extends State<_Palette> {
         }
       }
     } else {
-      for (final t in widget.targets.where((t) => hit(t.title) || hit(t.section)).take(8)) {
+      for (final t in _rank(widget.targets, key).take(12)) {
         out.add(_Entry('Telas', t.icon, t.title, t.section.isEmpty ? null : t.section, () => _close(() => widget.onNavigate(t.id))));
       }
       for (final g in _groups) {
@@ -360,7 +381,10 @@ class _PaletteState extends State<_Palette> {
               const Divider(height: 1),
               Flexible(
                 child: entries.isEmpty
-                    ? const Padding(padding: EdgeInsets.all(24), child: Text('Nada encontrado'))
+                    ? Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Semantics(liveRegion: true, child: const Text('Nada encontrado')),
+                      )
                     : ListView.builder(
                         controller: _scroll,
                         shrinkWrap: true,
@@ -370,10 +394,19 @@ class _PaletteState extends State<_Palette> {
                           final e = entries[i];
                           final selected = i == _index;
                           final first = i == 0 || entries[i - 1].group != e.group;
-                          return Material(
+                          return Semantics(
+                            button: true,
+                            selected: selected,
+                            label: e.subtitle == null ? e.title : '${e.title}, ${e.subtitle}',
+                            excludeSemantics: true,
+                            child: Material(
                             color: selected ? cs.secondaryContainer : Colors.transparent,
                             child: InkWell(
                               onTap: e.run,
+                              // The pointer and the arrow keys share one selection: hovering a row selects it.
+                              onHover: (h) {
+                                if (h && _index != i) setState(() => _index = i);
+                              },
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 16),
                                 child: Row(
@@ -400,6 +433,7 @@ class _PaletteState extends State<_Palette> {
                                   ],
                                 ),
                               ),
+                            ),
                             ),
                           );
                         },

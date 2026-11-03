@@ -69,6 +69,9 @@ class Session extends ChangeNotifier {
   /// Set when the idle lock signed the user out, so the login screen can say why. Cleared by the next login.
   bool idleSignedOut = false;
 
+  /// Set by "Sair" in the avatar menu (not by the idle lock or an expired session), so the Shell does not offer the place the user left to whoever signs in next.
+  bool signedOutManually = false;
+
   /// Shown instead of the username when set (kept on the server).
   String? displayName;
   String? email;
@@ -283,6 +286,7 @@ class Session extends ChangeNotifier {
     api.refreshToken = null;
     final r = await api.post('/api/auth/login', {'username': user, 'password': password, 'device': deviceLabel}) as Map<String, dynamic>;
     idleSignedOut = false;
+    signedOutManually = false;
     this.remember = remember;
     lastUser = remember ? user.trim() : '';
     try {

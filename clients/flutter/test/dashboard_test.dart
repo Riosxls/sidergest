@@ -154,7 +154,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Primeiros passos'), findsNothing);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool('onboardingDismissed'), isTrue);
+    expect(prefs.getBool('onboardingDismissed:ana'), isTrue);
   });
 
   testWidgets('Painel shows one card per module and keeps module details out', (tester) async {

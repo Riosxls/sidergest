@@ -94,16 +94,16 @@ final tabGroups = <TabGroup>[
     (id: tools.path, label: 'Ferramentas'),
     (id: standardOperations.path, label: 'Operações padrão'),
   ]),
-  TabGroup('Estoque', 'Saldos', Icons.inventory_outlined, [
+  const TabGroup('Estoque', 'Saldos', Icons.inventory_outlined, [
     (id: 'balances', label: 'Saldos'),
     (id: 'low-stock', label: 'Estoque mínimo'),
     (id: 'reservations', label: 'Reservas'),
-    (id: stockLocations.path, label: 'Locais'),
+    (id: 'locations', label: 'Locais'),
   ]),
   const TabGroup('Estoque', 'Movimentações', Icons.swap_horiz, [(id: 'documents', label: 'Movimentações'), (id: 'closing', label: 'Fechamento e custo médio')]),
-  const TabGroup('Suprimentos', 'Pedidos de compra', Icons.receipt_long_outlined, [(id: 'orders', label: 'Pedidos'), (id: 'overdue', label: 'Em atraso')]),
+  const TabGroup('Suprimentos', 'Pedidos de compra', Icons.receipt_long_outlined, [(id: 'orders', label: 'Pedidos de compra'), (id: 'overdue', label: 'Em atraso')]),
   const TabGroup('PCP', 'Ordens de fabricação', Icons.assignment_outlined, [
-    (id: 'production-orders', label: 'Ordens'),
+    (id: 'production-orders', label: 'Ordens de fabricação'),
     (id: 'outside-processing', label: 'Beneficiamento externo'),
   ]),
   TabGroup('PCP', 'Cadastros', Icons.groups_outlined, [
@@ -130,7 +130,7 @@ List<NavItem> navItems() {
         if (tabGroupOf(i.id) == null)
           ModuleLink(i.id, i.icon, i.title)
         else if (tabGroupOf(i.id)!.tabs.first.id == i.id)
-          ModuleLink(i.id, tabGroupOf(i.id)!.icon, tabGroupOf(i.id)!.title),
+          ModuleLink(i.id, tabGroupOf(i.id)!.icon, tabGroupOf(i.id)!.title, subtitle: tabGroupOf(i.id)!.tabs.map((t) => t.label).join(' · ')),
     ],
   };
   return [
@@ -200,7 +200,8 @@ class Shell extends StatefulWidget {
   final Session session;
 
   /// Where the user of a [Session] was last. Signing in again on the same session soon after (idle lock, expired session) returns there.
-  static final lastLocation = Expando<({String path, DateTime at})>('lastLocation');
+  /// The user is kept with it: another person signing in on the same [Session] never lands on someone else's screen.
+  static final lastLocation = Expando<({String path, DateTime at, String? user})>('lastLocation');
 
   @override
   State<Shell> createState() => _ShellState();
@@ -222,7 +223,14 @@ class _ShellState extends State<Shell> {
   final _mounted = <String, ({String id, String? filter})>{};
   final _left = <String, DateTime>{};
   static const _keepFor = Duration(minutes: 3);
-  static const _keepMax = 8;
+  static const _keepMax = 12;
+
+  /// Who is signed in, kept because the session forgets the name before the Shell closes.
+  late final String? _user = widget.session.username;
+
+  /// Keeps the bell current while the Painel (which loads the alerts) is not the screen being used.
+  Timer? _alertTimer;
+  static const _alertEvery = Duration(minutes: 3);
 
   /// Wide layout: record pages open inside the content area so the sidebar and the app bar stay.
   final _innerKey = GlobalKey<NavigatorState>();
@@ -267,7 +275,13 @@ class _ShellState extends State<Shell> {
       _current = widget.session.homeScreen;
     }
     _mount(_current, _filter);
+    _remember();
     _restorePrefs();
+    // The Painel loads the alerts itself; from any other first screen (home screen setting, a link, an idle-lock return) the bell would stay empty.
+    if (_current != 'dashboard') WidgetsBinding.instance.addPostFrameCallback((_) => _loadAlerts());
+    _alertTimer = Timer.periodic(_alertEvery, (_) {
+      if (_current != 'dashboard') _loadAlerts();
+    });
     HardwareKeyboard.instance.addHandler(_onKey);
     _innerTrail.pages.addListener(_onInnerPages);
     _innerTrail.records.addListener(_onRecords);
@@ -285,6 +299,13 @@ class _ShellState extends State<Shell> {
 
   @override
   void dispose() {
+    _alertTimer?.cancel();
+    // The 30 minutes to come back count from the moment the Shell closes, not from the last navigation; a person who signed out is not remembered.
+    if (widget.session.signedOutManually) {
+      Shell.lastLocation[widget.session] = null;
+    } else {
+      _remember();
+    }
     HardwareKeyboard.instance.removeHandler(_onKey);
     _innerTrail.pages.removeListener(_onInnerPages);
     _innerTrail.records.removeListener(_onRecords);
@@ -307,15 +328,24 @@ class _ShellState extends State<Shell> {
   }
 
   /// `/s/<screen>[/r/<kind>/<id>][?f=<filter>]`: the form kept in the address bar (web) and in [Shell.lastLocation].
+  /// The screen id is one encoded path segment: master-data screens are named after their API path (`/api/materials`).
   String _location() {
     final r = _top;
-    return Uri(path: '/s/$_current${_records.isNotEmpty && r != null ? r.path : ''}', queryParameters: _filter == null ? null : {'f': _filter}).toString();
+    final query = _filter == null ? '' : '?${Uri(queryParameters: {'f': _filter}).query}';
+    return '/s/${Uri.encodeComponent(_current)}${_records.isNotEmpty && r != null ? r.path : ''}$query';
   }
 
+  /// Writes the place to [Shell.lastLocation] with the current time.
+  void _remember() => Shell.lastLocation[widget.session] = (path: _location(), at: DateTime.now(), user: _user);
+
   void _syncLocation() {
-    final loc = _location();
-    Shell.lastLocation[widget.session] = (path: loc, at: DateTime.now());
-    if (kIsWeb) unawaited(SystemNavigator.routeInformationUpdated(uri: Uri.parse(loc), replace: true));
+    _remember();
+    if (kIsWeb) unawaited(SystemNavigator.routeInformationUpdated(uri: Uri.parse(_location()), replace: true));
+  }
+
+  Future<void> _loadAlerts() async {
+    if (!mounted) return;
+    await refreshAlertCenter(context, widget.session);
   }
 
   /// Where to open: the address the browser was loaded with, else the place this user left less than 30 minutes ago.
@@ -324,27 +354,34 @@ class _ShellState extends State<Shell> {
     final seen = Shell.lastLocation[widget.session];
     final path = fromWeb != null && fromWeb.startsWith('/s/')
         ? fromWeb
-        : (seen != null && DateTime.now().difference(seen.at) < const Duration(minutes: 30) ? seen.path : null);
+        : (seen != null && seen.user == _user && DateTime.now().difference(seen.at) < const Duration(minutes: 30) ? seen.path : null);
     return path == null ? null : _parse(path);
   }
 
   ({String id, String? filter, ({String kind, int id})? record})? _parse(String path) {
     final uri = Uri.tryParse(path);
-    final m = uri == null ? null : RegExp(r'^/s/([^/]+)(?:/r/([^/]+)/(\d+))?$').firstMatch(uri.path);
-    if (m == null || !_items.any((i) => i.id == m[1])) return null;
-    final kind = m[2], rid = int.tryParse(m[3] ?? '');
-    return (id: m[1]!, filter: uri!.queryParameters['f'], record: kind != null && rid != null ? (kind: kind, id: rid) : null);
+    // `s/<screen>` or `s/<screen>/r/<kind>/<id>`; pathSegments are decoded, so an id such as `/api/materials` survives.
+    final seg = uri?.pathSegments;
+    if (seg == null || seg.length < 2 || seg[0] != 's' || !_items.any((i) => i.id == seg[1])) return null;
+    ({String kind, int id})? record;
+    if (seg.length == 5 && seg[2] == 'r' && int.tryParse(seg[4]) != null) {
+      record = (kind: seg[3], id: int.parse(seg[4]));
+    } else if (seg.length != 2) {
+      return null;
+    }
+    return (id: seg[1], filter: uri!.queryParameters['f'], record: record);
   }
 
   /// Opens a place copied with "Copiar link" (a full address or just `/s/...`).
-  void _openLocation(String raw) {
+  Future<void> _openLocation(String raw) async {
     final i = raw.indexOf('#');
     final t = _parse(i >= 0 ? raw.substring(i + 1).trim() : raw.trim());
     if (t == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link não reconhecido.')));
       return;
     }
-    _go(t.id, t.filter);
+    // The record opens only once the screen did: leaving a page with unsaved edits asks first, and a "no" keeps everything as it was.
+    if (!await _go(t.id, t.filter) || !mounted) return;
     final r = t.record;
     if (r != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -498,31 +535,35 @@ class _ShellState extends State<Shell> {
   }
 
   /// Goes to a screen from the sidebar, the Painel, the bell or the palette: closes open record pages and remembers where it came from.
-  void _go(String id, [String? filter]) {
+  /// False when the user chose to stay (a record page has unsaved edits and the question was answered "no").
+  Future<bool> _go(String id, [String? filter]) async {
     final inner = _innerNav;
     if (inner != null && inner.canPop() && DiscardGuard.anyDirty) {
       // popUntil skips PopScope, so ask here before closing a record page with unsaved edits.
-      unawaited(
-        confirmDiscard(context).then((ok) {
-          if (ok && mounted) _goNow(id, filter);
-        }),
-      );
-      return;
+      if (!await confirmDiscard(context) || !mounted) return false;
     }
     _goNow(id, filter);
+    return true;
+  }
+
+  /// Two tabs of one group: moving between them is not a trip, so Back, Esc and Recentes do not count it.
+  bool _sameGroup(String a, String b) {
+    final g = tabGroupOf(a);
+    return g != null && g.has(b);
   }
 
   void _goNow(String id, String? filter) {
     _innerNav?.popUntil((r) => r.isFirst);
     if (id == _current && filter == _filter) return;
+    final tab = _sameGroup(_current, id);
     if (id == 'dashboard') {
       _history.clear();
-    } else {
+    } else if (!tab) {
       _history.add((id: _current, filter: _filter));
       if (_history.length > 30) _history.removeAt(0);
     }
     _fwd.clear();
-    _show(id, filter);
+    _show(id, filter, recent: !tab);
   }
 
   /// Alt+→: a screen undone with Back comes back.
@@ -555,7 +596,7 @@ class _ShellState extends State<Shell> {
     return false;
   }
 
-  void _show(String id, String? filter) {
+  void _show(String id, String? filter, {bool recent = true}) {
     _left[_key(_current, _filter)] = DateTime.now();
     _mount(id, filter);
     setState(() {
@@ -568,7 +609,7 @@ class _ShellState extends State<Shell> {
       final c = _activeKey.currentContext;
       if (c != null && c.mounted) unawaited(Scrollable.ensureVisible(c, duration: const Duration(milliseconds: 200), alignment: 0.3));
     });
-    if (id != 'dashboard') RecentStore.add(RecentItem('screen', id, _items.firstWhere((i) => i.id == id).title));
+    if (id != 'dashboard' && recent) RecentStore.add(RecentItem('screen', id, _items.firstWhere((i) => i.id == id).title));
   }
 
   void _openProduct(int id) => openProduct(_navContext, widget.session, id);
@@ -617,7 +658,16 @@ class _ShellState extends State<Shell> {
   Future<void> _showPalette() => showCommandPalette(
     context,
     session: widget.session,
-    targets: [for (final i in _items) SearchTarget(i.id, i.icon, i.title, i.section == hiddenSection ? 'Módulos' : i.section)],
+    // A tab names its group ("Comercial › Expedição") so "Certificados" is not mistaken for a screen of its own.
+    targets: [
+      for (final i in _items)
+        SearchTarget(
+          i.id,
+          i.icon,
+          i.title,
+          i.section == hiddenSection ? 'Módulos' : (_shownGroup(i.id) == null ? i.section : '${i.section} › ${tabGroupOf(i.id)!.title}'),
+        ),
+    ],
     actions: [for (final a in quickActionsFor(widget.session)) PaletteAction(a.icon, a.label, () => a.run(_navContext))],
     onNavigate: _go,
     onOpenHit: _openHit,
@@ -631,19 +681,62 @@ class _ShellState extends State<Shell> {
     return Tooltip(
       key: active ? _activeKey : null,
       message: title ?? d.title,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-        child: Material(
-          color: active ? cs.secondaryContainer : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          child: InkWell(
+      // The collapsed sidebar is icons only: the name and the selection must reach a screen reader, not only the colour.
+      child: Semantics(
+        button: true,
+        selected: active,
+        label: title ?? d.title,
+        excludeSemantics: true,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: Material(
+            color: active ? cs.secondaryContainer : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
-            onTap: tap,
-            child: SizedBox(height: 40, child: Icon(icon ?? d.icon, color: active ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: tap,
+              child: SizedBox(height: 40, child: Icon(icon ?? d.icon, color: active ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
+            ),
           ),
         ),
       ),
     );
+  }
+
+  /// A pinned screen in the collapsed sidebar: a star that opens it, named by its tooltip.
+  Widget _railPin(({String id, String? filter}) p, ColorScheme cs, VoidCallback tap) {
+    final selected = p.id == _current && p.filter == _filter;
+    return Tooltip(
+      message: _pinLabel(p),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: _pinLabel(p),
+        excludeSemantics: true,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: Material(
+            color: selected ? cs.secondaryContainer : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              key: ValueKey('nav-pin-${p.id}-${p.filter ?? ''}'),
+              borderRadius: BorderRadius.circular(10),
+              onTap: tap,
+              child: SizedBox(height: 40, child: Icon(Icons.star, size: 20, color: selected ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// What a pin is called in the sidebar: a tab says its group first ("Expedição · Certificados"), and the filter follows.
+  String _pinLabel(({String id, String? filter}) p) {
+    final item = _items.firstWhere((i) => i.id == p.id);
+    final g = _shownGroup(p.id)?.group;
+    final tab = g?.tabLabel(p.id);
+    final name = g == null ? item.title : (tab == null ? g.title : '${g.title} · $tab');
+    return p.filter == null ? name : '$name · ${p.filter}';
   }
 
   Widget _tile(NavItem d, ColorScheme cs, VoidCallback tap, {String? title, IconData? icon, bool? selected}) {
@@ -735,11 +828,20 @@ class _ShellState extends State<Shell> {
 
     final dashboard = _items.firstWhere((i) => i.id == 'dashboard');
     children.add(one(dashboard));
+    if (rail && _pins.isNotEmpty) {
+      for (final p in _pins) {
+        children.add(
+          _railPin(p, cs, () {
+            _go(p.id, p.filter);
+            if (closeDrawer) Navigator.pop(context);
+          }),
+        );
+      }
+    }
     if (!rail && _pins.isNotEmpty) {
       children.add(_groupLabel('Fixados', theme));
       for (final p in _pins) {
-        final item = _items.firstWhere((i) => i.id == p.id);
-        final label = p.filter == null ? item.title : '${item.title} · ${p.filter}';
+        final label = _pinLabel(p);
         children.add(
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -771,7 +873,15 @@ class _ShellState extends State<Shell> {
         // Only the first tab of a group has a sidebar entry; the others are reached from the tabs on the screen.
         if (tg != null && tg.first != i.id) continue;
         final g = _group(i);
-        if (g != null && g != lastGroup) children.add(rail ? const Divider(indent: 16, endIndent: 16) : _groupLabel(g, theme));
+        // A label that only repeats the title of the one entry under it ("Relatórios" over "Relatórios") says nothing.
+        final repeats = tg != null && tg.group.title == g;
+        if (g != null && g != lastGroup) {
+          if (rail) {
+            children.add(const Divider(indent: 16, endIndent: 16));
+          } else {
+            children.add(repeats ? const Divider(indent: 16, endIndent: 16, height: 16) : _groupLabel(g, theme));
+          }
+        }
         lastGroup = g;
         children.add(one(i, group: tg?.group));
       }
@@ -820,6 +930,27 @@ class _ShellState extends State<Shell> {
         ),
       );
       moduleItems(m.section);
+      // Inside a module only its screens are listed; the other modules are one tap away without going through the Painel.
+      children.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Theme(
+            data: theme.copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              key: const ValueKey('nav-switch-module'),
+              dense: true,
+              shape: const Border(),
+              collapsedShape: const Border(),
+              leading: const Icon(Icons.swap_horiz),
+              title: Text('Trocar de módulo', style: theme.textTheme.bodyMedium),
+              children: [
+                for (final o in modules)
+                  if (o.section != m.section) one(_items.firstWhere((i) => i.id == o.id), title: o.section),
+              ],
+            ),
+          ),
+        ),
+      );
     }
     return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
   }
@@ -856,10 +987,20 @@ class _ShellState extends State<Shell> {
     },
   );
 
+  /// Where the screen sits: `Módulo › Tela`, and for a tab of a group `Módulo › Grupo › Aba` — the names the sidebar and the tab strip show.
+  String _crumb() {
+    final item = _item;
+    if (_moduleSection == null || item.section == hiddenSection) return item.title;
+    final g = _shownGroup(item.id)?.group;
+    if (g == null) return '${item.section} › ${item.title}';
+    final tab = g.tabLabel(item.id);
+    return tab == null ? '${item.section} › ${g.title}' : '${item.section} › ${g.title} › $tab';
+  }
+
   /// Breadcrumb in the app bar: the module and screen, then every record page open over it (wide layout). Each step but the last goes back to it.
   Widget _title(bool wide) {
     final theme = Theme.of(context);
-    final base = _moduleSection == null || _item.section == hiddenSection ? _item.title : '${_item.section} › ${_item.title}';
+    final base = _crumb();
     final recs = wide ? _records : const <String>[];
     if (recs.isEmpty) return Text(base, overflow: TextOverflow.ellipsis);
     Widget crumb(String text, VoidCallback? tap) => tap == null
@@ -949,18 +1090,25 @@ class _ShellState extends State<Shell> {
     final cs = Theme.of(context).colorScheme;
     final color = active ? cs.primary : cs.onSurfaceVariant;
     return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Badge(
-              isLabelVisible: badge > 0,
-              label: Text(badge > 99 ? '99+' : '$badge'),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color)),
-          ],
+      // Colour alone does not say which button is current, and a bare badge number does not say what it counts.
+      child: Semantics(
+        button: true,
+        selected: active,
+        label: badge > 0 ? '$label, $badge ${badge == 1 ? 'pendente' : 'pendentes'}' : label,
+        excludeSemantics: true,
+        child: InkWell(
+          onTap: onTap,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Badge(
+                isLabelVisible: badge > 0,
+                label: Text(badge > 99 ? '99+' : '$badge'),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color)),
+            ],
+          ),
         ),
       ),
     );
@@ -987,31 +1135,37 @@ class _ShellState extends State<Shell> {
 
   Widget _pages() {
     final s = widget.session;
-    return Stack(
+    final stack = Stack(
       fit: StackFit.expand,
       children: [
         for (final e in _mounted.entries)
           _PageSlot(
             key: ValueKey(e.key),
             active: e.key == _key(_current, _filter),
-            child: _framed(e.value.id, _items.firstWhere((i) => i.id == e.value.id).build(s, e.value.filter, _go)),
+            child: _items.firstWhere((i) => i.id == e.value.id).build(s, e.value.filter, _go),
           ),
       ],
     );
-  }
-
-  /// A screen of a tab group gets the strip with its sibling tabs.
-  Widget _framed(String id, Widget screen) {
-    final g = _shownGroup(id)?.group;
-    if (g == null) return screen;
-    return TabFrame(
-      tabs: [
-        for (final t in g.tabs)
-          if (_items.any((i) => i.id == t.id)) t,
+    // One strip above the pages, not one inside each (it would fade and lose its scroll with the page). The column keeps the same two
+    // children whether a strip shows or not, so moving to a screen without tabs does not rebuild the pages kept alive.
+    final g = _shownGroup(_current)?.group;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (g == null)
+          const SizedBox.shrink()
+        else
+          TabStrip(
+            key: ValueKey('tabs-${g.title}'),
+            tabs: [
+              for (final t in g.tabs)
+                if (_items.any((i) => i.id == t.id)) t,
+            ],
+            current: _current,
+            onSelect: _go,
+          ),
+        Expanded(child: stack),
       ],
-      current: id,
-      onSelect: _go,
-      child: screen,
     );
   }
 
@@ -1042,6 +1196,8 @@ class _ShellState extends State<Shell> {
         key: _scaffoldKey,
         bottomNavigationBar: wide ? null : _bottomBar(),
         appBar: AppBar(
+          // On a phone the bottom bar already has Menu, Buscar and Alertas; repeating them here leaves the title 40 dp on a 360 dp screen.
+          automaticallyImplyLeading: false,
           leading: wide
               ? IconButton(
                   tooltip: _collapsed ? 'Expandir menu' : 'Recolher menu',
@@ -1066,10 +1222,12 @@ class _ShellState extends State<Shell> {
                 icon: Icon(_pinned ? Icons.star : Icons.star_border),
               ),
             if (wide) IconButton(key: const ValueKey('copy-link'), tooltip: 'Copiar link', onPressed: _copyLink, icon: const Icon(Icons.copy_all_outlined)),
-            SearchLauncher(onOpen: _openPalette, compact: !wide),
-            const SizedBox(width: 4),
-            AlertBell(center: s.alerts, onNavigate: _go),
-            const SizedBox(width: 12),
+            if (wide) ...[
+              SearchLauncher(onOpen: _openPalette),
+              const SizedBox(width: 4),
+              AlertBell(center: s.alerts, onNavigate: _go),
+              const SizedBox(width: 12),
+            ],
             UserMenu(
               session: s,
               adminScreens: [
