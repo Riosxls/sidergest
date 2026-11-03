@@ -150,7 +150,8 @@ bool Win32Window::Create(const std::wstring& title,
 }
 
 bool Win32Window::Show() {
-  return ShowWindow(window_handle_, SW_SHOWNORMAL);
+  // MetaGest opens maximized; the user can still restore or resize the window.
+  return ShowWindow(window_handle_, SW_SHOWMAXIMIZED);
 }
 
 // static

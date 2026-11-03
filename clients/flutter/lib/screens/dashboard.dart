@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../entities.dart';
 import '../session.dart';
@@ -311,10 +312,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DateTime? _updated;
   final _focus = FocusNode();
   Timer? _timer;
+  // Primeiros passos can be folded or dismissed; both are remembered on this device.
+  bool _stepsCollapsed = false;
+  bool _stepsDismissed = false;
+
+  Future<void> _loadStepsState() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _stepsCollapsed = p.getBool('onboardingCollapsed') ?? false;
+        _stepsDismissed = p.getBool('onboardingDismissed') ?? false;
+      });
+    } catch (e) {
+      debugPrint('dashboard: Local storage is best effort; the card stays open: $e');
+    }
+  }
+
+  Future<void> _saveStepsState(String key, bool value) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool(key, value);
+    } catch (e) {
+      debugPrint('dashboard: Local storage is best effort; the choice lasts until the app closes: $e');
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    unawaited(_loadStepsState());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focus.requestFocus();
     });
@@ -403,7 +430,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ('Criar a primeira ordem de fabricação', 'production', pr == null || pr.openTotal > 0 || pr.shipments.isNotEmpty, 'production-orders'),
       ];
       final done = steps.where((s) => s.$3).length;
-      if (done == steps.length) return const SizedBox.shrink();
+      if (done == steps.length || _stepsDismissed) return const SizedBox.shrink();
       final theme = Theme.of(context);
       final cs = theme.colorScheme;
       return Padding(
@@ -423,12 +450,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(width: 12),
                     Expanded(child: Text('Primeiros passos', style: theme.textTheme.titleMedium)),
                     Text('$done de ${steps.length}', style: theme.textTheme.bodySmall),
+                    IconButton(
+                      key: const ValueKey('steps-collapse'),
+                      tooltip: _stepsCollapsed ? 'Expandir' : 'Recolher',
+                      icon: Icon(_stepsCollapsed ? Icons.expand_more : Icons.expand_less),
+                      onPressed: () {
+                        setState(() => _stepsCollapsed = !_stepsCollapsed);
+                        unawaited(_saveStepsState('onboardingCollapsed', _stepsCollapsed));
+                      },
+                    ),
+                    IconButton(
+                      key: const ValueKey('steps-dismiss'),
+                      tooltip: 'Dispensar',
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        setState(() => _stepsDismissed = true);
+                        unawaited(_saveStepsState('onboardingDismissed', true));
+                      },
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 LinearProgressIndicator(value: done / steps.length),
-                const SizedBox(height: 8),
-                for (final s in steps)
+                if (!_stepsCollapsed) const SizedBox(height: 8),
+                if (!_stepsCollapsed)
+                  for (final s in steps)
                   ListTile(
                     key: ValueKey('step-${s.$2}'),
                     dense: true,

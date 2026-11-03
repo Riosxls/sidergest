@@ -57,23 +57,24 @@ void main() {
     expect(find.text('quote'), findsOneWidget);
   });
 
-  testWidgets('sidebar lists every module, expands and collapses on tap, and opens the current one', (tester) async {
+  testWidgets('sidebar lists the modules on the Painel and only the current module inside one', (tester) async {
     await pumpShell(tester, 'Admin');
     for (final m in ['Comercial', 'Engenharia', 'Estoque', 'Suprimentos', 'PCP']) {
-      expect(find.byKey(ValueKey('nav-section-$m')), findsOneWidget);
+      expect(find.byKey(ValueKey('nav-module:$m')), findsOneWidget);
     }
     expect(find.widgetWithText(ListTile, 'Saldos'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('nav-section-Estoque')));
+    await tester.tap(find.byKey(const ValueKey('nav-module:Estoque')));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('nav-section-Estoque')), findsOneWidget);
     expect(find.widgetWithText(ListTile, 'Saldos'), findsOneWidget);
-    await tester.tap(find.widgetWithText(ListTile, 'Saldos'));
+    // Other subjects are not listed while working in this one.
+    for (final m in ['Comercial', 'Engenharia', 'Suprimentos', 'PCP']) {
+      expect(find.byKey(ValueKey('nav-module:$m')), findsNothing);
+    }
+    expect(find.widgetWithText(ListTile, 'Apontamentos'), findsNothing);
+    await tester.tap(find.widgetWithText(ListTile, 'Painel'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('nav-section-PCP')));
-    await tester.pumpAndSettle();
-    expect(find.widgetWithText(ListTile, 'Apontamentos'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Saldos'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('nav-section-Estoque')));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('nav-module:PCP')), findsOneWidget);
     expect(find.widgetWithText(ListTile, 'Saldos'), findsNothing);
   });
 

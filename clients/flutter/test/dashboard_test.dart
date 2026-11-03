@@ -140,6 +140,23 @@ void main() {
     expect(find.text('OF-7'), findsOneWidget);
   });
 
+  testWidgets('Primeiros passos folds, unfolds and is dismissed for good', (tester) async {
+    await pumpShell(tester, 'Production');
+    expect(find.text('Cadastrar produtos'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('steps-collapse')));
+    await tester.pumpAndSettle();
+    expect(find.text('Primeiros passos'), findsOneWidget);
+    expect(find.text('Cadastrar produtos'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('steps-collapse')));
+    await tester.pumpAndSettle();
+    expect(find.text('Cadastrar produtos'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('steps-dismiss')));
+    await tester.pumpAndSettle();
+    expect(find.text('Primeiros passos'), findsNothing);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('onboardingDismissed'), isTrue);
+  });
+
   testWidgets('Painel shows one card per module and keeps module details out', (tester) async {
     await pumpShell(tester, 'Production');
     for (final m in ['Comercial', 'Engenharia', 'Estoque', 'Suprimentos', 'PCP']) {

@@ -173,7 +173,6 @@ class _ShellState extends State<Shell> {
   final _fwd = <({String id, String? filter})>[];
 
   /// Modules whose screens are listed in the sidebar.
-  final _open = <String>{};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   /// Tile of the screen being shown, kept in view when the sidebar is longer than the window.
@@ -204,8 +203,6 @@ class _ShellState extends State<Shell> {
       _current = widget.session.homeScreen;
     }
     _mount(_current, _filter);
-    final section = _sectionOf(_current);
-    if (section != null) _open.add(section);
     _restorePrefs();
     HardwareKeyboard.instance.addHandler(_onKey);
     _innerTrail.pages.addListener(_onInnerPages);
@@ -413,7 +410,6 @@ class _ShellState extends State<Shell> {
       if (!mounted) return;
       setState(() {
         _collapsed = p.getBool('navCollapsed') ?? false;
-        _open.addAll(p.getStringList('navOpen') ?? const []);
         _pins = [
           for (final raw in p.getStringList('navPins') ?? const <String>[])
             if (_items.any((i) => i.id == raw.split('\n').first))
@@ -498,11 +494,9 @@ class _ShellState extends State<Shell> {
   void _show(String id, String? filter) {
     _left[_key(_current, _filter)] = DateTime.now();
     _mount(id, filter);
-    final section = _sectionOf(id);
     setState(() {
       _current = id;
       _filter = filter;
-      if (section != null) _open.add(section);
     });
     _rev.value++;
     _syncLocation();
@@ -706,6 +700,7 @@ class _ShellState extends State<Shell> {
     for (final m in modules) {
       final home = _items.firstWhere((i) => i.id == m.id);
       final isCurrent = m.section == current;
+      if (current != null && !isCurrent) continue;
       if (rail) {
         // A module is one icon that opens its overview; the module being worked in lists its screens under it.
         if (isCurrent) children.add(const Divider());
@@ -716,28 +711,26 @@ class _ShellState extends State<Shell> {
         }
         continue;
       }
-      final open = _open.contains(m.section);
+      // On the Painel the modules are the way in; inside one, only that module's screens are listed.
+      if (!isCurrent) {
+        children.add(one(home, title: m.section));
+        continue;
+      }
       children.add(
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: ListTile(
-            key: ValueKey('nav-section-${m.section}'),
-            dense: true,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            leading: Icon(m.icon, color: isCurrent ? cs.primary : null),
-            title: Text(
-              m.section,
-              style: theme.textTheme.labelLarge?.copyWith(color: isCurrent ? cs.primary : null, fontWeight: FontWeight.w700),
-            ),
-            trailing: Icon(open ? Icons.expand_less : Icons.expand_more),
-            onTap: () => _toggleSection(m.section),
+          key: ValueKey('nav-section-${m.section}'),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Row(
+            children: [
+              Icon(m.icon, size: 20, color: cs.primary),
+              const SizedBox(width: 12),
+              Text(m.section, style: theme.textTheme.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w700)),
+            ],
           ),
         ),
       );
-      if (open) {
-        children.add(one(home, title: 'Visão geral'));
-        moduleItems(m.section);
-      }
+      children.add(one(home, title: 'Visão geral'));
+      moduleItems(m.section);
     }
     return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
   }
@@ -773,20 +766,6 @@ class _ShellState extends State<Shell> {
       );
     },
   );
-
-  void _toggleSection(String section) {
-    setState(() => _open.contains(section) ? _open.remove(section) : _open.add(section));
-    unawaited(_saveOpen());
-  }
-
-  Future<void> _saveOpen() async {
-    try {
-      final p = await SharedPreferences.getInstance();
-      await p.setStringList('navOpen', _open.toList());
-    } catch (e) {
-      debugPrint('shell: Local storage is best effort; the in-memory value stays: $e');
-    }
-  }
 
   /// Breadcrumb in the app bar: the module and screen, then every record page open over it (wide layout). Each step but the last goes back to it.
   Widget _title(bool wide) {
