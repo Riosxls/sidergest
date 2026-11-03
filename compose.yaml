@@ -45,6 +45,13 @@ services:
       Proxy__Trusted: ${EBT_BEHIND_PROXY:-false}
       Backup__Directory: /backup-status
       Security__MaxIdleMinutes: ${EBT_MAX_IDLE_MINUTES:-0}
+      Mail__Host: ${EBT_SMTP_HOST:-}
+      Mail__Port: ${EBT_SMTP_PORT:-587}
+      Mail__User: ${EBT_SMTP_USER:-}
+      Mail__Password: ${EBT_SMTP_PASSWORD:-}
+      Mail__From: ${EBT_SMTP_FROM:-}
+      Mail__FromName: ${EBT_SMTP_FROM_NAME:-EBT}
+      Mail__StartTls: ${EBT_SMTP_STARTTLS:-true}
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]

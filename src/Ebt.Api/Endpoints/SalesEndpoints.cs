@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Ebt.Api.Infrastructure;
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
+using Ebt.Core.Mail;
 using Ebt.Core.Sales;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,7 @@ public record PriceOut(int ProductId, int? CustomerId, decimal? UnitPrice, decim
 
 public record SalesEventOut(long Id, string Action, string? FromStatus, string? ToStatus, string? Note, string? User, DateTimeOffset At);
 public record QuoteActionIn(string? Note = null, string? SentTo = null, string? CustomerPo = null, LostReason? LostReason = null, DateOnly? ValidUntil = null, List<QuoteLineDate>? DeliveryDates = null);
+public record QuoteEmailIn(string? To, string? Cc, string? Subject, string? Body, string? PdfBase64, string? FileName);
 public record LostReasonOut(LostReason? Reason, int Quotes, decimal Value);
 public record SalesReasonIn(string? Reason);
 public record OrderCancelIn(string? Reason, bool CancelProduction = false);
@@ -299,6 +301,56 @@ public static class SalesEndpoints
         }).RequireAuthorization(SalesPolicies.Sell);
 
         QuoteAction(g, "send", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.SendAsync(id, i.SentTo, i.Note, u, ct));
+
+        // Sends the quote PDF (built by the app) from the company mailbox. A draft or approved quote is also registered as sent, so one click does both;
+        // a quote already sent is just mailed again (history "emailed").
+        g.MapPost("/{id:int}/email", async (int id, QuoteEmailIn i, EbtDbContext db, SalesService svc, IMailSender mail, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            if (!mail.Enabled) return Results.Conflict(new { message = "O envio de e-mail não está configurado no servidor. Peça ao administrador para configurar o SMTP." });
+            var q = await db.Quotes.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (q is null) return Results.NotFound();
+            var canRegister = q.Status == QuoteStatus.Approved || (q.Status == QuoteStatus.Draft && !q.NeedsApproval);
+            if (!canRegister && q.Status != QuoteStatus.Sent)
+                return Results.Conflict(new { message = q.Status is QuoteStatus.Draft or QuoteStatus.PendingApproval ? "Este orçamento precisa da aprovação do desconto antes de ir ao cliente" : $"Orçamento {q.Status} não pode ser enviado" });
+
+            var to = ParseAddresses(i.To, out var badTo);
+            var cc = ParseAddresses(i.Cc, out var badCc);
+            if (badTo is not null || to.Count == 0) return Results.BadRequest(new { message = badTo is null ? "Informe o e-mail do cliente" : $"E-mail inválido: {badTo}", field = "to" });
+            if (badCc is not null) return Results.BadRequest(new { message = $"E-mail inválido: {badCc}", field = "cc" });
+            var subject = Clean(i.Subject);
+            if (subject is null || subject.Length > 200) return Results.BadRequest(new { message = "Informe o assunto (até 200 caracteres)", field = "subject" });
+            byte[] pdf;
+            try
+            {
+                pdf = Convert.FromBase64String(i.PdfBase64 ?? "");
+            }
+            catch (FormatException)
+            {
+                pdf = [];
+            }
+            if (pdf.Length is 0 or > MaxEmailPdfBytes) return Results.BadRequest(new { message = "PDF do orçamento vazio ou maior que 10 MB", field = "pdf" });
+            var fileName = Path.GetFileName(Clean(i.FileName) ?? $"Orçamento {q.Reference}.pdf");
+
+            try
+            {
+                await mail.SendAsync(new OutgoingMail(to, cc, subject, i.Body ?? "", new MailAttachment(fileName, pdf)), ct);
+            }
+            catch (MailException e)
+            {
+                return Results.Json(new { message = e.Message }, statusCode: StatusCodes.Status502BadGateway);
+            }
+
+            var list = string.Join(", ", to) + (cc.Count > 0 ? $" (cópia: {string.Join(", ", cc)})" : "");
+            if (canRegister)
+                await svc.SendAsync(id, string.Join(", ", to), $"Enviado por e-mail para {list}", Who(user), ct);
+            else
+            {
+                var current = await db.Quotes.FirstAsync(x => x.Id == id, ct);
+                QuoteEvent(db, current, "emailed", $"E-mail enviado para {list}", Who(user));
+                await db.SaveChangesAsync(ct);
+            }
+            return Results.Ok(await LoadQuote(db, id, ct));
+        }).RequireAuthorization(SalesPolicies.Sell);
         QuoteAction(g, "approve", SalesPolicies.Approve, (svc, id, i, u, ct) => svc.ApproveAsync(id, i.Note, u, ct));
         QuoteAction(g, "reject-approval", SalesPolicies.Approve, (svc, id, i, u, ct) => svc.RejectApprovalAsync(id, i.Note, u, ct));
         QuoteAction(g, "purchase-order", SalesPolicies.Sell, (svc, id, i, u, ct) => svc.ReceivePurchaseOrderAsync(id, i.CustomerPo, i.Note, u, ct, i.DeliveryDates));
@@ -329,6 +381,20 @@ public static class SalesEndpoints
     private static IResult PoClosed(Quote q) => Results.Conflict(new { message = $"Pedido de compra só pode ser anexado após a aprovação do cliente (status atual: {q.Status})" });
 
     private const long MaxRequestFileBytes = 10 * 1024 * 1024;
+    private const int MaxEmailPdfBytes = 10 * 1024 * 1024;
+
+    /// <summary>Splits a typed list ("a@x.com; b@y.com") into addresses. <paramref name="bad"/> is the first entry that is not an e-mail address.</summary>
+    private static List<string> ParseAddresses(string? text, out string? bad)
+    {
+        bad = null;
+        var list = new List<string>();
+        foreach (var part in (text ?? "").Split([';', ',', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!System.Net.Mail.MailAddress.TryCreate(part, out var a) || !a.Address.Contains('.') || a.Address != part) { bad ??= part; continue; }
+            list.Add(a.Address);
+        }
+        return list;
+    }
 
     private static readonly Dictionary<string, string> RequestFileTypes = new()
     {

@@ -1110,4 +1110,86 @@ public class SalesTests(ApiFixture api)
         (await admin.Post($"/api/sales/orders/{order.Id}/certificate-waiver", new CertificateWaiverIn(true))).EnsureSuccessStatusCode();
         (await admin.Post($"/api/sales/orders/{order.Id}/certificate-waiver", new CertificateWaiverIn(false))).EnsureSuccessStatusCode();
     }
+
+    private sealed class FakeMail(bool fail = false) : Ebt.Core.Mail.IMailSender
+    {
+        public List<Ebt.Core.Mail.OutgoingMail> Sent { get; } = [];
+        public bool Enabled => true;
+        public string? From => "orcamentos@ebt.test";
+
+        public Task SendAsync(Ebt.Core.Mail.OutgoingMail mail, CancellationToken ct = default)
+        {
+            if (fail) throw new Ebt.Core.Mail.MailException("O servidor de e-mail recusou o envio (teste).");
+            Sent.Add(mail);
+            return Task.CompletedTask;
+        }
+    }
+
+    private static QuoteEmailIn Email(string to = "compras@cliente.com", string? cc = null, string pdf = "JVBERi0xLjQ=") => new(to, cc, "PROP teste · EBT", "Segue o orçamento.", pdf, "Orçamento teste.pdf");
+
+    [Fact]
+    public async Task Quote_email_is_off_without_smtp_settings()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var quote = await (await admin.Post("/api/sales/quotes", Quote(s, 20m))).Read<QuoteOut>();
+        var status = await (await admin.GetAsync("/api/system/mail")).Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        Assert.False(status.GetProperty("enabled").GetBoolean());
+        await AssertStatus(HttpStatusCode.Conflict, admin.Post($"/api/sales/quotes/{quote.Id}/email", Email()));
+    }
+
+    [Fact]
+    public async Task Quote_email_sends_the_pdf_and_registers_the_send()
+    {
+        var mail = new FakeMail();
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var withMail = await api.AdminWithMailAsync(mail);
+        var quote = await (await admin.Post("/api/sales/quotes", Quote(s, 20m))).Read<QuoteOut>();
+        Assert.False(quote.NeedsApproval);
+
+        await AssertStatus(HttpStatusCode.BadRequest, withMail.Post($"/api/sales/quotes/{quote.Id}/email", Email(to: "sem-arroba")));
+        await AssertStatus(HttpStatusCode.BadRequest, withMail.Post($"/api/sales/quotes/{quote.Id}/email", Email(cc: "ok@x.com; ruim")));
+        await AssertStatus(HttpStatusCode.BadRequest, withMail.Post($"/api/sales/quotes/{quote.Id}/email", Email(pdf: "")));
+        Assert.Empty(mail.Sent);
+
+        var sent = await (await withMail.Post($"/api/sales/quotes/{quote.Id}/email", Email(to: "a@cliente.com; b@cliente.com", cc: "vendas@ebt.test"))).Read<QuoteOut>();
+        Assert.Equal(QuoteStatus.Sent, sent.Status);
+        Assert.Equal("a@cliente.com, b@cliente.com", sent.SentTo);
+        var m = Assert.Single(mail.Sent);
+        Assert.Equal(["a@cliente.com", "b@cliente.com"], m.To);
+        Assert.Equal(["vendas@ebt.test"], m.Cc);
+        Assert.Equal("Orçamento teste.pdf", m.Attachment!.FileName);
+        Assert.Equal("%PDF-1.4"u8.ToArray(), m.Attachment.Data);
+
+        // A quote already sent is mailed again without changing its status or validity.
+        var again = await (await withMail.Post($"/api/sales/quotes/{quote.Id}/email", Email())).Read<QuoteOut>();
+        Assert.Equal(QuoteStatus.Sent, again.Status);
+        Assert.Equal(sent.ValidUntil, again.ValidUntil);
+        Assert.Equal(2, mail.Sent.Count);
+        await using var db = api.NewDb();
+        Assert.Contains(await db.SalesEvents.Where(e => e.Kind == SalesRecordKind.Quote && e.RecordId == quote.Id).Select(e => e.Action).ToListAsync(), a => a == "emailed");
+    }
+
+    [Fact]
+    public async Task Quote_email_waits_for_the_discount_approval_and_reports_a_failed_send()
+    {
+        var mail = new FakeMail();
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin);
+        var withMail = await api.AdminWithMailAsync(mail);
+        var discounted = await (await admin.Post("/api/sales/quotes", Quote(s))).Read<QuoteOut>();
+        Assert.True(discounted.NeedsApproval);
+        await AssertStatus(HttpStatusCode.Conflict, withMail.Post($"/api/sales/quotes/{discounted.Id}/email", Email()));
+        Assert.Empty(mail.Sent);
+
+        var failing = await api.AdminWithMailAsync(new FakeMail(fail: true));
+        var quote = await (await admin.Post("/api/sales/quotes", Quote(s, 20m))).Read<QuoteOut>();
+        await AssertStatus(HttpStatusCode.BadGateway, failing.Post($"/api/sales/quotes/{quote.Id}/email", Email()));
+        // The send is registered only after the mail went out.
+        Assert.Equal(QuoteStatus.Draft, (await (await admin.GetAsync($"/api/sales/quotes/{quote.Id}")).Read<QuoteOut>()).Status);
+
+        var reader = await api.UserAsync(UserRole.Reader);
+        await AssertStatus(HttpStatusCode.Forbidden, reader.Post($"/api/sales/quotes/{quote.Id}/email", Email()));
+    }
 }

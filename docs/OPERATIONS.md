@@ -101,3 +101,20 @@ Rotating secrets on the development machine does not carry over: production gets
 ## Behind a reverse proxy
 
 Set `EBT_BEHIND_PROXY=true` so the API trusts the forwarded client IP. Without it every user shares one login rate-limit bucket, and ten logins a minute lock everyone out. Set `EBT_ALLOWED_HOSTS` to the real host name.
+
+## E-mail (quote sending)
+
+The API sends the quote PDF to the customer from one company mailbox (`Ebt.Core/Mail`, `POST /api/sales/quotes/{id}/email`). Set it in `.env`, then recreate the `api` container (see CLAUDE.md, "Rebuilding the API container"):
+
+```
+EBT_SMTP_HOST=smtp.office365.com
+EBT_SMTP_PORT=587
+EBT_SMTP_USER=orcamentos@empresa.com.br
+EBT_SMTP_PASSWORD=<senha do e-mail ou senha de app>
+EBT_SMTP_FROM=orcamentos@empresa.com.br
+```
+
+- Without `EBT_SMTP_HOST` and `EBT_SMTP_FROM` sending is off and the quote screen shows only "Registrar envio". `GET /api/system/mail` tells the app which.
+- Port 587 with STARTTLS only. Implicit SSL (465) is not supported by the .NET SMTP client; use `EBT_SMTP_STARTTLS=false` only for a relay inside the company network.
+- Microsoft 365 and Gmail usually need an app password (or SMTP AUTH enabled for the mailbox) instead of the normal password.
+- The password lives only in `.env`/environment, never in the database or the app. Each send is written to the quote history (`sent` or `emailed`, with the addresses).

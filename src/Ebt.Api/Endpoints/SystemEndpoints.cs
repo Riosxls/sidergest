@@ -4,6 +4,7 @@ using System.Text.Json;
 using Ebt.Api.Infrastructure;
 using Ebt.Core.Data;
 using Ebt.Core.Entities;
+using Ebt.Core.Mail;
 using Ebt.Core.Maintenance;
 using Microsoft.EntityFrameworkCore;
 using static Ebt.Api.Infrastructure.Crud;
@@ -123,6 +124,9 @@ public static class SystemEndpoints
 
     public static void MapSystem(this WebApplication app)
     {
+        // Whether the server can send e-mail (the quote screen shows "Enviar por e-mail" only then). Never returns the SMTP settings.
+        app.MapGet("/api/system/mail", (IMailSender mail) => Results.Ok(new { enabled = mail.Enabled, from = mail.From })).RequireAuthorization();
+
         app.MapGet("/api/system/about", async (EbtDbContext db, IWebHostEnvironment env, ClaimsPrincipal principal, CancellationToken ct) =>
         {
             var info = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? typeof(Program).Assembly.GetName().Version?.ToString() ?? "";

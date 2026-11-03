@@ -62,6 +62,21 @@ public sealed class ApiFixture : IAsyncLifetime
 
     public async Task<HttpClient> AdminAsync() => await LoginAsync(AdminUser, AdminPassword);
 
+    /// <summary>An admin client against a host whose e-mail sender is replaced by <paramref name="mail"/> (no SMTP server needed).</summary>
+    public async Task<HttpClient> AdminWithMailAsync(Ebt.Core.Mail.IMailSender mail)
+    {
+        var host = factory.WithWebHostBuilder(b => b.ConfigureServices(s =>
+        {
+            Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<Ebt.Core.Mail.IMailSender>(s);
+            Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(s, mail);
+        }));
+        var client = host.CreateClient();
+        var res = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(AdminUser, AdminPassword));
+        res.EnsureSuccessStatusCode();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", (await res.Content.ReadFromJsonAsync<LoginResponse>(Json))!.Token);
+        return client;
+    }
+
     public async Task<HttpClient> LoginAsync(string username, string password)
     {
         var client = factory.CreateClient();
