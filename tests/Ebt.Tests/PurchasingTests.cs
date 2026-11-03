@@ -87,9 +87,20 @@ public class PurchasingTests(PurchasingFixture api)
         Assert.Equal(RequisitionStatus.OrderIssued, r1Ordered.Status);
         Assert.Equal(po.Number, r1Ordered.PurchaseOrderNumber);
 
+        // The records point at each other, so the pages can link them: order <-> quotation <-> requisitions.
+        var poPage = await (await c.GetAsync($"/api/purchase-orders/{po.Id}")).Read<OrderOut>();
+        Assert.Equal((q.Id, q.Number), (poPage.QuotationId, poPage.QuotationNumber));
+        Assert.Equal([r1.Number, r2.Number], poPage.Requisitions!.Select(r => r.Number).Order());
+        Assert.Empty(poPage.Receipts!);
+        var quotationPage = await (await c.GetAsync($"/api/quotations/{q.Id}")).Read<QuotationOut>();
+        Assert.Equal([new LinkOut(po.Id, po.Number)], quotationPage.Orders);
+        Assert.Equal([acme.Id], quotationPage.OrderedSupplierIds);
+        Assert.Equal([r1.Number, r2.Number], quotationPage.Requisitions.Select(r => r.Number).Order());
+
         var before = api.Handler.Events.Count;
         var rec = await (await c.Post("/api/goods-receipts", Receipt(acme.Id, line.Id, 2m, lot: "L-77"))).Read<ReceiptOut>();
         Assert.Equal(12600m, rec.CalculatedTotal);
+        Assert.Equal([new LinkOut(rec.Id, rec.Number)], (await (await c.GetAsync($"/api/purchase-orders/{po.Id}")).Read<OrderOut>()).Receipts);
         Assert.Equal([new InstallmentOut(1, Today.AddDays(28), 6300m), new InstallmentOut(2, Today.AddDays(56), 6300m)], rec.Installments);
         var evt = api.Handler.Events.Skip(before).Single(e => e.ReceiptId == rec.Id);
         var el = Assert.Single(evt.Lines);

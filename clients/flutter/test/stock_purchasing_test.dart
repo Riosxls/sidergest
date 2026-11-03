@@ -324,6 +324,7 @@ class Fake {
     }
     if (p.startsWith('/api/stock/closings/') && m == 'POST') return json({'period': 202610, 'closedBy': 'est', 'closedAt': '2026-11-01T10:00:00Z'}, 201);
     if (p == '/api/requisitions') return json(page(q['status'] == null || q['status'] == requisition['status'] ? [requisition] : []));
+    if (p == '/api/requisitions/11') return json(requisition);
     if (p == '/api/requisitions/11/approve') {
       requisition['status'] = 'Approved';
       requisition['approvedQuantity'] = body(r)['approvedQuantity'];
@@ -544,13 +545,19 @@ void main() {
     expect(fake.last('GET', '/api/requisitions').url.queryParameters['status'], 'PendingApproval');
     await tester.tap(find.text('101'));
     await tester.pumpAndSettle();
+    // The requisition is a page of its own, with the stage path and the next step.
+    expect(find.text('Requisição nº 101'), findsOneWidget);
+    expect(find.text('Aguardando aprovação'), findsWidgets);
     await tester.tap(find.byKey(const ValueKey('req-approve')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('field-approvedQuantity')), '800');
     await tester.tap(find.text('Salvar'));
     await tester.pumpAndSettle();
     expect(fake.body(fake.last('POST', '/api/requisitions/11/approve'))['approvedQuantity'], 800);
-    expect(find.text('101'), findsNothing);
+    // Approved: the page says what is next and offers it right away.
+    expect(find.text('Aprovada · falta cotar'), findsOneWidget);
+    expect(find.byKey(const ValueKey('req-quote')), findsOneWidget);
+    expect(find.text('Cotar agora'), findsWidgets);
   });
 
   testWidgets('comparison ranks bids, award and order generation', (tester) async {
@@ -564,12 +571,19 @@ void main() {
     expect(find.textContaining('Usina Norte'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('award-31')));
     await tester.pumpAndSettle();
+    // Awarding names the supplier first and sends nothing until confirmed.
+    expect(find.textContaining('Aprovar a proposta de'), findsOneWidget);
+    expect(fake.log.where((r) => r.url.path.endsWith('/award')), isEmpty);
+    await tester.tap(find.byKey(const ValueKey('confirm-step')));
+    await tester.pumpAndSettle();
     expect(fake.body(fake.last('POST', '/api/quotations/7/items/21/award'))['bidId'], 31);
     expect(find.byKey(const ValueKey('award-31')), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('quote-order')));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(SimpleDialogOption, 'Aços Sul'));
+    // A single winner needs no picker, only a confirmation.
+    expect(find.textContaining('Gerar pedido para Aços Sul'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('confirm-step')));
     await tester.pumpAndSettle();
     expect(fake.body(fake.last('POST', '/api/purchase-orders/from-quotation')), {'quotationId': 7, 'supplierId': 1});
     expect(find.text('Pedido nº 900 · Aços Sul'), findsOneWidget);
@@ -597,7 +611,8 @@ void main() {
     expect(b['lines'], [
       {'purchaseOrderLineId': 91, 'quantity': 400, 'unitPrice': 6.2, 'lotCode': null},
     ]);
-    expect(find.text('Recebimento nº 5'), findsOneWidget);
+    // The title carries the receipt number, not the database id.
+    expect(find.text('Recebimento nº 55'), findsOneWidget);
     expect(find.text('23/11/2026'), findsOneWidget);
   });
 

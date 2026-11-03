@@ -20,7 +20,9 @@ public record QuotationSupplierIn(int SupplierId);
 public record AwardIn(int BidId);
 public record BidOut(int Id, int SupplierId, string SupplierName, decimal? UnitPrice, decimal DiscountPercent, decimal IcmsPercent, decimal IpiPercent, int? LeadTimeDays, string? PaymentTerms, string? Notes, BidStatus Status, DateTimeOffset? RespondedAt);
 public record QuotationItemOut(int Id, int Item, int? MaterialId, string? MaterialCode, string Description, string Unit, decimal Quantity, IReadOnlyList<int> RequisitionNumbers, IReadOnlyList<BidOut> Bids);
-public record QuotationOut(int Id, int Number, QuotationStatus Status, string? Notes, string? CreatedBy, DateTimeOffset CreatedAt, IReadOnlyList<QuotationItemOut> Items);
+/// <summary>A record this one points to: its id and number, so a page can link to it.</summary>
+public record LinkOut(int Id, int Number);
+public record QuotationOut(int Id, int Number, QuotationStatus Status, string? Notes, string? CreatedBy, DateTimeOffset CreatedAt, IReadOnlyList<QuotationItemOut> Items, IReadOnlyList<LinkOut> Requisitions, IReadOnlyList<LinkOut> Orders, IReadOnlyList<int> OrderedSupplierIds);
 public record QuotationSummaryOut(int Id, int Number, QuotationStatus Status, DateTimeOffset CreatedAt, int ItemCount, int SupplierCount);
 public record ComparisonBidOut(int BidId, int SupplierId, string SupplierName, decimal UnitPrice, decimal NetUnitPrice, decimal LandedUnitPrice, decimal LineTotal, int? LeadTimeDays, string? PaymentTerms, int Rank, BidStatus Status);
 public record ComparisonItemOut(int ItemId, int Item, string Description, string Unit, decimal Quantity, decimal? LastUnitPrice, DateOnly? LastPurchaseDate, string? LastSupplierName, IReadOnlyList<ComparisonBidOut> Bids, IReadOnlyList<int> PendingSupplierIds);
@@ -31,7 +33,7 @@ public record OrderFromQuotationIn(int QuotationId, int SupplierId, string? Note
 public record ReasonIn(string? Reason);
 public record DueDateIn(DateOnly DueDate);
 public record OrderLineOut(int Id, int LineNumber, int? MaterialId, string? MaterialCode, string Description, string Unit, decimal Quantity, decimal UnitPrice, decimal DiscountPercent, decimal IcmsPercent, decimal IpiPercent, DateOnly DueDate, decimal ReceivedQuantity, decimal OpenQuantity, bool Closed, int? QuotationBidId, decimal Total);
-public record OrderOut(int Id, int Number, int SupplierId, string SupplierName, PurchaseOrderStatus Status, string? PaymentTerms, string? Notes, string? IssuedBy, DateTimeOffset IssuedAt, string? ClosedBy, DateTimeOffset? ClosedAt, string? CloseReason, decimal Total, IReadOnlyList<OrderLineOut> Lines);
+public record OrderOut(int Id, int Number, int SupplierId, string SupplierName, PurchaseOrderStatus Status, string? PaymentTerms, string? Notes, string? IssuedBy, DateTimeOffset IssuedAt, string? ClosedBy, DateTimeOffset? ClosedAt, string? CloseReason, decimal Total, IReadOnlyList<OrderLineOut> Lines, int? QuotationId = null, int? QuotationNumber = null, IReadOnlyList<LinkOut>? Requisitions = null, IReadOnlyList<LinkOut>? Receipts = null);
 public record OrderSummaryOut(int Id, int Number, int SupplierId, string SupplierName, PurchaseOrderStatus Status, DateTimeOffset IssuedAt, DateOnly? NextDueDate, int LineCount);
 public record OpenOrdersSummaryOut(int Total, IReadOnlyList<int> SupplierIds);
 
@@ -173,9 +175,16 @@ public static class PurchasingEndpoints
             .Include(x => x.Items).ThenInclude(i => i.Requisitions)
             .Include(x => x.Items).ThenInclude(i => i.Bids).ThenInclude(b => b.Supplier)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
-        return q is null ? null : new QuotationOut(q.Id, q.Number, q.Status, q.Notes, q.CreatedBy, q.CreatedAt, q.Items.OrderBy(i => i.Item).Select(i => new QuotationItemOut(
+        if (q is null) return null;
+        // The orders this quotation produced: lines created from one of its bids.
+        var bidIds = q.Items.SelectMany(i => i.Bids).Select(b => b.Id).ToList();
+        var orders = await db.PurchaseOrderLines.AsNoTracking().Where(l => l.QuotationBidId != null && bidIds.Contains(l.QuotationBidId.Value))
+            .Select(l => new { l.PurchaseOrderId, l.PurchaseOrder!.Number, l.PurchaseOrder.SupplierId }).Distinct().ToListAsync(ct);
+        return new QuotationOut(q.Id, q.Number, q.Status, q.Notes, q.CreatedBy, q.CreatedAt, q.Items.OrderBy(i => i.Item).Select(i => new QuotationItemOut(
             i.Id, i.Item, i.MaterialId, i.Material?.Code, i.Description, i.Unit, i.Quantity, i.Requisitions.Select(r => r.Number).Order().ToList(),
-            i.Bids.OrderBy(b => b.Supplier!.Name).Select(b => new BidOut(b.Id, b.SupplierId, b.Supplier!.Name, b.UnitPrice, b.DiscountPercent, b.IcmsPercent, b.IpiPercent, b.LeadTimeDays, b.PaymentTerms, b.Notes, b.Status, b.RespondedAt)).ToList())).ToList());
+            i.Bids.OrderBy(b => b.Supplier!.Name).Select(b => new BidOut(b.Id, b.SupplierId, b.Supplier!.Name, b.UnitPrice, b.DiscountPercent, b.IcmsPercent, b.IpiPercent, b.LeadTimeDays, b.PaymentTerms, b.Notes, b.Status, b.RespondedAt)).ToList())).ToList(),
+            q.Items.SelectMany(i => i.Requisitions).DistinctBy(r => r.Id).OrderBy(r => r.Number).Select(r => new LinkOut(r.Id, r.Number)).ToList(),
+            orders.OrderBy(o => o.Number).Select(o => new LinkOut(o.PurchaseOrderId, o.Number)).ToList(), orders.Select(o => o.SupplierId).Distinct().ToList());
     }
 
     private static void MapQuotations(WebApplication app)
@@ -262,7 +271,15 @@ public static class PurchasingEndpoints
         var lines = o.Lines.OrderBy(l => l.LineNumber).Select(l => new OrderLineOut(l.Id, l.LineNumber, l.MaterialId, l.Material?.Code, l.Description, l.Unit, l.Quantity, l.UnitPrice,
             l.DiscountPercent, l.IcmsPercent, l.IpiPercent, l.DueDate, l.ReceivedQuantity, l.Closed ? 0 : Math.Max(l.Quantity - l.ReceivedQuantity, 0), l.Closed, l.QuotationBidId,
             PurchasingService.LineTotal(l.Quantity, l.UnitPrice, l.DiscountPercent, l.IpiPercent))).ToList();
-        return new OrderOut(o.Id, o.Number, o.SupplierId, o.Supplier!.Name, o.Status, o.PaymentTerms, o.Notes, o.IssuedBy, o.IssuedAt, o.ClosedBy, o.ClosedAt, o.CloseReason, lines.Sum(l => l.Total), lines);
+        // Where the order came from and what came of it: its quotation, the requisitions it serves and the receipts against it.
+        var bidIds = o.Lines.Where(l => l.QuotationBidId != null).Select(l => l.QuotationBidId!.Value).ToList();
+        var quotation = bidIds.Count == 0 ? null : await db.QuotationBids.AsNoTracking().Where(b => bidIds.Contains(b.Id))
+            .Select(b => new { b.QuotationItem!.QuotationId, b.QuotationItem.Quotation!.Number }).FirstOrDefaultAsync(ct);
+        var requisitions = await db.PurchaseRequisitions.AsNoTracking().Where(r => r.PurchaseOrderLine != null && r.PurchaseOrderLine.PurchaseOrderId == id)
+            .OrderBy(r => r.Number).Select(r => new LinkOut(r.Id, r.Number)).ToListAsync(ct);
+        var receipts = await db.GoodsReceipts.AsNoTracking().Where(r => r.Lines.Any(l => l.PurchaseOrderLine!.PurchaseOrderId == id))
+            .OrderBy(r => r.Number).Select(r => new LinkOut(r.Id, r.Number)).ToListAsync(ct);
+        return new OrderOut(o.Id, o.Number, o.SupplierId, o.Supplier!.Name, o.Status, o.PaymentTerms, o.Notes, o.IssuedBy, o.IssuedAt, o.ClosedBy, o.ClosedAt, o.CloseReason, lines.Sum(l => l.Total), lines, quotation?.QuotationId, quotation?.Number, requisitions, receipts);
     }
 
     private static void MapOrders(WebApplication app)

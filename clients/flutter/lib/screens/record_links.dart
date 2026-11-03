@@ -11,6 +11,7 @@ import 'product_detail.dart';
 import 'production_orders.dart';
 import 'quotations.dart';
 import 'receipts.dart';
+import 'requisitions.dart';
 import 'sales_orders.dart';
 import 'sales_quotes.dart';
 import 'steel.dart';
@@ -38,6 +39,7 @@ const recordLabels = {
   'supplier': 'Fornecedor',
   'material-stock': 'Estoque do material',
   'product-stock': 'Estoque do produto',
+  'requisition': 'Requisição',
 };
 
 /// The page of a record kind, or null for an unknown kind (an old bookmark, a hand-edited address).
@@ -59,6 +61,7 @@ Widget? recordScreen(Session s, String kind, int id) => switch (kind) {
   'supplier' => supplierScreenById(s, id),
   'material-stock' => itemStockScreen(s, material: true, id: id),
   'product-stock' => itemStockScreen(s, material: false, id: id),
+  'requisition' => RequisitionScreen(session: s, id: id),
   _ => null,
 };
 

@@ -183,14 +183,33 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Pedido nº 900 · Aços Sul'), findsOneWidget);
     expect(find.text('Urgente'), findsOneWidget);
-    expect(find.text('Cancelar pedido'), findsNothing);
+    // Cancelling is a labelled button on the order page, not a hidden menu.
+    expect(find.byKey(const ValueKey('order-cancel')), findsOneWidget);
   });
 
-  testWidgets('order list of a supplier hides the new order button and a reader cannot create', (tester) async {
+  testWidgets('a status picked in the filter wins over "Somente abertos"', (tester) async {
     final env = _Env();
-    await _pump(tester, env, (s) => Scaffold(body: OrdersScreen(session: s, supplierId: 1)));
-    expect(find.text('Novo pedido'), findsNothing);
+    await _pump(tester, env, (s) => Scaffold(body: OrdersScreen(session: s)));
+    expect(env.log.first.url.queryParameters['open'], 'true');
+    await tester.tap(find.byKey(const ValueKey('filter-Situação')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Encerrado').last);
+    await tester.pumpAndSettle();
+    expect(env.log.last.url.queryParameters['status'], 'Closed');
+    expect(env.log.last.url.queryParameters.containsKey('open'), isFalse);
+  });
+
+  testWidgets('order list of a supplier starts new orders for that supplier and a reader cannot create', (tester) async {
+    final env = _Env();
+    await _pump(tester, env, (s) => Scaffold(body: OrdersScreen(session: s, supplierId: 1, supplierName: 'Aços Sul')));
     expect(env.log.first.url.queryParameters['supplierId'], '1');
+    await tester.tap(find.text('Novo pedido'));
+    await tester.pumpAndSettle();
+    expect(find.text('Novo pedido de compra'), findsOneWidget);
+    // The supplier is already chosen and cannot be changed there.
+    expect(find.text('Aços Sul'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
     final env2 = _Env();
     await _pump(tester, env2, (s) => Scaffold(body: OrdersScreen(session: s)), role: 'Reader');
     expect(find.text('Novo pedido'), findsNothing);
@@ -200,10 +219,8 @@ void main() {
     final env = _Env();
     await _pump(tester, env, (s) => OrderScreen(session: s, id: 90));
     expect(find.text('Receber NF'), findsOneWidget);
-    await tester.tap(find.byType(PopupMenuButton<String>));
-    await tester.pumpAndSettle();
     expect(find.text('Encerrar saldo'), findsNothing);
-    await tester.tap(find.text('Cancelar pedido'));
+    await tester.tap(find.byKey(const ValueKey('order-cancel')));
     await tester.pumpAndSettle();
     expect(find.text('Cancelar pedido nº 900'), findsOneWidget);
     await tester.tap(find.text('Confirmar'));
@@ -223,17 +240,13 @@ void main() {
       ..status = 'PartiallyReceived'
       ..received = 100;
     await _pump(tester, env, (s) => OrderScreen(session: s, id: 90));
-    await tester.tap(find.byType(PopupMenuButton<String>));
-    await tester.pumpAndSettle();
     expect(find.text('Cancelar pedido'), findsNothing);
-    await tester.tap(find.text('Encerrar saldo'));
+    await tester.tap(find.byKey(const ValueKey('order-close')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Voltar'));
     await tester.pumpAndSettle();
     expect(env.log.where((r) => r.method == 'POST'), isEmpty);
-    await tester.tap(find.byType(PopupMenuButton<String>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Encerrar saldo'));
+    await tester.tap(find.byKey(const ValueKey('order-close')));
     await tester.pumpAndSettle();
     expect(find.text('Encerrar saldo do pedido nº 900'), findsOneWidget);
     await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Saldo não será entregue');
@@ -247,9 +260,7 @@ void main() {
   testWidgets('a failed cancel shows the API message in a snackbar and keeps the order open', (tester) async {
     final env = _Env()..failWith = 'Há recebimento em andamento';
     await _pump(tester, env, (s) => OrderScreen(session: s, id: 90));
-    await tester.tap(find.byType(PopupMenuButton<String>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancelar pedido'));
+    await tester.tap(find.byKey(const ValueKey('order-cancel')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'x');
     await tester.tap(find.text('Confirmar'));
@@ -369,6 +380,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const ValueKey('field-quantity')), '10');
       await tester.enterText(find.byKey(const ValueKey('field-unitPrice')), '5');
+      // Discount and taxes are folded until asked for.
+      await tester.tap(find.byKey(const ValueKey('form-more')));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const ValueKey('field-ipiPercent')), '10');
       await tester.enterText(find.byKey(const ValueKey('field-dueDate')), '20/12/2026');
       await tester.tap(find.text('Salvar'));
@@ -403,6 +417,11 @@ void main() {
       expect(find.text('Total: R\$ 55,00'), findsOneWidget);
       await tester.tap(find.text('Emitir'));
       await tester.pumpAndSettle();
+      // Issuing names the supplier and the total first.
+      expect(find.text('Emitir o pedido de compra?'), findsOneWidget);
+      expect(env.log.where((r) => r.method == 'POST'), isEmpty);
+      await tester.tap(find.byKey(const ValueKey('confirm-step')));
+      await tester.pumpAndSettle();
       final b = env.body(env.last('POST', '/api/purchase-orders'));
       expect(b['supplierId'], 1);
       expect(b['paymentTerms'], '28/56');
@@ -432,6 +451,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Total: R\$ 110,00'), findsOneWidget);
       await tester.tap(find.text('Emitir'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('confirm-step')));
       await tester.pumpAndSettle();
       expect(find.text('Pedido bloqueado: Fornecedor bloqueado'), findsOneWidget);
       expect(find.text('Novo pedido de compra'), findsOneWidget);

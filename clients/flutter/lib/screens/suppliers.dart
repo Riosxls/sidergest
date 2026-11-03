@@ -89,7 +89,13 @@ class _SupplierScreenState extends State<SupplierScreen> {
       readOnly: !widget.session.canWrite,
       onSubmit: (b) async => await widget.session.api.put('${suppliers.path}/$id', b) as Map<String, dynamic>?,
     );
-    if (r != null && r['_deleted'] != true && r['id'] != null) setState(() => _s = r);
+    if (!mounted) return;
+    // A deleted supplier has no page to stay on.
+    if (r != null && r['_deleted'] == true) {
+      unawaited(Navigator.of(context).maybePop());
+    } else if (r != null && r['id'] != null) {
+      setState(() => _s = r);
+    }
   }
 
   @override
@@ -118,8 +124,8 @@ class _SupplierScreenState extends State<SupplierScreen> {
             PerformanceView(session: s, supplierId: id),
             _SupplierMaterials(session: s, supplierId: id),
             OverdueScreen(session: s, supplierId: id),
-            OrdersScreen(session: s, supplierId: id),
-            ReceiptsView(session: s, query: {'supplierId': id}),
+            OrdersScreen(session: s, supplierId: id, supplierName: '${_s['name']}'),
+            ReceiptsView(session: s, query: {'supplierId': id}, allowNew: true, supplierId: id, supplierName: '${_s['name']}'),
           ],
         ),
       ),
