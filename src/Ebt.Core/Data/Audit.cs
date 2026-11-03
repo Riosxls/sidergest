@@ -3,6 +3,7 @@ using Ebt.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Ebt.Core.Data;
 
@@ -43,12 +44,20 @@ public sealed class AuditInterceptor(ICurrentUser user) : SaveChangesInterceptor
 
     /// <summary>
     /// Transactional documents whose full edits are not logged (they keep their own history) but whose status changes must show who made them:
-    /// production orders (release, stop, cancel, close) and quality certificates (issue, cancel, delete).
+    /// production orders (release, stop, cancel, close), quality certificates (issue, cancel, delete), and the sales, purchasing, fiscal and stock
+    /// documents. The listed fields are what a Status row carries when they change and what a Delete row records (so the number of a deleted quote
+    /// stays traceable); stock documents are never edited, their only change is being reversed.
     /// </summary>
     private static readonly Dictionary<Type, string[]> Transitions = new()
     {
         [typeof(ProductionOrder)] = ["Status", "StatusReason"],
-        [typeof(QualityCertificate)] = ["Status"]
+        [typeof(QualityCertificate)] = ["Status"],
+        [typeof(Quote)] = ["Status", "Reference"],
+        [typeof(SalesOrder)] = ["Status", "StatusReason", "Reference"],
+        [typeof(Delivery)] = ["Status", "Reference"],
+        [typeof(PurchaseOrder)] = ["Status", "Number"],
+        [typeof(FiscalDocument)] = ["Status", "Series", "Number"],
+        [typeof(StockDocument)] = ["Reversed", "Reference"]
     };
 
     private static readonly HashSet<string> Hidden = ["PasswordHash", "TokenVersion", "FailedLogins", "LockedUntil", "xmin", "NextNumber", "LastActivityAt"];
@@ -57,38 +66,88 @@ public sealed class AuditInterceptor(ICurrentUser user) : SaveChangesInterceptor
     private readonly List<(EntityEntry Entry, Dictionary<string, object?> Values)> pendingInserts = [];
     private bool writing;
 
+    // Insert rows need the generated keys, so they are written by a second SaveChanges after the first one. When the caller has no transaction of
+    // its own, this one wraps both: the entity and its audit row commit together or not at all.
+    private IDbContextTransaction? ownTransaction;
+
     public static bool IsAudited(Type type) => Audited.Contains(type);
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
-        if (eventData.Context is { } ctx && !writing) Capture(ctx);
+        if (eventData.Context is { } ctx && !writing)
+        {
+            Capture(ctx);
+            if (pendingInserts.Count > 0 && ctx.Database.CurrentTransaction is null) ownTransaction = ctx.Database.BeginTransaction();
+        }
         return result;
     }
 
-    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken ct = default)
+    public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken ct = default)
     {
-        if (eventData.Context is { } ctx && !writing) Capture(ctx);
-        return ValueTask.FromResult(result);
+        if (eventData.Context is { } ctx && !writing)
+        {
+            Capture(ctx);
+            if (pendingInserts.Count > 0 && ctx.Database.CurrentTransaction is null) ownTransaction = await ctx.Database.BeginTransactionAsync(ct);
+        }
+        return result;
     }
 
     public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
     {
-        if (eventData.Context is { } ctx && pendingInserts.Count > 0 && !writing) FlushInserts(ctx).GetAwaiter().GetResult();
+        if (eventData.Context is { } ctx && !writing)
+        {
+            try
+            {
+                if (pendingInserts.Count > 0) FlushInserts(ctx).GetAwaiter().GetResult();
+                ownTransaction?.Commit();
+            }
+            catch
+            {
+                ownTransaction?.Rollback();
+                throw;
+            }
+            finally { EndOwnTransaction(); }
+        }
         return result;
     }
 
     public override async ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result, CancellationToken ct = default)
     {
-        if (eventData.Context is { } ctx && pendingInserts.Count > 0 && !writing) await FlushInserts(ctx, ct);
+        if (eventData.Context is { } ctx && !writing)
+        {
+            try
+            {
+                if (pendingInserts.Count > 0) await FlushInserts(ctx, ct);
+                if (ownTransaction is { } tx) await tx.CommitAsync(ct);
+            }
+            catch
+            {
+                if (ownTransaction is { } tx) await tx.RollbackAsync(CancellationToken.None);
+                throw;
+            }
+            finally { EndOwnTransaction(); }
+        }
         return result;
     }
 
-    public override void SaveChangesFailed(DbContextErrorEventData eventData) => pendingInserts.Clear();
-
-    public override Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken ct = default)
+    public override void SaveChangesFailed(DbContextErrorEventData eventData)
     {
         pendingInserts.Clear();
-        return Task.CompletedTask;
+        try { ownTransaction?.Rollback(); }
+        finally { EndOwnTransaction(); }
+    }
+
+    public override async Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken ct = default)
+    {
+        pendingInserts.Clear();
+        try { if (ownTransaction is { } tx) await tx.RollbackAsync(CancellationToken.None); }
+        finally { EndOwnTransaction(); }
+    }
+
+    private void EndOwnTransaction()
+    {
+        ownTransaction?.Dispose();
+        ownTransaction = null;
     }
 
     private void Capture(DbContext ctx)

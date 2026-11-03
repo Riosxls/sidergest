@@ -33,6 +33,7 @@ public sealed class ApiFixture : IAsyncLifetime
             .UseSetting("Database:MigrateOnStartup", "true")
             .UseSetting("Logging:LogLevel:Default", Environment.GetEnvironmentVariable("EBT_TEST_LOG") ?? "None")
             .UseSetting("RateLimit:LoginPerMinute", "100000")
+            .UseSetting("Auth:UserCacheSeconds", "0") // tests change user rows behind the API's back
             .UseSetting("Bootstrap:AdminUser", AdminUser)
             .UseSetting("Bootstrap:AdminPassword", AdminPassword));
         factory.CreateClient().Dispose();

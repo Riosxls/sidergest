@@ -7,7 +7,8 @@ namespace Ebt.Core.Viability;
 
 public static class ViabilityRules
 {
-    private static readonly SalesOrderStatus[] Counted = [SalesOrderStatus.Created, SalesOrderStatus.Released, SalesOrderStatus.PartiallyShipped, SalesOrderStatus.Shipped, SalesOrderStatus.Delivered];
+    /// <summary>Order statuses that use up one of a study's allowed orders.</summary>
+    public static readonly SalesOrderStatus[] Counted = [SalesOrderStatus.Created, SalesOrderStatus.Released, SalesOrderStatus.PartiallyShipped, SalesOrderStatus.Shipped, SalesOrderStatus.Delivered];
 
     public static async Task<Dictionary<int, int>> UsedOrdersAsync(EbtDbContext db, IReadOnlyCollection<int> studyIds, int? excludeOrderId, CancellationToken ct)
     {

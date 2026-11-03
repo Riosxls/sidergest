@@ -79,18 +79,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
         ClockSkew = TimeSpan.FromSeconds(jwt.ClockSkewSeconds)
     };
 });
-builder.Services.AddAuthorization(Access.Register);
-
-builder.Services.AddRateLimiter(o =>
+builder.Services.AddAuthorization(o =>
 {
-    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    var perMinute = builder.Configuration.GetValue("RateLimit:LoginPerMinute", 10);
-    o.AddPolicy(Policies.LoginLimiter, ctx => RateLimitPartition.GetFixedWindowLimiter(ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = perMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
-    // Signed-in account actions get their own bucket so repeated clicks cannot lock the login page of the same IP.
-    o.AddPolicy(Policies.AccountLimiter, ctx => RateLimitPartition.GetFixedWindowLimiter(ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = perMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    Access.Register(o);
+    // An endpoint without its own policy still needs a signed-in user; the few public ones (login, refresh, logout, health) say AllowAnonymous.
+    o.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
 });
+builder.Services.AddSingleton<UserCache>();
+
+builder.Services.AddAppRateLimiter(builder.Configuration);
+// The API protects nothing with ASP.NET data protection (JWT and hashed refresh tokens only), so its keys would be unused: silence the
+// "ephemeral key repository" warnings that a read-only container logs instead of mounting a writable key volume.
+builder.Logging.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
 if (builder.Configuration.GetValue("Proxy:Trusted", false))
     builder.Services.Configure<ForwardedHeadersOptions>(o =>
     {
@@ -102,7 +102,7 @@ if (builder.Configuration.GetValue("Proxy:Trusted", false))
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
 {
     var origins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? [];
-    if (origins.Length > 0) p.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().WithExposedHeaders("ETag");
+    if (origins.Length > 0) p.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().WithExposedHeaders("ETag", IdempotencyMiddleware.ReplayHeader);
 }));
 
 builder.Services.AddEndpointsApiExplorer();
@@ -128,9 +128,11 @@ app.Use(async (ctx, next) =>
     await next();
 });
 app.UseCors();
+app.UseLoginUsernameKey();
+app.UseAuthentication(); // before the limiter so signed-in actions can be limited per user
 app.UseRateLimiter();
-app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<IdempotencyMiddleware>();
 
 if (app.Configuration.GetValue("Swagger:Enabled", app.Environment.IsDevelopment()))
 {

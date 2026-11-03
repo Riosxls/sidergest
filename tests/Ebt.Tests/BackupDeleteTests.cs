@@ -42,11 +42,24 @@ public class BackupDeleteTests(ApiFixture api)
         return (host, dir);
     }
 
-    private static Task<HttpResponseMessage> Delete(HttpClient c, string? file, string? confirm = "EXCLUIR") =>
-        c.PostAsJsonAsync(Url + "/delete", new SystemEndpoints.DeleteRequest(file, confirm));
+    private static Task<HttpResponseMessage> Delete(HttpClient c, string? file, string? confirm = "EXCLUIR", string? password = ApiFixture.AdminPassword) =>
+        c.PostAsJsonAsync(Url + "/delete", new SystemEndpoints.DeleteRequest(file, confirm, password));
 
     private static async Task<SystemEndpoints.BackupListResponse> State(HttpClient c) =>
         (await c.GetFromJsonAsync<SystemEndpoints.BackupListResponse>(Url, ApiFixture.Json))!;
+
+    [Fact]
+    public async Task Deleting_asks_for_the_admin_password_again()
+    {
+        var (admin, dir) = await Setup();
+        try
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, (await Delete(admin, Newest, password: "not-the-password")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await Delete(admin, Newest, password: null)).StatusCode);
+            Assert.Equal(HttpStatusCode.Accepted, (await Delete(admin, Newest)).StatusCode);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
 
     [Fact]
     public async Task Deleting_is_admin_only()
@@ -118,7 +131,7 @@ public class BackupDeleteTests(ApiFixture api)
             Assert.Equal(HttpStatusCode.Conflict, (await Delete(admin, Newest)).StatusCode);
             File.WriteAllText(Path.Combine(dir, "progress.json"), ProgressJson(false));
 
-            var restore = await admin.PostAsJsonAsync(Url + "/restore", new SystemEndpoints.RestoreRequest(Older, "RESTAURAR"));
+            var restore = await admin.PostAsJsonAsync(Url + "/restore", new SystemEndpoints.RestoreRequest(Older, "RESTAURAR", ApiFixture.AdminPassword));
             Assert.Equal(HttpStatusCode.Accepted, restore.StatusCode);
             Assert.Equal(HttpStatusCode.Conflict, (await Delete(admin, Newest)).StatusCode); // restore pending
             (await admin.PostAsync(Url + "/restore/cancel", null)).EnsureSuccessStatusCode();

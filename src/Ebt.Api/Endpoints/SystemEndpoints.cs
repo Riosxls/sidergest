@@ -83,8 +83,8 @@ public static class SystemEndpoints
     public record DeleteResult(bool Ok, string? Message, string? File, DateTimeOffset? FinishedAt);
     public record DeleteState(DateTimeOffset? RequestedAt, string? File, DeleteResult? Result);
     public record BackupListResponse(List<BackupItem> Items, DateTimeOffset? ListedAt, RestoreState Restore, DeleteState Delete);
-    public record DeleteRequest(string? File, string? Confirm);
-    public record RestoreRequest(string? File, string? Confirm);
+    public record DeleteRequest(string? File, string? Confirm, string? Password = null);
+    public record RestoreRequest(string? File, string? Confirm, string? Password = null);
 
     private static readonly System.Text.RegularExpressions.Regex DumpName = new("^ebt-[A-Za-z0-9-]+-[0-9]{8}-[0-9]{6}[.]dump$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
@@ -204,7 +204,7 @@ public static class SystemEndpoints
 
         var backups = app.MapGroup("/api/admin/backups").WithTags("System").RequireAuthorization(Policies.Admin);
         backups.MapGet("/", async (EbtDbContext db, IConfiguration config, CancellationToken ct) => Results.Ok(BackupList(await LoadBackupSettings(db, ct), config["Backup:Directory"])));
-        backups.MapPost("/restore", async (RestoreRequest r, EbtDbContext db, IConfiguration config, CancellationToken ct) =>
+        backups.MapPost("/restore", async (RestoreRequest r, EbtDbContext db, IConfiguration config, ClaimsPrincipal principal, CancellationToken ct) =>
         {
             var dir = config["Backup:Directory"];
             var (items, _) = ScanBackupList(dir);
@@ -215,6 +215,8 @@ public static class SystemEndpoints
                 .Require(!shaped || items.Any(i => i.Name == name), "file", "Backup not found in the list published by the backup agent")
                 .Require(r.Confirm == "RESTAURAR", "confirm", "Type RESTAURAR to confirm");
             if (errors.Count > 0) return Results.ValidationProblem(errors);
+            // Overwrites the live database: ask for the admin password again, like the data reset.
+            if (await AuthEndpoints.ReauthAsync(db, principal, r.Password, ct) is { } denied) return denied;
             var s = await LoadBackupSettings(db, ct);
             if (ScanProgress(dir) is { Running: true }) return Results.Problem("A backup or restore is running; wait for it to finish", statusCode: StatusCodes.Status409Conflict);
             if (RestorePending(s, ScanRestoreResult(dir))) return Results.Problem("A restore is already requested and has not finished", statusCode: StatusCodes.Status409Conflict);
@@ -223,7 +225,7 @@ public static class SystemEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Json(BackupList(s, dir), new JsonSerializerOptions(JsonSerializerDefaults.Web), statusCode: StatusCodes.Status202Accepted);
         });
-        backups.MapPost("/delete", async (DeleteRequest r, EbtDbContext db, IConfiguration config, CancellationToken ct) =>
+        backups.MapPost("/delete", async (DeleteRequest r, EbtDbContext db, IConfiguration config, ClaimsPrincipal principal, CancellationToken ct) =>
         {
             var dir = config["Backup:Directory"];
             var (items, _) = ScanBackupList(dir);
@@ -234,6 +236,7 @@ public static class SystemEndpoints
                 .Require(!shaped || items.Any(i => i.Name == name), "file", "Backup not found in the list published by the backup agent")
                 .Require(r.Confirm == "EXCLUIR", "confirm", "Type EXCLUIR to confirm");
             if (errors.Count > 0) return Results.ValidationProblem(errors);
+            if (await AuthEndpoints.ReauthAsync(db, principal, r.Password, ct) is { } denied) return denied;
             var s = await LoadBackupSettings(db, ct);
             if (ScanProgress(dir) is { Running: true }) return Results.Problem("A backup or restore is running; wait for it to finish", statusCode: StatusCodes.Status409Conflict);
             if (RestorePending(s, ScanRestoreResult(dir))) return Results.Problem("A restore is requested and has not finished", statusCode: StatusCodes.Status409Conflict);

@@ -50,15 +50,19 @@ public static class ViabilityEndpoints
             if (quoteId is { } qi) x = x.Where(f => f.QuoteId == qi);
             if (productId is { } pi) x = x.Where(f => f.ProductId == pi || f.ProductId == null);
             if (Has(q)) x = x.Where(f => EF.Functions.ILike(f.Reference, Like(q!)) || EF.Functions.ILike(f.Title, Like(q)) || EF.Functions.ILike(f.Customer!.Name, Like(q)));
-            var rows = await x.OrderByDescending(f => f.Number).Select(f => new { F = f, Customer = f.Customer!.Name, Quote = f.Quote == null ? null : f.Quote.Reference, Product = f.Product == null ? null : f.Product.Code }).ToListAsync(ct);
-            var used = await ViabilityRules.UsedOrdersAsync(db, rows.Select(r => r.F.Id).ToList(), null, ct);
-            var items = rows.Select(r => new FeasibilitySummaryOut(r.F.Id, r.F.Number, r.F.Reference, r.F.QuoteId, r.Quote, r.F.CustomerId, r.Customer, r.F.ProductId, r.Product, r.F.Title, r.F.Status,
-                Signed(r.F), r.F.OrdersAllowed, used.GetValueOrDefault(r.F.Id), r.F.MonthlyConsumptionKg, r.F.CreatedAt));
-            if (usable == true) items = items.Where(i => i.Status == FeasibilityStatus.Approved && i.OrdersUsed < i.OrdersAllowed);
-            var list = items.ToList();
+            // "Usable" = approved and still below the allowed orders; the count is the same rule as ViabilityRules.UsedOrdersAsync, evaluated in SQL so paging stays in the database.
+            if (usable == true)
+                x = x.Where(f => f.Status == FeasibilityStatus.Approved
+                    && f.OrdersAllowed > db.SalesOrderLines.Where(l => l.FeasibilityStudyId == f.Id && ViabilityRules.Counted.Contains(l.Order!.Status)).Select(l => l.OrderId).Distinct().Count());
             var s = Math.Max(skip ?? 0, 0);
             var n = Math.Clamp(take ?? 50, 1, 500);
-            return Results.Ok(new Page<FeasibilitySummaryOut>(list.Skip(s).Take(n).ToList(), list.Count, s, n));
+            var total = await x.CountAsync(ct);
+            var rows = await x.OrderByDescending(f => f.Number).Skip(s).Take(n)
+                .Select(f => new { F = f, Customer = f.Customer!.Name, Quote = f.Quote == null ? null : f.Quote.Reference, Product = f.Product == null ? null : f.Product.Code }).ToListAsync(ct);
+            var used = await ViabilityRules.UsedOrdersAsync(db, rows.Select(r => r.F.Id).ToList(), null, ct);
+            var items = rows.Select(r => new FeasibilitySummaryOut(r.F.Id, r.F.Number, r.F.Reference, r.F.QuoteId, r.Quote, r.F.CustomerId, r.Customer, r.F.ProductId, r.Product, r.F.Title, r.F.Status,
+                Signed(r.F), r.F.OrdersAllowed, used.GetValueOrDefault(r.F.Id), r.F.MonthlyConsumptionKg, r.F.CreatedAt)).ToList();
+            return Results.Ok(new Page<FeasibilitySummaryOut>(items, total, s, n));
         });
 
         g.MapGet("/{id:int}", async (int id, EbtDbContext db, CancellationToken ct) =>

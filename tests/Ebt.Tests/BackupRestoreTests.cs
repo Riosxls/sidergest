@@ -32,8 +32,22 @@ public class BackupRestoreTests(ApiFixture api)
         return (host, dir);
     }
 
-    private static Task<HttpResponseMessage> Restore(HttpClient c, string? file, string? confirm = "RESTAURAR") =>
-        c.PostAsJsonAsync(Url + "/restore", new SystemEndpoints.RestoreRequest(file, confirm));
+    private static Task<HttpResponseMessage> Restore(HttpClient c, string? file, string? confirm = "RESTAURAR", string? password = ApiFixture.AdminPassword) =>
+        c.PostAsJsonAsync(Url + "/restore", new SystemEndpoints.RestoreRequest(file, confirm, password));
+
+    [Fact]
+    public async Task Restoring_asks_for_the_admin_password_again()
+    {
+        var (admin, dir) = await Setup();
+        try
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, (await Restore(admin, Newest, password: "not-the-password")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await Restore(admin, Newest, password: null)).StatusCode);
+            Assert.Null((await admin.GetFromJsonAsync<SystemEndpoints.BackupListResponse>(Url, ApiFixture.Json))!.Restore.RequestedAt);
+            Assert.Equal(HttpStatusCode.Accepted, (await Restore(admin, Newest)).StatusCode); // the right password also clears the failure count
+        }
+        finally { Directory.Delete(dir, true); }
+    }
 
     [Fact]
     public async Task Everything_is_admin_only()
