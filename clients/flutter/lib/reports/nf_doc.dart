@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -9,6 +8,7 @@ import 'package:printing/printing.dart';
 import '../api.dart';
 import '../entities.dart';
 import '../screens/customers.dart' show fmtDocument;
+import 'pdf_theme.dart';
 
 // Dados do emitente conforme os modelos de NF-e. Ajustar quando o cadastro da empresa existir no sistema.
 const _issuerName = 'Bst Ind Com de Produtos Metalurgicos Ltda';
@@ -24,7 +24,7 @@ String _s(Object? v) => v == null ? '' : '$v';
 num _n(Object? v) => v is num ? v : num.tryParse('$v') ?? 0;
 String _money(num v) => fmtNum(v, 2);
 String _qtd(num v, int d) => fmtNum(v, d);
-String _date(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+String _date(DateTime d) => fmtDayOf(d);
 
 /// Campos preenchidos pelo faturamento (a NF-e é emitida fora do sistema).
 class NfFiscal {
@@ -212,11 +212,7 @@ pw.Widget _title(String t) => pw.Padding(
 Future<Uint8List> _render(_Nf nf) async {
   final doc = pw.Document(
     title: 'NF ${nf.fiscal.number}',
-    theme: pw.ThemeData.withFont(
-      base: pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-regular.ttf')),
-      bold: pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-bold.ttf')),
-      italic: pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-regular.ttf')),
-    ),
+    theme: await pdfTheme(italicAsRegular: true),
   );
   final now = DateTime.now();
   final f = nf.fiscal;
@@ -446,7 +442,7 @@ Future<Uint8List> _render(_Nf nf) async {
       ),
     ),
   );
-  return doc.save();
+  return savePdf(doc);
 }
 
 pw.Widget _cellBox(String label, String value, {bool bold = false, double size = 8}) => pw.Container(

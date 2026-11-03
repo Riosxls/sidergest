@@ -1,10 +1,10 @@
 import 'dart:typed_data';
 
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../entities.dart';
+import 'pdf_theme.dart';
 
 /// Letterhead of each company, as printed on the paper certificates.
 const _letterhead = {
@@ -65,10 +65,7 @@ pw.Widget _field(String label, String value) => pw.Padding(
 
 /// Quality certificate in the layout of the spreadsheets used until now (one A4 page).
 Future<Uint8List> buildCertificatePdf(Map<String, dynamic> c) async {
-  final theme = pw.ThemeData.withFont(
-    base: pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-regular.ttf')),
-    bold: pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-bold.ttf')),
-  );
+  final theme = await pdfTheme();
   final measures = (c['measures'] as List).cast<Map<String, dynamic>>();
   List<List<String>> rows(String kind) => [
     for (final m in measures.where((m) => m['kind'] == kind)) [_s(m['name']), _dash(m['specified']), _dash(m['found'])],
@@ -212,5 +209,5 @@ Future<Uint8List> buildCertificatePdf(Map<String, dynamic> c) async {
       ),
     ),
   );
-  return doc.save();
+  return savePdf(doc);
 }

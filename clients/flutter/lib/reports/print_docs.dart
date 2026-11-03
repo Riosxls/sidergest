@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -10,6 +9,7 @@ import '../entities.dart';
 import '../labels.dart';
 import '../screens/customers.dart' show fmtDocument;
 import '../widgets/print_panel.dart' show printPdf;
+import 'pdf_theme.dart';
 
 /// Dados da empresa no cabeçalho do orçamento, lidos dos parâmetros fiscais (`GET /api/fiscal/settings`). O que não foi cadastrado não é impresso:
 /// nada de CNPJ ou endereço inventado numa folha que vai ao cliente.
@@ -66,10 +66,7 @@ const _generalConditions =
 /// Theme with the embedded fonts, for documents built outside this file.
 Future<pw.ThemeData> printTheme() => _theme();
 
-Future<pw.ThemeData> _theme() async => pw.ThemeData.withFont(
-  base: pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-regular.ttf')),
-  bold: pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-bold.ttf')),
-);
+Future<pw.ThemeData> _theme() => pdfTheme();
 
 pw.TextStyle _b([double size = 9]) => pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: size);
 pw.TextStyle _n([double size = 9]) => pw.TextStyle(fontSize: size);
@@ -174,7 +171,7 @@ pw.Widget _footer(pw.Context c) => pw.Align(alignment: pw.Alignment.centerRight,
 Future<Uint8List> _build(String title, List<pw.Widget> Function() body, {PdfPageFormat? format, pw.Widget Function(pw.Context)? header}) async {
   final doc = pw.Document(title: title, theme: await _theme());
   doc.addPage(pw.MultiPage(pageFormat: format ?? PdfPageFormat.a4, margin: const pw.EdgeInsets.all(28), footer: _footer, header: header, build: (_) => body()));
-  return doc.save();
+  return savePdf(doc);
 }
 
 Future<Map<String, dynamic>?> _customer(ApiClient api, Object? id) async {
@@ -402,7 +399,7 @@ Future<Uint8List> _forms(String title, List<pw.Widget> pages) async {
   for (final p in pages) {
     doc.addPage(pw.Page(pageFormat: PdfPageFormat.a4, margin: const pw.EdgeInsets.fromLTRB(36, 28, 36, 28), build: (_) => p));
   }
-  return doc.save();
+  return savePdf(doc);
 }
 
 /// Diâmetro, espessura e comprimento da especificação da linha do pedido ("Ø25,4 × e1,5 × c6000"), ou vazio.

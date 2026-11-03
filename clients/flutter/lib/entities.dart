@@ -181,6 +181,12 @@ String fmtNum(Object? v, [int decimals = 2]) {
 
 String fmtMoney(Object? v) => v == null ? '' : 'R\$ ${fmtNum(v)}';
 
+/// Plain pt-BR decimal for an editable field: comma, no thousands separator (so it parses back).
+String fmtDecimalInput(num v, [int decimals = 2]) => v.toStringAsFixed(decimals).replaceAll('.', ',');
+
+/// dd/mm/yyyy of a date value.
+String fmtDayOf(DateTime d) => '${_two(d.day)}/${_two(d.month)}/${d.year}';
+
 String fmtPeriod(Object? p) => p is int ? '${_two(p % 100)}/${p ~/ 100}' : fmt(p);
 
 /// Reads a typed number the Brazilian way: "1.234,56" is 1234.56 and "1.500" is 1500 (dots are thousands separators when

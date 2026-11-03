@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -9,6 +8,7 @@ import 'package:printing/printing.dart';
 import '../api.dart';
 import '../entities.dart';
 import '../screens/customers.dart' show fmtDocument;
+import 'pdf_theme.dart';
 
 /// DANFE (Documento Auxiliar da NF-e) of an NF already recorded by the API (`GET /api/fiscal/documents/{id}`), with the issuer data from
 /// `GET /api/fiscal/settings`. Everything printed comes from the stored document: access key, protocol, items, totals and duplicatas.
@@ -59,9 +59,7 @@ pw.Widget _title(String t) => pw.Padding(
 
 /// DANFE PDF of an NF-e document [d] for the [issuer]; marked when cancelled, simulated or issued in homologation.
 Future<Uint8List> buildDanfePdf(Map<String, dynamic> d, Map<String, dynamic> issuer) async {
-  final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-regular.ttf'));
-  final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-bold.ttf'));
-  final doc = pw.Document(title: 'DANFE NF ${d['number']}', theme: pw.ThemeData.withFont(base: regular, bold: bold, italic: regular));
+  final doc = pw.Document(title: 'DANFE NF ${d['number']}', theme: await pdfTheme(italicAsRegular: true));
 
   final key = _s(d['accessKey']).replaceAll(' ', '');
   final status = _s(d['status']);
@@ -289,7 +287,7 @@ Future<Uint8List> buildDanfePdf(Map<String, dynamic> d, Map<String, dynamic> iss
       footer: (ctx) => pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Página ${ctx.pageNumber}/${ctx.pagesCount}', style: _val(6))),
     ),
   );
-  return doc.save();
+  return savePdf(doc);
 }
 
 /// Fetches the issuer data, builds the DANFE of [d] (the document JSON from the API) and opens the print/save dialog.

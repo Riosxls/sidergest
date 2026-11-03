@@ -136,7 +136,13 @@ class Session extends ChangeNotifier {
 
   bool get _refreshValid => api.refreshToken != null && refreshExpiresAt != null && refreshExpiresAt!.isAfter(DateTime.now());
 
-  Future<void> restore() async {
+  /// Reads preferences and the stored session, then (unless [network] is false) refreshes them from the server; see [restoreLocal] and [refreshRemote].
+  Future<void> restore({bool network = true}) async {
+    await _restoreLocal();
+    if (network) await refreshRemote();
+  }
+
+  Future<void> _restoreLocal() async {
     try {
       final p = await SharedPreferences.getInstance();
       api.baseUrl = p.getString('apiUrl') ?? defaultApiUrl;
@@ -174,6 +180,23 @@ class Session extends ChangeNotifier {
         permissions = (jsonDecode(v['permissions'] ?? '[]') as List).cast<String>().toSet();
         expiresAt = exp;
         refreshExpiresAt = rExp;
+      }
+    } catch (e) {
+      debugPrint('session: Local storage is best effort; the in-memory value stays: $e');
+      // Local storage is best effort; the in-memory value stays.
+    }
+    notifyListeners();
+  }
+
+  /// Everything [restore] does without the network: preferences and the stored session (with its stored permissions). The app can show right after this.
+  Future<void> restoreLocal() => restore(network: false);
+
+  /// The network half of [restore]: renews an expired access token, re-reads role and permissions from the server and sends the idle heartbeat.
+  /// A refused refresh signs out (the screen then falls back to the login page). Safe to run after the first frame.
+  Future<void> refreshRemote() async {
+    try {
+      if (api.token != null) {
+        final accessValid = expiresAt != null && expiresAt!.isAfter(DateTime.now());
         if (!accessValid && !await api.refresh() && api.refreshRejected) await logout();
         if (api.token != null) {
           await _syncProfile();
@@ -182,8 +205,7 @@ class Session extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('session: Local storage is best effort; the in-memory value stays: $e');
-      // Local storage is best effort; the in-memory value stays.
+      debugPrint('session: background refresh failed, the stored session stays: $e');
     }
     notifyListeners();
   }

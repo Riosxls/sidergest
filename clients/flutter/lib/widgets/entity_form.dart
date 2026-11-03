@@ -130,6 +130,8 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
   bool _more = false;
   String? _message;
   bool _busy = false;
+  String? _idemKey;
+  String? _idemBody;
   late final String _initial;
   bool _recovered = false;
   bool _lockSaved = false;
@@ -194,7 +196,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
               ? (v as String? ?? '')
               : (f.type == FieldType.date
                     ? fmtDay(v)
-                    : (f.type == FieldType.time ? fmtTime(v) : (f.money && v is num ? v.toStringAsFixed(2).replaceAll('.', ',') : fmt(v)))),
+                    : (f.type == FieldType.time ? fmtTime(v) : (f.money && v is num ? fmtDecimalInput(v) : fmt(v)))),
         );
       } else {
         _values[f.key] = f.type == FieldType.boolean ? (v as bool? ?? false) : v;
@@ -267,10 +269,16 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
     });
     if (body == null) return;
     setState(() => _busy = true);
+    // One key per submit attempt: kept while the same content is resubmitted after a lost answer, dropped once the form is edited or the server refused.
+    final signature = jsonEncode(body);
+    if (_idemKey == null || _idemBody != signature) _idemKey = IdempotencyScope.newKey();
+    _idemBody = signature;
     try {
-      final result = await widget.onSubmit(body);
+      final result = await IdempotencyScope.run(_idemKey!, () => widget.onSubmit(body));
+      _idemKey = null;
       if (mounted) Navigator.pop(context, {...(result ?? {...body, '_labels': Map<String, String>.of(_labels)}), if (again) '_again': true});
     } on ApiException catch (e) {
+      if (!e.outcomeUnknown) _idemKey = null;
       setState(() {
         _serverErrors = e.fieldErrors.map((k, v) => MapEntry(k.isEmpty ? k : k[0].toLowerCase() + k.substring(1), v));
         _message = e.message;

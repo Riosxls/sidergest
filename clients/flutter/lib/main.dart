@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -13,8 +15,10 @@ import 'widgets/record_nav.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final session = Session();
-  await session.restore();
+  // Local storage only: the app shows at once with the stored session and permissions; the server refresh (token, role, permissions) follows in the background.
+  await session.restoreLocal();
   runApp(EbtApp(session: session));
+  unawaited(session.refreshRemote());
 }
 
 /// Root widget: wires the session, theme and the login/shell navigation.
@@ -32,20 +36,40 @@ class _EbtAppState extends State<EbtApp> {
   final _escObserver = EscRouteObserver();
   final _trail = RecordTrail();
   bool _wasLoggedIn = false;
+  late _Appearance _appearance;
 
   Session get session => widget.session;
+
+  _Appearance _readAppearance() => (
+    themeMode: session.themeMode,
+    comfortable: session.comfortable,
+    highContrast: session.highContrast,
+    reduceMotion: session.reduceMotion,
+    textScale: session.textScale,
+    loggedIn: session.loggedIn,
+    username: session.username,
+  );
 
   @override
   void initState() {
     super.initState();
     _wasLoggedIn = session.loggedIn;
+    _appearance = _readAppearance();
     session.addListener(_closeScreensOnSignOut);
+    session.addListener(_onSession);
   }
 
   @override
   void dispose() {
     session.removeListener(_closeScreensOnSignOut);
+    session.removeListener(_onSession);
     super.dispose();
+  }
+
+  /// The session notifies for many reasons (permissions, idle settings, tokens); MaterialApp only rebuilds when something it shows changed.
+  void _onSession() {
+    final now = _readAppearance();
+    if (now != _appearance) setState(() => _appearance = now);
   }
 
   /// Signing out (idle lock, expired session, manual) must not leave a pushed screen or dialog open over the login page.
@@ -60,9 +84,8 @@ class _EbtAppState extends State<EbtApp> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: session,
-      builder: (_, _) => MaterialApp(
+    return Builder(
+      builder: (_) => MaterialApp(
         title: 'MetaGest',
         navigatorKey: _navigatorKey,
         initialRoute: '/',
@@ -95,7 +118,24 @@ class _EbtAppState extends State<EbtApp> {
   }
 }
 
-ThemeData appTheme(Brightness brightness, {bool comfortable = false, bool highContrast = false, bool reduceMotion = false}) {
+/// What [MaterialApp] shows that comes from the session; the app rebuilds only when this changes.
+typedef _Appearance = ({
+  ThemeMode themeMode,
+  bool comfortable,
+  bool highContrast,
+  bool reduceMotion,
+  double textScale,
+  bool loggedIn,
+  String? username,
+});
+
+final _themeCache = <(Brightness, bool, bool, bool), ThemeData>{};
+
+/// The app theme; one instance per combination of brightness, density, contrast and motion, so repeated builds reuse it.
+ThemeData appTheme(Brightness brightness, {bool comfortable = false, bool highContrast = false, bool reduceMotion = false}) =>
+    _themeCache.putIfAbsent((brightness, comfortable, highContrast, reduceMotion), () => _buildTheme(brightness, comfortable, highContrast, reduceMotion));
+
+ThemeData _buildTheme(Brightness brightness, bool comfortable, bool highContrast, bool reduceMotion) {
   final cs = ColorScheme.fromSeed(seedColor: const Color(0xFF1F5F99), brightness: brightness, contrastLevel: highContrast ? 1.0 : 0.0);
   return ThemeData(
     colorScheme: cs,

@@ -3,13 +3,13 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../api.dart';
+import 'pdf_theme.dart';
 
 /// Visual kind of a row in a printed report.
 enum ReportRowKind { normal, group, subtotal, total, section }
@@ -54,10 +54,7 @@ class ReportDoc {
   }
 
   Future<Uint8List> toPdf() async {
-    final theme = pw.ThemeData.withFont(
-      base: pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-regular.ttf')),
-      bold: pw.Font.ttf(await rootBundle.load('assets/fonts/roboto-bold.ttf')),
-    );
+    final theme = await pdfTheme();
     final doc = pw.Document(title: title, theme: theme);
     const bold = pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8);
     const base = pw.TextStyle(fontSize: 8);
@@ -103,7 +100,7 @@ class ReportDoc {
         ],
       ),
     );
-    return doc.save();
+    return savePdf(doc);
   }
 }
 

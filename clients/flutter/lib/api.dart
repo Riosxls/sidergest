@@ -1,16 +1,24 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
 /// Error answer from the API: HTTP [status], a user-facing [message] and per-field validation messages in [fieldErrors].
 class ApiException implements Exception {
-  ApiException(this.status, this.message, [this.fieldErrors = const {}]);
+  ApiException(this.status, this.message, [this.fieldErrors = const {}, this.inProgress = false]);
 
   final int status;
   final String message;
   final Map<String, List<String>> fieldErrors;
+
+  /// The server answered 409 because an earlier attempt with the same idempotency key is still running.
+  final bool inProgress;
+
+  /// True when the write may have been applied although no definite answer arrived (lost connection, timeout, 5xx, previous attempt still running).
+  /// Only then may a retry reuse the idempotency key; after a definite refusal the next attempt is a new action.
+  bool get outcomeUnknown => status == 0 || status >= 500 || inProgress;
 
   @override
   String toString() => message;
@@ -27,6 +35,64 @@ class PageResult {
   final int total;
   final int skip;
   final int take;
+}
+
+/// Idempotency keys for write requests. A key identifies one user submit attempt; the server replays the stored answer when it sees the same key again.
+///
+/// [ApiClient] makes a fresh key per write call. A caller that may retry the same submit (a form whose request timed out) creates a base key with
+/// [newKey] and runs the submit inside [run]; the n-th write made inside gets `<base>-<n>`, so a retry that repeats the same calls repeats the same keys,
+/// while two different writes of one submit never share a key.
+class IdempotencyScope {
+  IdempotencyScope(this.key);
+
+  final String key;
+  int _n = 0;
+  static final _random = Random.secure();
+  static const _zoneKey = #metagestIdempotencyScope;
+
+  /// Random UUID v4.
+  static String newKey() {
+    final b = List<int>.generate(16, (_) => _random.nextInt(256));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+    return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
+  }
+
+  /// Runs [body]; every write [ApiClient] makes inside it (including after awaits) derives its key from [key].
+  static T run<T>(String key, T Function() body) => runZoned(body, zoneValues: {_zoneKey: IdempotencyScope(key)});
+
+  /// The key for the next write in the current scope, or null outside one.
+  static String? nextInScope() {
+    final s = Zone.current[_zoneKey] as IdempotencyScope?;
+    return s == null ? null : '${s.key}-${++s._n}';
+  }
+}
+
+/// Bounded map that forgets the least recently used entry beyond [capacity].
+class LruMap<K, V> {
+  LruMap(this.capacity);
+
+  final int capacity;
+  final _m = <K, V>{}; // insertion-ordered
+
+  int get length => _m.length;
+
+  V? operator [](K k) {
+    final v = _m.remove(k);
+    if (v != null) _m[k] = v;
+    return v;
+  }
+
+  void operator []=(K k, V v) {
+    _m.remove(k);
+    _m[k] = v;
+    while (_m.length > capacity) {
+      _m.remove(_m.keys.first);
+    }
+  }
+
+  void clear() => _m.clear();
 }
 
 /// HTTP client for the MetaGest API. Adds the bearer token, refreshes it silently on 401, sends the last seen version as `If-Match` on writes, and maps failures to [ApiException].
@@ -51,20 +117,24 @@ class ApiClient {
   Future<bool> Function()? onRefreshRejected;
   Future<bool>? _refreshing;
   final http.Client _http;
-  final _versions = <String, String>{};
+  final _versions = LruMap<String, String>(300);
   /// Auth endpoints that never trigger a silent refresh (a 401 there is a real answer); /api/auth/me and the rest may refresh.
   static const _noRefresh = ['/api/auth/login', '/api/auth/refresh', '/api/auth/logout'];
-  static final _idKey = RegExp(r'^(.*?/\d+)(?:[/?]|$)');
+  static final _inProgress = RegExp(r'idempot|request in progress|(a[cç][aã]o|requisi[cç][aã]o|opera[cç][aã]o) (anterior )?(ainda )?(est[aá] )?em andamento');
+  static final _idKey =RegExp(r'^(.*?/\d+)(?:[/?]|$)');
 
   static String? _versionKey(String path) => _idKey.firstMatch(path)?.group(1);
 
   void clearVersions() => _versions.clear();
 
-  Map<String, String> _writeHeaders(String path) {
+  Map<String, String> _writeHeaders(String path, String idempotencyKey) {
     final k = _versionKey(path);
     final tag = k == null ? null : _versions[k];
-    return {..._headers, 'If-Match': ?tag};
+    return {..._headers, 'If-Match': ?tag, 'Idempotency-Key': idempotencyKey};
   }
+
+  /// Explicit key, else the next one of the surrounding [IdempotencyScope], else a fresh one.
+  static String _keyFor(String? explicit) => explicit ?? IdempotencyScope.nextInScope() ?? IdempotencyScope.newKey();
 
   Uri _uri(String path, [Map<String, dynamic>? query]) {
     final base = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
@@ -76,11 +146,20 @@ class ApiClient {
 
   Future<dynamic> get(String path, [Map<String, dynamic>? query]) => _send(path, () => _http.get(_uri(path, query), headers: _headers));
 
-  Future<dynamic> post(String path, Object body) => _send(path, () => _http.post(_uri(path), headers: _writeHeaders(path), body: jsonEncode(body)), write: true);
+  Future<dynamic> post(String path, Object body, {String? idempotencyKey}) {
+    final key = _keyFor(idempotencyKey);
+    return _send(path, () => _http.post(_uri(path), headers: _writeHeaders(path, key), body: jsonEncode(body)), write: true);
+  }
 
-  Future<dynamic> put(String path, Object body) => _send(path, () => _http.put(_uri(path), headers: _writeHeaders(path), body: jsonEncode(body)), write: true);
+  Future<dynamic> put(String path, Object body, {String? idempotencyKey}) {
+    final key = _keyFor(idempotencyKey);
+    return _send(path, () => _http.put(_uri(path), headers: _writeHeaders(path, key), body: jsonEncode(body)), write: true);
+  }
 
-  Future<dynamic> delete(String path) => _send(path, () => _http.delete(_uri(path), headers: _writeHeaders(path)), write: true);
+  Future<dynamic> delete(String path, {String? idempotencyKey}) {
+    final key = _keyFor(idempotencyKey);
+    return _send(path, () => _http.delete(_uri(path), headers: _writeHeaders(path, key)), write: true);
+  }
 
   Future<PageResult> list(String path, {String? q, int skip = 0, int take = 50, Map<String, dynamic> query = const {}}) async {
     final r = await get(path, {...query, 'q': q, 'skip': skip, 'take': take});
@@ -100,12 +179,15 @@ class ApiClient {
   }
 
   /// Multipart upload of a single file; returns the decoded JSON response.
-  Future<dynamic> upload(String path, String field, String filename, Uint8List bytes) => _send(path, () async {
-    final req = http.MultipartRequest('POST', _uri(path))
-      ..headers.addAll({'Accept': 'application/json', if (token != null) 'Authorization': 'Bearer $token'})
-      ..files.add(http.MultipartFile.fromBytes(field, bytes, filename: filename));
-    return http.Response.fromStream(await _http.send(req));
-  }, write: true, timeout: transferTimeout);
+  Future<dynamic> upload(String path, String field, String filename, Uint8List bytes, {String? idempotencyKey}) {
+    final key = _keyFor(idempotencyKey);
+    return _send(path, () async {
+      final req = http.MultipartRequest('POST', _uri(path))
+        ..headers.addAll({'Accept': 'application/json', 'Idempotency-Key': key, if (token != null) 'Authorization': 'Bearer $token'})
+        ..files.add(http.MultipartFile.fromBytes(field, bytes, filename: filename));
+      return http.Response.fromStream(await _http.send(req));
+    }, write: true, timeout: transferTimeout);
+  }
 
   /// Raw bytes of a file endpoint. Goes through the same silent refresh as every other call, so a PDF opened after the access token expired still works.
   Future<Uint8List> download(String path) async {
@@ -203,6 +285,13 @@ class ApiClient {
         return ApiException(404, 'Registro não encontrado');
       case 429:
         return ApiException(429, 'Muitas tentativas em pouco tempo. Aguarde um instante e tente de novo.');
+      case 409:
+        // Same idempotency key while the first attempt still runs: like a timeout, the outcome is not known yet.
+        final text = utf8.decode(r.bodyBytes, allowMalformed: true).toLowerCase();
+        // Only the idempotency answer: other 409s ("Há recebimento em andamento") are business refusals and keep their own text.
+        if (_inProgress.hasMatch(text)) {
+          return ApiException(409, 'A ação anterior ainda está em andamento. Aguarde um instante e confira antes de repetir.', const {}, true);
+        }
     }
     try {
       final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;

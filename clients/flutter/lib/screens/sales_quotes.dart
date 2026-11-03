@@ -26,15 +26,16 @@ import '../widgets/record_shortcuts.dart';
 import '../widgets/record_skeleton.dart';
 import '../workdays.dart';
 import 'customers.dart';
+import 'quote_email_dialog.dart';
+import 'quote_pricing.dart';
 import 'sales_common.dart';
 import 'viability.dart';
 
-const _requestExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt'];
+// The pure pricing helpers and the e-mail dialog live in their own files; they stay reachable from here for the screens that import this one.
+export 'quote_email_dialog.dart';
+export 'quote_pricing.dart';
 
-String _fmtSize(Object? v) {
-  final n = v is num ? v : 0;
-  return n >= 1048576 ? '${(n / 1048576).toStringAsFixed(1).replaceAll('.', ',')} MB' : '${(n / 1024).ceil()} KB';
-}
+const _requestExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt'];
 
 /// Lets the user choose the customer's request file (PDF, image or text).
 Future<({String name, Uint8List bytes})?> pickRequestFile() async {
@@ -148,39 +149,6 @@ final salesLineColumns = [
 ];
 
 num _n(Object? v) => v is num ? v : 0;
-
-/// Quantity × unit price, plus IPI and ICMS amounts (both on the base value) when set.
-num lineEstimate(Map<String, dynamic> l) {
-  final base = _n(l['quantity']) * _n(l['unitPrice']);
-  return base + base * _n(l['ipiPercent']) / 100 + base * _n(l['icmsPercent']) / 100;
-}
-
-/// Products, IPI and ICMS of the lines that already have a price. The API total is products + IPI; the estimate adds ICMS on top.
-({num products, num ipi, num icms}) estimateParts(Iterable<Map<String, dynamic>> lines) {
-  num products = 0, ipi = 0, icms = 0;
-  for (final l in lines) {
-    final base = _n(l['quantity']) * _n(l['unitPrice']);
-    products += base;
-    ipi += base * _n(l['ipiPercent']) / 100;
-    icms += base * _n(l['icmsPercent']) / 100;
-  }
-  return (products: products, ipi: ipi, icms: icms);
-}
-
-/// Sales staff delete only a brand-new draft; an admin also clears drafts of any revision and quotes that ended without an order.
-bool canDeleteQuote(Session s, Object? status, int revision) =>
-    s.isAdmin ? const ['Draft', 'Cancelled', 'Rejected', 'Expired'].contains(status) : status == 'Draft' && revision == 0;
-
-/// Small alert text for a quote row/card: the most urgent thing the salesperson should know.
-String quoteAlert(Map<String, dynamic> e) => quoteAlerts(e).map((a) => a.text).join(' · ');
-
-/// Every alert a quote row has (a quote can both need an answer and be about to expire), with the tone and icon that mark it.
-List<({String text, Tone tone, IconData icon})> quoteAlerts(Map<String, dynamic> e) => [
-  if (e['status'] == 'PendingApproval' || e['needsApproval'] == true && e['status'] == 'Draft')
-    (text: 'Acima do limite', tone: Tone.warning, icon: Icons.gavel_outlined),
-  if (e['followUp'] == true) (text: 'Cobrar resposta', tone: Tone.warning, icon: Icons.mark_email_unread_outlined),
-  if (e['expiring'] == true) (text: 'Vence em breve', tone: Tone.danger, icon: Icons.schedule),
-];
 
 /// Quotes (Orçamentos) list.
 class QuotesScreen extends StatefulWidget {
@@ -624,7 +592,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     if (key != 'productId' || id == null || customer == null) return null;
     await _lookupPrice(id, customer);
     final price = _listPrice(id);
-    return price == null ? null : {'unitPrice': price.toStringAsFixed(2).replaceAll('.', ',')};
+    return price == null ? null : {'unitPrice': fmtDecimalInput(price)};
   }
 
   /// Helper text of the price field: the table price and the discount the typed price makes.
@@ -645,32 +613,13 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
 
   /// Discount of a line against the price table, or null when the table has no price to compare with.
   num? _lineDiscount(Map<String, dynamic> l) {
-    final price = l['unitPrice'], id = l['productId'];
-    if (price is! num || id == null) return null;
-    final list = _listPrice(id);
-    if (list == null || list <= 0) return null;
-    return (1 - price / list) * 100;
+    final id = l['productId'];
+    if (id == null) return null;
+    return discountPercent(l['unitPrice'], _listPrice(id));
   }
 
   /// Highest discount against the list price (and which line it is) and how many typed prices have no list price to compare with.
-  ({num discount, int line, int offList}) _pricing() {
-    num best = 0;
-    var line = -1;
-    var off = 0;
-    for (final (i, l) in _lines.indexed) {
-      final price = l['unitPrice'];
-      final id = l['productId'];
-      if (price is! num || id == null || !_priceInfo.containsKey(id)) continue;
-      final d = _lineDiscount(l);
-      if (d == null) {
-        off++;
-      } else if (d > best) {
-        best = d;
-        line = i;
-      }
-    }
-    return (discount: best, line: line, offList: off);
-  }
+  ({num discount, int line, int offList}) _pricing() => summarizePricing(_lines, hasPriceInfo: _priceInfo.containsKey, listPrice: _listPrice);
 
   /// "linha 2 (TB-25)" for messages.
   String _lineName(int i) {
@@ -1446,7 +1395,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     final registers = q['status'] != 'Sent';
     final form = await showDialog<Map<String, String>>(
       context: context,
-      builder: (c) => _QuoteEmailDialog(
+      builder: (c) => QuoteEmailDialog(
         to: '${q['sentTo'] ?? q['contactEmail'] ?? ''}'.trim(),
         subject: _mailSubject(q),
         body: _mailBody(q),
@@ -1885,7 +1834,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
               children: [
                 const Icon(Icons.description_outlined, size: 18),
                 const SizedBox(width: 6),
-                Expanded(child: Text('$fileName · ${_fmtSize(q['requestFileSize'])}', overflow: TextOverflow.ellipsis)),
+                Expanded(child: Text('$fileName · ${fmtFileSize(q['requestFileSize'])}', overflow: TextOverflow.ellipsis)),
                 TextButton.icon(key: const ValueKey('quote-po-print'), onPressed: _printRequest, icon: const Icon(Icons.print_outlined), label: const Text('Imprimir')),
                 TextButton.icon(onPressed: _saveRequest, icon: const Icon(Icons.download_outlined), label: const Text('Baixar')),
                 if (canEdit) IconButton(tooltip: 'Remover anexo', icon: const Icon(Icons.delete_outline), onPressed: _removeRequest),
@@ -2461,121 +2410,4 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ],
     );
   }
-}
-
-/// Form of "Enviar por e-mail": recipients, subject and text; the PDF is built and attached when the dialog returns.
-class _QuoteEmailDialog extends StatefulWidget {
-  const _QuoteEmailDialog({required this.to, required this.subject, required this.body, required this.from, required this.fileName, required this.registers});
-
-  final String to;
-  final String subject;
-  final String body;
-  final String? from;
-  final String fileName;
-
-  /// The send also starts the quote's validity (a draft or approved quote); false when it was already sent.
-  final bool registers;
-
-  @override
-  State<_QuoteEmailDialog> createState() => _QuoteEmailDialogState();
-}
-
-class _QuoteEmailDialogState extends State<_QuoteEmailDialog> {
-  late final _to = TextEditingController(text: widget.to.contains('@') ? widget.to : '');
-  final _cc = TextEditingController();
-  late final _subject = TextEditingController(text: widget.subject);
-  late final _body = TextEditingController(text: widget.body);
-  final _form = GlobalKey<FormState>();
-
-  @override
-  void dispose() {
-    _to.dispose();
-    _cc.dispose();
-    _subject.dispose();
-    _body.dispose();
-    super.dispose();
-  }
-
-  static final _address = RegExp(r'^[^\s@;,]+@[^\s@;,]+\.[^\s@;,]+$');
-
-  /// null when every address of the typed list (separated by ; or ,) looks like an e-mail address.
-  static String? _check(String? v, {required bool required}) {
-    final parts = (v ?? '').split(RegExp(r'[;,\n]')).map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-    if (parts.isEmpty) return required ? 'Informe o e-mail do cliente' : null;
-    final bad = parts.where((p) => !_address.hasMatch(p));
-    return bad.isEmpty ? null : 'E-mail inválido: ${bad.first}';
-  }
-
-  void _submit() {
-    if (!(_form.currentState?.validate() ?? false)) return;
-    Navigator.pop(context, {'to': _to.text.trim(), 'cc': _cc.text.trim(), 'subject': _subject.text.trim(), 'body': _body.text});
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    icon: const Icon(Icons.forward_to_inbox),
-    title: const Text('Enviar orçamento por e-mail'),
-    content: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 520),
-      child: Form(
-        key: _form,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextFormField(
-                key: const ValueKey('email-to'),
-                controller: _to,
-                autofocus: _to.text.isEmpty,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Para', helperText: 'Mais de um e-mail: separe com ;'),
-                validator: (v) => _check(v, required: true),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                key: const ValueKey('email-cc'),
-                controller: _cc,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Cópia (opcional)'),
-                validator: (v) => _check(v, required: false),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                key: const ValueKey('email-subject'),
-                controller: _subject,
-                decoration: const InputDecoration(labelText: 'Assunto'),
-                validator: (v) => (v ?? '').trim().isEmpty ? 'Informe o assunto' : null,
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                key: const ValueKey('email-body'),
-                controller: _body,
-                minLines: 5,
-                maxLines: 10,
-                decoration: const InputDecoration(labelText: 'Mensagem', alignLabelWithHint: true),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('Anexo: ${widget.fileName}', style: Theme.of(context).textTheme.bodySmall)),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${widget.from == null ? '' : 'Sai de ${widget.from}. '}${widget.registers ? 'O envio fica registrado e a validade começa a contar hoje.' : 'O orçamento já foi enviado: este é um reenvio.'}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-    actions: [
-      TextButton(key: const ValueKey('email-cancel'), onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-      FilledButton.icon(key: const ValueKey('email-send'), onPressed: _submit, icon: const Icon(Icons.send), label: const Text('Enviar')),
-    ],
-  );
 }
