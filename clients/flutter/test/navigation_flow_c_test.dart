@@ -81,7 +81,7 @@ void main() {
     final client = MockClient((r) async => http.Response('{}', 200));
     Widget form() => MaterialApp(
       home: Scaffold(
-        body: EntityFormDialog(api: _api(client), title: 'Cliente teste', fields: [FieldSpec('name', 'Nome')], onSubmit: (b) async => b),
+        body: EntityFormDialog(api: _api(client), title: 'Cliente teste', fields: const [FieldSpec('name', 'Nome')], onSubmit: (b) async => b),
       ),
     );
     await tester.pumpWidget(form());
