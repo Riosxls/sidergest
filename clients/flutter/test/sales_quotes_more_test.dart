@@ -116,10 +116,10 @@ void main() {
       await tester.pumpAndSettle();
       await tapText(tester, 'Cancelar');
       expect(find.text('Cancelar PROP 31'), findsOneWidget);
-      await tapText(tester, 'Confirmar');
+      await tester.tap(find.widgetWithText(FilledButton, 'Cancelar orçamento'));await tester.pumpAndSettle();
       expect(find.text('Obrigatório'), findsOneWidget);
       await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Emitido por engano');
-      await tapText(tester, 'Confirmar');
+      await tester.tap(find.widgetWithText(FilledButton, 'Cancelar orçamento'));await tester.pumpAndSettle();
       expect(f.body(f.last('POST', '/api/sales/quotes/5/cancel')), {'note': 'Emitido por engano'});
       expect(find.text('PROP 31 cancelado'), findsOneWidget);
     });
@@ -131,7 +131,7 @@ void main() {
       await tester.pumpAndSettle();
       await tapText(tester, 'Excluir');
       expect(find.text('Excluir PROP 31?'), findsOneWidget);
-      await tapText(tester, 'Cancelar');
+      await tapText(tester, 'Voltar');
       expect(f.called('DELETE', '/api/sales/quotes/5'), isFalse);
       await tester.tap(find.byTooltip('Ações'));
       await tester.pumpAndSettle();
@@ -382,7 +382,7 @@ void main() {
       await _openQuote(tester, f, role: 'SalesManager');
       await tapKey(tester, 'quote-approve');
       expect(f.called('POST', '/api/sales/quotes/5/approve'), isTrue);
-      expect(find.text('Desconto aprovado'), findsWidgets);
+      expect(find.text('Desconto autorizado'), findsWidgets);
       expect(find.byKey(const ValueKey('quote-send')), findsOneWidget);
     });
 
@@ -396,7 +396,7 @@ void main() {
       await tapKey(tester, 'quote-reject-approval');
       expect(find.text('Recusar desconto'), findsWidgets);
       await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Desconto alto');
-      await tapText(tester, 'Confirmar');
+      await tester.tap(find.widgetWithText(FilledButton, 'Recusar desconto'));await tester.pumpAndSettle();
       expect(f.body(f.last('POST', '/api/sales/quotes/5/reject-approval')), {'note': 'Desconto alto'});
       expect(find.text('Orçamento voltou para rascunho'), findsOneWidget);
       expect(find.textContaining('O gerente recusou o desconto: Desconto alto'), findsOneWidget);
@@ -652,7 +652,7 @@ void main() {
       await menu(tester, 'Cancelar orçamento');
       expect(find.text('Cancelar PROP 31'), findsOneWidget);
       await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Engano');
-      await tapText(tester, 'Confirmar');
+      await tester.tap(find.widgetWithText(FilledButton, 'Cancelar orçamento'));await tester.pumpAndSettle();
       expect(f.body(f.last('POST', '/api/sales/quotes/5/cancel')), {'note': 'Engano'});
       expect(find.text('Orçamento cancelado'), findsOneWidget);
       expect(find.text('Cancelada'), findsWidgets);

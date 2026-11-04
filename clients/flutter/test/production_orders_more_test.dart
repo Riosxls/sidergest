@@ -497,7 +497,7 @@ void main() {
       await _pumpPushed(tester, fake);
       await _menu(tester, 'Excluir');
       expect(find.text('Excluir OF 12?'), findsOneWidget);
-      await tester.tap(find.text('Confirmar'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Excluir'));
       await tester.pumpAndSettle();
       expect(fake.has('DELETE', '/api/production/orders/7'), isTrue);
       expect(find.text('abrir'), findsOneWidget);
@@ -521,7 +521,7 @@ void main() {
 
       await _menu(tester, 'Parar');
       await tester.enterText(find.byType(TextField), 'Quebra de máquina');
-      await tester.tap(find.text('Confirmar'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Parar'));
       await tester.pumpAndSettle();
       expect(fake.body(fake.last('POST', '/api/production/orders/7/stop'))['reason'], 'Quebra de máquina');
 
@@ -663,7 +663,7 @@ void main() {
 
       await _opMenu(tester, 20, 'Voltar para interno');
       expect(find.text('Voltar a operação 20 para produção interna?'), findsOneWidget);
-      await tester.tap(find.text('Confirmar'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Voltar para interna'));
       await tester.pumpAndSettle();
       expect(fake.has('DELETE', '/api/production/orders/7/operations/20/outsource'), isTrue);
     });
@@ -804,12 +804,12 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('issue-all')));
       await tester.pumpAndSettle();
       expect(find.text('Requisitar todo o saldo dos materiais para OF 12?'), findsOneWidget);
-      await tester.tap(find.text('Cancelar'));
+      await tester.tap(find.text('Voltar'));
       await tester.pumpAndSettle();
       expect(fake.has('POST', '/api/production/orders/7/issues'), isFalse);
       await tester.tap(find.byKey(const ValueKey('issue-all')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Confirmar'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Requisitar'));
       await tester.pumpAndSettle();
       expect(fake.body(fake.last('POST', '/api/production/orders/7/issues')).containsKey('date'), isTrue);
       expect(find.text('Material requisitado'), findsOneWidget);

@@ -333,6 +333,7 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
       title: 'Excluir ${_lot!['lotCode']}?',
       message: 'Só lotes sem remessas e sem uso interno podem ser excluídos.',
       confirmLabel: 'Excluir',
+      cancelLabel: 'Voltar',
       danger: true,
     );
     if (!ok || !mounted) return;
@@ -384,7 +385,7 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
   }
 
   Future<void> _deleteChild(String path, String what, String done) async {
-    if (!await confirmStep(context, title: 'Remover $what?', message: 'O saldo do lote é recalculado.', confirmLabel: 'Remover', danger: true)) return;
+    if (!await confirmStep(context, title: 'Remover $what?', message: 'O saldo do lote é recalculado.', confirmLabel: 'Remover', cancelLabel: 'Voltar', danger: true)) return;
     if (!mounted) return;
     await runAction(context, () => api.delete(path), success: done);
     unawaited(_load());

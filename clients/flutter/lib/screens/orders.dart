@@ -152,7 +152,7 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Future<void> _reason(String action, String title) async {
-    final reason = await promptText(context, title: title, label: 'Motivo', required: true);
+    final reason = await promptText(context, title: title, label: 'Motivo', required: true, confirmLabel: action == 'cancel' ? 'Cancelar pedido' : 'Encerrar saldo', danger: true);
     if (reason == null || !mounted) return;
     final r = await runAction(
       context,

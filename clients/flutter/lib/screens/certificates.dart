@@ -261,6 +261,8 @@ class _CertificateScreenState extends State<CertificateScreen> {
       title: 'Excluir rascunho ${_c!['reference']}?',
       message: 'O número fica disponível para o próximo certificado só se este for o último emitido.',
       confirmLabel: 'Excluir',
+      cancelLabel: 'Voltar',
+      danger: true,
       icon: Icons.delete_outline,
     );
     if (!ok || !mounted) return;

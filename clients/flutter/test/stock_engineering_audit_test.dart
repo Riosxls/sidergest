@@ -72,7 +72,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(fake.has('POST', '/api/stock/reservations/5/release'), isFalse);
       await tapKey(tester, 'reservation-release');
-      await tester.tap(find.text('Confirmar'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Liberar saldo'));
       await tester.pumpAndSettle();
       expect(fake.has('POST', '/api/stock/reservations/5/release'), isTrue);
     });

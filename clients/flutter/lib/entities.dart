@@ -89,7 +89,7 @@ class FieldSpec {
 
 /// One column of a record list or table: header, value reader and alignment.
 class ColumnSpec {
-  const ColumnSpec(this.label, this.value, {this.numeric = false, this.cell});
+  const ColumnSpec(this.label, this.value, {this.numeric = false, this.cell, this.hideOnNarrow = false});
 
   final String label;
   final String Function(Map<String, dynamic> e) value;
@@ -97,6 +97,9 @@ class ColumnSpec {
 
   /// A widget for the cell of a list (a status chip); [value] stays the text used for sorting and on phones.
   final Widget Function(BuildContext context, Map<String, dynamic> e)? cell;
+
+  /// Left out of the card layout of a [RecordList] on narrow widths (secondary data); the wide table always shows it.
+  final bool hideOnNarrow;
 }
 
 /// Declarative description of a CRUD entity (endpoint, columns and form fields) rendered by the generic list and form widgets.

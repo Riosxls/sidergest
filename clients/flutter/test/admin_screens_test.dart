@@ -152,7 +152,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Salvar'));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.textContaining('desconecta root'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Confirmar'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Salvar e desconectar'));
     await tester.pumpAndSettle();
     final put = log.singleWhere((r) => r.method == 'PUT');
     expect(jsonDecode(put.body), {'role': 'Admin', 'active': true, 'password': 'senha-longa-123'});

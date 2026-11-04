@@ -79,6 +79,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
     columns: spec.columns,
     searchable: spec.searchable,
     onTap: _open,
+    rowChevron: true,
     rowActions: spec.whereUsed || isProduct ? _rowActions : null,
     // One "Novo" button, the floating one; the empty state points to it instead of repeating it.
     emptyText: canWrite ? 'Nenhum registro. Use "Novo: ${spec.singular}" para cadastrar o primeiro.' : 'Nenhum registro',

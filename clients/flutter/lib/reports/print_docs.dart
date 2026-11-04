@@ -51,7 +51,7 @@ String? quotePrintWarning(Map<String, dynamic> q) {
   if (q['supersededById'] != null) return 'SUBSTITUÍDA pela revisão ${q['supersededBy'] ?? ''}'.trim();
   return switch (q['status']) {
     'Draft' => 'RASCUNHO · ainda não enviado ao cliente',
-    'PendingApproval' => 'RASCUNHO · aguardando a aprovação do gerente',
+    'PendingApproval' => 'RASCUNHO · aguardando a autorização do gerente',
     'Approved' => 'RASCUNHO · ainda não enviado ao cliente',
     'Cancelled' => 'CANCELADO',
     'Expired' => 'VALIDADE EXPIRADA',
@@ -599,7 +599,7 @@ String _tubeDimensions(Map<String, dynamic>? p, String fallback) {
 String _materialSpec(List<Map<String, dynamic>> mats) =>
     mats.map((m) => _s(m['description']).isNotEmpty ? _s(m['description']) : _s(m['code'])).where((e) => e.isNotEmpty).toSet().join('; ');
 
-/// Ordem de produção (OF N), conforme o modelo oficial.
+/// Ordem de fabricação (OF N), conforme o modelo oficial.
 Future<Uint8List> buildProductionOrderPdf(ApiClient api, Map<String, dynamic> o) async {
   final customer = await _customer(api, o['customerId']);
   final c = _CustomerBlock(_s(customer?['name']), customer, '');
@@ -628,7 +628,7 @@ Future<Uint8List> buildProductionOrderPdf(ApiClient api, Map<String, dynamic> o)
   final page = pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.stretch,
     children: [
-      _titleBar('ORDEM DE PRODUÇÃO', _s(o['customerPo']).isNotEmpty ? _s(o['customerPo']) : _s(o['reference'])),
+      _titleBar('ORDEM DE FABRICAÇÃO', _s(o['customerPo']).isNotEmpty ? _s(o['customerPo']) : _s(o['reference'])),
       pw.SizedBox(height: 4),
       _identBox(productCode: _s(o['productCode']), customerCode: c.code),
       _orderedBy(),

@@ -394,6 +394,7 @@ class _QuotationScreenState extends State<QuotationScreen> {
       message: 'Nenhuma proposta deste item será aprovada e as requisições dele voltam como cotação reprovada.',
       confirmLabel: 'Reprovar item',
       icon: Icons.thumb_down_alt_outlined,
+      cancelLabel: 'Voltar',
       danger: true,
     );
     if (!ok || !mounted) return;
@@ -401,7 +402,7 @@ class _QuotationScreenState extends State<QuotationScreen> {
   }
 
   Future<void> _cancel() async {
-    if (!await confirm(context, 'Cancelar a cotação nº ${_q!['number']}?')) return;
+    if (!await confirm(context, 'Cancelar a cotação nº ${_q!['number']}?', confirmLabel: 'Cancelar cotação', cancelLabel: 'Manter cotação', danger: true)) return;
     await _call(() => api.post('$base/cancel', {}), 'Cotação cancelada');
   }
 

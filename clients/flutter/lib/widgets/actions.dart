@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
+import '../theme_tokens.dart';
 import 'entity_form.dart';
 import 'record_list.dart';
 
@@ -35,19 +36,21 @@ Future<String?> promptText(
   bool required = false,
   String initial = '',
   String confirmLabel = 'Confirmar',
+  bool danger = false,
 }) => showDialog<String>(
   context: context,
-  builder: (_) => _PromptDialog(title: title, label: label, required: required, initial: initial, confirmLabel: confirmLabel),
+  builder: (_) => _PromptDialog(title: title, label: label, required: required, initial: initial, confirmLabel: confirmLabel, danger: danger),
 );
 
 class _PromptDialog extends StatefulWidget {
-  const _PromptDialog({required this.title, required this.label, required this.required, required this.initial, required this.confirmLabel});
+  const _PromptDialog({required this.title, required this.label, required this.required, required this.initial, required this.confirmLabel, this.danger = false});
 
   final String title;
   final String label;
   final bool required;
   final String initial;
   final String confirmLabel;
+  final bool danger;
 
   @override
   State<_PromptDialog> createState() => _PromptDialogState();
@@ -84,7 +87,7 @@ class _PromptDialogState extends State<_PromptDialog> {
     ),
     actions: [
       TextButton(onPressed: () => Navigator.pop(context), child: const Text('Voltar')),
-      FilledButton(onPressed: _ok, child: Text(widget.confirmLabel)),
+      FilledButton(style: widget.danger ? dangerButtonStyle(context) : null, onPressed: _ok, child: Text(widget.confirmLabel)),
     ],
   );
 }

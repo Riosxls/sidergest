@@ -58,9 +58,9 @@ void main() {
       expect(statusLabel(null), '');
     });
 
-    test('the status vocabulary is one: Aprovada pelo cliente and Desconto aprovado', () {
+    test('the status vocabulary is one: Aprovada pelo cliente and Desconto autorizado', () {
       expect(statusLabel('Accepted'), 'Aprovada pelo cliente');
-      expect(statusLabel('Approved'), 'Desconto aprovado');
+      expect(statusLabel('Approved'), 'Desconto autorizado');
     });
 
     test('the timeline shows the arrow only when the title does not already say where the record went', () {

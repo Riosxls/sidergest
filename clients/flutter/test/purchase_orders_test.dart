@@ -225,11 +225,11 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('order-cancel')));
     await tester.pumpAndSettle();
     expect(find.text('Cancelar pedido nº 900'), findsOneWidget);
-    await tester.tap(find.text('Confirmar'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Cancelar pedido'));
     await tester.pumpAndSettle();
     expect(find.text('Obrigatório'), findsOneWidget);
     await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Fornecedor errado');
-    await tester.tap(find.text('Confirmar'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Cancelar pedido'));
     await tester.pumpAndSettle();
     expect(env.body(env.last('POST', '/api/purchase-orders/90/cancel')), {'reason': 'Fornecedor errado'});
     expect(find.text('Pedido cancelado'), findsOneWidget);
@@ -256,7 +256,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Encerrar saldo do pedido nº 900'), findsOneWidget);
     await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Saldo não será entregue');
-    await tester.tap(find.text('Confirmar'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Encerrar saldo'));
     await tester.pumpAndSettle();
     expect(env.body(env.last('POST', '/api/purchase-orders/90/close'))['reason'], 'Saldo não será entregue');
     expect(find.text('Pedido encerrado'), findsOneWidget);
@@ -271,7 +271,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('order-cancel')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'x');
-    await tester.tap(find.text('Confirmar'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Cancelar pedido'));
     await tester.pumpAndSettle();
     expect(find.text('Pedido bloqueado: Há recebimento em andamento'), findsOneWidget);
     expect(find.text('Receber NF'), findsOneWidget);

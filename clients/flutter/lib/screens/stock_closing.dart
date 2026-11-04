@@ -182,6 +182,7 @@ class _ClosingScreenState extends State<ClosingScreen> {
       message: 'Os custos médios do mês são descartados e o mês volta a aceitar lançamentos e estornos. Feche-o de novo depois de corrigir.',
       confirmLabel: 'Reabrir ${fmtPeriod(p)}',
       icon: Icons.lock_open,
+      cancelLabel: 'Voltar',
       danger: true,
     );
     if (!ok || !mounted) return;
@@ -369,14 +370,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ];
 
   static const salesFields = [
-    FieldSpec('maxDiscountPercent', 'Desconto máximo sem aprovação (%)', type: FieldType.decimal, required: true),
+    FieldSpec('maxDiscountPercent', 'Desconto máximo sem autorização (%)', type: FieldType.decimal, required: true),
     FieldSpec('defaultValidityDays', 'Validade padrão do orçamento (dias)', type: FieldType.integer, required: true),
     FieldSpec('minimumOrderValue', 'Faturamento mínimo (R\$)', type: FieldType.decimal, required: true),
-    FieldSpec('offListNeedsApproval', 'Preço digitado fora da tabela exige aprovação do gerente', type: FieldType.boolean),
+    FieldSpec('offListNeedsApproval', 'Preço digitado fora da tabela exige autorização do gerente', type: FieldType.boolean),
     FieldSpec('followUpDays', 'Cobrar resposta do orçamento enviado após (dias)', type: FieldType.integer, required: true),
     FieldSpec(
       'approvalValidityDays',
-      'Validade da aprovação de desconto (dias)',
+      'Validade da autorização de desconto (dias)',
       type: FieldType.integer,
       required: true,
       hint: 'Passado o prazo sem envio, volta a rascunho',
@@ -475,12 +476,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ]),
             const SizedBox(height: 12),
             _card('Comercial', '/api/sales/settings', salesFields, sa, [
-              ('Desconto sem aprovação', 'até ${fmt(sa['maxDiscountPercent'])} %'),
+              ('Desconto sem autorização', 'até ${fmt(sa['maxDiscountPercent'])} %'),
               ('Validade do orçamento', '${fmt(sa['defaultValidityDays'])} dias'),
               ('Faturamento mínimo', (sa['minimumOrderValue'] as num? ?? 0) == 0 ? 'Sem mínimo' : fmtMoney(sa['minimumOrderValue'])),
-              ('Preço fora da tabela', sa['offListNeedsApproval'] == true ? 'exige aprovação' : 'livre'),
+              ('Preço fora da tabela', sa['offListNeedsApproval'] == true ? 'exige autorização' : 'livre'),
               ('Cobrar resposta', 'após ${fmt(sa['followUpDays'])} dias'),
-              ('Validade da aprovação', '${fmt(sa['approvalValidityDays'])} dias'),
+              ('Validade da autorização', '${fmt(sa['approvalValidityDays'])} dias'),
               ('Local de expedição', fmt(sa['shippingLocation'] ?? 'Acabado do PCP (padrão)')),
               ('Condições gerais', fmt(sa['defaultConditions'])),
             ]),

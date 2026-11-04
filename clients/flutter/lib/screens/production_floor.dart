@@ -190,7 +190,7 @@ class _ReportsViewState extends State<ReportsView> {
       return;
     }
     if (action != 'delete') return;
-    if (!await confirm(context, 'Excluir este apontamento?') || !mounted) return;
+    if (!await confirm(context, 'Excluir este apontamento?', confirmLabel: 'Excluir', cancelLabel: 'Voltar', danger: true) || !mounted) return;
     await runAction(context, () => s.api.delete('/api/production/reports/${r['id']}'), success: 'Apontamento excluído');
     unawaited(_list.currentState?.reload());
     widget.onChanged?.call();
@@ -518,7 +518,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
   });
 
   Future<void> _scheduleAll() async {
-    if (!await confirm(context, 'Reprogramar todas as OFs abertas a partir de hoje?') || !mounted) return;
+    if (!await confirm(context, 'Reprogramar todas as OFs abertas a partir de hoje?', confirmLabel: 'Reprogramar', cancelLabel: 'Voltar') || !mounted) return;
     final r = await runAction(context, () => s.api.post('/api/production/schedule', {}));
     if (r is! List || !mounted) return;
     await showScheduleResult(context, r.cast<Map<String, dynamic>>(), session: s);

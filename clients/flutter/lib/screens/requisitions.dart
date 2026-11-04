@@ -197,6 +197,7 @@ class _RequisitionScreenState extends State<RequisitionScreen> {
       label: 'Motivo',
       required: true,
       confirmLabel: 'Cancelar requisição',
+      danger: true,
     );
     if (reason == null || !mounted) return;
     final res = await runAction(context, () => api.post('$base/cancel', {'reason': reason}), success: 'Requisição cancelada');

@@ -304,7 +304,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
   }
 
   Future<void> _reason(String action, String title, {bool technical = false}) async {
-    final reason = await promptText(context, title: title, label: 'Motivo', required: true);
+    final reason = await promptText(context, title: title, label: 'Motivo', required: true, confirmLabel: 'Parar', danger: true);
     if (reason == null || !mounted) return;
     await _post(action, body: {'reason': reason, 'technical': technical});
   }
@@ -353,6 +353,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
       message: 'O custo de material e de serviço de terceiros é gravado como definitivo para esta OF.',
       confirmLabel: 'Fechar custo',
       icon: Icons.calculate_outlined,
+      cancelLabel: 'Voltar',
       danger: true,
     );
     if (go && mounted) await _post('close-cost', success: 'Custo fechado');
@@ -371,7 +372,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
   }
 
   Future<void> _delete() async {
-    if (!await confirm(context, 'Excluir ${_o!['reference']}?') || !mounted) return;
+    if (!await confirm(context, 'Excluir ${_o!['reference']}?', confirmLabel: 'Excluir', cancelLabel: 'Voltar', danger: true) || !mounted) return;
     final ok = await runAction(context, () async {
       await api.delete(base);
       return true;
@@ -502,9 +503,9 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
   bool _shortage(Map<String, dynamic> o) =>
       open && (o['materials'] as List).cast<Map<String, dynamic>>().any((l) => (l['remaining'] as num) > 0 && (l['reserved'] as num) < (l['remaining'] as num));
 
-  /// Pieces are away at a supplier while the OF is already late.
+  /// Pieces are away at a supplier while the OF is already late. The server says so in `externalLate`; without it the page works it out.
   bool _outsideLate(Map<String, dynamic> o) =>
-      productionLate(o) && (o['operations'] as List).cast<Map<String, dynamic>>().any((op) => op['external'] == true && ((op['inTransit'] as num?) ?? 0) > 0);
+      o['externalLate'] is bool ? o['externalLate'] as bool : productionLate(o) && (o['operations'] as List).cast<Map<String, dynamic>>().any((op) => op['external'] == true && ((op['inTransit'] as num?) ?? 0) > 0);
 
   /// A tab label with a warning dot when something on it needs attention.
   Tab _tab(String label, bool flag, String hint) => flag
@@ -773,7 +774,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
   }
 
   Future<void> _internal(Map<String, dynamic> op) async {
-    if (!await confirm(context, 'Voltar a operação ${op['sequence']} para produção interna?') || !mounted) return;
+    if (!await confirm(context, 'Voltar a operação ${op['sequence']} para produção interna?', confirmLabel: 'Voltar para interna', cancelLabel: 'Manter como está') || !mounted) return;
     final r = await runAction(context, () => api.delete('$base/operations/${op['sequence']}/outsource'));
     _set(r);
   }
@@ -1020,7 +1021,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
   Future<void> _issue([Map<String, dynamic>? line]) async {
     final today = isoDate(DateTime.now());
     if (line == null) {
-      if (!await confirm(context, 'Requisitar todo o saldo dos materiais para ${_o!['reference']}?') || !mounted) return;
+      if (!await confirm(context, 'Requisitar todo o saldo dos materiais para ${_o!['reference']}?', confirmLabel: 'Requisitar', cancelLabel: 'Voltar') || !mounted) return;
       final r = await runAction(context, () => api.post('$base/issues', {'date': today}), success: 'Material requisitado');
       if (r != null) unawaited(_load());
       return;
@@ -1357,7 +1358,7 @@ class _ProcessDialogState extends State<_ProcessDialog> {
     final narrow = dialogWidth(context, 760) < 600;
     final valid = _rows.isNotEmpty && _rows.every((r) => r.description.text.trim().isNotEmpty);
     return AlertDialog(
-      title: const Text('Processo da ordem de produção'),
+      title: const Text('Processo da ordem de fabricação'),
       content: SizedBox(
         width: dialogWidth(context, 760),
         child: SingleChildScrollView(

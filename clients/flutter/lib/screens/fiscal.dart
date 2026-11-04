@@ -611,7 +611,7 @@ class _FiscalSettingsScreenState extends State<FiscalSettingsScreen> {
             NextStepCard(
               title: d['enabled'] == true ? 'Emissão de NF-e ligada' : 'Emissão de NF-e desligada',
               message: d['enabled'] == true
-                  ? 'Expedir entrega e enviar remessa de beneficiamento sem informar a NF emitem a nota. Ambiente: ${_environments[d['environment']] ?? d['environment']}. A SEFAZ ainda é simulada.'
+                  ? 'Expedir entrega e enviar remessa de beneficiamento sem informar a NF emitem a nota. ${d['sefazSimulated'] == false ? 'Conectado à SEFAZ (${_environments[d['environment']] ?? d['environment']}).' : 'Ambiente: ${_environments[d['environment']] ?? d['environment']}. A SEFAZ ainda é simulada.'}'
                   : 'Enquanto desligada, o número da NF continua sendo digitado à mão.',
               tone: d['enabled'] == true ? Tone.success : Tone.warning,
               actions: [

@@ -49,7 +49,7 @@ void main() {
   group('quotePrintWarning', () {
     test('names what makes a quote not final, and is silent for one that may go to the customer', () {
       expect(quotePrintWarning({'status': 'Draft'}), startsWith('RASCUNHO'));
-      expect(quotePrintWarning({'status': 'PendingApproval'}), contains('aprovação do gerente'));
+      expect(quotePrintWarning({'status': 'PendingApproval'}), contains('autorização do gerente'));
       expect(quotePrintWarning({'status': 'Approved'}), startsWith('RASCUNHO'));
       expect(quotePrintWarning({'status': 'Cancelled'}), 'CANCELADO');
       expect(quotePrintWarning({'status': 'Expired'}), 'VALIDADE EXPIRADA');

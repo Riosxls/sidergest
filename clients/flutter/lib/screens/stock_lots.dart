@@ -72,6 +72,8 @@ Future<void> showLotDialog(BuildContext context, Session session, Map<String, dy
               title: status == 'Rejected' ? 'Rejeitar lote ${lot['code']}' : 'Mover lote ${lot['code']} para quarentena',
               label: 'Laudo / motivo',
               required: status == 'Rejected',
+              confirmLabel: status == 'Rejected' ? 'Rejeitar lote' : 'Mover para quarentena',
+              danger: status == 'Rejected',
             );
             if (note == null) return;
           }
@@ -213,7 +215,7 @@ class _ReservationsViewState extends State<ReservationsView> {
   bool _canRelease(Map<String, dynamic> e) => widget.session.canStock && e['status'] == 'Open';
 
   Future<void> _release(Map<String, dynamic> e) async {
-    if (!await confirm(context, 'Liberar o saldo restante (${fmt(e['remaining'])}) da reserva ${e['reference']}?')) return;
+    if (!await confirm(context, 'Liberar o saldo restante (${fmt(e['remaining'])}) da reserva ${e['reference']}?', confirmLabel: 'Liberar saldo', cancelLabel: 'Voltar')) return;
     if (!mounted) return;
     await runAction(context, () => widget.session.api.post('/api/stock/reservations/${e['id']}/release', {}), success: 'Reserva liberada');
   }

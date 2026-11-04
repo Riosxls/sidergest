@@ -102,13 +102,32 @@ Future<bool> printGate(
     context: context,
     builder: (c) => AlertDialog(
       icon: const Icon(Icons.print_outlined),
-      title: Text(title),
+      // "Voltar" abandons the whole flow, so it sits up in the title bar, apart from the three ways of going on.
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              key: const ValueKey('gate-back'),
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 8)),
+              onPressed: () => Navigator.pop(c),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.arrow_back, size: 18), SizedBox(width: 4), Text('Voltar')]),
+            ),
+          ),
+          Text(title),
+        ],
+      ),
       content: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 440), child: Text(message)),
       actionsOverflowAlignment: OverflowBarAlignment.end,
       actionsOverflowButtonSpacing: 8,
       actions: [
-        TextButton(key: const ValueKey('gate-back'), onPressed: () => Navigator.pop(c), child: const Text('Voltar')),
-        TextButton(key: const ValueKey('gate-skip'), onPressed: () => Navigator.pop(c, 'skip'), child: Text(continueLabel)),
+        TextButton(
+          key: const ValueKey('gate-skip'),
+          style: TextButton.styleFrom(foregroundColor: Theme.of(c).colorScheme.onSurfaceVariant),
+          onPressed: () => Navigator.pop(c, 'skip'),
+          child: Text(continueLabel),
+        ),
         if (onDownload != null)
           OutlinedButton.icon(
             key: const ValueKey('gate-download'),

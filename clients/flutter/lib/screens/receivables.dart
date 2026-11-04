@@ -257,6 +257,7 @@ class _PaymentsDialogState extends State<_PaymentsDialog> {
       label: 'Motivo do estorno',
       required: true,
       confirmLabel: 'Estornar',
+      danger: true,
     );
     if (reason == null || !mounted) return;
     final ok = await runAction(context, () async {

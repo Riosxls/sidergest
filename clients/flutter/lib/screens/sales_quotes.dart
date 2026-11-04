@@ -200,7 +200,7 @@ class _QuotesScreenState extends State<QuotesScreen> {
 
   /// Quick cancel from the list: asks for the reason, no need to open the quote.
   Future<void> _cancel(Map<String, dynamic> e) async {
-    final reason = await promptText(context, title: 'Cancelar ${e['reference']}', label: 'Motivo (ex.: emitido por engano)', required: true);
+    final reason = await promptText(context, title: 'Cancelar ${e['reference']}', label: 'Motivo (ex.: emitido por engano)', required: true, confirmLabel: 'Cancelar orçamento', danger: true);
     if (reason == null || !mounted) return;
     await runAction(context, () => widget.session.api.post('/api/sales/quotes/${e['id']}/cancel', {'note': reason}), success: '${e['reference']} cancelado');
   }
@@ -250,6 +250,7 @@ class _QuotesScreenState extends State<QuotesScreen> {
       title: 'Excluir ${e['reference']}?',
       message: 'O orçamento e o histórico dele somem de vez. Não dá para desfazer.',
       confirmLabel: 'Excluir',
+      cancelLabel: 'Voltar',
       danger: true,
       icon: Icons.delete_outline,
     );
@@ -1675,8 +1676,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
     }
   }
 
-  Future<void> _reason(String action, String title, {String label = 'Motivo', String? success}) async {
-    final reason = await promptText(context, title: title, label: label, required: true);
+  Future<void> _reason(String action, String title, {String label = 'Motivo', String? success, String? confirmLabel, bool danger = false}) async {
+    final reason = await promptText(context, title: title, label: label, required: true, confirmLabel: confirmLabel ?? title, danger: danger);
     if (reason == null || !mounted) return;
     await _act(action, body: {'note': reason}, success: success);
   }
@@ -1741,6 +1742,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
           title: 'Limite de crédito excedido',
           message: '${e.message}\n\nLiberar mesmo assim? A liberação fica registrada no histórico.',
           confirmLabel: 'Liberar e gerar',
+          cancelLabel: 'Voltar',
           danger: true,
           icon: Icons.warning_amber,
         );
@@ -1776,6 +1778,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
           title: 'Excluir ${_q!['reference']}?',
           message: 'O rascunho é apagado definitivamente.',
           confirmLabel: 'Excluir',
+          cancelLabel: 'Voltar',
           danger: true,
         ) ||
         !mounted) {
@@ -2013,7 +2016,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
             'quote-reject-approval',
             'Recusar desconto',
             Icons.thumb_down_alt_outlined,
-            () => _reason('reject-approval', 'Recusar desconto', success: 'Orçamento voltou para rascunho'),
+            () => _reason('reject-approval', 'Recusar desconto', success: 'Orçamento voltou para rascunho', danger: true),
           ),
         if (sell) _secondary('quote-reopen', 'Voltar para rascunho para editar', Icons.edit_outlined, _reopen),
       ],
@@ -2193,7 +2196,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       // No "Nova revisão" here: every state that can be revised already has that button on the status card, so a second entry only confuses.
       if (s.canSell && ['Draft', 'PendingApproval', 'Approved'].contains(status))
         PopupMenuItem(
-          value: () => _reason('cancel', 'Cancelar ${q['reference']}', label: 'Motivo (ex.: emitido por engano)', success: 'Orçamento cancelado'),
+          value: () => _reason('cancel', 'Cancelar ${q['reference']}', label: 'Motivo (ex.: emitido por engano)', success: 'Orçamento cancelado', confirmLabel: 'Cancelar orçamento', danger: true),
           // Destructive entries wear the error colour, like the outcome buttons on the status card.
           child: ListTile(
             iconColor: danger,

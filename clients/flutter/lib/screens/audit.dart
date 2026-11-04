@@ -58,8 +58,27 @@ class AuditScreen extends StatefulWidget {
 
 class _AuditScreenState extends State<AuditScreen> {
   String? _entity;
+  String? _action;
+  List<String> _actions = auditActions.keys.toList();
   DateTime? _from;
   DateTime? _to;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActions();
+  }
+
+  /// The actions the log really holds; the static list stays when the call fails or answers nothing usable.
+  Future<void> _loadActions() async {
+    try {
+      final r = await widget.session.api.get('/api/audit/actions');
+      final list = r is List ? [for (final a in r) '$a'] : const <String>[];
+      if (list.isNotEmpty && mounted) setState(() => _actions = list);
+    } catch (e) {
+      debugPrint('audit: actions list failed, using the static list: $e');
+    }
+  }
 
   Future<void> _pick(bool start) async {
     final now = DateTime.now();
@@ -87,20 +106,23 @@ class _AuditScreenState extends State<AuditScreen> {
     path: '/api/audit',
     query: {
       'entity': _entity,
+      'action': _action,
       'from': _from == null ? null : DateTime(_from!.year, _from!.month, _from!.day).toUtc().toIso8601String(),
       'to': _to == null ? null : DateTime(_to!.year, _to!.month, _to!.day, 23, 59, 59).toUtc().toIso8601String(),
     },
     searchParam: 'user',
     searchHint: 'Usuário',
     emptyText: 'Nenhum registro de auditoria ainda. Alterações em cadastros, parâmetros e usuários aparecem aqui.',
-    filtersActive: _entity != null || _from != null || _to != null,
+    filtersActive: _entity != null || _action != null || _from != null || _to != null,
     onClearFilters: () => setState(() {
       _entity = null;
+      _action = null;
       _from = null;
       _to = null;
     }),
     filters: [
       ChoiceFilter(label: 'Entidade', value: _entity, choices: {for (final e in auditEntities) e: auditEntityName(e)}, onChanged: (v) => setState(() => _entity = v)),
+      ChoiceFilter(label: 'Ação', value: _action, choices: {for (final a in _actions) a: auditActions[a] ?? humanizeField(a)}, onChanged: (v) => setState(() => _action = v)),
       _dateButton('Desde', _from, true),
       _dateButton('Até', _to, false),
     ],
@@ -109,7 +131,7 @@ class _AuditScreenState extends State<AuditScreen> {
       col('Usuário', 'user'),
       ColumnSpec('Entidade', (e) => auditEntityName(e['entity'])),
       col('Id', 'entityId'),
-      labelCol('Ação', 'action', auditActions),
+      ColumnSpec('Ação', (e) => auditActions[e['action']] ?? humanizeField('${e['action']}')),
     ],
     onTap: (e) => showDialog<void>(context: context, builder: (_) => AuditDetailDialog(entry: e)),
   );

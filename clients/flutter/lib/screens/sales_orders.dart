@@ -244,7 +244,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
 
   Future<bool> _printOf(int id, String ref) => printPdf(
     context,
-    'Ordem de produção $ref',
+    'Ordem de fabricação $ref',
     () async => buildProductionOrderPdf(api, await api.get('/api/production/orders/$id') as Map<String, dynamic>),
     doneKey: _ofKey(id),
   );
@@ -337,7 +337,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       Future<bool> saveAll() async {
         var all = true;
         for (final e in pending.entries) {
-          all = await savePdf(context, 'Ordem de produção ${e.value}.pdf', () async => buildProductionOrderPdf(api, await api.get('/api/production/orders/${e.key}') as Map<String, dynamic>), doneKey: _ofKey(e.key)) && all;
+          all = await savePdf(context, 'Ordem de fabricação ${e.value}.pdf', () async => buildProductionOrderPdf(api, await api.get('/api/production/orders/${e.key}') as Map<String, dynamic>), doneKey: _ofKey(e.key)) && all;
         }
         return all;
       }
@@ -988,7 +988,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       if (l['productionOrderId'] != null)
         PrintButton(
           key: ValueKey('print-of-${l['productionOrderId']}'),
-          name: 'Ordem de produção ${l['productionReference']}',
+          name: 'Ordem de fabricação ${l['productionReference']}',
           doneKey: _ofKey(l['productionOrderId']),
           builder: () async => buildProductionOrderPdf(api, await api.get('/api/production/orders/${l['productionOrderId']}') as Map<String, dynamic>),
         ),

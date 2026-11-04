@@ -156,7 +156,7 @@ List<DashAlert> buildAlerts(
         null,
         to('sales-orders'),
       ),
-      DashAlert('Comercial', Icons.gavel_outlined, 'Orçamentos a aprovar', commercial.k('pendingApprovals').toInt(), 'sales-quotes', null, to('sales-quotes')),
+      DashAlert('Comercial', Icons.gavel_outlined, 'Orçamentos a autorizar', commercial.k('pendingApprovals').toInt(), 'sales-quotes', null, to('sales-quotes')),
       DashAlert(
         'Comercial',
         Icons.draw_outlined,

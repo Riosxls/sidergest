@@ -11,7 +11,8 @@ using static Ebt.Api.Infrastructure.Crud;
 namespace Ebt.Api.Endpoints;
 
 public record FiscalSettingsDto(bool Enabled, SefazEnvironment Environment, string? CompanyName, string? TradeName, string? Cnpj, string? StateRegistration, int TaxRegime, string? Street, string? Number, string? Complement,
-    string? District, string? City, string? CityIbgeCode, string Uf, string? ZipCode, string? Phone, int Series, int NextNumber, int CancelWindowHours);
+    string? District, string? City, string? CityIbgeCode, string Uf, string? ZipCode, string? Phone, int Series, int NextNumber, int CancelWindowHours,
+    string SefazMode = "", bool SefazSimulated = false); // the last two are output only (ignored on PUT)
 public record CfopIn(string Code, string Description, FiscalKind Kind, bool Taxed, string IcmsCst, string IpiCst, string PisCst, string CofinsCst, decimal DefaultPisPercent, decimal DefaultCofinsPercent,
     string? IpiFramingCode, bool GeneratesInstallments, bool Active = true, string? LegalText = null);
 public record CfopOut(string Code, string Description, FiscalKind Kind, bool Taxed, string IcmsCst, string IpiCst, string PisCst, string CofinsCst, decimal DefaultPisPercent, decimal DefaultCofinsPercent,
@@ -101,8 +102,8 @@ public static class FiscalEndpoints
     private static void MapSettings(WebApplication app)
     {
         var g = app.MapGroup("/api/fiscal/settings").WithTags("Fiscal");
-        g.MapGet("/", async (FiscalService svc, CancellationToken ct) => ToDto(await svc.SettingsAsync(ct))).RequireAuthorization(Policies.Read);
-        g.MapPut("/", async (FiscalSettingsDto i, EbtDbContext db, FiscalService svc, System.Security.Claims.ClaimsPrincipal principal, CancellationToken ct) =>
+        g.MapGet("/", async (FiscalService svc, ISefazClient sefaz, CancellationToken ct) => ToDto(await svc.SettingsAsync(ct), sefaz)).RequireAuthorization(Policies.Read);
+        g.MapPut("/", async (FiscalSettingsDto i, EbtDbContext db, FiscalService svc, ISefazClient sefaz, System.Security.Claims.ClaimsPrincipal principal, CancellationToken ct) =>
         {
             var uf = i.Uf?.Trim().ToUpperInvariant() ?? "";
             var maxNumber = await db.FiscalDocuments.Where(d => d.Series == i.Series).Select(d => (int?)d.Number).MaxAsync(ct) ?? 0;
@@ -150,7 +151,7 @@ public static class FiscalEndpoints
                     Changes = System.Text.Json.JsonSerializer.Serialize(new { NextNumber = new { from = oldNumber, to = i.NextNumber } })
                 });
             await db.SaveChangesAsync(ct);
-            return Results.Ok(ToDto(s));
+            return Results.Ok(ToDto(s, sefaz));
         }).RequireAuthorization(Policies.Admin);
     }
 
@@ -355,6 +356,6 @@ public static class FiscalEndpoints
             d.Events.OrderBy(e => e.CreatedAt).Select(e => new FiscalEventOut(e.Id, e.EventType, e.Sequence, e.Text, e.Protocol, e.Simulated, e.CreatedAt, e.CreatedBy)).ToList());
     }
 
-    private static FiscalSettingsDto ToDto(FiscalSettings s) => new(s.Enabled, s.Environment, s.CompanyName, s.TradeName, s.Cnpj, s.StateRegistration, s.TaxRegime, s.Street, s.Number, s.Complement, s.District, s.City, s.CityIbgeCode, s.Uf,
-        s.ZipCode, s.Phone, s.Series, s.NextNumber, s.CancelWindowHours);
+    private static FiscalSettingsDto ToDto(FiscalSettings s, ISefazClient sefaz) => new(s.Enabled, s.Environment, s.CompanyName, s.TradeName, s.Cnpj, s.StateRegistration, s.TaxRegime, s.Street, s.Number, s.Complement, s.District, s.City, s.CityIbgeCode, s.Uf,
+        s.ZipCode, s.Phone, s.Series, s.NextNumber, s.CancelWindowHours, sefaz.IsSimulated ? "Stub" : "Sp", sefaz.IsSimulated);
 }

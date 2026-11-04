@@ -133,7 +133,7 @@ void main() {
     await tester.tap(find.byTooltip('Inativar'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Inativar este cliente?'), findsOneWidget);
-    await tester.tap(find.text('Confirmar'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Inativar'));
     await tester.pumpAndSettle();
     expect(jsonDecode(env.log.where((r) => r.method == 'PUT').last.body)['active'], false);
     expect(find.textContaining('(inativo)'), findsOneWidget);

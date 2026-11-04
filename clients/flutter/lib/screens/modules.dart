@@ -142,7 +142,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
   /// What needs action comes first; a count and the money behind it share one tile.
   List<GridItem> _commercial(CommercialDashboard d) => [
     _tile(Icons.event_busy_outlined, 'Pedidos atrasados', '${d.k('lateOrders').toInt()}', _go('sales-orders'), d.k('lateOrders') > 0),
-    _tile(Icons.gavel_outlined, 'Aprovações pendentes', '${d.k('pendingApprovals').toInt()}', _go('sales-quotes')),
+    _tile(Icons.gavel_outlined, 'Autorizações pendentes', '${d.k('pendingApprovals').toInt()}', _go('sales-quotes')),
     _tile(Icons.local_shipping_outlined, 'Prontos para expedir', '${d.k('readyToShip').toInt()}', _go('deliveries')),
     _tile(Icons.request_quote_outlined, 'Orçamentos abertos', '${d.k('openQuotes').toInt()}', _go('sales-quotes'), false, fmtMoney(d.k('openQuotesValue'))),
     _tile(Icons.receipt_long_outlined, 'Pedidos abertos', '${d.k('openOrders').toInt()}', _go('sales-orders'), false, fmtMoney(d.k('openOrdersValue'))),

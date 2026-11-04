@@ -44,7 +44,15 @@ class RecordList extends StatefulWidget {
     this.onClearFilters,
     this.emptyAction,
     this.phoneTile,
+    this.bottomPadding,
+    this.rowChevron = false,
   });
+
+  /// Room left under the last row (and the pager) so the floating button never hides it; null is 88 with a [fab], 80 without.
+  final double? bottomPadding;
+
+  /// Shows a trailing chevron on tappable rows (cards and a last cell of the wide table).
+  final bool rowChevron;
 
   /// Content of a row on a phone, in place of the title and the grey line of label/value pairs.
   final Widget Function(BuildContext context, Map<String, dynamic> e)? phoneTile;
@@ -95,6 +103,11 @@ class RecordListState extends State<RecordList> {
   final _search = TextEditingController();
   final _vertical = ScrollController();
   final _horizontal = ScrollController();
+  final _headerHorizontal = ScrollController();
+  final _filterTick = ValueNotifier<int>(0);
+  List<double>? _widths;
+  Object? _widthsPage;
+  double _widthsScale = 0;
   int? _sortColumn;
   bool _ascending = true;
   DateTime? _loadedAt;
@@ -150,6 +163,7 @@ class RecordListState extends State<RecordList> {
   void initState() {
     super.initState();
     reload();
+    _horizontal.addListener(_syncHeader);
     RecordTrail.closed.addListener(_onPageClosed);
     _searchFocus.addListener(_searchFocusChanged);
     unawaited(_restoreView());
@@ -248,6 +262,18 @@ class RecordListState extends State<RecordList> {
       reload();
     }
     if (oldWidget.path == widget.path && !mapEquals(_filterValues(oldWidget), _filterValues(widget))) unawaited(_saveView());
+    // An open filter sheet shows the filters the screen has now (its dropdowns follow what was picked).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _filterTick.value++;
+    });
+  }
+
+  /// The pinned header follows the sideways scroll of the rows.
+  void _syncHeader() {
+    if (!_headerHorizontal.hasClients || !_horizontal.hasClients) return;
+    final max = _headerHorizontal.position.maxScrollExtent;
+    final to = _horizontal.offset.clamp(0.0, max);
+    if (_headerHorizontal.offset != to) _headerHorizontal.jumpTo(to);
   }
 
   @override
@@ -259,7 +285,10 @@ class RecordListState extends State<RecordList> {
     _debounce?.cancel();
     _search.dispose();
     _vertical.dispose();
+    _horizontal.removeListener(_syncHeader);
     _horizontal.dispose();
+    _headerHorizontal.dispose();
+    _filterTick.dispose();
     super.dispose();
   }
 
@@ -338,6 +367,7 @@ class RecordListState extends State<RecordList> {
   Widget _buildBody(BuildContext context, BoxConstraints box) {
     final width = box.maxWidth.isFinite ? box.maxWidth : MediaQuery.sizeOf(context).width;
     final wide = width >= 900;
+    final collapseFilters = width < 600 && widget.filters.isNotEmpty;
     final page = _page;
     return Focus(
       focusNode: _listFocus,
@@ -361,7 +391,7 @@ class RecordListState extends State<RecordList> {
                       children: [
                         if (widget.searchable)
                           SizedBox(
-                            width: wide ? 320 : math.max(160, width - 96),
+                            width: wide ? 320 : math.max(160, width - 96 - (collapseFilters ? 124 : 0)),
                             child: TextField(
                               key: const ValueKey('record-search'),
                               controller: _search,
@@ -374,7 +404,7 @@ class RecordListState extends State<RecordList> {
                               onChanged: _onSearch,
                             ),
                           ),
-                        ...widget.filters,
+                        if (collapseFilters) _filtersButton() else ...widget.filters,
                       ],
                     ),
                   ),
@@ -416,6 +446,63 @@ class RecordListState extends State<RecordList> {
     );
   }
 
+  /// Filters in use: the chosen drop-downs when there are any, otherwise all of them while the screen says something narrows the list.
+  int get _activeFilters {
+    final chosen = widget.filters.whereType<ChoiceFilter>().where((f) => f.value != null).length;
+    if (chosen > 0) return chosen;
+    return widget.filtersActive ? widget.filters.length : 0;
+  }
+
+  /// On a phone the filters do not stack above the list: one button opens them in a sheet.
+  Widget _filtersButton() {
+    final n = _activeFilters;
+    return OutlinedButton.icon(
+      key: const ValueKey('filters-button'),
+      onPressed: _openFilters,
+      icon: const Icon(Icons.filter_list),
+      label: Text(n > 0 ? 'Filtros ($n)' : 'Filtros'),
+    );
+  }
+
+  Future<void> _openFilters() => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (c) => SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.viewInsetsOf(c).bottom),
+        child: ValueListenableBuilder<int>(
+          valueListenable: _filterTick,
+          builder: (_, _, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text('Filtros', style: Theme.of(c).textTheme.titleMedium)),
+                  if (widget.onClearFilters != null && _activeFilters > 0)
+                    TextButton(
+                      key: const ValueKey('filters-clear'),
+                      onPressed: () {
+                        Navigator.pop(c);
+                        _clearFilters();
+                      },
+                      child: const Text('Limpar filtros'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              for (final f in widget.filters) Padding(padding: const EdgeInsets.only(bottom: 12), child: f),
+              FilledButton(key: const ValueKey('filters-done'), onPressed: () => Navigator.pop(c), child: const Text('Concluir')),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  double get _bottomPad => widget.bottomPadding ?? (widget.fab != null ? 88 : 80);
+
   Widget _empty() {
     final cs = Theme.of(context).colorScheme;
     final narrowed = _q.isNotEmpty || widget.filtersActive;
@@ -444,65 +531,193 @@ class RecordListState extends State<RecordList> {
     );
   }
 
-  Widget _table(List<Map<String, dynamic>> items) => Scrollbar(
-    controller: _vertical,
-    thumbVisibility: true,
-    child: SingleChildScrollView(
-      controller: _vertical,
-      padding: const EdgeInsets.only(bottom: 80),
-      child: Scrollbar(
-        controller: _horizontal,
-        thumbVisibility: true,
-        notificationPredicate: (n) => n.depth == 0,
-        child: SingleChildScrollView(controller: _horizontal, scrollDirection: Axis.horizontal, child: _dataTable(items)),
-      ),
-    ),
-  );
+  // The wide table is a header row pinned above the scrolling rows. Both are laid out with the same fixed column widths (measured from the
+  // text on the page), and the header follows the rows' sideways scroll, so the columns stay lined up without the header scrolling away.
+  static const _margin = 16.0;
+  static const _spacing = 32.0;
+  static const _maxCol = 320.0;
+  static const _actionsCol = 48.0;
+  static const _chevronCol = 24.0;
+  static const _sortSlot = 24.0;
 
-  Widget _dataTable(List<Map<String, dynamic>> items) => DataTable(
-    showCheckboxColumn: false,
-    headingRowHeight: 40,
-    dataRowMinHeight: 36,
-    // Larger text (accessibility scale) needs taller rows or the cells are cut.
-    dataRowMaxHeight: MediaQuery.textScalerOf(context).scale(44).clamp(44, 132).toDouble(),
-    sortColumnIndex: _sortColumn,
-    sortAscending: _ascending,
-    columns: [
-      for (var i = 0; i < widget.columns.length; i++)
-        DataColumn(
-          label: Text(widget.columns[i].label),
-          numeric: widget.columns[i].numeric,
-          onSort: (col, asc) {
-            setState(() {
-              _sortColumn = col;
-              _ascending = asc;
-            });
-            unawaited(_saveView());
-          },
-        ),
-      if (widget.rowActions != null) const DataColumn(label: SizedBox.shrink()),
-    ],
-    rows: [
-      for (final e in items)
-        DataRow(
-          color: WidgetStateProperty.resolveWith(
-            (_) => _rowTint(context, e, items),
-          ),
-          selected: identical(e, _highlighted(items)),
-          onSelectChanged: widget.onTap == null ? null : (_) => _tap(e),
-          cells: [
-            for (final c in widget.columns)
-              DataCell(
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 320),
-                  child: c.cell != null ? c.cell!(context, e) : Tooltip(message: c.value(e), waitDuration: const Duration(milliseconds: 600), child: Text(c.value(e), overflow: TextOverflow.ellipsis)),
-                ),
+  bool get _chevron => widget.rowChevron && widget.onTap != null;
+
+  double _headerHeight() => MediaQuery.textScalerOf(context).scale(40).clamp(40, 96).toDouble();
+
+  TextStyle _headStyle() => DataTableTheme.of(context).headingTextStyle ?? Theme.of(context).textTheme.titleSmall!.copyWith(fontWeight: FontWeight.w600);
+
+  TextStyle _dataStyle() => DataTableTheme.of(context).dataTextStyle ?? Theme.of(context).textTheme.bodyMedium!;
+
+  /// One width per data column: the widest of its header (plus the sort arrow) and its cells on this page.
+  List<double> _columnWidths(List<Map<String, dynamic>> items) {
+    final scale = MediaQuery.textScalerOf(context).scale(10);
+    final cached = _widths;
+    if (cached != null && identical(_widthsPage, _page) && _widthsScale == scale && cached.length == widget.columns.length) return cached;
+    final scaler = MediaQuery.textScalerOf(context);
+    final head = _headStyle(), data = _dataStyle();
+    double measure(String s, TextStyle style) {
+      final tp = TextPainter(text: TextSpan(text: s, style: style), textDirection: TextDirection.ltr, textScaler: scaler, maxLines: 1)..layout();
+      final w = tp.width;
+      tp.dispose();
+      return w;
+    }
+
+    final out = <double>[];
+    for (final c in widget.columns) {
+      var cells = 0.0;
+      for (final e in items) {
+        cells = math.max(cells, measure(c.value(e), data) + (c.cell != null ? 40 : 0));
+      }
+      out.add(math.max(math.min(cells + 2, _maxCol), measure(c.label, head) + _sortSlot + 4).ceilToDouble());
+    }
+    _widths = out;
+    _widthsPage = _page;
+    _widthsScale = scale;
+    return out;
+  }
+
+  Widget _table(List<Map<String, dynamic>> items) {
+    final widths = _columnWidths(items);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _stickyHeader(widths),
+        Expanded(
+          child: Scrollbar(
+            controller: _vertical,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _vertical,
+              padding: EdgeInsets.only(bottom: _bottomPad),
+              child: Scrollbar(
+                controller: _horizontal,
+                thumbVisibility: true,
+                notificationPredicate: (n) => n.depth == 0,
+                child: SingleChildScrollView(controller: _horizontal, scrollDirection: Axis.horizontal, child: _dataTable(items, widths)),
               ),
-            if (widget.rowActions != null) DataCell(_menu(e)),
-          ],
+            ),
+          ),
         ),
-    ],
-  );
+      ],
+    );
+  }
+
+  void _sortBy(int col) {
+    setState(() {
+      _ascending = _sortColumn == col ? !_ascending : true;
+      _sortColumn = col;
+    });
+    unawaited(_saveView());
+  }
+
+  Widget _stickyHeader(List<double> widths) {
+    final cs = Theme.of(context).colorScheme;
+    final style = _headStyle();
+    final extra = [if (widget.rowActions != null) _actionsCol, if (_chevron) _chevronCol];
+    Widget cell(int i) {
+      final c = widget.columns[i];
+      final sorted = _sortColumn == i;
+      final label = Text(c.label, style: style, maxLines: 1, overflow: TextOverflow.ellipsis);
+      final arrow = SizedBox(width: _sortSlot, child: sorted ? Icon(_ascending ? Icons.arrow_upward : Icons.arrow_downward, size: 16) : null);
+      return Semantics(
+        button: true,
+        child: InkWell(
+          onTap: () => _sortBy(i),
+          child: SizedBox(
+            width: widths[i],
+            height: double.infinity,
+            child: Row(
+              mainAxisAlignment: c.numeric ? MainAxisAlignment.end : MainAxisAlignment.start,
+              children: [
+                if (c.numeric) arrow,
+                Flexible(child: label),
+                if (!c.numeric) arrow,
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Material(
+      color: cs.surface,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: cs.outlineVariant)),
+        ),
+        child: SingleChildScrollView(
+          controller: _headerHorizontal,
+          scrollDirection: Axis.horizontal,
+          physics: const NeverScrollableScrollPhysics(),
+          child: SizedBox(
+            height: _headerHeight(),
+            child: Row(
+              children: [
+                const SizedBox(width: _margin),
+                for (var i = 0; i < widths.length; i++) ...[
+                  if (i > 0) const SizedBox(width: _spacing),
+                  cell(i),
+                ],
+                for (final w in extra) ...[const SizedBox(width: _spacing), SizedBox(width: w)],
+                const SizedBox(width: _margin),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dataTable(List<Map<String, dynamic>> items, List<double> widths) {
+    final cs = Theme.of(context).colorScheme;
+    return DataTable(
+      showCheckboxColumn: false,
+      // The header lives above the scrolling rows (see _stickyHeader); the table keeps its own at zero height for the column widths and sort state.
+      headingRowHeight: 0,
+      horizontalMargin: _margin,
+      columnSpacing: _spacing,
+      dataRowMinHeight: 36,
+      // Larger text (accessibility scale) needs taller rows or the cells are cut.
+      dataRowMaxHeight: MediaQuery.textScalerOf(context).scale(44).clamp(44, 132).toDouble(),
+      sortColumnIndex: _sortColumn,
+      sortAscending: _ascending,
+      columns: [
+        for (var i = 0; i < widget.columns.length; i++) DataColumn(label: SizedBox(width: widths[i]), numeric: widget.columns[i].numeric),
+        if (widget.rowActions != null) const DataColumn(label: SizedBox(width: _actionsCol)),
+        if (_chevron) const DataColumn(label: SizedBox(width: _chevronCol)),
+      ],
+      rows: [
+        for (final e in items)
+          DataRow(
+            color: WidgetStateProperty.resolveWith(
+              (_) => _rowTint(context, e, items),
+            ),
+            selected: identical(e, _highlighted(items)),
+            onSelectChanged: widget.onTap == null ? null : (_) => _tap(e),
+            cells: [
+              for (var i = 0; i < widget.columns.length; i++)
+                DataCell(
+                  SizedBox(
+                    width: widths[i],
+                    child: Align(
+                      alignment: widget.columns[i].numeric ? Alignment.centerRight : Alignment.centerLeft,
+                      child: widget.columns[i].cell != null
+                          ? FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: widget.columns[i].cell!(context, e))
+                          : Tooltip(
+                              message: widget.columns[i].value(e),
+                              waitDuration: const Duration(milliseconds: 600),
+                              child: Text(widget.columns[i].value(e), overflow: TextOverflow.ellipsis),
+                            ),
+                    ),
+                  ),
+                ),
+              if (widget.rowActions != null) DataCell(SizedBox(width: _actionsCol, child: _menu(e))),
+              if (_chevron) DataCell(Icon(Icons.chevron_right, color: cs.onSurfaceVariant)),
+            ],
+          ),
+      ],
+    );
+  }
 
   /// Colour of a row: the screen's own tint (late, alert) stays, and the keyboard-selected row gets a primary wash over it instead of replacing it.
   Color? _rowTint(BuildContext context, Map<String, dynamic> e, List<Map<String, dynamic>> items) {
@@ -531,13 +746,25 @@ class RecordListState extends State<RecordList> {
     );
   }
 
+  /// Trailing part of a card: the row menu and/or the chevron of a tappable row.
+  Widget? _trailing(Map<String, dynamic> e) {
+    final menu = widget.rowActions == null ? null : _menu(e);
+    if (!_chevron) return menu;
+    final chevron = Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant);
+    return menu == null ? chevron : Row(mainAxisSize: MainAxisSize.min, children: [menu, chevron]);
+  }
+
   Widget _list(List<Map<String, dynamic>> items) => ListView.separated(
-    padding: const EdgeInsets.only(bottom: 80),
+    padding: EdgeInsets.only(bottom: _bottomPad),
     itemCount: items.length,
     separatorBuilder: (_, _) => const Divider(height: 1),
     itemBuilder: (_, i) {
       final e = items[i];
-      final cols = widget.columns;
+      final cols = [
+        for (final c in widget.columns)
+          if (!c.hideOnNarrow) c,
+      ];
+      if (cols.isEmpty) return const SizedBox.shrink();
       final pairs = cols.skip(2).map((c) => (c.label, c.value(e))).where((p) => p.$2.isNotEmpty).toList();
       final muted = TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant);
       if (widget.phoneTile != null) {
@@ -545,7 +772,7 @@ class RecordListState extends State<RecordList> {
           tileColor: _rowTint(context, e, items),
           selected: identical(e, _highlighted(items)),
           title: widget.phoneTile!(context, e),
-          trailing: widget.rowActions == null ? null : _menu(e),
+          trailing: _trailing(e),
           onTap: widget.onTap == null ? null : () => _tap(e),
         );
       }
@@ -580,7 +807,7 @@ class RecordListState extends State<RecordList> {
                   ],
                 ),
               ),
-        trailing: widget.rowActions == null ? null : _menu(e),
+        trailing: _trailing(e),
         onTap: widget.onTap == null ? null : () => _tap(e),
       );
     },

@@ -354,7 +354,7 @@ void main() {
       await tester.pumpAndSettle();
       await _openLotMenu(tester, 'Excluir lote');
       expect(find.text('Excluir B-100?'), findsOneWidget);
-      await tester.tap(find.text('Cancelar'));
+      await tester.tap(find.text('Voltar'));
       await tester.pumpAndSettle();
       expect(fake.has('DELETE', '/api/steel/lots/3'), isFalse);
       await _openLotMenu(tester, 'Excluir lote');
@@ -410,7 +410,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Remover remessa?'), findsOneWidget);
       expect(find.text('O saldo do lote é recalculado.'), findsOneWidget);
-      await tester.tap(find.text('Cancelar'));
+      await tester.tap(find.text('Voltar'));
       await tester.pumpAndSettle();
       expect(fake.log.any((r) => r.method == 'DELETE'), isFalse);
       await _rowMenu(tester, 'job-menu-9', 'Remover');

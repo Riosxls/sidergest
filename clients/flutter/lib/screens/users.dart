@@ -104,7 +104,7 @@ class _UsersScreenState extends State<UsersScreen> {
         final pw = '${b['password'] ?? ''}';
         // Only a change of profile, status or password signs the user out; saving without touching them asks nothing.
         final sensitive = b['role'] != u['role'] || (b['active'] == true) != (u['active'] == true) || pw.isNotEmpty;
-        if (sensitive && !await confirm(context, 'Alterar perfil, situação ou senha desconecta ${u['username']} de todos os dispositivos. Continuar?')) {
+        if (sensitive && !await confirm(context, 'Alterar perfil, situação ou senha desconecta ${u['username']} de todos os dispositivos. Continuar?', confirmLabel: 'Salvar e desconectar', cancelLabel: 'Voltar')) {
           // Backing out is not an error: the form stays open and the message is empty.
           throw ApiException(0, '');
         }

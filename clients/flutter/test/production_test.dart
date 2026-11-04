@@ -334,7 +334,7 @@ void main() {
     expect(fake.last('GET', '/api/production/load').url.queryParameters['groupBy'], 'machine');
     await tester.tap(find.byKey(const ValueKey('schedule-all')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Confirmar'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Reprogramar'));
     await tester.pumpAndSettle();
     expect(find.text('1 OF(s) programada(s) · 1 atrasada(s)'), findsOneWidget);
   });

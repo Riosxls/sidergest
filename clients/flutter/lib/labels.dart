@@ -44,7 +44,19 @@ const userRoles = {
   'SalesManager': 'Gerente de vendas',
 };
 
-const auditActions = {'Insert': 'Criado', 'Update': 'Alterado', 'Delete': 'Excluído'};
+const auditActions = {
+  'Insert': 'Criado',
+  'Update': 'Alterado',
+  'Delete': 'Excluído',
+  'Status': 'Mudança de situação',
+  'PasswordReset': 'Senha redefinida',
+  'PasswordChange': 'Senha alterada',
+  'Unlock': 'Usuário desbloqueado',
+  'Lockout': 'Usuário bloqueado',
+  'SessionRevoked': 'Sessão encerrada',
+  'SessionsRevoked': 'Sessões encerradas',
+  'AccessChanged': 'Acesso alterado',
+};
 
 const auditEntities = [
   'Customer', 'CustomerAddress', 'Supplier', 'SupplierAddress', 'Material', 'Product', 'AppUser', 'StockLocation', 'StockSettings', 'StockClosing',
@@ -65,7 +77,7 @@ const policyDescriptions = {
   'production': 'Operar ordens de fabricação e apontamentos',
   'production-materials': 'Movimentar materiais da produção',
   'sales': 'Criar orçamentos e pedidos de venda',
-  'sales-approve': 'Aprovar orçamentos e pedidos de venda',
+  'sales-approve': 'Autorizar descontos de orçamentos e pedidos de venda',
   'sales-release': 'Liberar pedidos para produção',
   'sales-ship': 'Confirmar a expedição física das entregas (estoque, vendas)',
   'fiscal-emit': 'Emitir a nota fiscal de venda (na expedição ou depois dela)',
@@ -115,8 +127,8 @@ const productionKinds = {'Standard': 'OF', 'Internal': 'OPI (interna)'};
 
 const quoteStatuses = {
   'Draft': 'Rascunho',
-  'PendingApproval': 'Aguardando aprovação',
-  'Approved': 'Desconto aprovado',
+  'PendingApproval': 'Aguardando autorização',
+  'Approved': 'Desconto autorizado',
   'Sent': 'Enviada ao cliente',
   'Accepted': 'Aprovada pelo cliente',
   'PurchaseOrder': 'Pedido de compra recebido',
@@ -142,7 +154,7 @@ const pipelineStages = {
   'accepted': 'Aprovada',
   'po': 'Pedido de compra',
   'order': 'Pedido',
-  'production': 'Ordem de Produção',
+  'production': 'Ordem de Fabricação',
   'certificate': 'Certificado',
   'ready': 'Pronto p/ expedir',
   'shipped': 'Expedição',
@@ -151,8 +163,8 @@ const pipelineStages = {
 const salesActions = {
   'created': 'Criação',
   'edited': 'Edição',
-  'submitted': 'Envio para aprovação do gerente',
-  'approved': 'Desconto aprovado',
+  'submitted': 'Envio para autorização do gerente',
+  'approved': 'Desconto autorizado',
   'approval-rejected': 'Desconto recusado',
   'sent': 'Envio ao cliente registrado',
   'po-received': 'Pedido de compra recebido',
@@ -164,7 +176,7 @@ const salesActions = {
   'delivery-dates': 'Data de entrega do cliente',
   'revised': 'Nova revisão criada',
   'duplicated': 'Copiado de outro orçamento',
-  'approval-lapsed': 'Aprovação de desconto vencida',
+  'approval-lapsed': 'Autorização de desconto vencida',
   'po-text': 'Texto do pedido de compra',
   'po-file': 'Pedido de compra anexado',
   'po-file-removed': 'Anexo do pedido de compra removido',

@@ -166,6 +166,38 @@ public class IdleLockTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Audit_filters_by_action_case_insensitively_and_lists_actions()
+    {
+        var admin = await api.AdminAsync();
+        var s = await (await admin.GetAsync("/api/fiscal/settings")).Read<FiscalSettingsDto>();
+        (await admin.Put("/api/fiscal/settings", s with { NextNumber = s.NextNumber + 3 })).EnsureSuccessStatusCode();
+
+        var actions = await (await admin.GetAsync("/api/audit/actions")).Read<List<string>>();
+        Assert.Contains("Update", actions);
+        Assert.Equal(actions.OrderBy(a => a).ToList(), actions);
+
+        var page = await (await admin.GetAsync("/api/audit?entity=FiscalSettings&action=uPDATE")).Read<Page<AuditOut>>();
+        Assert.NotEmpty(page.Items);
+        Assert.All(page.Items, a => Assert.Equal("Update", a.Action));
+        var none = await (await admin.GetAsync("/api/audit?entity=FiscalSettings&action=Delete")).Read<Page<AuditOut>>();
+        Assert.Empty(none.Items);
+
+        var reader = await api.UserAsync(UserRole.Reader);
+        Assert.Equal(System.Net.HttpStatusCode.Forbidden, (await reader.GetAsync("/api/audit/actions")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Fiscal_settings_report_the_sefaz_mode()
+    {
+        var admin = await api.AdminAsync();
+        var s = await (await admin.GetAsync("/api/fiscal/settings")).Read<FiscalSettingsDto>();
+        Assert.Equal("Stub", s.SefazMode);
+        Assert.True(s.SefazSimulated);
+        var saved = await (await admin.Put("/api/fiscal/settings", s)).Read<FiscalSettingsDto>();
+        Assert.Equal("Stub", saved.SefazMode);
+    }
+
+    [Fact]
     public async Task Easy_to_guess_passwords_are_rejected()
     {
         var admin = await api.AdminAsync();

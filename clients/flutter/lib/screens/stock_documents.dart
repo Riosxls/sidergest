@@ -9,6 +9,7 @@ import '../labels.dart';
 import '../session.dart';
 import '../theme_tokens.dart';
 import '../widgets/actions.dart';
+import '../widgets/date_input_formatter.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/load_error.dart';
@@ -114,6 +115,7 @@ class _DocumentScreenState extends State<DocumentScreen> {
       label: 'Motivo do estorno (as linhas voltam ao estoque)',
       required: true,
       confirmLabel: 'Estornar',
+      danger: true,
     );
     if (notes == null || !mounted) return;
     final r = await runAction(context, () => widget.session.api.post('/api/stock/documents/${widget.id}/reverse', {'notes': notes}));
@@ -497,6 +499,7 @@ class _StockPostScreenState extends State<StockPostScreen> {
                         key: const ValueKey('post-date'),
                         controller: _date,
                         keyboardType: TextInputType.datetime,
+                        inputFormatters: const [DateSlashFormatter()],
                         textInputAction: TextInputAction.next,
                         onChanged: (_) => setState(() {}),
                         decoration: InputDecoration(

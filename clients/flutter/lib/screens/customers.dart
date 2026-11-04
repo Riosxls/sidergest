@@ -105,6 +105,17 @@ const _companyFields = [
   FieldSpec('creditLimit', 'Limite de crédito (R\$)', type: FieldType.decimal, hint: 'Vazio = vale o limite do prazo'),
 ];
 
+/// Helper text for the phone fields of the customer forms: it only warns, it never blocks saving. A phone has 8 to 11 digits once the
+/// punctuation is stripped (landline, mobile, with area code); an empty field and values saved by the old system are left alone.
+String? phoneHint(String key, Map<String, dynamic> values) {
+  if (key != 'phone' && key != 'company.phone') return null;
+  final text = '${values[key] ?? ''}'.trim();
+  if (text.isEmpty) return null;
+  final digits = text.replaceAll(RegExp(r'\D'), '').length;
+  if (digits >= 8 && digits <= 11) return null;
+  return digits < 8 ? 'Confira o telefone: costuma ter de 8 a 11 dígitos (com DDD)' : 'Confira o telefone: tem mais de 11 dígitos';
+}
+
 List<FieldSpec> _companyFormFields() => [
   for (final f in _companyFields) FieldSpec('company.${f.key}', f.label, type: f.type, hint: f.hint, lookup: f.lookup, defaultValue: f.defaultValue, choices: f.choices),
 ];
@@ -177,6 +188,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       context,
       api: s.api,
       title: 'Novo cliente',
+      hintFor: phoneHint,
       fields: [
         const FieldSpec('name', 'Nome / razão social', required: true),
         const FieldSpec('tradeName', 'Nome fantasia'),
@@ -276,6 +288,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
       context,
       api: s.api,
       title: 'Cliente',
+      hintFor: phoneHint,
       fields: [
         const FieldSpec('name', 'Nome / razão social', required: true),
         const FieldSpec('tradeName', 'Nome fantasia'),
@@ -295,7 +308,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
 
   Future<void> _toggleActive() async {
     final msg = _isActive ? 'Inativar este cliente? Ele deixa de aparecer nas buscas de novos orçamentos e pedidos.' : 'Reativar este cliente?';
-    if (!await confirm(context, msg)) return;
+    if (!await confirm(context, msg, confirmLabel: _isActive ? 'Inativar' : 'Reativar', cancelLabel: 'Voltar', danger: _isActive)) return;
     try {
       await _save({'active': !_isActive});
     } catch (e) {
@@ -518,6 +531,7 @@ class _CustomerAddressesState extends State<_CustomerAddresses> {
       api: s.api,
       title: current == null ? 'Novo local de entrega' : 'Local de entrega',
       fields: _shippingFields,
+      hintFor: phoneHint,
       initial: current == null ? null : _normalizeUf(current, 'uf'),
       readOnly: !s.canCustomers,
       onSubmit: (b) async {

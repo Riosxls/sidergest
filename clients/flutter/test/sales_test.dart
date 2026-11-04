@@ -526,7 +526,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('quote-approve')));
     await tester.pumpAndSettle();
     expect(manager.last('POST', '/api/sales/quotes/5/approve'), isNotNull);
-    expect(find.text('Desconto aprovado'), findsWidgets);
+    expect(find.text('Desconto autorizado'), findsWidgets);
   });
 
   testWidgets('proposal with purchase order becomes a sales order', (tester) async {

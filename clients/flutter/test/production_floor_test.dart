@@ -184,7 +184,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('report-delete')));
       await tester.pumpAndSettle();
       expect(find.text('Excluir este apontamento?'), findsOneWidget);
-      await tester.tap(find.text('Confirmar'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Excluir'));
       await tester.pumpAndSettle();
       expect(fake.has('DELETE', '/api/production/reports/31'), isTrue);
       expect(find.text('Apontamento excluído'), findsOneWidget);
@@ -197,7 +197,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('report-delete')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancelar'));
+      await tester.tap(find.text('Voltar'));
       await tester.pumpAndSettle();
       expect(fake.log.any((r) => r.method == 'DELETE'), isFalse);
     });
@@ -345,7 +345,7 @@ void main() {
       final before = fake.log.where((r) => r.method == 'GET' && r.url.path == '/api/production/reports').length;
       await tester.tap(find.byKey(const ValueKey('report-delete')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Confirmar'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Excluir'));
       await tester.pumpAndSettle();
       expect(fake.log.where((r) => r.method == 'GET' && r.url.path == '/api/production/reports').length, greaterThan(before));
     });
@@ -531,12 +531,12 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('schedule-all')));
       await tester.pumpAndSettle();
       expect(find.text('Reprogramar todas as OFs abertas a partir de hoje?'), findsOneWidget);
-      await tester.tap(find.text('Cancelar'));
+      await tester.tap(find.text('Voltar'));
       await tester.pumpAndSettle();
       expect(fake.has('POST', '/api/production/schedule'), isFalse);
       await tester.tap(find.byKey(const ValueKey('schedule-all')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Confirmar'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Reprogramar'));
       await tester.pumpAndSettle();
       expect(find.text('0 OF(s) programada(s)'), findsOneWidget);
       await tester.tap(find.text('Fechar'));

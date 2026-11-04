@@ -225,6 +225,7 @@ class _FeasibilityScreenState extends State<FeasibilityScreen> {
       title: 'Excluir ${_f!['reference']}?',
       message: 'Só rascunhos podem ser excluídos.',
       confirmLabel: 'Excluir',
+      cancelLabel: 'Voltar',
       danger: true,
     );
     if (!ok || !mounted) return;
