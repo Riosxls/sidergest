@@ -10,7 +10,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api.dart';
 import '../entities.dart';
 import '../prefs.dart';
-import 'pipeline.dart';
 import 'record_nav.dart';
 
 /// One entry of a [RecordList] row menu; the list reloads after [run].
