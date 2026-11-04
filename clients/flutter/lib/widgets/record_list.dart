@@ -788,8 +788,6 @@ class TotalsBlock extends StatelessWidget {
   }
 }
 
-/// Status label with a dot; [alert] paints it red, [ok] green. Same look as [StatusBadge] so lists and record pages read alike.class StatusChip extends StatelessWidget {  const StatusChip(this.label, {super.key, this.alert = false, this.ok = false});  final String label;  final bool alert;  final bool ok;  @override  Widget build(BuildContext context) => StatusBadge(label, tone: alert ? Tone.danger : (ok ? Tone.success : Tone.neutral), icon: Icons.circle);}
-
 /// Read-only table for small, already loaded rows.
 ///
 /// The layout follows the width the table is given (the card it sits in), not the window: a record page opens beside the sidebar, so a wide
