@@ -349,7 +349,8 @@ void main() {
     test('a stored text scale outside the choices snaps to the nearest one', () async {
       expect(Session.snapTextScale(1.0), 1.0);
       expect(Session.snapTextScale(1.2), 1.15);
-      expect(Session.snapTextScale(1.5), 1.3);
+      expect(Session.snapTextScale(1.5), 1.5);
+      expect(Session.snapTextScale(1.9), 1.5);
       expect(Session.snapTextScale(0.5), 1.0);
       SharedPreferences.setMockInitialValues({'textScale': 1.1});
       final s = Session();

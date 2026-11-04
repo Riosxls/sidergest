@@ -62,6 +62,7 @@ class AppearanceSection extends StatelessWidget {
                 ButtonSegment(value: 1.0, label: Text('Normal')),
                 ButtonSegment(value: 1.15, label: Text('Grande')),
                 ButtonSegment(value: 1.3, label: Text('Maior')),
+                ButtonSegment(value: 1.5, label: Text('Enorme')),
               ],
               selected: {session.textScale},
               onSelectionChanged: (s) => session.setTextScale(s.first),

@@ -88,7 +88,7 @@ class Session extends ChangeNotifier {
 
   static const dashboardRefreshChoices = [0, 2, 5, 10];
   static const idleLockChoices = [0, 15, 30, 60];
-  static const textScaleChoices = [1.0, 1.15, 1.3];
+  static const textScaleChoices = [1.0, 1.15, 1.3, 1.5];
 
   /// Idle-lock options offered in the settings: with an administrator cap the larger ones and "Nunca" disappear, and an effective value
   /// outside the list (the cap itself, or a server default such as 45) is added so the current setting is always shown.

@@ -117,6 +117,8 @@ class UserMenu extends StatelessWidget {
         switch (v) {
           case 'profile':
             showUserSettings(context, session, section: 'account');
+          case 'appearance':
+            showUserSettings(context, session, section: 'appearance');
           case 'settings':
             showUserSettings(context, session);
           case 'logout':
@@ -129,7 +131,14 @@ class UserMenu extends StatelessWidget {
       itemBuilder: (_) => [
         PopupMenuItem<String>(key: const ValueKey('menu-header'), enabled: false, height: 72, child: _header(theme)),
         const PopupMenuDivider(),
-        PopupMenuItem<String>(key: const ValueKey('menu-appearance'), enabled: false, child: _appearance(theme)),
+        // Enabled on purpose: a disabled item dims its icons and text, so the controls looked dead. A tap beside a control just closes the menu.
+        PopupMenuItem<String>(key: const ValueKey('menu-appearance'), child: _appearance(theme)),
+        const PopupMenuItem<String>(
+          key: ValueKey('menu-appearance-more'),
+          value: 'appearance',
+          height: 36,
+          child: Row(children: [Icon(Icons.palette_outlined, size: 20), SizedBox(width: 12), Flexible(child: Text('Mais em Aparência', overflow: TextOverflow.ellipsis))]),
+        ),
         const PopupMenuDivider(),
         const PopupMenuItem<String>(
           value: 'profile',
