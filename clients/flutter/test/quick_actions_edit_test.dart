@@ -42,7 +42,7 @@ void main() {
 
   testWidgets('without a choice the Painel shows the five default shortcuts', (tester) async {
     final s = _session('Admin');
-    expect([for (final a in quickActionsFor(s)) a.label], ['Novo orçamento', 'Novo produto', 'Nova ordem de fabricação', 'Nova requisição', 'Novo pedido']);
+    expect([for (final a in quickActionsFor(s)) a.label], ['Novo orçamento', 'Novo produto', 'Nova ordem de fabricação', 'Nova requisição', 'Novo pedido ao fornecedor']);
     await _pump(tester, s);
     expect(find.byKey(const ValueKey('quick-actions-edit')), findsOneWidget);
   });
@@ -63,7 +63,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(s.quickActionIds, ['new-quote', 'new-product', 'new-production-order', 'new-requisition', 'low-stock']);
     expect(find.widgetWithText(FilledButton, 'Estoque mínimo'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Novo pedido'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Novo pedido ao fornecedor'), findsNothing);
     expect((await SharedPreferences.getInstance()).getStringList('quickActions'), s.quickActionIds);
   });
 

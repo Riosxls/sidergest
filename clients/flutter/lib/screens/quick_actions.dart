@@ -48,7 +48,7 @@ List<QuickAction> quickActionCatalog(Session s, {void Function(String id)? go}) 
   if (s.canProduce) QuickAction(Icons.add_task, 'Nova ordem de fabricação', (c) => newProductionOrder(c, s), id: 'new-production-order'),
   if (s.canProduce) QuickAction(Icons.timer_outlined, 'Novo apontamento', (c) => newReport(c, s), id: 'new-report'),
   if (s.canRequest) QuickAction(Icons.post_add, 'Nova requisição', (c) => newRequisition(c, s), id: 'new-requisition'),
-  if (s.canBuy) QuickAction(Icons.add_shopping_cart, 'Novo pedido', (c) => newPurchaseOrder(c, s), id: 'new-purchase-order'),
+  if (s.canBuy) QuickAction(Icons.add_shopping_cart, 'Novo pedido ao fornecedor', (c) => newPurchaseOrder(c, s), id: 'new-purchase-order'),
   if (s.canStock) QuickAction(Icons.swap_vert, 'Novo lançamento', (c) => newStockPosting(c, s), id: 'new-stock-posting'),
   if (s.canStock) QuickAction(Icons.lock_clock_outlined, 'Nova reserva', (c) => newReservation(c, s), id: 'new-reservation'),
   if (go != null) QuickAction(Icons.trending_down, 'Estoque mínimo', (c) async => go('low-stock'), id: 'low-stock'),

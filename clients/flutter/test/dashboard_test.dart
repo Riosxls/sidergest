@@ -218,14 +218,14 @@ void main() {
   testWidgets('quick actions follow the role', (tester) async {
     await pumpShell(tester, 'Production');
     expect(find.text('Nova ordem de fabricação'), findsWidgets);
-    expect(find.text('Novo pedido'), findsNothing);
+    expect(find.text('Novo pedido ao fornecedor'), findsNothing);
     expect(find.text('Novo produto'), findsNothing);
     expect(find.text('Novo orçamento'), findsNothing);
   });
 
   testWidgets('admin quick actions open the creation forms', (tester) async {
     await pumpShell(tester, 'Admin');
-    for (final l in ['Novo orçamento', 'Novo produto', 'Nova ordem de fabricação', 'Nova requisição', 'Novo pedido']) {
+    for (final l in ['Novo orçamento', 'Novo produto', 'Nova ordem de fabricação', 'Nova requisição', 'Novo pedido ao fornecedor']) {
       expect(find.text(l), findsOneWidget);
     }
     await tester.tap(find.text('Nova ordem de fabricação'));
