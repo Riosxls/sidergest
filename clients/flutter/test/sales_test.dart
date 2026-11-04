@@ -376,8 +376,8 @@ void main() {
     expect(s.canApproveSales, isFalse);
     expect(s.canShip, isTrue);
     expect(quotePath('Sent'), (1, null));
-    expect(quotePath('Accepted'), (2, null));
-    expect(quotePath('PurchaseOrder'), (3, null));
+    expect(quotePath('Accepted'), (3, null));
+    expect(quotePath('PurchaseOrder'), (4, null));
     expect(quotePath('Rejected'), (2, 'Perdida'));
     expect(quotePath('Cancelled'), (0, 'Cancelada'));
     expect(quotePath('Cancelled', superseded: true), (0, 'Substituída'));
@@ -426,10 +426,9 @@ void main() {
     expect(find.text('Aprovada pelo cliente · falta o pedido de compra'), findsOneWidget);
     expect(find.textContaining('Passo 1 de 2'), findsOneWidget);
     expect(find.byKey(const ValueKey('quote-po-start')), findsOneWidget);
-    expect(find.byKey(const ValueKey('quote-po-attach')), findsOneWidget);
+    // the step card carries the buttons; the section only appears once something is attached
+    expect(find.byKey(const ValueKey('quote-po-attach')), findsNothing);
     expect(find.byKey(const ValueKey('quote-po')), findsNothing); // nothing to register until the order is attached
-    // the attachment area sits right under the step card, above the items
-    expect(tester.getTopLeft(find.text('Pedido de compra').first).dy, lessThan(tester.getTopLeft(find.textContaining('Itens (')).dy));
     expect(fake.log.where((r) => r.url.path.endsWith('/purchase-order')), isEmpty);
   });
 

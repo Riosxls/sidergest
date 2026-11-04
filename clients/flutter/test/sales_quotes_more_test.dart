@@ -496,12 +496,17 @@ void main() {
       final f = _fake('Accepted');
       await _openQuote(tester, f);
       expect(find.byKey(const ValueKey('quote-po')), findsNothing);
-      expect(find.text('Nenhum pedido de compra anexado (PDF, imagem ou texto)'), findsOneWidget);
+      expect(find.text('Nenhum pedido de compra anexado (PDF, imagem ou texto)'), findsNothing); // the step card carries the buttons
       await tapKey(tester, 'quote-po-start-text');
       expect(find.text('Texto do pedido de compra'), findsWidgets);
       await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Pedido 77 do cliente');
       await tapText(tester, 'Salvar');
       expect(f.body(f.last('PUT', '/api/sales/quotes/5/request')), {'text': 'Pedido 77 do cliente'});
+      // saving goes straight on to registering: print gate, then the form; leaving it keeps the text attached
+      expect(find.text('Imprimir o pedido de compra do cliente?'), findsOneWidget);
+      await tapKey(tester, 'gate-skip');
+      expect(find.text('Pedido de compra de PROP 31'), findsOneWidget);
+      await tapText(tester, 'Cancelar');
       expect(find.text('Pedido de compra anexado · registre-o'), findsOneWidget);
       expect(find.text('Pedido 77 do cliente'), findsOneWidget);
     });
@@ -519,7 +524,7 @@ void main() {
       await tester.tap(find.byTooltip('Remover anexo'));
       await tester.pumpAndSettle();
       expect(f.called('DELETE', '/api/sales/quotes/5/request-file'), isTrue);
-      expect(find.text('Nenhum pedido de compra anexado (PDF, imagem ou texto)'), findsOneWidget);
+      expect(find.byKey(const ValueKey('quote-po-start')), findsOneWidget);
     });
 
     testWidgets('a large attachment shows its size in MB', (tester) async {

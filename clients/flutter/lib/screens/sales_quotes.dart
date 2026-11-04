@@ -1933,14 +1933,30 @@ class _QuoteScreenState extends State<QuoteScreen> {
           ? 'Passo 2 de 2: confira o anexo abaixo e registre o pedido de compra para poder gerar o pedido de venda.'
           : 'Passo 1 de 2: anexe o pedido de compra que o cliente enviou (PDF, imagem ou texto). Depois, registre-o para gerar o pedido de venda.',
       tone: attached ? Tone.success : Tone.warning,
+      icon: attached ? Icons.check_circle_outline : Icons.warning_amber_rounded,
+      // One main action; the ways out of the sale sit apart, on the right.
       actions: [
-        if (sell && !attached) _primary('quote-po-start', 'Anexar pedido de compra', Icons.attach_file, _attachRequest),
-        if (sell && !attached) _secondary('quote-po-start-text', 'Escrever texto do pedido', Icons.edit_note, _setRequestText),
+        if (sell && !attached) _primary('quote-po-start', 'Anexar pedido de compra', Icons.attach_file, () => _provideRequest(_attachRequest)),
+        if (sell && !attached) _secondary('quote-po-start-text', 'Escrever texto do pedido', Icons.edit_note, () => _provideRequest(_setRequestText)),
         if (sell && attached) _primary('quote-po', 'Registrar pedido de compra', Icons.assignment_turned_in_outlined, _receivePo),
-        if (sell) _secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
+      ],
+      trailing: [
+        if (sell)
+          Tooltip(
+            message: _reviseTip,
+            child: TextButton.icon(key: const ValueKey('quote-change'), onPressed: _revise, icon: const Icon(Icons.edit_note), label: const Text('Nova revisão')),
+          ),
         if (sell) _negative('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, _gaveUp),
       ],
     );
+  }
+
+  /// First purchase order of the quote: once the file or text is saved, go straight on to registering it instead of waiting for another click.
+  Future<void> _provideRequest(Future<void> Function() provide) async {
+    await provide();
+    if (!mounted) return;
+    final q = _q;
+    if (q != null && q['status'] == 'Accepted' && (q['requestFileName'] != null || '${q['requestText'] ?? ''}'.trim().isNotEmpty)) await _receivePo();
   }
 
   void _gaveUp() => _decline(gaveUp: true);
@@ -2399,7 +2415,11 @@ class _QuoteScreenState extends State<QuoteScreen> {
         gap,
         _creditBanner(),
         _nextStep(q),
-        if (const ['Accepted', 'PurchaseOrder'].contains(q['status'])) ...[gap, _requestSection(q)],
+        // While nothing is attached the step card above carries the buttons; the section appears once there is something to show.
+        if (const ['Accepted', 'PurchaseOrder'].contains(q['status']) && (q['requestFileName'] != null || '${q['requestText'] ?? ''}'.trim().isNotEmpty)) ...[
+          gap,
+          _requestSection(q),
+        ],
         gap,
         _itemsSection(q, t, lines),
         gap,

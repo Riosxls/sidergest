@@ -478,10 +478,14 @@ class NextStepCard extends StatelessWidget {
     this.trailing = const [],
     this.badge,
     this.tone = Tone.info,
+    this.icon,
   });
 
   final String title;
   final String message;
+
+  /// Optional icon before the title (e.g. a warning for a step that is blocked).
+  final IconData? icon;
   final List<Widget> actions;
   final List<Widget> trailing;
   final Widget? badge;
@@ -500,6 +504,7 @@ class NextStepCard extends StatelessWidget {
           children: [
             Row(
               children: [
+                if (icon != null) ...[Icon(icon, size: 20, color: fg), const SizedBox(width: 8)],
                 Flexible(
                   child: Text(
                     title,

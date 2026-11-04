@@ -54,8 +54,9 @@ Tone productionTone(Object? s) => switch (s) {
 (int, String?) quotePath(Object? s, {bool superseded = false}) => switch (s) {
   'Draft' || 'PendingApproval' || 'Approved' => (0, null),
   'Sent' => (1, null),
-  'Accepted' => (2, null),
-  'PurchaseOrder' => (3, null),
+  // Approved is done; what is left is the customer's purchase order (step 3), then the sales order (step 4).
+  'Accepted' => (3, null),
+  'PurchaseOrder' => (4, null),
   'Converted' => (4, null),
   'Rejected' => (2, 'Perdida'),
   'Expired' => (1, 'Expirada'),
