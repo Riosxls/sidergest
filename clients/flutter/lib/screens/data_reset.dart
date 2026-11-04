@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/record_list.dart';
 
 /// Word the admin types before movement data is deleted; the server checks it too.
@@ -220,7 +221,7 @@ class _DataResetDialogState extends State<_DataResetDialog> {
         else if (_total > 0)
           FilledButton(
             key: const ValueKey('reset-run'),
-            style: FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
+            style: dangerButtonStyle(context),
             onPressed: canDelete ? _run : null,
             child: const Text('Apagar definitivamente'),
           ),

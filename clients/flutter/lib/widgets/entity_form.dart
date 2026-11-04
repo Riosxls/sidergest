@@ -68,7 +68,14 @@ Future<bool> confirm(BuildContext context, String message) async =>
     false;
 
 void showError(BuildContext context, Object e) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e is String ? e : friendlyError(e)), backgroundColor: Theme.of(context).colorScheme.error));
+  final cs = Theme.of(context).colorScheme;
+  // Text on the error colour must be onError: in dark mode the error colour is light and the default snackbar text would vanish.
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(e is String ? e : friendlyError(e), style: TextStyle(color: cs.onError)),
+      backgroundColor: cs.error,
+    ),
+  );
 }
 
 /// Dialog form built from a list of field specs; validates, shows API field errors and calls [onSubmit] (and [onDelete] when given).

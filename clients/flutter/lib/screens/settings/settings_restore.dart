@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../api.dart';
 import '../../session.dart';
+import '../../theme_tokens.dart';
 import 'settings_backup.dart';
 import 'settings_widgets.dart';
 
@@ -653,7 +654,7 @@ class _RestoreDialogState extends State<_RestoreDialog> {
         TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancelar')),
         FilledButton(
           key: const ValueKey('restore-confirm-run'),
-          style: FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
+          style: dangerButtonStyle(context),
           onPressed: ok ? _run : null,
           child: const Text('Restaurar agora'),
         ),
@@ -749,7 +750,7 @@ class _DeleteDialogState extends State<_DeleteDialog> {
         TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancelar')),
         FilledButton(
           key: const ValueKey('delete-confirm-run'),
-          style: FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
+          style: dangerButtonStyle(context),
           onPressed: ok ? _run : null,
           child: const Text('Excluir'),
         ),

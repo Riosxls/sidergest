@@ -9,6 +9,7 @@ import '../labels.dart';
 import '../reports/certificate_doc.dart';
 import '../reports/nf_doc.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart' show showError;
 import '../widgets/load_error.dart';
@@ -168,7 +169,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
             // Skipping the certificate is the exception the rule allows, not the normal way: the button looks like one.
             FilledButton(
               key: const ValueKey('ship-without-certificate'),
-              style: FilledButton.styleFrom(backgroundColor: Theme.of(c).colorScheme.error, foregroundColor: Theme.of(c).colorScheme.onError),
+              style: dangerButtonStyle(c),
               onPressed: () => Navigator.pop(c, true),
               child: const Text('Expedir sem certificado'),
             ),

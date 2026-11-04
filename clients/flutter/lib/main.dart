@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'screens/login.dart';
 import 'screens/shell.dart';
 import 'session.dart';
+import 'theme_tokens.dart';
 import 'widgets/app_text_scale.dart';
 import 'widgets/drafts.dart';
 import 'widgets/esc_back.dart';
@@ -147,10 +148,13 @@ ThemeData _buildTheme(Brightness brightness, bool comfortable, bool highContrast
       color: cs.surfaceContainerHigh,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        // High contrast: a stronger border so cards stay separated from the page.
+        side: BorderSide(color: highContrast ? cs.outline : cs.outlineVariant),
       ),
     ),
+    // Outlined fields everywhere; screens that need compact fields still pass isDense.
+    inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
   );
 }
 

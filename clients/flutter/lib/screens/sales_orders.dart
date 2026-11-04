@@ -9,6 +9,7 @@ import '../reports/certificate_doc.dart';
 import '../reports/nf_doc.dart';
 import '../reports/print_docs.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/load_error.dart';
@@ -1343,7 +1344,7 @@ class _ReasonDialogState extends State<ReasonDialog> {
       TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
       FilledButton(
         key: const ValueKey('confirm-step'),
-        style: widget.danger ? FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Theme.of(context).colorScheme.onError) : null,
+        style: widget.danger ? dangerButtonStyle(context) : null,
         onPressed: _reason.text.trim().isEmpty ? null : () => Navigator.pop(context, (reason: _reason.text.trim(), option: _option)),
         child: Text(widget.confirmLabel),
       ),
