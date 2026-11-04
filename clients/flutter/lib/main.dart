@@ -101,12 +101,11 @@ class _EbtAppState extends State<EbtApp> {
           child: IdleGuard(
           session: session,
           navigatorKey: _navigatorKey,
-          child: AppTextScale(
-            factor: session.textScale,
-            child: MediaQuery(
-              data: MediaQuery.of(context).copyWith(disableAnimations: session.reduceMotion || MediaQuery.of(context).disableAnimations),
-              child: child!,
-            ),
+          // The animation flag wraps the text scale, not the other way round: a MediaQuery built from the outer context here
+          // would copy the unscaled text scaler over the one AppTextScale just set, so the text size never changed.
+          child: MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: session.reduceMotion || MediaQuery.of(context).disableAnimations),
+            child: AppTextScale(factor: session.textScale, child: child!),
           ),
         ),
         ),
