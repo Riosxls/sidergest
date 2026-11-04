@@ -276,4 +276,8 @@ public class AppUser
     public int IdleLockMinutes { get; set; }
     /// <summary>Last user activity reported by a client (a click or key press, not background polling).</summary>
     public DateTimeOffset? LastActivityAt { get; set; }
+    /// <summary>Personal notification preference: comma-separated opaque alert keys the user muted (set by the client; never audited).</summary>
+    public string? MutedAlerts { get; set; }
+    /// <summary>Personal notification preference: hide alerts about imported legacy records.</summary>
+    public bool HideLegacyAlerts { get; set; }
 }

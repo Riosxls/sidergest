@@ -77,6 +77,15 @@ class Session extends ChangeNotifier {
   String? displayName;
   String? email;
 
+  /// When the user signed in the time before this one (login and /auth/me; null when the server does not say or it is the first access).
+  DateTime? previousLoginAt;
+
+  /// Notification modules the user silenced (keys of `alertModuleKey`); kept on the server, copied here so the Painel and the bell filter without a request.
+  Set<String> mutedAlerts = const {};
+
+  /// Hides the imported-legacy overdue backlog on the Painel.
+  bool hideLegacyAlerts = false;
+
   static const dashboardRefreshChoices = [0, 2, 5, 10];
   static const idleLockChoices = [0, 15, 30, 60];
   static const textScaleChoices = [1.0, 1.15, 1.3];
@@ -201,6 +210,7 @@ class Session extends ChangeNotifier {
         if (!accessValid && !await api.refresh() && api.refreshRejected) await logout();
         if (api.token != null) {
           await _syncProfile();
+          await loadNotificationPrefs();
           await _migrateIdlePref();
           reportActivity();
         }
@@ -220,11 +230,55 @@ class Session extends ChangeNotifier {
       if (me['permissions'] is List) permissions = (me['permissions'] as List).cast<String>().toSet();
       displayName = me['displayName'] as String?;
       email = me['email'] as String?;
+      _adoptPreviousLogin(me);
       _adoptIdle(me);
       if (remember) await _storage.write(key: 'permissions', value: jsonEncode(permissions.toList()));
     } catch (e) {
       debugPrint('session: Local storage is best effort; the in-memory value stays: $e');
       // Local storage is best effort; the in-memory value stays.
+    }
+  }
+
+  /// Takes `previousLoginAt` when the response carries the field (a refresh response does not, and must not clear it).
+  void _adoptPreviousLogin(Map<String, dynamic> r) {
+    if (r.containsKey('previousLoginAt')) previousLoginAt = DateTime.tryParse('${r['previousLoginAt'] ?? ''}');
+  }
+
+  /// Reads the notification preferences from the server into [mutedAlerts] and [hideLegacyAlerts]; a failure keeps what is held (best effort).
+  Future<void> loadNotificationPrefs() async {
+    try {
+      final r = await api.get('/api/auth/notification-prefs');
+      if (r is Map) _adoptNotificationPrefs(Map<String, dynamic>.from(r));
+    } catch (e) {
+      debugPrint('session: notification preferences not loaded: $e');
+    }
+  }
+
+  void _adoptNotificationPrefs(Map<String, dynamic> r) {
+    final muted = r['mutedAlerts'];
+    mutedAlerts = muted is List ? {for (final k in muted) if (k is String) k} : mutedAlerts;
+    final hide = r['hideLegacy'];
+    if (hide is bool) hideLegacyAlerts = hide;
+    alerts.update(muted: mutedAlerts);
+    notifyListeners();
+  }
+
+  /// Saves the notification preferences: the screen changes at once and goes back to the previous values when the server refuses (the error is rethrown).
+  Future<void> saveNotificationPrefs({Set<String>? muted, bool? hideLegacy}) async {
+    final oldMuted = mutedAlerts, oldHide = hideLegacyAlerts;
+    mutedAlerts = muted ?? mutedAlerts;
+    hideLegacyAlerts = hideLegacy ?? hideLegacyAlerts;
+    alerts.update(muted: mutedAlerts);
+    notifyListeners();
+    try {
+      final r = await api.put('/api/auth/notification-prefs', {'mutedAlerts': mutedAlerts.toList()..sort(), 'hideLegacy': hideLegacyAlerts});
+      if (r is Map) _adoptNotificationPrefs(Map<String, dynamic>.from(r));
+    } catch (_) {
+      mutedAlerts = oldMuted;
+      hideLegacyAlerts = oldHide;
+      alerts.update(muted: mutedAlerts);
+      notifyListeners();
+      rethrow;
     }
   }
 
@@ -274,6 +328,7 @@ class Session extends ChangeNotifier {
   /// Applies a login/refresh response and persists it.
   Future<void> _apply(Map<String, dynamic> r) async {
     _adoptIdle(r);
+    _adoptPreviousLogin(r);
     api.token = r['token'] as String;
     api.refreshToken = r['refreshToken'] as String?;
     username = r['username'] as String? ?? username;
@@ -329,6 +384,7 @@ class Session extends ChangeNotifier {
     await _apply(r);
     await _migrateIdlePref();
     reportActivity(force: true);
+    unawaited(loadNotificationPrefs());
   }
 
   /// Turns "stay signed in on this device" on or off for the running session; off removes the stored tokens now.
@@ -510,7 +566,10 @@ class Session extends ChangeNotifier {
     permissions = const {};
     expiresAt = null;
     refreshExpiresAt = null;
-    alerts.value = const [];
+    alerts.clear();
+    mutedAlerts = const {};
+    hideLegacyAlerts = false;
+    previousLoginAt = null;
     for (final k in _secureKeys) {
       try {
         await _storage.delete(key: k);

@@ -61,12 +61,12 @@ public class TokenService(JwtOptions options)
     public static string HashRefresh(string token) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
 
     /// <summary>Creates, stores and returns a new opaque refresh token for the user (only its hash is persisted).</summary>
-    public async Task<(string Token, DateTimeOffset ExpiresAt)> NewRefreshAsync(AppUser user, EbtDbContext db, CancellationToken ct, DeviceInfo? device = null)
+    public async Task<(string Token, DateTimeOffset ExpiresAt)> NewRefreshAsync(AppUser user, EbtDbContext db, CancellationToken ct, DeviceInfo? device = null, bool isLogin = false)
     {
         var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         var now = DateTimeOffset.UtcNow;
         var expires = now.AddDays(options.RefreshDays);
-        db.RefreshTokens.Add(new RefreshToken { UserId = user.Id, TokenHash = HashRefresh(token), CreatedAt = now, ExpiresAt = expires, Device = device?.Device, UserAgent = device?.UserAgent, Ip = device?.Ip });
+        db.RefreshTokens.Add(new RefreshToken { UserId = user.Id, TokenHash = HashRefresh(token), CreatedAt = now, ExpiresAt = expires, Device = device?.Device, UserAgent = device?.UserAgent, Ip = device?.Ip, IsLogin = isLogin });
         await db.RefreshTokens.Where(r => r.UserId == user.Id && r.ExpiresAt < now).ExecuteDeleteAsync(ct);
         await db.SaveChangesAsync(ct);
         return (token, expires);
@@ -167,7 +167,11 @@ public record SessionsRequest(string? RefreshToken);
 public record SessionDto(long Id, string? Device, string? UserAgent, string? Ip, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, bool Current);
 public record IdleLockRequest(int Minutes);
 public record ProfileRequest(string? DisplayName, string? Email);
-public record LoginResponse(string Token, DateTimeOffset ExpiresAt, string Username, UserRole Role, string[] Permissions, string RefreshToken, DateTimeOffset RefreshExpiresAt, int IdleLockMinutes = 0, int MaxIdleMinutes = 0);
+public record LoginResponse(string Token, DateTimeOffset ExpiresAt, string Username, UserRole Role, string[] Permissions, string RefreshToken, DateTimeOffset RefreshExpiresAt, int IdleLockMinutes = 0, int MaxIdleMinutes = 0, DateTimeOffset? PreviousLoginAt = null);
+public record LoginEntryDto(DateTimeOffset At, string? Device, string? UserAgent, string? Ip, bool Current);
+public record MyChangeDto(DateTimeOffset At, string Entity, string? EntityId, string Action, string? Summary);
+public record MyActivityDto(List<LoginEntryDto> Logins, List<MyChangeDto> Changes);
+public record NotificationPrefsDto(string[]? MutedAlerts, bool HideLegacy);
 public record RefreshRequest(string? RefreshToken);
 public record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
 public record UserDto(int Id, string Username, UserRole Role, bool Active, bool Locked = false, string? DisplayName = null, string? Email = null);
@@ -237,6 +241,36 @@ public static class AuthEndpoints
     private static bool TooEasy(string? password, string? username) =>
         password is not null && (password == DefaultPassword || (username is not null && string.Equals(password, username, StringComparison.OrdinalIgnoreCase)));
 
+    /// <summary>The sign-in before the newest one (the newest is the current session); null on a first login.</summary>
+    public static async Task<DateTimeOffset?> PreviousLoginAsync(EbtDbContext db, int userId, CancellationToken ct) =>
+        await db.RefreshTokens.AsNoTracking().Where(r => r.UserId == userId && r.IsLogin).OrderByDescending(r => r.CreatedAt).Skip(1)
+            .Select(r => (DateTimeOffset?)r.CreatedAt).FirstOrDefaultAsync(ct);
+
+    private static readonly System.Text.RegularExpressions.Regex AlertKey = new("^[a-z0-9_-]{1,40}$");
+
+    private static string? Summarize(string changes)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(changes);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            var parts = new List<string>();
+            foreach (var p in doc.RootElement.EnumerateObject())
+            {
+                if (p.Value.ValueKind == JsonValueKind.Object && p.Value.TryGetProperty("from", out var from) && p.Value.TryGetProperty("to", out var to))
+                    parts.Add($"{p.Name}: {Show(from)} -> {Show(to)}");
+                else if (p.Value.ValueKind is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False)
+                    parts.Add($"{p.Name}: {Show(p.Value)}");
+                if (parts.Count == 3) break;
+            }
+            if (parts.Count == 0) return null;
+            var text = string.Join("; ", parts);
+            return text.Length > 200 ? text[..200] : text;
+        }
+        catch (JsonException) { return null; }
+        static string Show(JsonElement e) => e.ValueKind == JsonValueKind.Null ? "-" : e.ValueKind == JsonValueKind.String ? e.GetString() ?? "-" : e.ToString();
+    }
+
     public static bool VerifyPassword(AppUser user, string password) => Hasher.VerifyHashedPassword(user, user.PasswordHash, password) != PasswordVerificationResult.Failed;
 
     public static void MapAuth(this WebApplication app)
@@ -279,8 +313,8 @@ public static class AuthEndpoints
             cache.Invalidate(user.Id);
             var (token, expires) = tokens.Issue(user);
             log.LogInformation("User {User} logged in from {Ip}", user.Username, http.Connection.RemoteIpAddress);
-            var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct, DeviceInfo.From(req.Device, http));
-            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires, TokenService.EffectiveIdle(user.IdleLockMinutes, TokenService.MaxIdle(config)), TokenService.MaxIdle(config)));
+            var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct, DeviceInfo.From(req.Device, http), isLogin: true);
+            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires, TokenService.EffectiveIdle(user.IdleLockMinutes, TokenService.MaxIdle(config)), TokenService.MaxIdle(config), await PreviousLoginAsync(db, user.Id, ct)));
         }).AllowAnonymous().RequireRateLimiting(Policies.LoginLimiter);
 
         auth.MapPost("/refresh", async (RefreshRequest req, EbtDbContext db, TokenService tokens, ILoggerFactory logs, IConfiguration config, UserCache cache, CancellationToken ct) =>
@@ -308,7 +342,7 @@ public static class AuthEndpoints
             if (claimed == 0) return Results.Unauthorized();
             var (token, expires) = tokens.Issue(user);
             var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct, new DeviceInfo(stored.Device, stored.UserAgent, stored.Ip));
-            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires, TokenService.EffectiveIdle(user.IdleLockMinutes, TokenService.MaxIdle(config)), TokenService.MaxIdle(config)));
+            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires, TokenService.EffectiveIdle(user.IdleLockMinutes, TokenService.MaxIdle(config)), TokenService.MaxIdle(config), await PreviousLoginAsync(db, user.Id, ct)));
         }).AllowAnonymous().RequireRateLimiting(Policies.RefreshLimiter);
 
         auth.MapPost("/logout", async (RefreshRequest req, EbtDbContext db, CancellationToken ct) =>
@@ -321,8 +355,9 @@ public static class AuthEndpoints
             return Results.NoContent();
         }).AllowAnonymous().RequireRateLimiting(Policies.RefreshLimiter);
 
-        static object Me(ClaimsPrincipal principal, AppUser? user, IConfiguration config) => new
+        static object Me(ClaimsPrincipal principal, AppUser? user, IConfiguration config, DateTimeOffset? previousLoginAt = null) => new
         {
+            previousLoginAt,
             username = principal.Identity!.Name,
             role = principal.FindFirstValue(ClaimTypes.Role),
             permissions = Enum.TryParse<UserRole>(principal.FindFirstValue(ClaimTypes.Role), out var r) ? Access.PoliciesFor(r) : [Policies.Read],
@@ -335,8 +370,43 @@ public static class AuthEndpoints
         auth.MapGet("/me", async (EbtDbContext db, IConfiguration config, ClaimsPrincipal principal, CancellationToken ct) =>
         {
             var user = int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id) ? await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, ct) : null;
-            return Results.Ok(Me(principal, user, config));
+            return Results.Ok(Me(principal, user, config, user is null ? null : await PreviousLoginAsync(db, user.Id, ct)));
         }).RequireAuthorization(Policies.Read);
+
+        // The signed-in user's own recent activity: sign-ins (newest first) and the audit rows written under their name.
+        auth.MapGet("/my-activity", async (EbtDbContext db, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
+            var name = principal.Identity?.Name;
+            var logins = (await db.RefreshTokens.AsNoTracking().Where(r => r.UserId == id && r.IsLogin).OrderByDescending(r => r.CreatedAt).Take(20).ToListAsync(ct))
+                .Select(r => new LoginEntryDto(r.CreatedAt, r.Device, r.UserAgent, r.Ip, false)).ToList();
+            var rows = name is null ? [] : await db.AuditLog.AsNoTracking().Where(a => a.User == name).OrderByDescending(a => a.At).Take(30).ToListAsync(ct);
+            var changes = rows.Select(a => new MyChangeDto(a.At, a.Entity, a.EntityId, a.Action, Summarize(a.Changes))).ToList();
+            return Results.Ok(new MyActivityDto(logins, changes));
+        }).RequireAuthorization(Policies.Read);
+
+        // Personal alert preferences. Written with ExecuteUpdate (like the idle lock): a preference is not an audited change.
+        auth.MapGet("/notification-prefs", async (EbtDbContext db, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
+            var u = await db.Users.AsNoTracking().Where(x => x.Id == id).Select(x => new { x.MutedAlerts, x.HideLegacyAlerts }).FirstOrDefaultAsync(ct);
+            if (u is null) return Results.Unauthorized();
+            return Results.Ok(new NotificationPrefsDto(string.IsNullOrEmpty(u.MutedAlerts) ? [] : u.MutedAlerts.Split(','), u.HideLegacyAlerts));
+        }).RequireAuthorization(Policies.Read);
+
+        auth.MapPut("/notification-prefs", async (NotificationPrefsDto req, EbtDbContext db, ClaimsPrincipal principal, CancellationToken ct) =>
+        {
+            if (!int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)) return Results.Unauthorized();
+            var keys = (req.MutedAlerts ?? []).Select(k => k?.Trim() ?? "").Distinct().ToArray();
+            var errors = Crud.Errors()
+                .Require(keys.Length <= 30, "mutedAlerts", "No máximo 30 alertas silenciados")
+                .Require(keys.All(k => AlertKey.IsMatch(k)), "mutedAlerts", "Cada chave deve ter de 1 a 40 caracteres: letras minúsculas, números, - ou _");
+            if (errors.Count > 0) return Results.ValidationProblem(errors);
+            var joined = keys.Length == 0 ? null : string.Join(',', keys);
+            var n = await db.Users.Where(u => u.Id == id).ExecuteUpdateAsync(s => s.SetProperty(u => u.MutedAlerts, joined).SetProperty(u => u.HideLegacyAlerts, req.HideLegacy), ct);
+            if (n == 0) return Results.Unauthorized();
+            return Results.Ok(new NotificationPrefsDto(keys, req.HideLegacy));
+        }).RequireAuthorization(Policies.Read).RequireRateLimiting(Policies.AccountLimiter);
 
         // The client reports real activity (not background polling). Only the time is recorded: the limit is server-side (PUT /idle-lock, Security:MaxIdleMinutes);
         // a body from older clients is accepted and ignored, so one device cannot change the lock of another.
@@ -379,7 +449,7 @@ public static class AuthEndpoints
                 Changes = JsonSerializer.Serialize(new { profile = true, displayName = name, email })
             });
             await db.SaveChangesAsync(ct);
-            return Results.Ok(Me(principal, user, config));
+            return Results.Ok(Me(principal, user, config, await PreviousLoginAsync(db, id, ct)));
         }).RequireAuthorization(Policies.Read);
 
         // Devices: each login chain keeps one active refresh row (rotation replaces it), so the rows are the user's signed-in devices.
@@ -424,7 +494,7 @@ public static class AuthEndpoints
             var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct, new DeviceInfo(current.Device, current.UserAgent, current.Ip));
             await tx.CommitAsync(ct);
             logs.CreateLogger("Ebt.Auth").LogInformation("{User} signed out all other devices", user.Username);
-            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires, TokenService.EffectiveIdle(user.IdleLockMinutes, TokenService.MaxIdle(config)), TokenService.MaxIdle(config)));
+            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires, TokenService.EffectiveIdle(user.IdleLockMinutes, TokenService.MaxIdle(config)), TokenService.MaxIdle(config), await PreviousLoginAsync(db, user.Id, ct)));
         }).RequireAuthorization(Policies.Read).RequireRateLimiting(Policies.AccountLimiter);
 
         // Own password: needs the current one, signs every other session out and returns fresh tokens for this one.
@@ -457,7 +527,7 @@ public static class AuthEndpoints
             logs.CreateLogger("Ebt.Auth").LogInformation("User {User} changed their own password; other sessions revoked", user.Username);
             var (token, expires) = tokens.Issue(user);
             var (refresh, refreshExpires) = await tokens.NewRefreshAsync(user, db, ct);
-            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires, TokenService.EffectiveIdle(user.IdleLockMinutes, TokenService.MaxIdle(config)), TokenService.MaxIdle(config)));
+            return Results.Ok(new LoginResponse(token, expires, user.Username, user.Role, Access.PoliciesFor(user.Role), refresh, refreshExpires, TokenService.EffectiveIdle(user.IdleLockMinutes, TokenService.MaxIdle(config)), TokenService.MaxIdle(config), await PreviousLoginAsync(db, user.Id, ct)));
         }).RequireAuthorization(Policies.Read).RequireRateLimiting(Policies.PasswordLimiter);
 
         var users = app.MapGroup("/api/users").WithTags("Users").RequireAuthorization(Policies.Admin);

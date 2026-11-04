@@ -146,6 +146,9 @@ class ApiClient {
 
   Future<dynamic> get(String path, [Map<String, dynamic>? query]) => _send(path, () => _http.get(_uri(path, query), headers: _headers));
 
+  /// The signed-in user's own recent sign-ins and audited changes: `{logins: [...], changes: [...]}`.
+  Future<dynamic> myActivity() => get('/api/auth/my-activity');
+
   Future<dynamic> post(String path, Object body, {String? idempotencyKey}) {
     final key = _keyFor(idempotencyKey);
     return _send(path, () => _http.post(_uri(path), headers: _writeHeaders(path, key), body: jsonEncode(body)), write: true);

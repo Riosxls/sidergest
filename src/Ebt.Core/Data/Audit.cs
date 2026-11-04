@@ -60,7 +60,7 @@ public sealed class AuditInterceptor(ICurrentUser user) : SaveChangesInterceptor
         [typeof(StockDocument)] = ["Reversed", "Reference"]
     };
 
-    private static readonly HashSet<string> Hidden = ["PasswordHash", "TokenVersion", "FailedLogins", "LockedUntil", "xmin", "NextNumber", "LastActivityAt"];
+    private static readonly HashSet<string> Hidden = ["PasswordHash", "TokenVersion", "FailedLogins", "LockedUntil", "xmin", "NextNumber", "LastActivityAt", "MutedAlerts", "HideLegacyAlerts"];
     private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never };
 
     private readonly List<(EntityEntry Entry, Dictionary<string, object?> Values)> pendingInserts = [];

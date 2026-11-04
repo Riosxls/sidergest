@@ -7,6 +7,7 @@ import '../../session.dart';
 import '../../widgets/print_gate.dart';
 import '../../widgets/user_settings.dart';
 import '../shell.dart' show homeScreenChoices;
+import 'settings_activity.dart';
 import 'settings_devices.dart';
 import 'settings_shortcuts.dart';
 import 'settings_widgets.dart';
@@ -378,6 +379,13 @@ class _AccountSectionState extends State<AccountSection> {
               title: 'Dispositivos conectados',
               subtitle: 'Veja onde você está conectado e desconecte os outros',
               onTap: () => widget.open('Dispositivos conectados', (_) => DevicesView(session: s)),
+            ),
+            SettingsLink(
+              key: const ValueKey('settings-open-activity'),
+              icon: Icons.history,
+              title: 'Minha atividade',
+              subtitle: 'Seus últimos acessos e as alterações feitas com o seu usuário',
+              onTap: () => widget.open('Minha atividade', (_) => ActivityView(session: s)),
             ),
           ],
         ),

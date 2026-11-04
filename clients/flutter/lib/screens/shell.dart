@@ -42,6 +42,7 @@ import 'sales_common.dart' show openDelivery, openQuote, openSalesOrder;
 import 'sales_orders.dart';
 import 'sales_pipeline.dart';
 import 'sales_quotes.dart';
+import 'settings/settings_dialog.dart' show showUserSettings;
 import 'steel.dart';
 import 'stock_balances.dart';
 import 'stock_closing.dart';
@@ -1105,6 +1106,17 @@ class _ShellState extends State<Shell> {
                       },
                     ),
                 ]),
+            if (widget.session.alerts.silenced > 0)
+              ListTile(
+                key: const ValueKey('sheet-silenced'),
+                leading: const Icon(Icons.notifications_off_outlined),
+                title: Text('${widget.session.alerts.silenced} ${widget.session.alerts.silenced == 1 ? 'alerta silenciado' : 'alertas silenciados'}'),
+                subtitle: const Text('Ajustar em Notificações'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  showUserSettings(context, widget.session, section: 'notifications');
+                },
+              ),
           ],
         ),
       ),
@@ -1269,7 +1281,7 @@ class _ShellState extends State<Shell> {
             if (wide) ...[
               SearchLauncher(onOpen: _openPalette, compact: mid && width < 1100),
               const SizedBox(width: 4),
-              AlertBell(center: s.alerts, onNavigate: _go),
+              AlertBell(center: s.alerts, onNavigate: _go, onOpenPrefs: () => showUserSettings(context, s, section: 'notifications')),
               const SizedBox(width: 12),
             ],
             UserMenu(

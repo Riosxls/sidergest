@@ -14,4 +14,6 @@ public class RefreshToken
     public string? Device { get; set; }
     public string? UserAgent { get; set; }
     public string? Ip { get; set; }
+    /// <summary>True for the row created by a real sign-in (not by a rotation, a password change or revoke-others); feeds the user's own login history.</summary>
+    public bool IsLogin { get; set; }
 }

@@ -17,6 +17,7 @@ import 'orders.dart';
 import 'product_detail.dart';
 import 'production_orders.dart';
 import 'quick_actions.dart';
+import 'settings/settings_dialog.dart';
 
 typedef Navigate = void Function(String id, [String? filter]);
 
@@ -57,12 +58,33 @@ final dashboardCounted = [products, materials, machines, standardOperations, wor
 /// Overdue items older than this are treated as legacy backlog: shown, but not counted as a fresh alarm.
 const legacyOverdueDays = 30;
 
+/// Modules whose alerts the user may silence in Configurações > Notificações: notification key and the module title used by [DashAlert.module].
+/// Keys are opaque to the server ([a-z0-9_-]); alerts that are not about a module (backup failure) are never silenceable.
+const alertModules = [
+  (key: 'comercial', title: 'Comercial'),
+  (key: 'pcp', title: 'PCP'),
+  (key: 'suprimentos', title: 'Suprimentos'),
+  (key: 'estoque', title: 'Estoque'),
+  (key: 'engenharia', title: 'Engenharia'),
+];
+
+/// Notification key of the module titled [title] (a [DashAlert.module]); null when it has none.
+String? alertModuleKey(String title) {
+  for (final m in alertModules) {
+    if (m.title == title) return m.key;
+  }
+  return null;
+}
+
 /// One alert shown on the Painel and in the bell, with the screen it opens.
 class DashAlert {
-  const DashAlert(this.module, this.icon, this.label, this.count, this.navId, this.filter, this.onTap, {this.muted = false});
+  const DashAlert(this.module, this.icon, this.label, this.count, this.navId, this.filter, this.onTap, {this.muted = false, this.silenced = false});
 
   /// A known backlog (imported legacy): drawn neutral, left out of the bell and the module badge.
   final bool muted;
+
+  /// Left out because the user silenced its module (or the legacy backlog) in the notification preferences; the Painel only counts it.
+  final bool silenced;
   final String module;
   final IconData icon;
   final String label;
@@ -286,8 +308,21 @@ List<DashAlert> buildAlerts(
         showList('Produtos sem roteiro', eng.withoutRouting, productLabel, showProduct, all: products.path, total: eng.withoutRoutingTotal),
       ),
     ],
-  ].where((a) => a.count > 0).toList();
+  ].where((a) => a.count > 0).map((a) => _applyPrefs(a, session)).toList();
 }
+
+DashAlert _applyPrefs(DashAlert a, Session session) {
+  final key = alertModuleKey(a.module);
+  final silenced = (key != null && session.mutedAlerts.contains(key)) || (a.muted && session.hideLegacyAlerts);
+  if (!silenced) return a;
+  return DashAlert(a.module, a.icon, a.label, a.count, a.navId, a.filter, a.onTap, muted: a.muted, silenced: true);
+}
+
+/// What the bell needs from [alerts]: the ones that are not legacy backlog. Silenced modules stay in; [AlertCenter] filters and counts them.
+List<AlertInfo> bellAlerts(List<DashAlert> alerts) => [
+  for (final a in alerts)
+    if (!a.muted) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter, alertModuleKey(a.module)),
+];
 
 /// Reads the five sections and puts the alerts on the bell. The Painel does this itself; the shell calls it when another screen is the one
 /// in use, so the bell and the Alertas button do not stay empty or stale. A section that fails counts as no news; if none loads the bell stays as it was.
@@ -319,7 +354,7 @@ Future<void> refreshAlertCenter(BuildContext context, Session session) async {
     production: d[3] as ProductionDashboard?,
     commercial: d[4] as CommercialDashboard?,
   );
-  session.alerts.value = [for (final a in alerts.where((a) => !a.muted)) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter)];
+  session.alerts.update(all: bellAlerts(alerts), muted: session.mutedAlerts);
 }
 
 String hhmm(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
@@ -452,7 +487,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!mounted) return;
     // Nothing loaded (server down): keep the bell as it was instead of emptying it.
     if (d.any((s) => s != null)) {
-      widget.session.alerts.value = [for (final a in _alerts(d).where((a) => !a.muted)) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter)];
+      widget.session.alerts.update(all: bellAlerts(_alerts(d)), muted: widget.session.mutedAlerts);
     }
     // "Atualizado às" only when something was read; a Painel where every section failed is not up to date.
     setState(() {
@@ -568,8 +603,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Alert tiles grouped under a sub-header per module (in the order of the user's modules); known legacy backlog is folded into one row.
   Widget _alertGroups(List<DashAlert> alerts) {
     final theme = Theme.of(context);
-    final fresh = alerts.where((a) => !a.muted).toList();
-    final legacy = alerts.where((a) => a.muted).toList();
+    final fresh = alerts.where((a) => !a.muted && !a.silenced).toList();
+    final legacy = alerts.where((a) => a.muted && !a.silenced).toList();
     GridItem tile(DashAlert a) => GridItem(
       DashTile(
         icon: a.icon,
@@ -627,7 +662,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final theme = Theme.of(context);
       final updated = _updated;
       final data = snap.data ?? _last;
-      final alerts = data == null ? const <DashAlert>[] : _alerts(data);
+      final all = data == null ? const <DashAlert>[] : _alerts(data);
+      final alerts = all.where((a) => !a.silenced).toList();
+      final silenced = all.length - alerts.length;
       final count = alerts.where((a) => !a.muted).length;
       final header = Row(
         children: [
@@ -706,7 +743,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: BackupAlertCard(alert: b.data!, session: widget.session),
               ),
       );
-      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [header, backup, content, const SizedBox(height: 16)]);
+      final silencedNote = silenced == 0
+          ? const SizedBox.shrink()
+          : Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const ValueKey('silenced-alerts'),
+                  onPressed: () => showUserSettings(context, widget.session, section: 'notifications'),
+                  icon: const Icon(Icons.notifications_off_outlined, size: 18),
+                  label: Text('$silenced ${silenced == 1 ? 'alerta silenciado' : 'alertas silenciados'} · Notificações'),
+                ),
+              ),
+            );
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [header, backup, content, silencedNote, const SizedBox(height: 16)]);
     },
   );
 
@@ -743,7 +794,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     builder: (context, snap) {
       final theme = Theme.of(context);
       final data = snap.data ?? _last;
-      final alerts = data != null ? _alerts(data) : const <DashAlert>[];
+      final alerts = data != null ? _alerts(data).where((a) => !a.silenced).toList() : const <DashAlert>[];
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -805,8 +856,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     QuickActionBar(actions: actions, onDone: _refresh),
-                    _attention(),
-                    _modules(),
+                    ListenableBuilder(listenable: widget.session, builder: (_, _) => _attention()),
+                    ListenableBuilder(listenable: widget.session, builder: (_, _) => _modules()),
                     _onboarding(),
                   ],
                 ),

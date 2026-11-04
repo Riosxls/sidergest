@@ -127,6 +127,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("failed_logins");
 
+                    b.Property<bool>("HideLegacyAlerts")
+                        .HasColumnType("boolean")
+                        .HasColumnName("hide_legacy_alerts");
+
                     b.Property<int>("IdleLockMinutes")
                         .HasColumnType("integer")
                         .HasColumnName("idle_lock_minutes");
@@ -138,6 +142,10 @@ namespace Ebt.Core.Data.Migrations
                     b.Property<DateTimeOffset?>("LockedUntil")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("locked_until");
+
+                    b.Property<string>("MutedAlerts")
+                        .HasColumnType("text")
+                        .HasColumnName("muted_alerts");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -4678,6 +4686,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasMaxLength(45)
                         .HasColumnType("character varying(45)")
                         .HasColumnName("ip");
+
+                    b.Property<bool>("IsLogin")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_login");
 
                     b.Property<DateTimeOffset?>("RevokedAt")
                         .HasColumnType("timestamp with time zone")

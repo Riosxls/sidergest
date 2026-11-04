@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../session.dart';
 import '../../widgets/discard_guard.dart';
+import 'settings_activity.dart';
 import 'settings_admin.dart';
+import 'settings_notifications.dart';
 import 'settings_sections.dart';
 import 'settings_widgets.dart';
 
@@ -26,7 +28,9 @@ final _sections = <_Section>[
   _Section('appearance', Icons.palette_outlined, 'Aparência', (c, s, open, out) => AppearanceSection(session: s)),
   _Section('general', Icons.tune, 'Geral', (c, s, open, out) => GeneralSection(session: s, open: open)),
   _Section('print', Icons.print_outlined, 'Impressão', (c, s, open, out) => PrintSection(session: s)),
+  _Section('notifications', Icons.notifications_outlined, 'Notificações', (c, s, open, out) => NotificationsSection(session: s)),
   _Section('account', Icons.person_outline, 'Conta e acesso', (c, s, open, out) => AccountSection(session: s, open: open, onSignOut: out)),
+  _Section('activity', Icons.history, 'Minha atividade', (c, s, open, out) => ActivityView(session: s)),
   _Section('data', Icons.storage_outlined, 'Dados e servidor', (c, s, open, out) => DataSection(session: s)),
   _Section('about', Icons.info_outline, 'Sobre', (c, s, open, out) => AboutSection(session: s)),
   _Section('admin', Icons.admin_panel_settings_outlined, 'Administração', (c, s, open, out) => AdminSection(session: s, open: open)),
