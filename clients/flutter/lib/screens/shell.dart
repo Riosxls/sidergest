@@ -13,6 +13,7 @@ import '../widgets/alerts.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/record_nav.dart';
+import '../widgets/responsive.dart';
 import '../widgets/tab_frame.dart';
 import '../widgets/unload_guard.dart';
 import '../widgets/user_menu.dart';
@@ -513,7 +514,7 @@ class _ShellState extends State<Shell> {
       final p = await SharedPreferences.getInstance();
       if (!mounted) return;
       setState(() {
-        _collapsed = p.getBool('navCollapsed') ?? false;
+        _collapsed = p.getBool('navCollapsed') ?? (MediaQuery.sizeOf(context).width < 1100 && MediaQuery.sizeOf(context).width >= 900);
         _pins = [
           for (final raw in p.getStringList('navPins') ?? const <String>[])
             if (_items.any((i) => i.id == raw.split('\n').first))
@@ -679,11 +680,11 @@ class _ShellState extends State<Shell> {
 
   NavItem get _item => _items.firstWhere((i) => i.id == _current);
 
-  Widget _railItem(NavItem d, ColorScheme cs, VoidCallback tap, {String? title, IconData? icon, bool? selected}) {
+  Widget _railItem(NavItem d, ColorScheme cs, VoidCallback tap, {String? title, IconData? icon, bool? selected, String? hint}) {
     final active = selected ?? d.id == _current;
     return Tooltip(
       key: active ? _activeKey : null,
-      message: title ?? d.title,
+      message: '${title ?? d.title}${hint ?? ''}',
       // The collapsed sidebar is icons only: the name and the selection must reach a screen reader, not only the colour.
       child: Semantics(
         button: true,
@@ -698,7 +699,7 @@ class _ShellState extends State<Shell> {
             child: InkWell(
               borderRadius: BorderRadius.circular(10),
               onTap: tap,
-              child: SizedBox(height: 40, child: Icon(icon ?? d.icon, color: active ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
+              child: SizedBox(height: scaledHeight(context, 40), child: Icon(icon ?? d.icon, color: active ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
             ),
           ),
         ),
@@ -725,7 +726,16 @@ class _ShellState extends State<Shell> {
               key: ValueKey('nav-pin-${p.id}-${p.filter ?? ''}'),
               borderRadius: BorderRadius.circular(10),
               onTap: tap,
-              child: SizedBox(height: 40, child: Icon(Icons.star, size: 20, color: selected ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
+              child: SizedBox(
+                height: scaledHeight(context, 40),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Icon(_items.firstWhere((i) => i.id == p.id).icon, size: 22, color: selected ? cs.onSecondaryContainer : cs.onSurfaceVariant),
+                    Positioned(right: 14, top: 4, child: Icon(Icons.star, size: 12, color: selected ? cs.onSecondaryContainer : cs.tertiary)),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -742,13 +752,13 @@ class _ShellState extends State<Shell> {
     return p.filter == null ? name : '$name · ${p.filter}';
   }
 
-  Widget _tile(NavItem d, ColorScheme cs, VoidCallback tap, {String? title, IconData? icon, bool? selected}) {
+  Widget _tile(NavItem d, ColorScheme cs, VoidCallback tap, {String? title, IconData? icon, bool? selected, String? hint}) {
     final active = selected ?? d.id == _current;
     return Padding(
       key: active ? _activeKey : null,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Tooltip(
-        message: title ?? d.title,
+        message: '${title ?? d.title}${hint ?? ''}',
         waitDuration: const Duration(milliseconds: 600),
         child: ListTile(
           key: ValueKey('nav-${d.id}'),
@@ -824,9 +834,12 @@ class _ShellState extends State<Shell> {
       }
 
       final selected = group?.has(_current);
+      // Ctrl+1…9 jump to the modules in this order, Ctrl+0 to the Painel.
+      final mi = modules.indexWhere((m) => m.id == d.id);
+      final hint = mi >= 0 && mi < 9 ? '  (Ctrl+${mi + 1})' : null;
       return rail
-          ? _railItem(d, cs, tap, title: group?.title, icon: group?.icon, selected: selected)
-          : _tile(d, cs, tap, title: title ?? group?.title, icon: group?.icon, selected: selected);
+          ? _railItem(d, cs, tap, title: group?.title, icon: group?.icon, selected: selected, hint: hint)
+          : _tile(d, cs, tap, title: title ?? group?.title, icon: group?.icon, selected: selected, hint: hint);
     }
 
     final dashboard = _items.firstWhere((i) => i.id == 'dashboard');
@@ -932,8 +945,7 @@ class _ShellState extends State<Shell> {
           ),
         ),
       );
-      moduleItems(m.section);
-      // Inside a module only its screens are listed; the other modules are one tap away without going through the Painel.
+      // The other modules are one tap away without going through the Painel; the switcher sits at the top, above the long list of screens.
       children.add(
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -954,6 +966,7 @@ class _ShellState extends State<Shell> {
           ),
         ),
       );
+      moduleItems(m.section);
     }
     return ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children);
   }
@@ -1016,7 +1029,7 @@ class _ShellState extends State<Shell> {
             borderRadius: BorderRadius.circular(6),
             onTap: tap,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
               child: Text(
                 text,
                 overflow: TextOverflow.ellipsis,
@@ -1024,7 +1037,7 @@ class _ShellState extends State<Shell> {
               ),
             ),
           );
-    return Row(
+    return Semantics(container: true, label: 'Navegação', child: Row(
       children: [
         Flexible(child: crumb(base, () => unawaited(_popTo(null)))),
         for (var i = 0; i < recs.length; i++) ...[
@@ -1032,7 +1045,7 @@ class _ShellState extends State<Shell> {
           Flexible(child: crumb(recordLabels[recs[i].split(':')[1]] ?? recs[i], i == recs.length - 1 ? null : () => unawaited(_popTo(recs[i])))),
         ],
       ],
-    );
+    ));
   }
 
   /// Closes record pages down to the one named [name] (null: all of them), asking first when one has unsaved edits.
@@ -1065,17 +1078,25 @@ class _ShellState extends State<Shell> {
 
   void _showAlerts() => showModalBottomSheet<void>(
     context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
     builder: (ctx) => SafeArea(
       child: ValueListenableBuilder<List<AlertInfo>>(
         valueListenable: widget.session.alerts,
         builder: (_, list, _) => ListView(
           shrinkWrap: true,
-          children: list.isEmpty
+          padding: const EdgeInsets.only(bottom: 8),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Semantics(header: true, child: Text('Alertas pendentes', style: Theme.of(ctx).textTheme.titleMedium)),
+            ),
+            ...(list.isEmpty
               ? [const ListTile(title: Text('Nenhum alerta'))]
               : [
                   for (final a in list)
                     ListTile(
-                      leading: Icon(a.icon, color: Theme.of(ctx).colorScheme.error),
+                      leading: Icon(a.icon, color: a.count > 0 ? Theme.of(ctx).colorScheme.error : Theme.of(ctx).colorScheme.onSurfaceVariant),
                       title: Text(a.label),
                       trailing: Text('${a.count}', style: const TextStyle(fontWeight: FontWeight.w600)),
                       onTap: () {
@@ -1083,18 +1104,20 @@ class _ShellState extends State<Shell> {
                         _go(a.navId, a.filter);
                       },
                     ),
-                ],
+                ]),
+          ],
         ),
       ),
     ),
   );
 
-  Widget _barButton(IconData icon, String label, VoidCallback onTap, {bool active = false, int badge = 0}) {
+  Widget _barButton(IconData icon, String label, VoidCallback onTap, {bool active = false, int badge = 0, bool expand = true}) {
     final cs = Theme.of(context).colorScheme;
     final color = active ? cs.primary : cs.onSurfaceVariant;
-    return Expanded(
+    Widget wrap(Widget child) => expand ? Expanded(child: child) : child;
+    return wrap(
       // Colour alone does not say which button is current, and a bare badge number does not say what it counts.
-      child: Semantics(
+      Semantics(
         button: true,
         selected: active,
         label: badge > 0 ? '$label, $badge ${badge == 1 ? 'pendente' : 'pendentes'}' : label,
@@ -1119,7 +1142,7 @@ class _ShellState extends State<Shell> {
 
   /// Phone: the four things reached most, always one tap away.
   Widget _bottomBar() => BottomAppBar(
-    height: 56,
+    height: scaledHeight(context, 56).clamp(56.0, 96.0),
     padding: EdgeInsets.zero,
     child: Row(
       children: [
@@ -1128,7 +1151,7 @@ class _ShellState extends State<Shell> {
         ValueListenableBuilder<List<AlertInfo>>(
           valueListenable: widget.session.alerts,
           builder: (_, _, _) => Expanded(
-            child: Row(children: [_barButton(Icons.notifications_none, 'Alertas', _showAlerts, badge: widget.session.alerts.total)]),
+            child: _barButton(Icons.notifications_none, 'Alertas', _showAlerts, badge: widget.session.alerts.total, expand: false),
           ),
         ),
         _barButton(Icons.apps, 'Menu', () => _scaffoldKey.currentState?.openDrawer()),
@@ -1174,7 +1197,10 @@ class _ShellState extends State<Shell> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 900;
+    final width = MediaQuery.sizeOf(context).width;
+    final wide = width >= 900;
+    // Between a phone and a full desktop the bar has little room: pin and copy-link fold into one menu and the search becomes an icon.
+    final mid = wide && width < 1200;
     final s = widget.session;
     // Wide: record pages open inside the content area, under the sidebar. Narrow: they cover the whole screen.
     final page = wide
@@ -1217,16 +1243,31 @@ class _ShellState extends State<Shell> {
           ),
           actions: [
             if (wide) ..._stepButtons(),
-            if (_current != 'dashboard')
-              IconButton(
-                key: const ValueKey('pin-screen'),
-                tooltip: _pinned ? 'Desafixar esta tela' : 'Fixar esta tela',
-                onPressed: _togglePin,
-                icon: Icon(_pinned ? Icons.star : Icons.star_border),
-              ),
-            if (wide) IconButton(key: const ValueKey('copy-link'), tooltip: 'Copiar link', onPressed: _copyLink, icon: const Icon(Icons.copy_all_outlined)),
+            if (mid && _current != 'dashboard')
+              PopupMenuButton<String>(
+                key: const ValueKey('screen-more'),
+                tooltip: 'Mais ações da tela',
+                onSelected: (v) {
+                  if (v == 'pin') _togglePin();
+                  if (v == 'copy') unawaited(_copyLink());
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(value: 'pin', child: ListTile(leading: Icon(_pinned ? Icons.star : Icons.star_border), title: Text(_pinned ? 'Desafixar esta tela' : 'Fixar esta tela'))),
+                  const PopupMenuItem(value: 'copy', child: ListTile(leading: Icon(Icons.copy_all_outlined), title: Text('Copiar link'))),
+                ],
+              )
+            else ...[
+              if (_current != 'dashboard')
+                IconButton(
+                  key: const ValueKey('pin-screen'),
+                  tooltip: _pinned ? 'Desafixar esta tela' : 'Fixar esta tela',
+                  onPressed: _togglePin,
+                  icon: Icon(_pinned ? Icons.star : Icons.star_border),
+                ),
+              if (wide) IconButton(key: const ValueKey('copy-link'), tooltip: 'Copiar link', onPressed: _copyLink, icon: const Icon(Icons.copy_all_outlined)),
+            ],
             if (wide) ...[
-              SearchLauncher(onOpen: _openPalette),
+              SearchLauncher(onOpen: _openPalette, compact: mid && width < 1100),
               const SizedBox(width: 4),
               AlertBell(center: s.alerts, onNavigate: _go),
               const SizedBox(width: 12),

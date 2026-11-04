@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api.dart';
 import '../entities.dart';
 import '../prefs.dart';
+import 'pipeline.dart';
 import 'record_nav.dart';
 
 /// One entry of a [RecordList] row menu; the list reloads after [run].
@@ -38,7 +39,7 @@ class RecordList extends StatefulWidget {
     this.enrich,
     this.rowColor,
     this.rowActions,
-    this.emptyText = 'Nenhum registro',
+    this.emptyText = 'Nenhum registro cadastrado',
     this.pageSize,
     this.filtersActive = false,
     this.onClearFilters,
@@ -333,8 +334,10 @@ class RecordListState extends State<RecordList> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
+  Widget build(BuildContext context) => LayoutBuilder(builder: _buildBody);
+
+  Widget _buildBody(BuildContext context, BoxConstraints box) {
+    final width = box.maxWidth.isFinite ? box.maxWidth : MediaQuery.sizeOf(context).width;
     final wide = width >= 900;
     final page = _page;
     return Focus(
@@ -359,7 +362,7 @@ class RecordListState extends State<RecordList> {
                       children: [
                         if (widget.searchable)
                           SizedBox(
-                            width: wide ? 320 : width - 96,
+                            width: wide ? 320 : math.max(160, width - 96),
                             child: TextField(
                               key: const ValueKey('record-search'),
                               controller: _search,
@@ -368,7 +371,6 @@ class RecordListState extends State<RecordList> {
                                 prefixIcon: const Icon(Icons.search),
                                 labelText: widget.searchHint,
                                 isDense: true,
-                                border: const OutlineInputBorder(),
                               ),
                               onChanged: _onSearch,
                             ),
@@ -485,15 +487,16 @@ class RecordListState extends State<RecordList> {
       for (final e in items)
         DataRow(
           color: WidgetStateProperty.resolveWith(
-            (_) => identical(e, _highlighted(items)) ? Theme.of(context).colorScheme.primaryContainer : widget.rowColor?.call(context, e),
+            (_) => _rowTint(context, e, items),
           ),
+          selected: identical(e, _highlighted(items)),
           onSelectChanged: widget.onTap == null ? null : (_) => _tap(e),
           cells: [
             for (final c in widget.columns)
               DataCell(
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 320),
-                  child: c.cell != null ? c.cell!(context, e) : Text(c.value(e), overflow: TextOverflow.ellipsis),
+                  child: c.cell != null ? c.cell!(context, e) : Tooltip(message: c.value(e), waitDuration: const Duration(milliseconds: 600), child: Text(c.value(e), overflow: TextOverflow.ellipsis)),
                 ),
               ),
             if (widget.rowActions != null) DataCell(_menu(e)),
@@ -501,6 +504,14 @@ class RecordListState extends State<RecordList> {
         ),
     ],
   );
+
+  /// Colour of a row: the screen's own tint (late, alert) stays, and the keyboard-selected row gets a primary wash over it instead of replacing it.
+  Color? _rowTint(BuildContext context, Map<String, dynamic> e, List<Map<String, dynamic>> items) {
+    final base = widget.rowColor?.call(context, e);
+    if (!identical(e, _highlighted(items))) return base;
+    final wash = Theme.of(context).colorScheme.primary.withValues(alpha: 0.16);
+    return base == null ? wash : Color.alphaBlend(wash, base);
+  }
 
   Widget _menu(Map<String, dynamic> e) {
     final actions = widget.rowActions?.call(e) ?? const <RowAction>[];
@@ -532,14 +543,16 @@ class RecordListState extends State<RecordList> {
       final muted = TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant);
       if (widget.phoneTile != null) {
         return ListTile(
-          tileColor: identical(e, _highlighted(items)) ? Theme.of(context).colorScheme.primaryContainer : widget.rowColor?.call(context, e),
+          tileColor: _rowTint(context, e, items),
+          selected: identical(e, _highlighted(items)),
           title: widget.phoneTile!(context, e),
           trailing: widget.rowActions == null ? null : _menu(e),
           onTap: widget.onTap == null ? null : () => _tap(e),
         );
       }
       return ListTile(
-        tileColor: identical(e, _highlighted(items)) ? Theme.of(context).colorScheme.primaryContainer : widget.rowColor?.call(context, e),
+        tileColor: _rowTint(context, e, items),
+        selected: identical(e, _highlighted(items)),
         title: Text(
           '${cols[0].value(e)}  ${cols.length > 1 ? cols[1].value(e) : ''}',
           maxLines: 2,
@@ -627,20 +640,22 @@ class ChoiceFilter extends StatelessWidget {
   final String allLabel;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 220,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) => SizedBox(
+    // On a phone the filter takes the whole row instead of a fixed 220 that leaves a ragged edge.
+    width: box.maxWidth.isFinite && box.maxWidth < 520 ? box.maxWidth : 220,
     child: DropdownButtonFormField<String?>(
       key: ValueKey('filter-$label'),
       initialValue: value,
       isExpanded: true,
-      decoration: InputDecoration(labelText: label, isDense: true, border: const OutlineInputBorder()),
+      decoration: InputDecoration(labelText: label, isDense: true),
       items: [
         DropdownMenuItem<String?>(value: null, child: Text(allLabel)),
         for (final e in choices.entries) DropdownMenuItem<String?>(value: e.key, child: Text(e.value)),
       ],
       onChanged: onChanged,
     ),
-  );
+  ));
 }
 
 /// Memoised lookup of a record display name by path and id; falls back to `#id` when the fetch fails.
@@ -773,36 +788,7 @@ class TotalsBlock extends StatelessWidget {
   }
 }
 
-/// Outlined status chip; [alert] paints it red, [ok] in the primary colour.
-class StatusChip extends StatelessWidget {
-  const StatusChip(this.label, {super.key, this.alert = false, this.ok = false});
-
-  final String label;
-  final bool alert;
-  final bool ok;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final color = alert ? cs.error : (ok ? cs.primary : cs.onSurfaceVariant);
-    // Tonal outline with a dot so a status never looks like a pressable button.
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      decoration: BoxDecoration(
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.circle, size: 8, color: color),
-          const SizedBox(width: 6),
-          Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color)),
-        ],
-      ),
-    );
-  }
-}
+/// Status label with a dot; [alert] paints it red, [ok] green. Same look as [StatusBadge] so lists and record pages read alike.class StatusChip extends StatelessWidget {  const StatusChip(this.label, {super.key, this.alert = false, this.ok = false});  final String label;  final bool alert;  final bool ok;  @override  Widget build(BuildContext context) => StatusBadge(label, tone: alert ? Tone.danger : (ok ? Tone.success : Tone.neutral), icon: Icons.circle);}
 
 /// Read-only table for small, already loaded rows.
 ///
@@ -816,7 +802,7 @@ class SimpleTable extends StatelessWidget {
     this.actions,
     this.rowColor,
     this.actionsFirst = false,
-    this.emptyText = 'Nenhum registro',
+    this.emptyText = 'Nenhum registro cadastrado',
     this.hideWhenEmpty = const {},
   });
 
@@ -847,7 +833,20 @@ class SimpleTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (rows.isEmpty) return Padding(padding: const EdgeInsets.all(16), child: Text(emptyText));
+    if (rows.isEmpty) {
+      final cs = Theme.of(context).colorScheme;
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.inbox_outlined, size: 20, color: cs.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Flexible(child: Text(emptyText, style: TextStyle(color: cs.onSurfaceVariant))),
+          ],
+        ),
+      );
+    }
     final cols = _shown;
     return LayoutBuilder(
       builder: (context, box) {

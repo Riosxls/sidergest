@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../api.dart';
 import '../session.dart';
 import '../theme_tokens.dart';
+import '../widgets/pipeline.dart' show Tone, toneColors;
 import '../widgets/record_list.dart';
+import '../widgets/responsive.dart';
 
 /// Word the admin types before movement data is deleted; the server checks it too.
 const dataResetConfirmWord = 'LIMPAR';
@@ -21,7 +23,7 @@ const _scopes = [
   _Scope('Sales', 'Comercial', 'Orçamentos, pedidos de venda, entregas, certificados, análises de viabilidade e notas fiscais simuladas'),
   _Scope('Purchasing', 'Suprimentos', 'Requisições, cotações, pedidos de compra e recebimentos', warning: 'Inclui o que veio do sistema antigo'),
   _Scope('Production', 'PCP', 'Ordens de fabricação e apontamentos', warning: 'Inclui o que veio do sistema antigo'),
-  _Scope('Stock', 'Estoque', 'Movimentações, lotes, reservas e bobinas', warning: 'O saldo de estoque volta a zero.'),
+  _Scope('Stock', 'Estoque', 'Movimentações, lotes, reservas e bobinas', warning: 'O saldo de estoque volta a zero'),
 ];
 
 const _tableNames = {
@@ -152,7 +154,7 @@ class _DataResetDialogState extends State<_DataResetDialog> {
     return AlertDialog(
       title: const Text('Limpar dados de movimento'),
       content: SizedBox(
-        width: 520,
+        width: dialogWidth(context, 520),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -169,7 +171,13 @@ class _DataResetDialogState extends State<_DataResetDialog> {
                   value: _selected.contains(s.key),
                   onChanged: _busy ? null : (v) => _toggle(s.key, v ?? false),
                   title: Text(s.title),
-                  subtitle: Text(s.warning == null ? s.detail : '${s.detail}. ${s.warning}'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(s.detail),
+                      if (s.warning != null) _WarningNote(s.warning!),
+                    ],
+                  ),
                 ),
               if (_preview != null) ...[
                 const Divider(),
@@ -193,6 +201,7 @@ class _DataResetDialogState extends State<_DataResetDialog> {
                     key: const ValueKey('reset-confirm'),
                     controller: _confirm,
                     onChanged: (_) => setState(() {}),
+                    textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(labelText: 'Digite $dataResetConfirmWord para confirmar', border: OutlineInputBorder(), isDense: true),
                   ),
                   const SizedBox(height: 8),
@@ -201,7 +210,12 @@ class _DataResetDialogState extends State<_DataResetDialog> {
                     controller: _password,
                     obscureText: true,
                     onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(labelText: 'Sua senha', border: OutlineInputBorder(), isDense: true),
+                    autofillHints: const [AutofillHints.password],
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) {
+                      if (canDelete) _run();
+                    },
+                    decoration: const InputDecoration(labelText: 'Sua senha de administrador', border: OutlineInputBorder(), isDense: true),
                   ),
                 ],
               ],
@@ -223,9 +237,36 @@ class _DataResetDialogState extends State<_DataResetDialog> {
             key: const ValueKey('reset-run'),
             style: dangerButtonStyle(context),
             onPressed: canDelete ? _run : null,
-            child: const Text('Apagar definitivamente'),
+            child: _busy ? const Row(mainAxisSize: MainAxisSize.min, children: [SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)), SizedBox(width: 8), Text('Apagando...')]) : const Text('Apagar definitivamente'),
           ),
       ],
+    );
+  }
+}
+
+/// A caution under a scope: warning icon and tone, so it is not read as plain description.
+class _WarningNote extends StatelessWidget {
+  const _WarningNote(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final (bg, fg) = toneColors(context, Tone.warning);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(AppRadius.chip)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.warning_amber_rounded, size: 16, color: fg),
+            const SizedBox(width: 6),
+            Flexible(child: Text(text, style: TextStyle(color: fg, fontWeight: FontWeight.w600))),
+          ],
+        ),
+      ),
     );
   }
 }

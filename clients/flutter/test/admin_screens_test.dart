@@ -148,13 +148,14 @@ void main() {
     await open(tester, 'Usuários');
     await tester.tap(find.byKey(const ValueKey('user-1')));
     await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('field-password')), 'senha-longa-123');
     await tester.tap(find.widgetWithText(FilledButton, 'Salvar'));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.textContaining('desconecta root'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Confirmar'));
     await tester.pumpAndSettle();
     final put = log.singleWhere((r) => r.method == 'PUT');
-    expect(jsonDecode(put.body), {'role': 'Admin', 'active': true});
+    expect(jsonDecode(put.body), {'role': 'Admin', 'active': true, 'password': 'senha-longa-123'});
     expect(find.text('Deve restar pelo menos um administrador ativo'), findsOneWidget);
   });
 
@@ -172,7 +173,7 @@ void main() {
     final (_, log) = await pump(tester, 'Admin');
     await open(tester, 'Auditoria');
     expect(find.text('Alterado'), findsOneWidget);
-    expect(find.text('Customer'), findsOneWidget);
+    expect(find.text('Cliente'), findsOneWidget);
     await tester.tap(find.text('root'));
     await tester.pumpAndSettle();
     expect(find.text('De'), findsOneWidget);
@@ -184,7 +185,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('filter-Entidade')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Product').last);
+    await tester.tap(find.text('Produto').last);
     await tester.pumpAndSettle();
     expect(log.last.url.queryParameters['entity'], 'Product');
   });

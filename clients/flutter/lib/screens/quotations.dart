@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -12,6 +13,7 @@ import '../widgets/load_error.dart';
 import '../widgets/pipeline.dart' show confirmStep;
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
+import '../widgets/responsive.dart';
 import 'orders.dart';
 import 'purchasing_path.dart';
 import 'requisitions.dart';
@@ -140,8 +142,8 @@ class _NewQuotationDialogState extends State<NewQuotationDialog> {
     return AlertDialog(
       title: const Text('Nova cotação'),
       content: SizedBox(
-        width: 640,
-        height: 520,
+        width: dialogWidth(context, 640),
+        height: math.min(520, MediaQuery.sizeOf(context).height * 0.7),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -425,15 +427,23 @@ class _QuotationScreenState extends State<QuotationScreen> {
                     RelatedLink(Icons.business_outlined, 'Fornecedor: ${e.value}', () => openSupplier(context, widget.session, e.key)),
                 ],
               ),
-            if (open) IconButton(tooltip: 'Adicionar fornecedor', onPressed: _addSupplier, icon: const Icon(Icons.person_add_alt)),
             if (q != null && q['status'] != 'Cancelled' && hasWinner && widget.session.canBuy)
               TextButton.icon(key: const ValueKey('quote-order'), onPressed: _order, icon: const Icon(Icons.receipt_long), label: const Text('Gerar pedido')),
-            if (open) IconButton(tooltip: 'Cancelar cotação', onPressed: _cancel, icon: const Icon(Icons.cancel_outlined)),
+            if (open)
+              PopupMenuButton<String>(
+                key: const ValueKey('quote-menu'),
+                tooltip: 'Mais ações',
+                onSelected: (v) => v == 'supplier' ? _addSupplier() : _cancel(),
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'supplier', key: ValueKey('quote-add-supplier-item'), child: ListTile(leading: Icon(Icons.person_add_alt), title: Text('Adicionar fornecedor'))),
+                  PopupMenuItem(value: 'cancel', key: ValueKey('quote-cancel-item'), child: ListTile(leading: Icon(Icons.cancel_outlined), title: Text('Cancelar cotação'))),
+                ],
+              ),
           ],
-          bottom: const TabBar(
+          bottom: TabBar(
             tabs: [
-              Tab(text: 'Propostas'),
-              Tab(text: 'Comparativo'),
+              Tab(text: 'Propostas (${_items.length})'),
+              Tab(text: 'Comparativo (${_cmp.length})'),
             ],
           ),
         ),

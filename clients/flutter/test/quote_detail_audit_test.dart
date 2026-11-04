@@ -226,7 +226,7 @@ void main() {
 
     testWidgets('the header total says what it adds up and the customer opens its page', (tester) async {
       await _open(tester, _fake('Sent'));
-      expect(find.text('Total + IPI'), findsOneWidget);
+      expect(find.text('Total do orçamento'), findsOneWidget);
       expect(find.byKey(const ValueKey('header-link-Cliente')), findsOneWidget);
       expect(find.text('Orçamento PROP 31'), findsOneWidget);
     });
@@ -283,10 +283,13 @@ void main() {
       await _open(tester, _fake('Draft'));
       expect(find.text('Registrar envio ao cliente'), findsOneWidget);
       expect(find.text('Enviar ao cliente'), findsNothing);
-      expect(find.byKey(const ValueKey('quote-pdf')), findsOneWidget);
+      // Document actions live only in the app bar menu, not on the status card.
+      expect(find.byKey(const ValueKey('quote-pdf')), findsNothing);
       await _open(tester, _fake('Sent'));
-      expect(find.byKey(const ValueKey('quote-pdf')), findsOneWidget);
-      expect(find.byKey(const ValueKey('quote-mail')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('quote-menu')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('quote-menu-pdf')), findsOneWidget);
+      expect(find.byKey(const ValueKey('quote-menu-mail')), findsOneWidget);
     });
 
     testWidgets('the menu offers Baixar PDF and shows the destructive entries in the error colour', (tester) async {

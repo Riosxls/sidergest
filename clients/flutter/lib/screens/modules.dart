@@ -39,6 +39,9 @@ class ModuleScreen extends StatefulWidget {
 
 class _ModuleScreenState extends State<ModuleScreen> {
   static const _maxWidth = 1280.0;
+
+  /// Where the Shell switches from drawer and bottom bar to the sidebar (screens/shell.dart: width >= 900).
+  static const _shellWide = 900.0;
   late Future<Object> _data = _fetch();
   DateTime? _updated;
   final _focus = FocusNode();
@@ -117,9 +120,9 @@ class _ModuleScreenState extends State<ModuleScreen> {
 
   void Function()? _go(String id, [String? filter]) => widget.onNavigate == null ? null : () => widget.onNavigate!(id, filter);
 
-  /// [alarm]: a count above zero is a problem, so the tile is drawn red; otherwise it is plain information.
+  /// [alarm]: the caller has already checked that the count is above zero (a number, not the shown text), so the tile is drawn red.
   GridItem _tile(IconData icon, String label, String value, [void Function()? onTap, bool alarm = false, String? hint]) =>
-      GridItem(DashTile(icon: icon, label: label, value: value, hint: hint, alert: alarm && value != '0', onTap: onTap));
+      GridItem(DashTile(icon: icon, label: label, value: value, hint: hint, alert: alarm, onTap: onTap));
 
   Widget _content(Object data) {
     final items = switch (data) {
@@ -138,7 +141,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
 
   /// What needs action comes first; a count and the money behind it share one tile.
   List<GridItem> _commercial(CommercialDashboard d) => [
-    _tile(Icons.event_busy_outlined, 'Pedidos atrasados', '${d.k('lateOrders').toInt()}', _go('sales-orders'), true),
+    _tile(Icons.event_busy_outlined, 'Pedidos atrasados', '${d.k('lateOrders').toInt()}', _go('sales-orders'), d.k('lateOrders') > 0),
     _tile(Icons.gavel_outlined, 'Aprovações pendentes', '${d.k('pendingApprovals').toInt()}', _go('sales-quotes')),
     _tile(Icons.local_shipping_outlined, 'Prontos para expedir', '${d.k('readyToShip').toInt()}', _go('deliveries')),
     _tile(Icons.request_quote_outlined, 'Orçamentos abertos', '${d.k('openQuotes').toInt()}', _go('sales-quotes'), false, fmtMoney(d.k('openQuotesValue'))),
@@ -187,14 +190,35 @@ class _ModuleScreenState extends State<ModuleScreen> {
     if (d.locations == 0 && d.steelLots == 0) return [];
     return [
       _tile(Icons.trending_down, 'Abaixo do mínimo', '${d.lowStock.length}', _go('low-stock'), d.lowStock.isNotEmpty),
-      _tile(Icons.verified_outlined, 'Lotes em quarentena', '${d.quarantine}', _go('lots', 'Quarantine'), true),
+      _tile(Icons.verified_outlined, 'Lotes em quarentena', '${d.quarantine}', _go('lots', 'Quarantine'), d.quarantine > 0),
       _tile(Icons.bookmark_border, 'Reservas abertas', '${d.openReservations}', _go('reservations')),
       _tile(Icons.lock_outline, 'Último mês fechado', d.lastClosing == null ? 'Nenhum' : fmtPeriod(d.lastClosing!['period']), _go('closing')),
       // A failed steel lookup shows a dash, not a believable zero.
-      _tile(Icons.layers_outlined, 'Bobinas de aço', d.steelUnavailable ? '—' : '${d.steelLots}', _go('steel')),
-      _tile(Icons.scale_outlined, 'Saldo de aço (kg)', d.steelUnavailable ? '—' : fmt(d.steelBalanceKg), _go('steel')),
-      _tile(Icons.payments_outlined, 'Saldo de aço (R\$)', d.steelUnavailable ? '—' : fmtMoney(d.steelBalanceValue), _go('steel')),
-      _tile(Icons.content_cut, 'No slitter', d.steelUnavailable ? '—' : '${d.steelPending}', _go('steel')),
+      _tile(
+        Icons.layers_outlined,
+        'Bobinas de aço',
+        d.steelUnavailable ? '—' : '${d.steelLots}',
+        _go('steel'),
+        false,
+        d.steelUnavailable ? 'Não carregou' : null,
+      ),
+      _tile(
+        Icons.scale_outlined,
+        'Saldo de aço (kg)',
+        d.steelUnavailable ? '—' : fmt(d.steelBalanceKg),
+        _go('steel'),
+        false,
+        d.steelUnavailable ? 'Não carregou' : null,
+      ),
+      _tile(
+        Icons.payments_outlined,
+        'Saldo de aço (R\$)',
+        d.steelUnavailable ? '—' : fmtMoney(d.steelBalanceValue),
+        _go('steel'),
+        false,
+        d.steelUnavailable ? 'Não carregou' : null,
+      ),
+      _tile(Icons.content_cut, 'No slitter', d.steelUnavailable ? '—' : '${d.steelPending}', _go('steel'), false, d.steelUnavailable ? 'Não carregou' : null),
     ];
   }
 
@@ -208,7 +232,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
       _tile(Icons.assignment_turned_in_outlined, 'Aprovadas sem cotação', '${d.approved}', _go('requisitions', 'Approved')),
       _tile(Icons.request_quote_outlined, 'Cotações abertas', '${d.openQuotations}', _go('quotations')),
       _tile(Icons.receipt_long_outlined, 'Pedidos abertos', '${d.openOrders}', _go('orders')),
-      _tile(Icons.schedule, 'Entregas em atraso', '${fresh.length}', _go('overdue'), true),
+      _tile(Icons.schedule, 'Entregas em atraso', '${fresh.length}', _go('overdue'), fresh.isNotEmpty),
       _tile(Icons.history, 'Atrasadas há mais de $legacyOverdueDays dias', '${legacy.length}', _go('overdue')),
       GridItem.bars(
         BarPanel(
@@ -236,8 +260,8 @@ class _ModuleScreenState extends State<ModuleScreen> {
       _tile(Icons.assignment_outlined, 'OFs a liberar', '${d.count('Created')}', _go('production-orders', 'Created')),
       _tile(Icons.play_circle_outline, 'Liberadas', '${d.count('Released')}', _go('production-orders', 'Released')),
       _tile(Icons.precision_manufacturing_outlined, 'Em produção', '${d.count('InProduction')}', _go('production-orders', 'InProduction')),
-      _tile(Icons.pause_circle_outline, 'Paradas', '${d.count('Stopped')}', _go('production-orders', 'Stopped'), true),
-      _tile(Icons.schedule, 'Atrasadas', '${d.lateFresh.total}', _go('production-orders'), true),
+      _tile(Icons.pause_circle_outline, 'Paradas', '${d.count('Stopped')}', _go('production-orders', 'Stopped'), d.count('Stopped') > 0),
+      _tile(Icons.schedule, 'Atrasadas', '${d.lateFresh.total}', _go('production-orders'), d.lateFresh.total > 0),
       _tile(Icons.history, 'Atrasadas há mais de $legacyOverdueDays dias', '${d.lateLegacy.total}', _go('production-orders')),
       _tile(Icons.outbox_outlined, 'Remessas em terceiros', '${d.shipments.length}', _go('outside-processing')),
       GridItem.bars(
@@ -335,13 +359,24 @@ class _ModuleScreenState extends State<ModuleScreen> {
                   children: [
                     // The app bar already names the module; this row carries what it is for and when the numbers were read.
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(widget.module.icon, color: theme.colorScheme.primary),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(widget.module.blurb, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                        // Decoration only: a screen reader has the blurb next to it.
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: ExcludeSemantics(child: Icon(widget.module.icon, color: theme.colorScheme.primary)),
                         ),
-                        if (updated != null) Text('Atualizado às ${hhmm(updated)}', style: theme.textTheme.bodySmall),
+                        const SizedBox(width: 8),
+                        // The time sits under the blurb, so a narrow row keeps the refresh button instead of squeezing three things side by side.
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(widget.module.blurb, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                              if (updated != null) Text('Atualizado às ${hhmm(updated)}', style: theme.textTheme.bodySmall),
+                            ],
+                          ),
+                        ),
                         IconButton(tooltip: 'Atualizar (F5)', onPressed: _refresh, icon: const Icon(Icons.refresh)),
                       ],
                     ),
@@ -358,8 +393,15 @@ class _ModuleScreenState extends State<ModuleScreen> {
                         if (snap.hasError) {
                           return Row(
                             children: [
-                              Expanded(child: Text(friendlyError(snap.error!), style: TextStyle(color: theme.colorScheme.error))),
-                              TextButton.icon(key: const ValueKey('module-retry'), onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+                              Expanded(
+                                child: Text(friendlyError(snap.error!), style: TextStyle(color: theme.colorScheme.error)),
+                              ),
+                              TextButton.icon(
+                                key: const ValueKey('module-retry'),
+                                onPressed: _refresh,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Tentar novamente'),
+                              ),
                             ],
                           );
                         }
@@ -368,7 +410,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
                       },
                     ),
                     // With the sidebar showing, every screen is already listed there; the cards below are for phones and narrow windows.
-                    if (MediaQuery.sizeOf(context).width < 900) ...[
+                    if (MediaQuery.sizeOf(context).width < _shellWide) ...[
                       const SizedBox(height: 24),
                       Text('Telas', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
                       const SizedBox(height: 8),

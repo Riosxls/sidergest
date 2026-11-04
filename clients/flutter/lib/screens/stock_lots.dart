@@ -7,6 +7,7 @@ import '../session.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/record_list.dart';
+import '../widgets/responsive.dart';
 import 'stock_balances.dart';
 import 'stock_documents.dart';
 import 'suppliers.dart';
@@ -68,7 +69,7 @@ Future<void> showLotDialog(BuildContext context, Session session, Map<String, dy
           if (status != 'Released') {
             note = await promptText(
               ctx,
-              title: status == 'Rejected' ? 'Rejeitar lote ${lot['code']}' : 'Voltar lote ${lot['code']} para quarentena',
+              title: status == 'Rejected' ? 'Rejeitar lote ${lot['code']}' : 'Mover lote ${lot['code']} para quarentena',
               label: 'Laudo / motivo',
               required: status == 'Rejected',
             );
@@ -104,7 +105,7 @@ Future<void> showLotDialog(BuildContext context, Session session, Map<String, dy
         return AlertDialog(
           title: Text('Lote ${lot['code']} · ${lot['itemCode']}'),
           content: SizedBox(
-            width: 480,
+            width: dialogWidth(context, 480),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -156,8 +157,15 @@ Future<void> showLotDialog(BuildContext context, Session session, Map<String, dy
           actions: [
             if (session.canStock && lot['status'] != 'Released')
               FilledButton(key: const ValueKey('lot-release'), onPressed: busy ? null : () => inspect('Released'), child: const Text('Liberar')),
-            if (session.canStock && lot['status'] != 'Rejected') TextButton(onPressed: busy ? null : () => inspect('Rejected'), child: const Text('Rejeitar')),
-            if (session.canStock && lot['status'] != 'Quarantine') TextButton(onPressed: busy ? null : () => inspect('Quarantine'), child: const Text('Quarentena')),
+            if (session.canStock && lot['status'] != 'Quarantine')
+              TextButton(onPressed: busy ? null : () => inspect('Quarantine'), child: const Text('Mover para quarentena')),
+            if (session.canStock && lot['status'] != 'Rejected')
+              TextButton(
+                key: const ValueKey('lot-reject'),
+                style: TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error),
+                onPressed: busy ? null : () => inspect('Rejected'),
+                child: const Text('Rejeitar'),
+              ),
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fechar')),
           ],
         );
@@ -217,7 +225,7 @@ class _ReservationsViewState extends State<ReservationsView> {
       builder: (ctx) => AlertDialog(
         title: Text('Reserva ${e['reference']}'),
         content: SizedBox(
-          width: 440,
+          width: dialogWidth(context, 440),
           child: InfoGrid([
             ('Item', fmt(e['itemCode'])),
             ('Local', fmt(e['locationCode'])),

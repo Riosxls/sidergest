@@ -8,13 +8,15 @@ import '../labels.dart';
 import '../reports/nf_doc.dart';
 import '../reports/print_docs.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/actions.dart';
 import '../widgets/discard_guard.dart' show confirmDiscard;
 import '../widgets/entity_form.dart';
 import '../widgets/load_error.dart';
-import '../widgets/pipeline.dart' show confirmStep;
+import '../widgets/pipeline.dart' show StatusBadge, Tone, confirmStep;
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
+import '../widgets/responsive.dart';
 import 'customers.dart';
 import 'orders.dart';
 import 'product_detail.dart';
@@ -105,7 +107,8 @@ class _ProductionOrdersScreenState extends State<ProductionOrdersScreen> {
     final cs = Theme.of(context).colorScheme;
     return RecordList(
       key: _list,
-      filtersActive: _open || _status != null || _kind != null,
+      // "Somente abertas" is how the list starts, so it alone does not count as a filter the user set.
+      filtersActive: _status != null || _kind != null,
       onClearFilters: () => setState(() {
         _open = false;
         _status = null;
@@ -118,10 +121,15 @@ class _ProductionOrdersScreenState extends State<ProductionOrdersScreen> {
       filters: [
         ChoiceFilter(label: 'Situação', value: _status, choices: productionStatuses, onChanged: (v) => setState(() => _status = v)),
         ChoiceFilter(label: 'Tipo', value: _kind, choices: productionKinds, onChanged: (v) => setState(() => _kind = v)),
-        FilterChip(label: const Text('Somente abertas'), selected: _open, onSelected: (v) => setState(() => _open = v)),
+        // A chosen situation decides what is listed, so "Somente abertas" has nothing left to say.
+        FilterChip(
+          label: const Text('Somente abertas'),
+          selected: _open && _status == null,
+          onSelected: _status == null ? (v) => setState(() => _open = v) : null,
+        ),
       ],
       fab: widget.session.canProduce
-          ? FloatingActionButton.extended(heroTag: 'new-of', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Nova Ordem de Fabricação'))
+          ? FloatingActionButton.extended(heroTag: 'new-of', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Nova OF'))
           : null,
       columns: [
         col('Referência', 'reference'),
@@ -129,9 +137,21 @@ class _ProductionOrdersScreenState extends State<ProductionOrdersScreen> {
         col('Descrição', 'productName'),
         col('Quantidade', 'quantity', numeric: true),
         dateCol('Entrega', 'dueDate'),
-        ColumnSpec('Início prog.', (e) => fmtDay(e['adjustedStart'] ?? e['plannedStart'])),
-        ColumnSpec('Fim prog.', (e) => fmtDay(e['adjustedEnd'] ?? e['plannedEnd'])),
-        labelCol('Situação', 'status', productionStatuses),
+        // Programmed start and end stay on the order page; the list keeps the columns that decide what to open.
+        ColumnSpec(
+          'Situação',
+          (e) => productionStatuses[e['status']] ?? fmt(e['status']),
+          cell: (context, e) => Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(productionStatuses[e['status']] ?? fmt(e['status'])),
+              // Colour alone does not say it: the row tint is backed by a word.
+              if (productionLate(e)) const StatusBadge('Atrasada', tone: Tone.danger, icon: Icons.schedule),
+            ],
+          ),
+        ),
         col('Cliente', 'customerName'),
       ],
       rowColor: (_, e) => productionLate(e) ? cs.errorContainer : null,
@@ -411,52 +431,101 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
     }
   }
 
+  /// One primary action stays on the bar, by status; the rest sits in a grouped menu with the destructive ones last, in the error colour.
   List<Widget> _actions() {
     if (_o == null) return [];
-    final menu = <PopupMenuEntry<VoidCallback>>[
-      if (s.canProduce && open) PopupMenuItem(value: _edit, child: const Text('Editar')),
-      if (s.canProduce && status == 'Created')
-        PopupMenuItem(
-          value: () => _post('refresh-structure', success: 'Estrutura atualizada'),
-          child: const Text('Atualizar estrutura'),
+    final cs = Theme.of(context).colorScheme;
+    final canProduce = s.canProduce;
+    final cost = canProduce && status == 'Closed' && _o!['costClosedAt'] == null;
+    // Whoever can move material but not produce has nothing else to do on a running order, so the entry is the primary action.
+    final receiveFirst = !canProduce && s.canMoveProduction && running;
+    Widget? primary;
+    if (canProduce && status == 'Created') {
+      primary = FilledButton.icon(key: const ValueKey('of-release'), onPressed: _release, icon: const Icon(Icons.play_arrow), label: const Text('Liberar'));
+    } else if (canProduce && status == 'Stopped') {
+      primary = FilledButton.icon(
+        key: const ValueKey('of-resume'),
+        onPressed: () => _post('resume', success: 'OF retomada'),
+        icon: const Icon(Icons.play_arrow),
+        label: const Text('Retomar'),
+      );
+    } else if (canProduce && running) {
+      primary = FilledButton.icon(key: const ValueKey('of-finish'), onPressed: _finish, icon: const Icon(Icons.flag_outlined), label: const Text('Finalizar'));
+    } else if (receiveFirst) {
+      primary = Tooltip(
+        message: 'Entrada de produto acabado no estoque',
+        child: FilledButton.icon(
+          key: const ValueKey('of-receive'),
+          onPressed: _receive,
+          icon: const Icon(Icons.move_to_inbox),
+          label: const Text('Entrada PA'),
         ),
-      if (s.canProduce && open) PopupMenuItem(value: _children, child: const Text('Gerar OFs de subconjuntos')),
-      if (s.canProduce && open) PopupMenuItem(value: _schedule, child: const Text('Programar')),
-      if (s.canProduce && running) PopupMenuItem(value: () => _reason('stop', 'Parar ${_o!['reference']}'), child: const Text('Parar')),
-      if (s.canProduce && running) PopupMenuItem(value: _finish, child: const Text('Finalizar')),
-      if (s.canProduce && status == 'Finished')
-        PopupMenuItem(
-          value: () => _post('reopen', success: 'OF reaberta'),
-          child: const Text('Reabrir'),
-        ),
-      if (s.canProduce && status == 'Finished') PopupMenuItem(value: _closeOrder, child: const Text('Encerrar')),
-      if (s.canProduce && status == 'Closed' && _o!['costClosedAt'] == null) PopupMenuItem(value: _closeCost, child: const Text('Fechar custo')),
-      if (s.canProduce && open) PopupMenuItem(value: _cancel, child: const Text('Cancelar')),
-      if (s.canProduce && status == 'Created') PopupMenuItem(value: _delete, child: const Text('Excluir')),
+      );
+    }
+    PopupMenuItem<VoidCallback> item(VoidCallback f, String label, {bool danger = false}) => PopupMenuItem(
+      value: f,
+      child: Text(label, style: danger ? TextStyle(color: cs.error) : null),
+    );
+    final edit = <PopupMenuEntry<VoidCallback>>[
+      if (canProduce && open) item(_edit, 'Editar'),
+      if (canProduce && status == 'Created') item(() => _post('refresh-structure', success: 'Estrutura atualizada'), 'Atualizar estrutura'),
+      if (canProduce && open) item(_children, 'Gerar OFs de subconjuntos'),
+      if (canProduce && open) item(_schedule, 'Programar'),
     ];
+    final flow = <PopupMenuEntry<VoidCallback>>[
+      if (s.canMoveProduction && running && !receiveFirst) item(_receive, 'Entrada PA'),
+      if (canProduce && running) item(() => _reason('stop', 'Parar ${_o!['reference']}'), 'Parar'),
+      if (canProduce && status == 'Finished') item(() => _post('reopen', success: 'OF reaberta'), 'Reabrir'),
+      if (canProduce && status == 'Finished') item(_closeOrder, 'Encerrar'),
+      if (cost) item(_closeCost, 'Fechar custo'),
+    ];
+    final danger = <PopupMenuEntry<VoidCallback>>[
+      if (canProduce && open) item(_cancel, 'Cancelar', danger: true),
+      if (canProduce && status == 'Created') item(_delete, 'Excluir', danger: true),
+    ];
+    final menu = <PopupMenuEntry<VoidCallback>>[];
+    for (final group in [edit, flow, danger]) {
+      if (group.isEmpty) continue;
+      if (menu.isNotEmpty) menu.add(const PopupMenuDivider());
+      menu.addAll(group);
+    }
     return [
-      if (_o != null) PrintButton(name: 'Ordem de fabricação ${_o!['reference']}', builder: () => buildProductionOrderPdf(s.api, _o!)),
-      if (s.canProduce && status == 'Created')
-        TextButton.icon(key: const ValueKey('of-release'), onPressed: _release, icon: const Icon(Icons.play_arrow), label: const Text('Liberar')),
-      if (s.canProduce && status == 'Stopped')
-        TextButton.icon(
-          onPressed: () => _post('resume', success: 'OF retomada'),
-          icon: const Icon(Icons.play_arrow),
-          label: const Text('Retomar'),
-        ),
-      if (s.canMoveProduction && running)
-        Tooltip(
-          message: 'Entrada de produto acabado no estoque',
-          child: TextButton.icon(
-            key: const ValueKey('of-receive'),
-            onPressed: _receive,
-            icon: const Icon(Icons.move_to_inbox),
-            label: const Text('Entrada PA'),
-          ),
-        ),
-      if (menu.isNotEmpty) PopupMenuButton<VoidCallback>(key: const ValueKey('of-menu'), onSelected: (f) => f(), itemBuilder: (_) => menu),
+      PrintButton(name: 'Ordem de fabricação ${_o!['reference']}', builder: () => buildProductionOrderPdf(s.api, _o!)),
+      ?primary,
+      if (menu.isNotEmpty)
+        PopupMenuButton<VoidCallback>(key: const ValueKey('of-menu'), tooltip: 'Mais ações', onSelected: (f) => f(), itemBuilder: (_) => menu),
+      const SizedBox(width: AppSpacing.sm),
     ];
   }
+
+  /// An open OF with material still to issue that is not fully reserved.
+  bool _shortage(Map<String, dynamic> o) =>
+      open && (o['materials'] as List).cast<Map<String, dynamic>>().any((l) => (l['remaining'] as num) > 0 && (l['reserved'] as num) < (l['remaining'] as num));
+
+  /// Pieces are away at a supplier while the OF is already late.
+  bool _outsideLate(Map<String, dynamic> o) =>
+      productionLate(o) && (o['operations'] as List).cast<Map<String, dynamic>>().any((op) => op['external'] == true && ((op['inTransit'] as num?) ?? 0) > 0);
+
+  /// A tab label with a warning dot when something on it needs attention.
+  Tab _tab(String label, bool flag, String hint) => flag
+      ? Tab(
+          child: Semantics(
+            label: '$label, $hint',
+            excludeSemantics: true,
+            child: Tooltip(
+              message: hint,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label),
+                  const SizedBox(width: AppSpacing.xs),
+                  Icon(Icons.circle, size: 8, color: Theme.of(context).colorScheme.error),
+                ],
+              ),
+            ),
+          ),
+        )
+      : Tab(text: label);
 
   @override
   Widget build(BuildContext context) {
@@ -471,13 +540,13 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
         bottom: TabBar(
           controller: _tabs,
           isScrollable: true,
-          tabs: const [
-            Tab(text: 'Resumo'),
-            Tab(text: 'Operações'),
-            Tab(text: 'Materiais'),
-            Tab(text: 'Apontamentos'),
-            Tab(text: 'Beneficiamento'),
-            Tab(text: 'Custo'),
+          tabs: [
+            const Tab(text: 'Resumo'),
+            const Tab(text: 'Operações'),
+            _tab('Materiais', o != null && _shortage(o), 'Falta material reservado'),
+            const Tab(text: 'Apontamentos'),
+            _tab('Terceiros', o != null && _outsideLate(o), 'Beneficiamento em atraso'),
+            const Tab(text: 'Custo'),
           ],
         ),
       ),
@@ -551,30 +620,59 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
           ),
         if (warnings.isNotEmpty)
           Card(
-            color: cs.errorContainer,
-            child: Padding(padding: const EdgeInsets.all(12), child: Text(warnings.join('\n'))),
+            key: const ValueKey('of-warnings'),
+            color: cs.tertiaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: cs.onTertiaryContainer),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Text(warnings.join('\n'), style: TextStyle(color: cs.onTertiaryContainer)),
+                  ),
+                ],
+              ),
+            ),
           ),
         Section(
           title: 'Ordem',
+          // The status reason lives in the banner above, so it is not repeated here.
           child: InfoGrid([
-            ('Situação', '${productionStatuses[o['status']] ?? o['status']}${o['statusReason'] == null ? '' : ' · ${o['statusReason']}'}'),
-            ('Tipo', productionKinds[o['kind']] ?? fmt(o['kind'])),
-            ('Pedido de venda', fmt(o['salesOrderReference'])),
-            ('Pedido do cliente', fmt(o['customerPo'])),
-            ('OF anterior', fmt(o['previousOrderReference'])),
+            ('Situação', '${productionStatuses[o['status']] ?? o['status']}'),
             ('Produto', '${o['productCode']} · ${o['productName']}'),
             ('Quantidade', '${fmt(o['quantity'])} ${o['productUnit']}'),
             ('Entrega', fmtDay(o['dueDate'])),
-            ('Programado', o['plannedStart'] == null ? '' : '${fmtDay(o['plannedStart'])} a ${fmtDay(o['plannedEnd'])}'),
-            ('Ajustado', o['adjustedStart'] == null ? '' : '${fmtDay(o['adjustedStart'])} a ${fmtDay(o['adjustedEnd'])}'),
-            ('Amarrados', fmt(o['bales'])),
-            ('Tubo primário', fmt(o['primaryTube'])),
+            ('Pedido de venda', fmt(o['salesOrderReference'])),
+            ('Pedido do cliente', fmt(o['customerPo'])),
+            ('OF anterior', fmt(o['previousOrderReference'])),
             ('Observações', fmt(o['notes'])),
-            ('Criada', '${fmt(o['createdBy'])} · ${fmtDate(o['createdAt'])}'),
-            ('Liberada', fmtDate(o['releasedAt'])),
-            ('Finalizada', fmtDate(o['finishedAt'])),
-            ('Encerrada', o['closedAt'] == null ? '' : '${fmt(o['closedBy'])} · ${fmtDate(o['closedAt'])}'),
           ]),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Card(
+          child: ExpansionTile(
+            key: const ValueKey('of-details'),
+            title: const Text('Detalhes'),
+            shape: const Border(),
+            collapsedShape: const Border(),
+            childrenPadding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
+            expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              InfoGrid([
+                ('Tipo', productionKinds[o['kind']] ?? fmt(o['kind'])),
+                ('Programado', o['plannedStart'] == null ? '' : '${fmtDay(o['plannedStart'])} a ${fmtDay(o['plannedEnd'])}'),
+                ('Ajustado', o['adjustedStart'] == null ? '' : '${fmtDay(o['adjustedStart'])} a ${fmtDay(o['adjustedEnd'])}'),
+                ('Amarrados', fmt(o['bales'])),
+                ('Tubo primário', fmt(o['primaryTube'])),
+                ('Criada', '${fmt(o['createdBy'])} · ${fmtDate(o['createdAt'])}'),
+                ('Liberada', fmtDate(o['releasedAt'])),
+                ('Finalizada', fmtDate(o['finishedAt'])),
+                ('Encerrada', o['closedAt'] == null ? '' : '${fmt(o['closedBy'])} · ${fmtDate(o['closedAt'])}'),
+              ]),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         Section(
@@ -730,11 +828,143 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
     }
   }
 
+  /// Wide enough for the full table of operations; narrower shows one card per operation.
+  static const _opTableMin = 900.0;
+
+  List<Widget> _opActions(Map<String, dynamic> op, {required bool reportable, required bool focus}) {
+    final seq = op['sequence'];
+    final big = Size(0, scaledHeight(context, kMinTouchTarget));
+    final external = op['external'] == true;
+    return [
+      // A user who can move material but not report sees why there is no button; a tooltip would not show on touch.
+      if (reportable && !s.canProduce)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+          child: Text(
+            'Sem permissão para apontar',
+            key: ValueKey('op-report-$seq'),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+        ),
+      if (s.canProduce && reportable && !external)
+        (focus ? FilledButton.icon : FilledButton.tonalIcon)(
+          key: ValueKey('op-report-$seq'),
+          style: FilledButton.styleFrom(minimumSize: big),
+          onPressed: () => _report(op),
+          icon: const Icon(Icons.edit_note),
+          label: const Text('Apontar'),
+        ),
+      if (s.canProduce && reportable && external)
+        FilledButton.tonalIcon(
+          key: ValueKey('op-send-$seq'),
+          style: FilledButton.styleFrom(minimumSize: big),
+          onPressed: () => _send(op),
+          icon: const Icon(Icons.local_shipping_outlined),
+          label: const Text('Enviar'),
+        ),
+      // Rare actions stay out of the way in the menu.
+      if (s.canProduce)
+        PopupMenuButton<VoidCallback>(
+          key: ValueKey('op-menu-$seq'),
+          tooltip: 'Mais ações da operação',
+          onSelected: (f) => f(),
+          itemBuilder: (_) => [
+            PopupMenuItem(value: () => _outsource(op), child: Text(external ? 'Trocar fornecedor' : 'Beneficiamento externo')),
+            if (external) PopupMenuItem(value: () => _internal(op), child: const Text('Voltar para interno')),
+            PopupMenuItem(value: () => _overrun(op), child: const Text('Liberar excedente')),
+            PopupMenuItem(value: () => _details(op), child: const Text('Tolerância e medidas')),
+          ],
+        ),
+    ];
+  }
+
+  Widget _opCard(Map<String, dynamic> op, {required bool reportable, required bool focus, required bool actions}) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final measures = [op['measureStart'], op['measureEnd']].where((m) => m != null).join(' / ');
+    final facts = <(String, String)>[
+      ('Máquina', fmt(op['machineCode'])),
+      ('Tolerância', fmt(op['tolerance'])),
+      ('Medidas', measures),
+      ('Horas', fmtNum(op['plannedHours'])),
+      ('Programado', op['plannedStart'] == null ? '' : '${fmtDay(op['plannedStart'])} a ${fmtDay(op['plannedEnd'])}'),
+      ('Boas', fmt(op['good'])),
+      ('Refugo', fmt(op['scrap'])),
+      ('Em beneficiamento', fmt(op['inTransit'])),
+      ('Saldo', fmt(op['remaining'])),
+    ];
+    return Card(
+      key: ValueKey('op-card-${op['sequence']}'),
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      color: focus ? cs.primaryContainer.withValues(alpha: 0.35) : null,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    '${op['sequence']} · ${op['description'] ?? ''}${op['external'] == true ? ' (externo)' : ''}',
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                if (focus) const StatusBadge('Maior saldo', tone: Tone.info, icon: Icons.flag_outlined),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Wrap(
+              spacing: AppSpacing.xl,
+              runSpacing: AppSpacing.sm,
+              children: [
+                for (final f in facts)
+                  if (f.$2.isNotEmpty && f.$2 != '—')
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(f.$1, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                        Text(f.$2, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: f.$1 == 'Saldo' ? FontWeight.w700 : null)),
+                      ],
+                    ),
+              ],
+            ),
+            if (actions) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: _opActions(op, reportable: reportable, focus: focus),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _operations(Map<String, dynamic> o) {
     final ops = (o['operations'] as List).cast<Map<String, dynamic>>();
     final reportable = runningProductionStatuses.contains(o['status']);
+    final actions = open && (s.canProduce || s.canMoveProduction);
+    // The internal operation with the most balance is where the shop floor works next.
+    num most = 0;
+    Object? focus;
+    if (reportable) {
+      for (final op in ops) {
+        final r = (op['remaining'] as num?) ?? 0;
+        if (op['external'] != true && r > most) {
+          most = r;
+          focus = op['sequence'];
+        }
+      }
+    }
+    final cs = Theme.of(context).colorScheme;
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         Section(
           title: 'Roteiro',
@@ -747,62 +977,40 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
                 label: const Text('Editar processo'),
               ),
           ],
-          child: SimpleTable(
-            columns: [
-              col('Seq.', 'sequence'),
-              ColumnSpec('Descrição', (e) => '${e['description'] ?? ''}${e['external'] == true ? ' (externo)' : ''}'),
-              col('Máquina', 'machineCode'),
-              col('Tolerância', 'tolerance'),
-              ColumnSpec('Medidas', (e) => [e['measureStart'], e['measureEnd']].where((m) => m != null).join(' / ')),
-              col('Setup (h)', 'setupHours', numeric: true),
-              col('Peças/h', 'piecesPerHour', numeric: true),
-              ColumnSpec('Horas', (e) => fmtNum(e['plannedHours']), numeric: true),
-              ColumnSpec('Programado', (e) => e['plannedStart'] == null ? '' : '${fmtDay(e['plannedStart'])} a ${fmtDay(e['plannedEnd'])}'),
-              col('Boas', 'good', numeric: true),
-              col('Refugo', 'scrap', numeric: true),
-              col('Em beneficiamento', 'inTransit', numeric: true),
-              col('Limite', 'limit', numeric: true),
-              col('Saldo', 'remaining', numeric: true),
-            ],
-            rows: ops,
-            actionsFirst: true,
-            actions: open && (s.canProduce || s.canMoveProduction)
-                ? (op) => [
-                    // A user who can move material but not report sees why the button does nothing.
-                    if (reportable && !s.canProduce)
-                      IconButton(
-                        key: ValueKey('op-report-${op['sequence']}'),
-                        tooltip: 'Sem permissão para apontar',
-                        icon: const Icon(Icons.edit_note, size: 20),
-                        onPressed: null,
-                      ),
-                    if (s.canProduce && reportable && op['external'] != true)
-                      IconButton(
-                        key: ValueKey('op-report-${op['sequence']}'),
-                        tooltip: 'Apontar',
-                        icon: const Icon(Icons.edit_note, size: 20),
-                        onPressed: () => _report(op),
-                      ),
-                    if (s.canProduce && reportable && op['external'] == true)
-                      IconButton(
-                        key: ValueKey('op-send-${op['sequence']}'),
-                        tooltip: 'Enviar ao beneficiamento',
-                        icon: const Icon(Icons.local_shipping_outlined, size: 20),
-                        onPressed: () => _send(op),
-                      ),
-                    if (s.canProduce)
-                      PopupMenuButton<VoidCallback>(
-                        key: ValueKey('op-menu-${op['sequence']}'),
-                        onSelected: (f) => f(),
-                        itemBuilder: (_) => [
-                          PopupMenuItem(value: () => _outsource(op), child: Text(op['external'] == true ? 'Trocar fornecedor' : 'Beneficiamento externo')),
-                          if (op['external'] == true) PopupMenuItem(value: () => _internal(op), child: const Text('Voltar para interno')),
-                          PopupMenuItem(value: () => _overrun(op), child: const Text('Liberar excedente')),
-                          PopupMenuItem(value: () => _details(op), child: const Text('Tolerância e medidas')),
-                        ],
-                      ),
-                  ]
-                : null,
+          child: LayoutBuilder(
+            builder: (context, box) {
+              if (box.maxWidth < _opTableMin) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final op in ops) _opCard(op, reportable: reportable, focus: op['sequence'] == focus, actions: actions),
+                    if (ops.isEmpty) const Padding(padding: EdgeInsets.all(AppSpacing.lg), child: Text('Nenhum registro')),
+                  ],
+                );
+              }
+              return SimpleTable(
+                columns: [
+                  col('Seq.', 'sequence'),
+                  ColumnSpec('Descrição', (e) => "${e['description'] ?? ''}${e['external'] == true ? ' (externo)' : ''}"),
+                  col('Máquina', 'machineCode'),
+                  col('Tolerância', 'tolerance'),
+                  ColumnSpec('Medidas', (e) => [e['measureStart'], e['measureEnd']].where((m) => m != null).join(' / ')),
+                  col('Setup (h)', 'setupHours', numeric: true),
+                  col('Peças/h', 'piecesPerHour', numeric: true),
+                  ColumnSpec('Horas', (e) => fmtNum(e['plannedHours']), numeric: true),
+                  ColumnSpec('Programado', (e) => e['plannedStart'] == null ? '' : '${fmtDay(e['plannedStart'])} a ${fmtDay(e['plannedEnd'])}'),
+                  col('Boas', 'good', numeric: true),
+                  col('Refugo', 'scrap', numeric: true),
+                  col('Em beneficiamento', 'inTransit', numeric: true),
+                  col('Limite', 'limit', numeric: true),
+                  col('Saldo', 'remaining', numeric: true),
+                ],
+                rows: ops,
+                actionsFirst: true,
+                rowColor: (e) => e['sequence'] == focus ? cs.primaryContainer.withValues(alpha: 0.35) : null,
+                actions: actions ? (op) => _opActions(op, reportable: reportable, focus: op['sequence'] == focus) : null,
+              );
+            },
           ),
         ),
       ],
@@ -884,8 +1092,9 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
     final canIssue = s.canMoveProduction && running;
     final canReturn = s.canMoveProduction && o['status'] != 'Closed' && o['status'] != 'Created';
     final cs = Theme.of(context).colorScheme;
+    bool unreserved(Map<String, dynamic> e) => (e['remaining'] as num) > 0 && (e['reserved'] as num) < (e['remaining'] as num) && open;
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         Section(
           title: 'Materiais e reservas',
@@ -908,10 +1117,18 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
               col('Reservado', 'reserved', numeric: true),
               col('Requisitado', 'issued', numeric: true),
               col('Saldo', 'remaining', numeric: true),
+              // The row tint says it with colour only; the badge says it in words.
+              ColumnSpec(
+                'Reserva',
+                (e) => unreserved(e) ? 'Sem reserva' : '',
+                cell: (context, e) =>
+                    unreserved(e) ? const StatusBadge('Sem reserva', tone: Tone.warning, icon: Icons.warning_amber_rounded) : const SizedBox.shrink(),
+              ),
             ],
+            hideWhenEmpty: const {'Reserva'},
             rows: lines,
             actionsFirst: true,
-            rowColor: (e) => (e['remaining'] as num) > 0 && (e['reserved'] as num) < (e['remaining'] as num) && open ? cs.tertiaryContainer : null,
+            rowColor: (e) => unreserved(e) ? cs.tertiaryContainer : null,
             actions: canIssue || canReturn
                 ? (l) => [
                     if (canIssue)
@@ -1051,56 +1268,106 @@ class _ProcessDialogState extends State<_ProcessDialog> {
     decoration: InputDecoration(labelText: label, isDense: true),
   );
 
+  /// The server renumbers 10, 20, 30... by position, so this is the number the operation will have. Fixed width so the fields line up.
+  Widget _number(int i) => SizedBox(
+    width: 32,
+    child: Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Text('${(i + 1) * 10}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+    ),
+  );
+
+  Widget _wideRow(int i, _ProcessRow r) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _number(i),
+        Expanded(flex: 4, child: _field(r.description, 'Descrição da operação', key: ValueKey('process-desc-$i'))),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(flex: 2, child: _field(r.tolerance, 'Requisitos/Tolerância')),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(flex: 2, child: _field(r.start, 'Início')),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(flex: 2, child: _field(r.end, 'Final')),
+        IconButton(key: ValueKey('process-up-$i'), tooltip: 'Subir', icon: const Icon(Icons.arrow_upward), onPressed: i == 0 ? null : () => _move(i, -1)),
+        IconButton(
+          key: ValueKey('process-down-$i'),
+          tooltip: 'Descer',
+          icon: const Icon(Icons.arrow_downward),
+          onPressed: i == _rows.length - 1 ? null : () => _move(i, 1),
+        ),
+        IconButton(
+          key: ValueKey('process-del-$i'),
+          tooltip: r.sequence != null ? 'Operação do roteiro da OF: não pode ser removida aqui' : 'Remover',
+          icon: const Icon(Icons.delete_outline),
+          onPressed: r.sequence != null ? null : () => setState(() => _rows.removeAt(i).dispose()),
+        ),
+      ],
+    ),
+  );
+
+  /// Phone layout: one card per operation, the description on its own line, the three short fields wrapping below, and one menu for move and remove.
+  Widget _card(int i, _ProcessRow r) => Card(
+    key: ValueKey('process-card-$i'),
+    margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _number(i),
+              Expanded(child: _field(r.description, 'Descrição da operação', key: ValueKey('process-desc-$i'))),
+              PopupMenuButton<String>(
+                key: ValueKey('process-menu-$i'),
+                tooltip: 'Mais ações da operação',
+                onSelected: (v) {
+                  if (v == 'up') _move(i, -1);
+                  if (v == 'down') _move(i, 1);
+                  if (v == 'del') setState(() => _rows.removeAt(i).dispose());
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(value: 'up', enabled: i > 0, child: const Text('Subir')),
+                  PopupMenuItem(value: 'down', enabled: i < _rows.length - 1, child: const Text('Descer')),
+                  PopupMenuItem(value: 'del', enabled: r.sequence == null, child: Text(r.sequence == null ? 'Remover' : 'Remover (operação do roteiro)')),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              SizedBox(width: 150, child: _field(r.tolerance, 'Requisitos/Tolerância')),
+              SizedBox(width: 100, child: _field(r.start, 'Início')),
+              SizedBox(width: 100, child: _field(r.end, 'Final')),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
+    final narrow = dialogWidth(context, 760) < 600;
     final valid = _rows.isNotEmpty && _rows.every((r) => r.description.text.trim().isNotEmpty);
     return AlertDialog(
       title: const Text('Processo da ordem de produção'),
       content: SizedBox(
-        width: 760,
+        width: dialogWidth(context, 760),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Tudo o que o produto passa, na ordem. Isto é o que sai impresso no meio da ordem de fabricação.'),
-              const SizedBox(height: 12),
-              for (final (i, r) in _rows.indexed)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // The server renumbers 10, 20, 30... by position, so this is the number the operation will have.
-                      Padding(padding: const EdgeInsets.only(top: 12, right: 8), child: Text('${(i + 1) * 10}')),
-                      Expanded(flex: 4, child: _field(r.description, 'Descrição da operação', key: ValueKey('process-desc-$i'))),
-                      const SizedBox(width: 8),
-                      Expanded(flex: 2, child: _field(r.tolerance, 'Requisitos/Tolerância')),
-                      const SizedBox(width: 8),
-                      Expanded(flex: 2, child: _field(r.start, 'Início')),
-                      const SizedBox(width: 8),
-                      Expanded(flex: 2, child: _field(r.end, 'Final')),
-                      IconButton(
-                        key: ValueKey('process-up-$i'),
-                        tooltip: 'Subir',
-                        icon: const Icon(Icons.arrow_upward),
-                        onPressed: i == 0 ? null : () => _move(i, -1),
-                      ),
-                      IconButton(
-                        key: ValueKey('process-down-$i'),
-                        tooltip: 'Descer',
-                        icon: const Icon(Icons.arrow_downward),
-                        onPressed: i == _rows.length - 1 ? null : () => _move(i, 1),
-                      ),
-                      IconButton(
-                        key: ValueKey('process-del-$i'),
-                        tooltip: r.sequence != null ? 'Operação do roteiro da OF: não pode ser removida aqui' : 'Remover',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: r.sequence != null ? null : () => setState(() => _rows.removeAt(i).dispose()),
-                      ),
-                    ],
-                  ),
-                ),
+              const SizedBox(height: AppSpacing.md),
+              for (final (i, r) in _rows.indexed) narrow ? _card(i, r) : _wideRow(i, r),
               TextButton.icon(
                 key: const ValueKey('process-add'),
                 onPressed: () => setState(() => _rows.add(_ProcessRow(null))),

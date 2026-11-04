@@ -11,6 +11,7 @@ import 'widgets/app_text_scale.dart';
 import 'widgets/drafts.dart';
 import 'widgets/esc_back.dart';
 import 'widgets/idle_guard.dart';
+import 'widgets/pipeline.dart' show StatusColors;
 import 'widgets/record_nav.dart';
 
 Future<void> main() async {
@@ -155,8 +156,37 @@ ThemeData _buildTheme(Brightness brightness, bool comfortable, bool highContrast
     ),
     // Outlined fields everywhere; screens that need compact fields still pass isDense.
     inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
+    extensions: [StatusColors.build(cs, highContrast: highContrast)],
+    dialogTheme: DialogThemeData(
+      backgroundColor: cs.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.card + 4)),
+    ),
+    appBarTheme: AppBarTheme(
+      backgroundColor: cs.surface,
+      foregroundColor: cs.onSurface,
+      surfaceTintColor: Colors.transparent,
+      scrolledUnderElevation: 1,
+    ),
+    chipTheme: ChipThemeData(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.chip)),
+      side: BorderSide(color: cs.outlineVariant),
+    ),
+    listTileTheme: ListTileThemeData(iconColor: cs.onSurfaceVariant),
+    snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
+    // A visible ring on keyboard focus for every button, so Tab navigation shows where it is.
+    focusColor: cs.primary.withValues(alpha: 0.18),
+    textButtonTheme: TextButtonThemeData(style: ButtonStyle(side: _focusRing(cs))),
+    outlinedButtonTheme: OutlinedButtonThemeData(style: ButtonStyle(side: _focusRing(cs, base: cs.outline))),
+    filledButtonTheme: FilledButtonThemeData(style: ButtonStyle(side: _focusRing(cs))),
+    iconButtonTheme: IconButtonThemeData(style: ButtonStyle(side: _focusRing(cs))),
   );
 }
+
+/// Border that turns into a 2 px primary ring while the button has keyboard focus.
+WidgetStateProperty<BorderSide?> _focusRing(ColorScheme cs, {Color? base}) => WidgetStateProperty.resolveWith((states) {
+  if (states.contains(WidgetState.focused)) return BorderSide(color: cs.primary, width: 2);
+  return base == null ? null : BorderSide(color: base);
+});
 
 class _NoTransitions extends PageTransitionsBuilder {
   const _NoTransitions();

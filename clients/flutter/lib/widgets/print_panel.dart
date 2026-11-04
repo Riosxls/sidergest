@@ -134,7 +134,7 @@ class _PrintPanelState extends State<PrintPanel> {
     final printed = docs.where((d) => d.doneKey != null && _done.containsKey(d.doneKey)).length;
     return Section(
       key: const ValueKey('print-panel'),
-      title: '${widget.title} ($ready de ${docs.length} prontos${printed > 0 ? ' · $printed impressos' : ''})',
+      title: widget.title,
       actions: [
         IconButton(
           key: const ValueKey('print-panel-toggle'),
@@ -143,9 +143,29 @@ class _PrintPanelState extends State<PrintPanel> {
           icon: Icon(_open ? Icons.expand_less : Icons.expand_more),
         ),
       ],
-      child: !_open
-          ? const SizedBox.shrink()
-          : Column(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            key: const ValueKey('print-panel-header'),
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text('$ready de ${docs.length} prontos${printed > 0 ? ' · $printed impressos' : ''}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+            ),
+          ),
+          if (_open)
+            LayoutBuilder(
+              builder: (context, box) => _list(context, cs, docs, iconOnly: box.maxWidth < 420),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _list(BuildContext context, ColorScheme cs, List<PrintDoc> docs, {required bool iconOnly}) {
+    final small = Theme.of(context).textTheme.bodySmall;
+    return Column(
               children: [
                 for (final d in docs)
                   Padding(
@@ -167,33 +187,32 @@ class _PrintPanelState extends State<PrintPanel> {
                                 style: TextStyle(fontWeight: FontWeight.w600, color: d.ready ? null : cs.outline),
                               ),
                               if (d.ready ? d.detail != null : d.waiting != null)
-                                Text(d.ready ? d.detail! : d.waiting!, style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant)),
+                                Text(d.ready ? d.detail! : d.waiting!, style: small?.copyWith(color: cs.onSurfaceVariant)),
                               if (d.ready && d.doneKey != null && _done[d.doneKey] != null)
                                 Text(
                                   'Impresso em ${_day(_done[d.doneKey]!)}',
                                   key: ValueKey('doc-done-${d.id}'),
-                                  style: TextStyle(fontSize: 12.5, color: cs.primary),
+                                  style: small?.copyWith(color: cs.primary),
                                 ),
                             ],
                           ),
                         ),
                         const SizedBox(width: 12),
-                        FilledButton.tonalIcon(
-                          key: ValueKey('doc-print-${d.id}'),
-                          onPressed: d.ready && d.onPrint != null
-                              ? () async {
-                                  await d.onPrint!();
-                                  if (mounted) await _loadDays();
-                                }
-                              : null,
-                          icon: const Icon(Icons.print_outlined),
-                          label: const Text('Imprimir'),
-                        ),
+                        () {
+                          Future<void> run() async {
+                            await d.onPrint!();
+                            if (mounted) await _loadDays();
+                          }
+
+                          final onPressed = d.ready && d.onPrint != null ? run : null;
+                          return iconOnly
+                              ? IconButton.filledTonal(key: ValueKey('doc-print-${d.id}'), tooltip: 'Imprimir', onPressed: onPressed, icon: const Icon(Icons.print_outlined))
+                              : FilledButton.tonalIcon(key: ValueKey('doc-print-${d.id}'), onPressed: onPressed, icon: const Icon(Icons.print_outlined), label: const Text('Imprimir'));
+                        }(),
                       ],
                     ),
                   ),
               ],
-            ),
     );
   }
 }

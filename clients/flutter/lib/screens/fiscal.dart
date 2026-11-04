@@ -6,16 +6,24 @@ import '../api.dart';
 import '../entities.dart';
 import '../reports/danfe_doc.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/actions.dart';
 import '../widgets/load_error.dart';
 import '../widgets/page_column.dart';
 import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
+import '../widgets/record_skeleton.dart';
 import 'sales_common.dart';
 
 const fiscalKinds = {'Sale': 'Venda', 'OutsideShipment': 'Remessa p/ industrialização', 'Return': 'Devolução'};
 const fiscalStatuses = {'Authorized': 'Autorizada', 'Cancelled': 'Cancelada', 'Pending': 'Pendente na SEFAZ', 'Rejected': 'Rejeitada'};
+
+Tone _fiscalTone(Object? status) => switch (status) {
+  'Authorized' => Tone.success,
+  'Pending' => Tone.warning,
+  _ => Tone.danger,
+};
 
 Future<void> openFiscalDocument(BuildContext context, Session session, int id) =>
     pushRecord<void>(context, 'fiscal', id, (_) => FiscalDocumentScreen(session: session, id: id));
@@ -60,25 +68,38 @@ class _FiscalDocumentsScreenState extends State<FiscalDocumentsScreen> {
     key: _list,
     api: widget.session.api,
     path: '/api/fiscal/documents',
-    fab: widget.session.canFiscalCancel
-        ? FloatingActionButton.extended(onPressed: _inutilize, icon: const Icon(Icons.layers_clear_outlined), label: const Text('Inutilizar numeração'))
-        : null,
     query: {'kind': _kind, 'status': _status},
     searchHint: 'Destinatário, número ou chave',
     filters: [
       ChoiceFilter(label: 'Tipo', value: _kind, choices: fiscalKinds, onChanged: (v) => setState(() => _kind = v)),
       ChoiceFilter(label: 'Situação', value: _status, choices: fiscalStatuses, onChanged: (v) => setState(() => _status = v)),
+      // A rare, serious operation: a deliberate chip in the filter bar, not a button that floats over every list.
+      if (widget.session.canFiscalCancel)
+        ActionChip(
+          key: const ValueKey('fiscal-inutilize'),
+          avatar: const Icon(Icons.layers_clear_outlined, size: 18),
+          label: const Text('Inutilizar numeração'),
+          onPressed: _inutilize,
+        ),
     ],
     columns: [
       col('NF', 'number', numeric: true),
-      col('Série', 'series', numeric: true),
-      col('CFOP', 'cfopCode'),
-      labelCol('Tipo', 'kind', fiscalKinds),
+      ColumnSpec('Tipo · CFOP', (e) => '${fiscalKinds[e['kind']] ?? e['kind']} · ${fmt(e['cfopCode'])}'),
       col('Destinatário', 'recipientName'),
       moneyCol('Valor', 'invoiceTotal'),
       dateCol('Emissão', 'issuedAt'),
-      labelCol('Situação', 'status', fiscalStatuses),
-      ColumnSpec('Simulada', (e) => e['simulated'] == true ? 'Sim' : ''),
+      ColumnSpec(
+        'Situação',
+        (e) => '${fiscalStatuses[e['status']] ?? e['status']}${e['simulated'] == true ? ' · SIMULADA' : ''}',
+        cell: (_, e) => Wrap(
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
+          children: [
+            StatusBadge(fiscalStatuses[e['status']] ?? '${e['status']}', tone: _fiscalTone(e['status'])),
+            if (e['simulated'] == true) const StatusBadge('SIMULADA', tone: Tone.warning),
+          ],
+        ),
+      ),
     ],
     onTap: (e) async {
       await openFiscalDocument(context, widget.session, e['id'] as int);
@@ -126,8 +147,31 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
     }
   }
 
+  /// What cancelling does depends on the kind of NF (see FiscalService / SalesService.CancelInvoiceAsync): a sale NF takes its delivery back
+  /// with it, a return NF takes the goods out of stock again, a processing shipment loses its NF number. Always: SEFAZ gets the cancellation.
+  String _cancelConsequences(Map<String, dynamic> d) {
+    final effects = switch (d['kind']) {
+      'Sale' when d['deliveryReference'] != null =>
+        'A entrega ${d['deliveryReference']} também é cancelada: o estoque volta e o pedido reabre o saldo. Se a entrega já foi recebida pelo cliente, o cancelamento é recusado e o caminho é a devolução.',
+      'Sale' => 'A NF deixa de valer.',
+      'Return' => 'As peças da devolução saem do estoque de novo.',
+      _ => 'O número da NF é retirado da remessa.',
+    };
+    return '$effects\n\nO cancelamento é registrado na SEFAZ e não dá para desfazer. Só vale dentro do prazo (a SEFAZ recusa depois); uma NF de devolução emitida contra esta precisa ser cancelada antes.';
+  }
+
   Future<void> _cancel() async {
     final d = _d!;
+    final go = await confirmStep(
+      context,
+      title: 'Cancelar a NF ${d['number']}?',
+      message: _cancelConsequences(d),
+      confirmLabel: 'Continuar',
+      cancelLabel: 'Voltar',
+      icon: Icons.block,
+      danger: true,
+    );
+    if (!go || !mounted) return;
     final r = await submitForm(
       context,
       api: api,
@@ -247,7 +291,6 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
     final d = _d;
     final authorized = d?['status'] == 'Authorized';
     final canCancel = s.canFiscalCancel && authorized;
-    final canReconcile = s.canFiscalCancel && d?['status'] == 'Pending';
     final canReturn = s.canEmitInvoice && authorized && d?['kind'] == 'Sale' && _returnable(d!).isNotEmpty;
     final canCorrect = s.canEmitInvoice && authorized && ((d?['events'] as List?)?.length ?? 0) < 20;
     return Scaffold(
@@ -278,17 +321,21 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
                 if (canCancel)
                   PopupMenuItem(
                     value: _cancel,
-                    child: const ListTile(leading: Icon(Icons.block), title: Text('Cancelar NF')),
+                    child: ListTile(
+                      leading: const Icon(Icons.block),
+                      iconColor: Theme.of(context).colorScheme.error,
+                      textColor: Theme.of(context).colorScheme.error,
+                      title: const Text('Cancelar NF'),
+                    ),
                   ),
               ],
             ),
-          if (canReconcile) TextButton.icon(onPressed: _reconcile, icon: const Icon(Icons.sync), label: const Text('Conciliar com a SEFAZ')),
         ],
       ),
       body: _error != null && d == null
           ? LoadError(message: _error!, onRetry: _load)
           : d == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const RecordSkeleton()
           : RefreshIndicator(onRefresh: _load, child: _body(d)),
     );
   }
@@ -390,13 +437,13 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
       icon: Icons.description_outlined,
       kind: fiscalKinds['${d['kind']}'] ?? '${d['kind']}',
       title: 'NF ${d['number']} · série ${d['series']}',
-      badge: StatusBadge(
-        fiscalStatuses[d['status']] ?? '${d['status']}',
-        tone: switch (d['status']) {
-          'Authorized' => Tone.success,
-          'Pending' => Tone.warning,
-          _ => Tone.danger,
-        },
+      badge: Wrap(
+        spacing: AppSpacing.xs,
+        runSpacing: AppSpacing.xs,
+        children: [
+          StatusBadge(fiscalStatuses[d['status']] ?? '${d['status']}', tone: _fiscalTone(d['status'])),
+          if (d['simulated'] == true) const StatusBadge('SIMULADA', tone: Tone.warning),
+        ],
       ),
       fields: [
         ('Destinatário', '${d['recipientName']}'),
@@ -424,6 +471,10 @@ class _FiscalDocumentScreenState extends State<FiscalDocumentScreen> {
           ? '${fmt(d['statusMessage'])} Se o número não será reaproveitado, use "Inutilizar numeração" na lista de notas.'
           : fmt(d['statusMessage']),
       tone: d['status'] == 'Rejected' ? Tone.danger : Tone.warning,
+      actions: [
+        if (s.canFiscalCancel && d['status'] == 'Pending')
+          FilledButton.icon(key: const ValueKey('fiscal-reconcile'), onPressed: _reconcile, icon: const Icon(Icons.sync), label: const Text('Conciliar com a SEFAZ')),
+      ],
     );
   }
 
@@ -507,7 +558,7 @@ class _FiscalSettingsScreenState extends State<FiscalSettingsScreen> {
     FieldSpec('district', 'Bairro'),
     FieldSpec('city', 'Município'),
     FieldSpec('cityIbgeCode', 'Código IBGE do município', hint: '7 dígitos'),
-    FieldSpec('uf', 'UF', required: true),
+    FieldSpec('uf', 'UF', required: true, hint: 'Sigla de 2 letras, ex.: SP'),
     FieldSpec('zipCode', 'CEP'),
     FieldSpec('phone', 'Telefone'),
     FieldSpec('series', 'Série', type: FieldType.integer, required: true),
@@ -533,11 +584,15 @@ class _FiscalSettingsScreenState extends State<FiscalSettingsScreen> {
     }
   }
 
+  void _retry() => setState(() {
+    _future = _fetch();
+  });
+
   @override
   Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>>(
     future: _future,
     builder: (context, snap) {
-      if (snap.hasError) return Center(child: Text(friendlyError(snap.error!)));
+      if (snap.hasError) return LoadError(message: friendlyError(snap.error!), onRetry: _retry);
       final d = snap.data;
       if (d == null) return const Center(child: CircularProgressIndicator());
       String has(String k) => '${d[k] ?? ''}'.trim();
@@ -575,7 +630,6 @@ class _FiscalSettingsScreenState extends State<FiscalSettingsScreen> {
             gap,
             Section(
               title: 'Emitente',
-              actions: [if (widget.session.isAdmin) IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined), onPressed: () => _edit(d))],
               child: InfoGrid([
                 ('Razão social', or('companyName')),
                 ('CNPJ', or('cnpj')),
@@ -595,7 +649,6 @@ class _FiscalSettingsScreenState extends State<FiscalSettingsScreen> {
             gap,
             Section(
               title: 'Emissão',
-              actions: [if (widget.session.isAdmin) IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined), onPressed: () => _edit(d))],
               child: InfoGrid([
                 ('Ambiente', _environments[d['environment']] ?? '${d['environment']}'),
                 ('Série', '${d['series']}'),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
+import '../widgets/responsive.dart';
 
 /// Admin tool for the orders imported from the old system: fills empty processes and cancels stale OFs, always after a preview.
 Future<void> showLegacyCleanupDialog(BuildContext context, Session session) => showDialog<void>(context: context, builder: (_) => _LegacyCleanup(session: session));
@@ -90,12 +92,13 @@ class _LegacyCleanupState extends State<_LegacyCleanup> {
     return AlertDialog(
       title: const Text('Limpeza do legado'),
       content: SizedBox(
-        width: 520,
+        width: dialogWidth(context, 520),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (_busy) const Padding(padding: EdgeInsets.only(bottom: 12), child: LinearProgressIndicator()),
               const Text('Ordens de fabricação vindas do sistema antigo distorcem o Painel, o PCP e os avisos. Cada ação mostra uma prévia antes de mudar algo.'),
               title('1. Processo nas OFs sem processo'),
               const Text('Escreve o processo sugerido (perfilar, trefilar, endireitar e cortar, inspeção) nas OFs ainda não liberadas que estão sem processo.'),
@@ -123,7 +126,14 @@ class _LegacyCleanupState extends State<_LegacyCleanup> {
                       key: const ValueKey('legacy-days'),
                       controller: _days,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Vencidas há (dias)', border: OutlineInputBorder(), isDense: true),
+                      decoration: InputDecoration(
+                        labelText: 'Vencidas há (dias)',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        // The limit is shown from the start, not only after a button turns out to be disabled.
+                        helperText: _daysValue < 30 ? null : 'Mínimo 30 dias',
+                        errorText: _daysValue < 30 ? 'Mínimo 30 dias' : null,
+                      ),
                       onChanged: (_) => setState(() => _stalePreview = null),
                     ),
                   ),
@@ -143,16 +153,15 @@ class _LegacyCleanupState extends State<_LegacyCleanup> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   OutlinedButton(key: const ValueKey('legacy-stale-preview'), onPressed: _busy || _daysValue < 30 ? null : _previewStale, child: const Text('Ver prévia')),
-                  if (_daysValue < 30) Text('Mínimo 30 dias', style: theme.textTheme.bodySmall),
                   if (sp != null)
                     if ((sp['matched'] as num) == 0)
                       const Text('Nenhuma OF atende ao critério.')
                     else
                       FilledButton(
                         key: const ValueKey('legacy-stale-apply'),
-                        style: FilledButton.styleFrom(backgroundColor: theme.colorScheme.error),
+                        style: dangerButtonStyle(context),
                         onPressed: _busy || _reason.text.trim().isEmpty ? null : _applyStale,
-                        child: Text('Cancelar ${sp['matched']} OFs'),
+                        child: _busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text('Cancelar ${sp['matched']} OFs'),
                       ),
                 ],
               ),

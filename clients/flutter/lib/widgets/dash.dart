@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../entities.dart';
+import 'responsive.dart';
 
 /// A cell of [DashGrid]: one column wide by default, [GridItem.panel] and [GridItem.bars] span two.
 class GridItem {
@@ -41,7 +42,7 @@ class DashGrid extends StatelessWidget {
                 final span = math.min(i.span, cols);
                 return colWidth * span + gap * (span - 1) - 0.01;
               })(),
-              height: i.height,
+              height: math.max(i.height, scaledHeight(context, i.height)),
               child: i.child,
             ),
         ],
@@ -115,7 +116,8 @@ class DashTile extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(alert ? Icons.error_outline : icon, size: 20, color: alert ? cs.error : cs.primary),
+                    // The tile keeps its own icon (it says what the number is); the alert state is a badge on it, not a different glyph.
+                    Badge(isLabelVisible: alert, smallSize: 8, backgroundColor: cs.error, child: Icon(icon, size: 20, color: alert ? cs.error : cs.primary)),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Tooltip(
@@ -227,7 +229,7 @@ class BarPanel extends StatelessWidget {
     final theme = Theme.of(context);
     final rows = data.entries.take(maxRows).toList();
     final top = max ?? rows.fold<num>(1, (m, e) => e.value > m ? e.value : m);
-    return Card(
+    return LayoutBuilder(builder: (context, box) => Card(
       margin: EdgeInsets.zero,
       shape: dashCardShape(context),
       color: theme.colorScheme.surfaceContainerHigh,
@@ -257,7 +259,7 @@ class BarPanel extends StatelessWidget {
                   child: Row(
                     children: [
                       SizedBox(
-                        width: 150,
+                        width: (box.maxWidth * 0.35).clamp(90.0, 150.0),
                         child: Tooltip(
                           message: e.key,
                           child: Text(e.key, overflow: TextOverflow.ellipsis),
@@ -293,6 +295,6 @@ class BarPanel extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 }

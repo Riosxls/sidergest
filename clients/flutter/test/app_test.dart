@@ -182,7 +182,7 @@ void main() {
     await tester.tap(find.byTooltip('Conta'));
     await tester.pumpAndSettle();
     expect(find.text('eng'), findsOneWidget);
-    expect(find.text('Engineering'), findsOneWidget);
+    expect(find.text('Engenharia'), findsWidgets);
   });
 
   testWidgets('product list, server validation errors and product detail with explosion', (tester) async {
@@ -193,7 +193,7 @@ void main() {
     await openScreen(tester, 'Engenharia', '/api/products');
     expect(find.text('T-100'), findsOneWidget);
 
-    await tester.tap(find.text('Novo'));
+    await tester.tap(find.textContaining('Novo:').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Salvar'));
     await tester.pumpAndSettle();

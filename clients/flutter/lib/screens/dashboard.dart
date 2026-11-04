@@ -7,8 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../entities.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/alerts.dart';
 import '../widgets/dash.dart';
+import '../widgets/responsive.dart';
 import 'backup_alert.dart';
 import 'dashboard_data.dart';
 import 'orders.dart';
@@ -97,7 +99,7 @@ List<DashAlert> buildAlerts(
         builder: (ctx) => AlertDialog(
           title: Text('$title (${total ?? items.length})'),
           content: SizedBox(
-            width: 560,
+            width: dialogWidth(context, 560),
             child: ListView(
               shrinkWrap: true,
               children: [
@@ -343,6 +345,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late Future<List<Object?>> _all = _combine();
   late Future<BackupAlert?> _backup = fetchBackupAlert(widget.session);
   DateTime? _updated;
+  // The last numbers read: they stay on screen while a refresh runs (a small spinner says so) instead of blanking the page.
+  List<Object?>? _last;
+  bool _refreshing = false;
   final _focus = FocusNode();
   Timer? _timer;
   // Primeiros passos can be folded or dismissed; both are remembered on this device, per user (two people share a computer).
@@ -356,9 +361,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final p = await SharedPreferences.getInstance();
       if (!mounted) return;
       setState(() {
-        _stepsCollapsed = p.getBool(_stepsKey('onboardingCollapsed')) ?? false;
+        // Seen once, the card starts folded on the next visits: it stays a reminder, not the first thing on the page.
+        _stepsCollapsed = p.getBool(_stepsKey('onboardingCollapsed')) ?? (p.getBool(_stepsKey('onboardingSeen')) ?? false);
         _stepsDismissed = p.getBool(_stepsKey('onboardingDismissed')) ?? false;
       });
+      await p.setBool(_stepsKey('onboardingSeen'), true);
     } catch (e) {
       debugPrint('dashboard: Local storage is best effort; the card stays open: $e');
     }
@@ -448,11 +455,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       widget.session.alerts.value = [for (final a in _alerts(d).where((a) => !a.muted)) AlertInfo(a.icon, a.label, a.count, a.navId, a.filter)];
     }
     // "Atualizado às" only when something was read; a Painel where every section failed is not up to date.
-    setState(() => _updated = d.any((s) => s != null) ? DateTime.now() : null);
+    setState(() {
+      _refreshing = false;
+      if (d.any((s) => s != null)) _last = d;
+      _updated = d.any((s) => s != null) ? DateTime.now() : null;
+    });
   }
 
   Future<void> _refresh() {
     setState(() {
+      _refreshing = true;
       _eng = fetchEngineering(widget.session.api, dashboardCounted);
       _stock = fetchStock(widget.session.api);
       _purchasing = fetchPurchasing(widget.session.api);
@@ -469,8 +481,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _onboarding() => FutureBuilder<List<Object?>>(
     future: _all,
     builder: (context, snap) {
-      if (!snap.hasData) return const SizedBox.shrink();
-      final d = snap.data!;
+      final d = snap.data ?? _last;
+      if (d == null) return const SizedBox.shrink();
       final e = d[0] as DashboardData?, st = d[1] as StockDashboard?, pu = d[2] as PurchasingDashboard?, pr = d[3] as ProductionDashboard?;
       // A section that did not load says nothing about its step: it is left out, not counted as done (that could hide the card for good).
       final all = [
@@ -493,7 +505,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final theme = Theme.of(context);
       final cs = theme.colorScheme;
       return Padding(
-        padding: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.only(top: AppSpacing.lg),
         child: Card(
           margin: EdgeInsets.zero,
           shape: dashCardShape(context),
@@ -530,7 +542,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                LinearProgressIndicator(value: done / steps.length),
+                LinearProgressIndicator(value: done / steps.length, semanticsLabel: 'Primeiros passos: $done de ${steps.length} concluídos'),
                 if (!_stepsCollapsed) const SizedBox(height: 8),
                 if (!_stepsCollapsed)
                   for (final s in steps)
@@ -553,33 +565,110 @@ class _DashboardScreenState extends State<DashboardScreen> {
     },
   );
 
+  /// Alert tiles grouped under a sub-header per module (in the order of the user's modules); known legacy backlog is folded into one row.
+  Widget _alertGroups(List<DashAlert> alerts) {
+    final theme = Theme.of(context);
+    final fresh = alerts.where((a) => !a.muted).toList();
+    final legacy = alerts.where((a) => a.muted).toList();
+    GridItem tile(DashAlert a) => GridItem(
+      DashTile(
+        icon: a.icon,
+        label: a.label,
+        value: '${a.count}',
+        // A tile that opens nothing is information, not a call to act: it drops the alarm look.
+        alert: !a.muted && a.onTap != null,
+        onTap: a.onTap,
+      ),
+    );
+    final order = [for (final m in modulesFor(widget.session.role)) m.section];
+    final groups = <Widget>[];
+    for (final section in order) {
+      final mine = fresh.where((a) => a.module == section).toList();
+      if (mine.isEmpty) continue;
+      groups.add(
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: AppSpacing.sm),
+          child: Text(section, style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ),
+      );
+      groups.add(DashGrid(items: [for (final a in mine) tile(a)]));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ...groups,
+        if (legacy.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.sm),
+            child: Card(
+              margin: EdgeInsets.zero,
+              clipBehavior: Clip.antiAlias,
+              shape: dashCardShape(context),
+              color: theme.colorScheme.surfaceContainerHigh,
+              child: ExpansionTile(
+                key: const ValueKey('legacy-alerts'),
+                leading: const Icon(Icons.history),
+                title: Text('Pendências antigas (${legacy.length})'),
+                subtitle: const Text('Atrasos de mais de $legacyOverdueDays dias, do sistema antigo; não entram no sino'),
+                shape: const Border(),
+                collapsedShape: const Border(),
+                childrenPadding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
+                children: [DashGrid(items: [for (final a in legacy) tile(a)])],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _attention() => FutureBuilder<List<Object?>>(
     future: _all,
     builder: (context, snap) {
       final theme = Theme.of(context);
       final updated = _updated;
+      final data = snap.data ?? _last;
+      final alerts = data == null ? const <DashAlert>[] : _alerts(data);
+      final count = alerts.where((a) => !a.muted).length;
       final header = Row(
         children: [
           Expanded(
-            child: Text('Atenção', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+            child: Text.rich(
+              TextSpan(
+                text: 'Atenção',
+                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+                children: [
+                  if (data != null && count > 0)
+                    TextSpan(
+                      text: '  $count ${count == 1 ? 'alerta' : 'alertas'}',
+                      style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                ],
+              ),
+            ),
           ),
           if (updated != null) Text('Atualizado às ${hhmm(updated)}', style: theme.textTheme.bodySmall),
-          IconButton(tooltip: 'Atualizar (F5)', onPressed: _refresh, icon: const Icon(Icons.refresh)),
+          if (_refreshing)
+            const Padding(
+              padding: EdgeInsets.all(AppSpacing.md),
+              child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, semanticsLabel: 'Atualizando')),
+            )
+          else
+            IconButton(tooltip: 'Atualizar (F5)', onPressed: _refresh, icon: const Icon(Icons.refresh)),
         ],
       );
       final Widget content;
-      if (!snap.hasData) {
+      if (data == null) {
         content = const LinearProgressIndicator();
       } else {
-        final alerts = _alerts(snap.data!);
+        final fresh = alerts.where((a) => !a.muted).toList();
         // A section that failed to load is null; "Nada pendente" would then hide a problem instead of reporting it.
-        final failed = snap.data!.where((s) => s == null).length;
+        final failed = data.where((s) => s == null).length;
         final failedNotice = failed == 0
             ? null
             : DashNotice(
                 icon: Icons.cloud_off_outlined,
-                title: failed == snap.data!.length ? 'Não foi possível carregar o painel' : 'Parte do painel não carregou',
-                subtitle: '$failed de ${snap.data!.length} seções falharam. Use Atualizar para tentar de novo.',
+                title: failed == data.length ? 'Não foi possível carregar o painel' : 'Parte do painel não carregou',
+                subtitle: '$failed de ${data.length} seções falharam. Use Atualizar para tentar de novo.',
               );
         content = alerts.isEmpty && failedNotice != null
             ? failedNotice
@@ -591,16 +680,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     : const DashNotice(
                         icon: Icons.check_circle_outline,
                         title: 'Nada pendente',
-                        subtitle: 'Nenhuma OF atrasada, entrega em atraso, aprovação ou bloqueio.',
+                        subtitle: 'Nenhum alerta nas áreas que você acompanha agora.',
                       ),
               )
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (failedNotice != null) ...[failedNotice, const SizedBox(height: 12)],
-                  DashGrid(
-                    items: [for (final a in alerts) GridItem(DashTile(icon: a.icon, label: a.label, value: '${a.count}', alert: !a.muted, onTap: a.onTap))],
-                  ),
+                  if (failedNotice != null) ...[failedNotice, const SizedBox(height: AppSpacing.md)],
+                  if (fresh.isEmpty)
+                    const DashNotice(
+                      icon: Icons.check_circle_outline,
+                      title: 'Nada novo pendente',
+                      subtitle: 'Só restam as pendências antigas abaixo.',
+                    ),
+                  _alertGroups(alerts),
                 ],
               );
       }
@@ -649,7 +742,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     future: _all,
     builder: (context, snap) {
       final theme = Theme.of(context);
-      final alerts = snap.hasData ? _alerts(snap.data!) : const <DashAlert>[];
+      final data = snap.data ?? _last;
+      final alerts = data != null ? _alerts(data) : const <DashAlert>[];
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -660,7 +754,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           LayoutBuilder(
             builder: (context, c) {
               const gap = 12.0;
-              final cols = math.max(1, ((c.maxWidth + gap) / (300 + gap)).floor());
+              // Columns follow the number of modules: no lone card on the last row when a different count would fill it.
+              final count = modulesFor(widget.session.role).length;
+              var cols = math.max(1, math.min(count, ((c.maxWidth + gap) / (300 + gap)).floor()));
+              while (cols > 2 && count % cols == 1) {
+                cols--;
+              }
               final width = (c.maxWidth - gap * (cols - 1)) / cols - 0.01;
               return Wrap(
                 spacing: gap,
@@ -671,8 +770,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       width: width,
                       child: ModuleCard(
                         module: m,
-                        lines: _summary(m.section, snap.data),
-                        loading: !snap.hasData,
+                        lines: _summary(m.section, data),
+                        loading: data == null,
                         attention: alerts.where((a) => a.module == m.section && !a.muted).fold<int>(0, (n, a) => n + a.count),
                         onTap: _go(m.id),
                       ),
@@ -706,9 +805,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     QuickActionBar(actions: actions, onDone: _refresh),
-                    _onboarding(),
                     _attention(),
                     _modules(),
+                    _onboarding(),
                   ],
                 ),
               ),
@@ -784,12 +883,38 @@ class ModuleCard extends StatelessWidget {
                 else if (lines == null)
                   Text('Indisponível no momento', style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
                 else
-                  for (final l in lines!) Text(l, style: theme.textTheme.bodyMedium),
+                  for (final l in lines!) _MetricLine(l),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+/// One summary line of a module card: each "N label" part shows the number in a larger weight so the figures can be scanned.
+class _MetricLine extends StatelessWidget {
+  const _MetricLine(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final big = theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600, fontFeatures: const [FontFeature.tabularFigures()]);
+    final spans = <InlineSpan>[];
+    final parts = text.split(' · ');
+    for (var i = 0; i < parts.length; i++) {
+      if (i > 0) spans.add(TextSpan(text: ' · ', style: theme.textTheme.bodyMedium));
+      final m = RegExp(r'^(\S*\d\S*)(\s.*)?$').firstMatch(parts[i]);
+      if (m == null) {
+        spans.add(TextSpan(text: parts[i], style: theme.textTheme.bodyMedium));
+      } else {
+        spans.add(TextSpan(text: m.group(1), style: big));
+        if (m.group(2) != null) spans.add(TextSpan(text: m.group(2), style: theme.textTheme.bodyMedium));
+      }
+    }
+    return Text.rich(TextSpan(children: spans));
   }
 }

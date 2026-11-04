@@ -184,7 +184,7 @@ void main() {
     expect(find.text('Pedido nº 900 · Aços Sul'), findsOneWidget);
     expect(find.text('Urgente'), findsOneWidget);
     // Cancelling is a labelled button on the order page, not a hidden menu.
-    expect(find.byKey(const ValueKey('order-cancel')), findsOneWidget);
+    expect(find.byKey(const ValueKey('order-menu')), findsOneWidget);
   });
 
   testWidgets('a status picked in the filter wins over "Somente abertos"', (tester) async {
@@ -220,6 +220,8 @@ void main() {
     await _pump(tester, env, (s) => OrderScreen(session: s, id: 90));
     expect(find.text('Receber NF'), findsOneWidget);
     expect(find.text('Encerrar saldo'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('order-menu')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('order-cancel')));
     await tester.pumpAndSettle();
     expect(find.text('Cancelar pedido nº 900'), findsOneWidget);
@@ -241,11 +243,15 @@ void main() {
       ..received = 100;
     await _pump(tester, env, (s) => OrderScreen(session: s, id: 90));
     expect(find.text('Cancelar pedido'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('order-menu')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('order-close')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Voltar'));
     await tester.pumpAndSettle();
     expect(env.log.where((r) => r.method == 'POST'), isEmpty);
+    await tester.tap(find.byKey(const ValueKey('order-menu')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('order-close')));
     await tester.pumpAndSettle();
     expect(find.text('Encerrar saldo do pedido nº 900'), findsOneWidget);
@@ -260,6 +266,8 @@ void main() {
   testWidgets('a failed cancel shows the API message in a snackbar and keeps the order open', (tester) async {
     final env = _Env()..failWith = 'Há recebimento em andamento';
     await _pump(tester, env, (s) => OrderScreen(session: s, id: 90));
+    await tester.tap(find.byKey(const ValueKey('order-menu')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('order-cancel')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'x');

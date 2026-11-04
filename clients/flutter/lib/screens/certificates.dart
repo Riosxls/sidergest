@@ -1,5 +1,7 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../api.dart';
 import '../entities.dart';
@@ -7,6 +9,7 @@ import '../labels.dart';
 import '../reports/certificate_doc.dart';
 import '../reports/print_docs.dart' show PrintButton;
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/actions.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/entity_form.dart';
@@ -16,6 +19,8 @@ import '../widgets/print_panel.dart' show printPdf;
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
 import '../widgets/record_shortcuts.dart';
+import '../widgets/record_skeleton.dart';
+import '../widgets/responsive.dart';
 import 'customers.dart';
 import 'sales_common.dart';
 import 'sales_orders.dart' show ReasonDialog;
@@ -100,16 +105,16 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
       ),
     ],
     columns: [
+      // Six columns: the company is in the filter and in the number, the customer's PO and the NF ride with the order.
       col('Certificado', 'reference'),
-      col('Empresa', 'company'),
-      dateCol('Data', 'issueDate'),
       labelCol('Situação', 'status', certificateStatuses),
-      col('Pedido', 'orderReference'),
-      col('Pedido do cliente', 'customerPo'),
       col('Cliente', 'customerName'),
-      col('Produto', 'description'),
-      ColumnSpec('Qtd.', (e) => '${fmt(e['quantity'])} ${e['unit']}', numeric: true),
-      col('NF', 'invoiceNumber'),
+      ColumnSpec('Produto · qtd.', (e) => '${fmt(e['description'])} · ${fmt(e['quantity'])} ${e['unit']}'),
+      ColumnSpec(
+        'Pedido · NF',
+        (e) => [e['orderReference'], if (fmt(e['invoiceNumber']).isNotEmpty) 'NF ${e['invoiceNumber']}'].whereType<Object>().map(fmt).where((t) => t.isNotEmpty).join(' · '),
+      ),
+      dateCol('Data', 'issueDate'),
     ],
     onTap: (e) async {
       await openCertificate(context, widget.session, e['id'] as int);
@@ -347,7 +352,7 @@ class _CertificateScreenState extends State<CertificateScreen> {
       body: _error != null && c == null
           ? LoadError(message: _error!, onRetry: _load)
           : c == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const RecordSkeleton()
           : RefreshIndicator(onRefresh: () => _load(report: true), child: _body(c)),
       ),
     );
@@ -464,6 +469,7 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
   int? _deliveryId;
   String? _error;
   bool _busy = false;
+  bool _bannerOpen = false;
   String _initial = '';
 
   ApiClient get api => widget.session.api;
@@ -603,6 +609,7 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
       controller: _fields[key],
       maxLines: lines,
       keyboardType: number ? const TextInputType.numberWithOptions(decimal: true) : null,
+      textInputAction: lines > 1 ? TextInputAction.newline : TextInputAction.next,
       decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder(), isDense: true),
     ),
   );
@@ -678,65 +685,98 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
     ],
   );
 
-  Widget _tableHeaders(List<String> headers, ColorScheme scheme, TextStyle? label) => Row(
-    children: [
-      SizedBox(width: 92, child: Text(headers[0], style: label)),
-      Expanded(child: Text(headers[1], style: label)),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(headers[2], style: label?.copyWith(color: scheme.primary)),
-      ),
-      const SizedBox(width: 40),
-    ],
+  /// Below this width of the card the value fields drop under the name, each with its own label, instead of squeezing into three slivers.
+  static const _stackBelow = 600.0;
+
+  Widget _tableHeaders(List<String> headers, ColorScheme scheme, TextStyle? label) => LayoutBuilder(
+    builder: (context, box) => box.maxWidth < _stackBelow
+        ? const SizedBox.shrink()
+        : Row(
+            children: [
+              SizedBox(width: 92, child: Text(headers[0], style: label)),
+              Expanded(child: Text(headers[1], style: label)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(headers[2], style: label?.copyWith(color: scheme.primary)),
+              ),
+              const SizedBox(width: kMinTouchTarget),
+            ],
+          ),
   );
 
-  Widget _tableRow(String kind, int i, ColorScheme scheme) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 3),
-    child: Row(
-      children: [
-        SizedBox(
-          width: 92,
-          // The name is cut at 92 px: the tooltip carries the whole of it.
-          child: Tooltip(
-            message: '${_measures[i]['name']}',
-            child: Text(
-              '${_measures[i]['name']}',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Semantics(
-            label: 'Especificado: ${_measures[i]['name']}',
-            child: TextField(key: ValueKey('spec-$kind-${_measures[i]['name']}'), controller: _spec[i], decoration: _cell(scheme, found: false)),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Semantics(
-            label: 'Encontrado: ${_measures[i]['name']}',
-            child: TextField(
-              key: ValueKey('found-$kind-${_measures[i]['name']}'),
-              controller: _found[i],
-              onChanged: (_) => setState(() {}),
-              decoration: _cell(scheme, found: true),
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 40,
-          child: IconButton(
-            key: ValueKey('row-del-$kind-${_measures[i]['name']}'),
-            tooltip: 'Remover linha',
-            visualDensity: VisualDensity.compact,
-            icon: Icon(Icons.close, size: 18, color: scheme.onSurfaceVariant),
-            onPressed: () => _removeRow(i),
-          ),
-        ),
-      ],
-    ),
-  );
+  Widget _tableRow(String kind, int i, ColorScheme scheme) {
+    final name = '${_measures[i]['name']}';
+    Widget spec(bool narrow) => Semantics(
+      label: 'Especificado: $name',
+      child: TextField(
+        key: ValueKey('spec-$kind-$name'),
+        controller: _spec[i],
+        textInputAction: TextInputAction.next,
+        decoration: _cell(scheme, found: false).copyWith(labelText: narrow ? 'Especificado' : null),
+      ),
+    );
+    Widget found(bool narrow) => Semantics(
+      label: 'Encontrado: $name',
+      child: TextField(
+        key: ValueKey('found-$kind-$name'),
+        controller: _found[i],
+        textInputAction: TextInputAction.next,
+        onChanged: (_) => setState(() {}),
+        decoration: _cell(scheme, found: true).copyWith(labelText: narrow ? 'Encontrado' : null),
+      ),
+    );
+    final remove = IconButton(
+      key: ValueKey('row-del-$kind-$name'),
+      tooltip: 'Remover linha',
+      constraints: const BoxConstraints(minWidth: kMinTouchTarget, minHeight: kMinTouchTarget),
+      icon: Icon(Icons.close, size: 20, color: scheme.onSurfaceVariant),
+      onPressed: () => _removeRow(i),
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          if (box.maxWidth < _stackBelow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600))),
+                    remove,
+                  ],
+                ),
+                Row(
+                  children: [
+                    Expanded(child: spec(true)),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(child: found(true)),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.xs),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              SizedBox(
+                width: 92,
+                // The name is cut at 92 px: the tooltip carries the whole of it.
+                child: Tooltip(
+                  message: name,
+                  child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                ),
+              ),
+              Expanded(child: spec(false)),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(child: found(false)),
+              remove,
+            ],
+          );
+        },
+      ),
+    );
+  }
 
   Widget _table(String title, String kind, List<String> headers) {
     final scheme = Theme.of(context).colorScheme;
@@ -795,21 +835,40 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
     );
   }
 
+  /// Where the specifications come from; folded away by default so the form starts with the fields.
   Widget _banner(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: scheme.secondaryContainer.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      decoration: BoxDecoration(color: scheme.secondaryContainer.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(AppRadius.card)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(Icons.info_outline, size: 20, color: scheme.onSecondaryContainer),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              'As especificações vêm do último certificado emitido para este cliente e produto (ou dos certificados em Excel de 2025-26); ao emitir, ficam salvas como modelo. Só o "Encontrado" muda a cada remessa.',
+          InkWell(
+            key: const ValueKey('cert-banner-toggle'),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            onTap: () => setState(() => _bannerOpen = !_bannerOpen),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: kMinTouchTarget),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 20, color: scheme.onSecondaryContainer),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(child: Text('De onde vêm as especificações', style: Theme.of(context).textTheme.labelLarge)),
+                    Icon(_bannerOpen ? Icons.expand_less : Icons.expand_more),
+                  ],
+                ),
+              ),
             ),
           ),
+          if (_bannerOpen)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+              child: Text(
+                'As especificações vêm do último certificado emitido para este cliente e produto (ou dos certificados em Excel de 2025-26); ao emitir, ficam salvas como modelo. Só o "Encontrado" muda a cada remessa.',
+              ),
+            ),
         ],
       ),
     );
@@ -897,33 +956,55 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
   @override
   Widget build(BuildContext context) => DiscardGuard(
     isDirty: () => _signature() != _initial,
-    child: _scaffold(context),
+    // Ctrl+S saves; something in the page has to hold the focus for it to hear the key before a field is touched.
+    child: CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.keyS, control: true): () => _busy ? null : unawaited(_save())},
+      child: Focus(autofocus: true, skipTraversal: true, child: _scaffold(context)),
+    ),
   );
+
+  List<Widget> _saveActions(BuildContext context) {
+    final canIssue = widget.session.canIssueCertificate;
+    // On a narrow window the two buttons become icons with tooltips, so the title keeps its room.
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return [
+        if (canIssue)
+          IconButton(
+            key: const ValueKey('cert-save-issue'),
+            tooltip: 'Salvar e emitir',
+            onPressed: _busy ? null : () => _save(issue: true),
+            icon: const Icon(Icons.verified_outlined),
+          ),
+        IconButton(key: const ValueKey('cert-save'), tooltip: 'Salvar (Ctrl+S)', onPressed: _busy ? null : _save, icon: const Icon(Icons.save_outlined)),
+      ];
+    }
+    return [
+      if (canIssue)
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: OutlinedButton.icon(
+            key: const ValueKey('cert-save-issue'),
+            onPressed: _busy ? null : () => _save(issue: true),
+            icon: const Icon(Icons.verified_outlined),
+            label: const Text('Salvar e emitir'),
+          ),
+        ),
+      Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: FilledButton.icon(
+          key: const ValueKey('cert-save'),
+          onPressed: _busy ? null : _save,
+          icon: const Icon(Icons.save_outlined),
+          label: const Text('Salvar'),
+        ),
+      ),
+    ];
+  }
 
   Widget _scaffold(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: Text('Certificado ${c['reference']} · ${c['orderReference']}'),
-      actions: [
-        if (widget.session.canIssueCertificate)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: OutlinedButton.icon(
-              key: const ValueKey('cert-save-issue'),
-              onPressed: _busy ? null : () => _save(issue: true),
-              icon: const Icon(Icons.verified_outlined),
-              label: const Text('Salvar e emitir'),
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.only(right: 12),
-          child: FilledButton.icon(
-            key: const ValueKey('cert-save'),
-            onPressed: _busy ? null : _save,
-            icon: const Icon(Icons.save_outlined),
-            label: const Text('Salvar'),
-          ),
-        ),
-      ],
+      title: Text('Certificado ${c['reference']} · ${c['orderReference']}', overflow: TextOverflow.ellipsis),
+      actions: _saveActions(context),
     ),
     body: Align(
       alignment: Alignment.topCenter,
@@ -1077,22 +1158,25 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
       appBar: AppBar(
         title: const Text('Modelos de especificação'),
         actions: [
+          // A one-off migration tool: it lives in the overflow menu, not in the bar.
           if (widget.session.canCertificate)
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: OutlinedButton.icon(
-                key: const ValueKey('templates-import'),
-                onPressed: _importLegacy,
-                icon: const Icon(Icons.table_view_outlined),
-                label: const Text('Importar dos certificados em Excel'),
-              ),
+            PopupMenuButton<VoidCallback>(
+              key: const ValueKey('templates-menu'),
+              onSelected: (f) => f(),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  key: const ValueKey('templates-import'),
+                  value: _importLegacy,
+                  child: const ListTile(leading: Icon(Icons.table_view_outlined), title: Text('Importar dos certificados em Excel')),
+                ),
+              ],
             ),
         ],
       ),
       body: _error != null
           ? LoadError(message: _error!, onRetry: _load)
           : items == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const RecordSkeleton()
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -1213,40 +1297,50 @@ class _TemplateEditorState extends State<_TemplateEditor> {
     }
   }
 
-  Widget _rowEditor(int i, _TemplateRow r, InputDecoration dec) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Row(
-      children: [
-        SizedBox(
-          width: 140,
-          child: DropdownButtonFormField<String>(
-            initialValue: r.kind,
-            isExpanded: true,
-            decoration: dec,
-            items: [for (final e in _kinds.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-            onChanged: (v) => setState(() => r.kind = v ?? r.kind),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            key: ValueKey('template-name-$i'),
-            controller: r.name,
-            decoration: dec.copyWith(labelText: 'Nome'),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            key: ValueKey('template-spec-$i'),
-            controller: r.specified,
-            decoration: dec.copyWith(labelText: 'Especificado'),
-          ),
-        ),
-        IconButton(tooltip: 'Remover', icon: const Icon(Icons.close), onPressed: () => setState(() => _rows.removeAt(i))),
-      ],
-    ),
-  );
+  Widget _rowEditor(int i, _TemplateRow r, InputDecoration dec) {
+    final kind = DropdownButtonFormField<String>(
+      initialValue: r.kind,
+      isExpanded: true,
+      decoration: dec,
+      items: [for (final e in _kinds.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+      onChanged: (v) => setState(() => r.kind = v ?? r.kind),
+    );
+    final name = TextField(key: ValueKey('template-name-$i'), controller: r.name, textInputAction: TextInputAction.next, decoration: dec.copyWith(labelText: 'Nome'));
+    final spec = TextField(key: ValueKey('template-spec-$i'), controller: r.specified, textInputAction: TextInputAction.next, decoration: dec.copyWith(labelText: 'Especificado'));
+    final remove = IconButton(
+      tooltip: 'Remover',
+      constraints: const BoxConstraints(minWidth: kMinTouchTarget, minHeight: kMinTouchTarget),
+      icon: const Icon(Icons.close),
+      onPressed: () => setState(() => _rows.removeAt(i)),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: LayoutBuilder(
+        builder: (context, box) => box.maxWidth < 520
+            // Narrow: the kind and the remove button on one line, the two text fields stacked under it.
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(children: [Expanded(child: kind), remove]),
+                  const SizedBox(height: AppSpacing.sm),
+                  name,
+                  const SizedBox(height: AppSpacing.sm),
+                  spec,
+                ],
+              )
+            : Row(
+                children: [
+                  SizedBox(width: 140, child: kind),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(child: name),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(child: spec),
+                  remove,
+                ],
+              ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1260,8 +1354,8 @@ class _TemplateEditorState extends State<_TemplateEditor> {
   Widget _dialog(BuildContext context, InputDecoration dec) {
     return AlertDialog(
       title: Text('Modelo · ${widget.template['customerName']} · ${widget.template['productCode']}'),
-      content: SizedBox(
-        width: 620,
+      content: DialogBody(
+        ideal: 620,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsService;
 import 'package:flutter/services.dart';
 
 import '../session.dart';
@@ -106,7 +107,12 @@ class _IdleGuardState extends State<IdleGuard> {
     }
     final left = Duration(minutes: s.idleLockMinutes) - widget.now().difference(_last);
     if (left <= Duration.zero) return _signOutNow();
-    _secondsLeft.value = (left.inMilliseconds / 1000).ceil();
+    final secs = (left.inMilliseconds / 1000).ceil();
+    _secondsLeft.value = secs;
+    // Screen readers do not re-read a changing text, so the countdown is announced at fixed points.
+    if (_warning != null && const {60, 30, 10}.contains(secs)) {
+      unawaited(SemanticsService.sendAnnouncement(View.of(context), 'Sua sessão expira em $secs segundos.', Directionality.of(context)));
+    }
     if (left <= idleWarningLead && _warning == null) _showWarning();
   }
 
@@ -158,7 +164,7 @@ class _ExpiryDialog extends StatelessWidget {
           content: ValueListenableBuilder<int>(
             valueListenable: secondsLeft,
             builder: (_, s, _) => Text(
-              'Por inatividade, você será desconectado em $s ${s == 1 ? 'segundo' : 'segundos'}. Alterações não salvas serão perdidas.',
+              'Por inatividade, você será desconectado em $s ${s == 1 ? 'segundo' : 'segundos'}. O rascunho dos formulários abertos será guardado; outras alterações não salvas serão perdidas.',
               key: const ValueKey('idle-countdown'),
             ),
           ),

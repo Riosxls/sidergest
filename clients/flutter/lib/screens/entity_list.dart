@@ -80,7 +80,10 @@ class _EntityListScreenState extends State<EntityListScreen> {
     searchable: spec.searchable,
     onTap: _open,
     rowActions: spec.whereUsed || isProduct ? _rowActions : null,
-    fab: canWrite ? FloatingActionButton.extended(heroTag: 'new-${spec.path}', onPressed: _edit, icon: const Icon(Icons.add), label: const Text('Novo')) : null,
-    emptyAction: canWrite ? OutlinedButton.icon(onPressed: _edit, icon: const Icon(Icons.add), label: Text('Novo: ${spec.singular}')) : null,
+    // One "Novo" button, the floating one; the empty state points to it instead of repeating it.
+    emptyText: canWrite ? 'Nenhum registro. Use "Novo: ${spec.singular}" para cadastrar o primeiro.' : 'Nenhum registro',
+    fab: canWrite
+        ? FloatingActionButton.extended(heroTag: 'new-${spec.path}', onPressed: _edit, icon: const Icon(Icons.add), label: Text('Novo: ${spec.singular}'))
+        : null,
   );
 }

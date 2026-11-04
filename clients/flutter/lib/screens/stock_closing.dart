@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../entities.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/page_column.dart';
 import '../widgets/pipeline.dart' show confirmStep;
 import '../widgets/record_list.dart';
+import '../widgets/responsive.dart';
 
 int? parsePeriod(String s) {
   final m = RegExp(r'^(\d{1,2})/(\d{4})$').firstMatch(s.trim());
@@ -68,6 +70,9 @@ class _ClosingScreenState extends State<ClosingScreen> {
     _period.dispose();
     super.dispose();
   }
+
+  /// The figures on screen are a preview of the period typed: closing is only offered on numbers the user has seen.
+  bool get _previewed => _mode.startsWith('Prévia') && _shownPeriod != null && _shownPeriod == parsePeriod(_period.text);
 
   int? get _last => _closings.isEmpty ? null : _closings.first['period'] as int;
 
@@ -146,6 +151,29 @@ class _ClosingScreenState extends State<ClosingScreen> {
     await _view();
   }
 
+  /// Defines the Médio columns where the user looks for them, in a dialog that opens from the info icon of the table.
+  Future<void> _explainColumns() => showDialog<void>(
+    context: context,
+    builder: (c) => AlertDialog(
+      title: const Text('Colunas de custo médio'),
+      content: SizedBox(
+        width: dialogWidth(context, 460),
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Médio do mês: custo médio das entradas do mês (compras e serviços, com a sucata).'),
+            SizedBox(height: AppSpacing.sm),
+            Text('Médio: média ponderada entre o saldo anterior e o mês, sem o ICMS quando a configuração manda deduzir.'),
+            SizedBox(height: AppSpacing.sm),
+            Text('Médio bruto: a mesma média com o ICMS incluído.'),
+          ],
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Fechar'))],
+    ),
+  );
+
   Future<void> _reopen() async {
     final p = _last!;
     final ok = await confirmStep(
@@ -172,30 +200,70 @@ class _ClosingScreenState extends State<ClosingScreen> {
       children: [
         Section(
           title: 'Período',
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
-                width: 140,
-                child: TextField(
-                  key: const ValueKey('closing-period'),
-                  controller: _period,
-                  decoration: const InputDecoration(labelText: 'Período', hintText: 'mm/aaaa', border: OutlineInputBorder(), isDense: true),
-                  onSubmitted: (_) => _busy ? null : _preview(),
+              // Where the books stand comes first: the controls below act on the month after this one.
+              Wrap(
+                spacing: AppSpacing.md,
+                runSpacing: AppSpacing.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    key: const ValueKey('closing-last'),
+                    _last == null
+                        ? 'Nenhum mês fechado'
+                        : 'Último fechado: ${fmtPeriod(_last)} por ${_closings.first['closedBy']} em ${fmtDate(_closings.first['closedAt'])}',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  // Next to the month it reopens, in the error colour: it throws the month's costs away.
+                  if (s.isAdmin && _last != null)
+                    TextButton.icon(
+                      key: const ValueKey('closing-reopen'),
+                      style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+                      onPressed: _busy ? null : _reopen,
+                      icon: const Icon(Icons.lock_open),
+                      label: Text('Reabrir ${fmtPeriod(_last)}'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Wrap(
+                spacing: AppSpacing.md,
+                runSpacing: AppSpacing.md,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 140,
+                    child: TextField(
+                      key: const ValueKey('closing-period'),
+                      controller: _period,
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(labelText: 'Período', hintText: 'mm/aaaa', border: OutlineInputBorder(), isDense: true),
+                      onSubmitted: (_) => _busy ? null : _preview(),
+                    ),
+                  ),
+                  OutlinedButton.icon(onPressed: _busy ? null : _preview, icon: const Icon(Icons.calculate_outlined), label: const Text('Prévia')),
+                  OutlinedButton.icon(onPressed: _busy ? null : _view, icon: const Icon(Icons.history), label: const Text('Consultar')),
+                  if (s.canStock)
+                    FilledButton.icon(
+                      key: const ValueKey('closing-close'),
+                      onPressed: _busy || !_previewed ? null : _close,
+                      icon: const Icon(Icons.lock_outline),
+                      label: const Text('Fechar mês'),
+                    ),
+                ],
+              ),
+              // A disabled button has to say why; a tooltip would not show on touch.
+              if (s.canStock && !_previewed && !_busy)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.sm),
+                  child: Text(
+                    'Calcule a prévia deste período para poder fechar o mês.',
+                    key: const ValueKey('closing-hint'),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
                 ),
-              ),
-              OutlinedButton.icon(onPressed: _busy ? null : _preview, icon: const Icon(Icons.calculate_outlined), label: const Text('Prévia')),
-              OutlinedButton.icon(onPressed: _busy ? null : _view, icon: const Icon(Icons.history), label: const Text('Consultar')),
-              if (s.canStock) FilledButton.icon(onPressed: _busy ? null : _close, icon: const Icon(Icons.lock_outline), label: const Text('Fechar mês')),
-              if (s.isAdmin && _last != null)
-                TextButton.icon(onPressed: _busy ? null : _reopen, icon: const Icon(Icons.lock_open), label: Text('Reabrir ${fmtPeriod(_last)}')),
-              Text(
-                _last == null
-                    ? 'Nenhum mês fechado'
-                    : 'Último fechado: ${fmtPeriod(_last)} por ${_closings.first['closedBy']} em ${fmtDate(_closings.first['closedAt'])}',
-              ),
             ],
           ),
         ),
@@ -209,7 +277,9 @@ class _ClosingScreenState extends State<ClosingScreen> {
                 children: [
                   Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+                  Expanded(
+                    child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  ),
                   TextButton(key: const ValueKey('closing-retry'), onPressed: _busy ? null : _retry, child: const Text('Tentar novamente')),
                 ],
               ),
@@ -219,6 +289,14 @@ class _ClosingScreenState extends State<ClosingScreen> {
           const SizedBox(height: 12),
           Section(
             title: '$_mode (${rows.length})',
+            actions: [
+              IconButton(
+                key: const ValueKey('closing-columns-info'),
+                tooltip: 'O que são as colunas Médio',
+                icon: const Icon(Icons.info_outline),
+                onPressed: _explainColumns,
+              ),
+            ],
             child: SimpleTable(
               columns: [
                 ColumnSpec('Espessura', (e) => e['thicknessMm'] == null ? '—' : '${fmt(e['thicknessMm'])} mm'),
@@ -235,14 +313,7 @@ class _ClosingScreenState extends State<ClosingScreen> {
                 ColumnSpec('Importado', (e) => e['imported'] == true ? 'Sim' : ''),
               ],
               rows: rows,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-            child: Text(
-              'Médio do mês: custo médio das entradas do mês (compras e serviços, com a sucata). Médio: média ponderada entre o saldo anterior e o mês, '
-              'sem o ICMS quando a configuração manda deduzir. Médio bruto: a mesma média com o ICMS incluído.',
-              style: Theme.of(context).textTheme.bodySmall,
+              hideWhenEmpty: const {'Serviços (qtd)', 'Serviços (valor)', 'Importado'},
             ),
           ),
         ],
@@ -303,7 +374,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     FieldSpec('minimumOrderValue', 'Faturamento mínimo (R\$)', type: FieldType.decimal, required: true),
     FieldSpec('offListNeedsApproval', 'Preço digitado fora da tabela exige aprovação do gerente', type: FieldType.boolean),
     FieldSpec('followUpDays', 'Cobrar resposta do orçamento enviado após (dias)', type: FieldType.integer, required: true),
-    FieldSpec('approvalValidityDays', 'Validade da aprovação de desconto (dias)', type: FieldType.integer, required: true, hint: 'Passado o prazo sem envio, volta a rascunho'),
+    FieldSpec(
+      'approvalValidityDays',
+      'Validade da aprovação de desconto (dias)',
+      type: FieldType.integer,
+      required: true,
+      hint: 'Passado o prazo sem envio, volta a rascunho',
+    ),
     FieldSpec(
       'shippingLocationId',
       'Local de expedição',
@@ -372,42 +449,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final pu = r[1] as Map<String, dynamic>;
       final pr = r[2] as Map<String, dynamic>;
       final sa = r[3] as Map<String, dynamic>;
-      return PageColumn(child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _card('Estoque', '/api/stock/settings', stockFields, st, [
-            ('Saldo negativo', st['allowNegativeStock'] == true ? 'Permitido' : 'Bloqueado'),
-            ('ICMS no custo médio', st['deductIcmsFromAverage'] == true ? 'Deduzido' : 'Incluído'),
-            ('Serviço de corte', '${fmtMoney(st['cuttingServicePerKg'])}/kg'),
-            ('Revenda de sucata', '${fmtMoney(st['scrapResalePerKg'])}/kg'),
-            ('Sucata', '${fmt(st['scrapPercent'])} %'),
-          ]),
-          const SizedBox(height: 12),
-          _card('Compras e recebimento', '/api/purchasing/settings', purchasingFields, pu, [
-            ('Tolerância de recebimento', '${fmt(pu['receivingTolerancePercent'])} %'),
-            ('Entrega antecipada', pu['allowEarlyReceipt'] == true ? 'Aceita até ${pu['earlyReceiptGraceDays']} dias' : 'Não aceita'),
-            ('Local de recebimento', fmt(pu['receivingLocation'] ?? 'ALM (padrão)')),
-          ]),
-          const SizedBox(height: 12),
-          _card('PCP', '/api/production/settings', productionFields, pr, [
-            ('Tolerância de excedente', '${fmt(pr['overrunTolerancePercent'])} %'),
-            ('Jornada', '${fmt(pr['hoursPerDay'])} h/dia${pr['workSaturdays'] == true ? ' · inclui sábado' : ''}'),
-            ('Local de requisição', fmt(pr['issueLocation'] ?? 'ALM (padrão)')),
-            ('Entrada de acabado', fmt(pr['receiptLocation'] ?? 'PA (padrão)')),
-          ]),
-          const SizedBox(height: 12),
-          _card('Comercial', '/api/sales/settings', salesFields, sa, [
-            ('Desconto sem aprovação', 'até ${fmt(sa['maxDiscountPercent'])} %'),
-            ('Validade do orçamento', '${fmt(sa['defaultValidityDays'])} dias'),
-            ('Faturamento mínimo', (sa['minimumOrderValue'] as num? ?? 0) == 0 ? 'Sem mínimo' : fmtMoney(sa['minimumOrderValue'])),
-            ('Preço fora da tabela', sa['offListNeedsApproval'] == true ? 'exige aprovação' : 'livre'),
-            ('Cobrar resposta', 'após ${fmt(sa['followUpDays'])} dias'),
-            ('Validade da aprovação', '${fmt(sa['approvalValidityDays'])} dias'),
-            ('Local de expedição', fmt(sa['shippingLocation'] ?? 'Acabado do PCP (padrão)')),
-            ('Condições gerais', fmt(sa['defaultConditions'])),
-          ]),
-        ],
-      ));
+      return PageColumn(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _card('Estoque', '/api/stock/settings', stockFields, st, [
+              ('Saldo negativo', st['allowNegativeStock'] == true ? 'Permitido' : 'Bloqueado'),
+              ('ICMS no custo médio', st['deductIcmsFromAverage'] == true ? 'Deduzido' : 'Incluído'),
+              ('Serviço de corte', '${fmtMoney(st['cuttingServicePerKg'])}/kg'),
+              ('Revenda de sucata', '${fmtMoney(st['scrapResalePerKg'])}/kg'),
+              ('Sucata', '${fmt(st['scrapPercent'])} %'),
+            ]),
+            const SizedBox(height: 12),
+            _card('Compras e recebimento', '/api/purchasing/settings', purchasingFields, pu, [
+              ('Tolerância de recebimento', '${fmt(pu['receivingTolerancePercent'])} %'),
+              ('Entrega antecipada', pu['allowEarlyReceipt'] == true ? 'Aceita até ${pu['earlyReceiptGraceDays']} dias' : 'Não aceita'),
+              ('Local de recebimento', fmt(pu['receivingLocation'] ?? 'ALM (padrão)')),
+            ]),
+            const SizedBox(height: 12),
+            _card('PCP', '/api/production/settings', productionFields, pr, [
+              ('Tolerância de excedente', '${fmt(pr['overrunTolerancePercent'])} %'),
+              ('Jornada', '${fmt(pr['hoursPerDay'])} h/dia${pr['workSaturdays'] == true ? ' · inclui sábado' : ''}'),
+              ('Local de requisição', fmt(pr['issueLocation'] ?? 'ALM (padrão)')),
+              ('Entrada de acabado', fmt(pr['receiptLocation'] ?? 'PA (padrão)')),
+            ]),
+            const SizedBox(height: 12),
+            _card('Comercial', '/api/sales/settings', salesFields, sa, [
+              ('Desconto sem aprovação', 'até ${fmt(sa['maxDiscountPercent'])} %'),
+              ('Validade do orçamento', '${fmt(sa['defaultValidityDays'])} dias'),
+              ('Faturamento mínimo', (sa['minimumOrderValue'] as num? ?? 0) == 0 ? 'Sem mínimo' : fmtMoney(sa['minimumOrderValue'])),
+              ('Preço fora da tabela', sa['offListNeedsApproval'] == true ? 'exige aprovação' : 'livre'),
+              ('Cobrar resposta', 'após ${fmt(sa['followUpDays'])} dias'),
+              ('Validade da aprovação', '${fmt(sa['approvalValidityDays'])} dias'),
+              ('Local de expedição', fmt(sa['shippingLocation'] ?? 'Acabado do PCP (padrão)')),
+              ('Condições gerais', fmt(sa['defaultConditions'])),
+            ]),
+          ],
+        ),
+      );
     },
   );
 }

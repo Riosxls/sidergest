@@ -52,8 +52,12 @@ Future<bool> confirmDiscard(BuildContext context) async =>
         title: const Text('Descartar alterações?'),
         content: const Text('Você preencheu informações que ainda não foram salvas. Se sair agora, elas serão perdidas.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Continuar editando')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Descartar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error),
+            child: const Text('Descartar'),
+          ),
+          FilledButton(autofocus: true, onPressed: () => Navigator.pop(ctx, false), child: const Text('Continuar editando')),
         ],
       ),
     ) ??

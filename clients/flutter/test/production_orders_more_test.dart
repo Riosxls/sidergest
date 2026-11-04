@@ -338,13 +338,13 @@ void main() {
       final q = fake.last('GET', '/api/production/orders').url.queryParameters;
       expect(q['status'], 'Created');
       expect(q.containsKey('open'), isFalse);
-      expect(find.text('Nova Ordem de Fabricação'), findsNothing);
+      expect(find.text('Nova OF'), findsNothing);
     });
 
     testWidgets('creating an OF posts the form and opens the new order', (tester) async {
       final fake = _Fake();
       await _pump(tester, fake, (s) => Scaffold(body: ProductionOrdersScreen(session: s)));
-      await tester.tap(find.text('Nova Ordem de Fabricação'));
+      await tester.tap(find.text('Nova OF'));
       await tester.pumpAndSettle();
       expect(find.text('Nova ordem de fabricação'), findsOneWidget);
       await _pickLookup(tester, 'Produto *', 'TB-50 · Tubo 50x50');
@@ -380,7 +380,9 @@ void main() {
         ];
       await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
       expect(find.text('Sem roteiro cadastrado'), findsOneWidget);
-      expect(find.text('Parada · Falta de material'), findsOneWidget);
+      // The reason is said once, in the banner.
+      expect(find.text('Parada: Falta de material'), findsOneWidget);
+      expect(find.text('Parada · Falta de material'), findsNothing);
       expect(find.text('OF pai'), findsOneWidget);
       expect(find.text('OF 13'), findsOneWidget);
       expect(find.byKey(const ValueKey('of-release')), findsNothing);
@@ -459,7 +461,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await _menu(tester, 'Cancelar');
-      expect(find.text('Cancelar OF 12'), findsOneWidget);
+      expect(find.text('Cancelar OF 12?'), findsOneWidget);
       await tester.enterText(find.byKey(const ValueKey('cancel-reason')), 'Cliente desistiu');
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('cancel-confirm')));
@@ -487,7 +489,7 @@ void main() {
       await _menu(tester, 'Cancelar');
       expect(tester.widget<FilledButton>(find.byKey(const ValueKey('cancel-confirm'))).onPressed, isNull);
       expect(fake.has('POST', '/api/production/orders/7/cancel'), isFalse);
-      expect(find.text('Cancelar OF 12'), findsOneWidget);
+      expect(find.text('Cancelar OF 12?'), findsOneWidget);
     });
 
     testWidgets('deleting a created OF confirms, deletes and goes back', (tester) async {
@@ -506,7 +508,7 @@ void main() {
       await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
       expect(find.byKey(const ValueKey('of-release')), findsNothing);
 
-      await tester.tap(find.byKey(const ValueKey('of-receive')));
+      await _menu(tester, 'Entrada PA');
       await tester.pumpAndSettle();
       expect(find.text('Entrada de produto acabado · OF 12'), findsOneWidget);
       expect(tester.widget<TextField>(find.byKey(const ValueKey('field-quantity'))).controller!.text, '5');
@@ -527,7 +529,9 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
       await tester.pump(const Duration(seconds: 6));
       await tester.pump(const Duration(seconds: 6));
-      await _menu(tester, 'Finalizar');
+      // Finalizar is the primary action of a running OF, not a menu entry.
+      await tester.tap(find.byKey(const ValueKey('of-finish')));
+      await tester.pumpAndSettle();
       // The balance still open on the operations is named before the OF is finished.
       expect(find.text('Finalizar OF 12?'), findsOneWidget);
       expect(find.textContaining('saldo nas operações'), findsOneWidget);
@@ -709,7 +713,7 @@ void main() {
     testWidgets('receiving finished goods offers to open the stock document it created', (tester) async {
       final fake = _Fake()..status = 'InProduction';
       await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
-      await tester.tap(find.byKey(const ValueKey('of-receive')));
+      await _menu(tester, 'Entrada PA');
       await tester.pumpAndSettle();
       await tester.tap(find.text('Salvar'));
       await tester.pumpAndSettle();
@@ -735,8 +739,8 @@ void main() {
       expect(find.byKey(const ValueKey('op-menu-10')), findsNothing);
       final report = find.byKey(const ValueKey('op-report-10'));
       expect(report, findsOneWidget);
-      expect(tester.widget<IconButton>(report).onPressed, isNull);
-      expect(tester.widget<IconButton>(report).tooltip, 'Sem permissão para apontar');
+      // Visible words, not a tooltip: touch screens do not show tooltips.
+      expect(tester.widget<Text>(report).data, 'Sem permissão para apontar');
     });
 
     testWidgets('the process dialog moves rows, numbers them by position and asks before dropping edits', (tester) async {
@@ -768,7 +772,7 @@ void main() {
     testWidgets('the new OF form folds the rare fields', (tester) async {
       final fake = _Fake();
       await _pump(tester, fake, (s) => Scaffold(body: ProductionOrdersScreen(session: s)));
-      await tester.tap(find.text('Nova Ordem de Fabricação'));
+      await tester.tap(find.text('Nova OF'));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('field-quantity')), findsOneWidget);
       expect(find.byKey(const ValueKey('field-primaryTube')), findsNothing);
@@ -782,7 +786,7 @@ void main() {
       final fake = _Fake();
       await _pump(tester, fake, (s) => Scaffold(body: ProductionOrdersScreen(session: s)));
       final loads = fake.log.where((r) => r.method == 'GET' && r.url.path == '/api/production/orders').length;
-      await tester.tap(find.text('Nova Ordem de Fabricação'));
+      await tester.tap(find.text('Nova OF'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cancelar'));
       await tester.pumpAndSettle();

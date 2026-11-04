@@ -42,7 +42,7 @@ class AlertBell extends StatelessWidget {
                     value: a,
                     child: Row(
                       children: [
-                        Icon(a.icon, size: 20, color: Theme.of(context).colorScheme.error),
+                        Icon(a.icon, size: 20, color: a.count > 0 ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.onSurfaceVariant),
                         const SizedBox(width: 12),
                         Expanded(child: Text(a.label)),
                         const SizedBox(width: 16),
@@ -51,13 +51,20 @@ class AlertBell extends StatelessWidget {
                     ),
                   ),
               ],
-        child: Padding(
+        child: Semantics(
+          label: total == 0 ? 'Notificações, nenhum alerta' : 'Notificações, $total alertas',
+          button: true,
+          excludeSemantics: true,
+          child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          child: Center(child: Padding(
           padding: const EdgeInsets.all(8),
           child: Badge(
             isLabelVisible: total > 0,
             label: Text(total > 99 ? '99+' : '$total'),
             child: Icon(total > 0 ? Icons.notifications_active_outlined : Icons.notifications_none),
           ),
+        ))),
         ),
       );
     },

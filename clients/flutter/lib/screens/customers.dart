@@ -1,13 +1,17 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/load_error.dart';
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
+import 'receivables.dart';
 import 'sales_common.dart';
 import 'sales_quotes.dart' show newQuote;
 
@@ -19,6 +23,63 @@ String fmtDocument(Object? v) {
   if (RegExp(r'^\d{11}$').hasMatch(d)) return '${d.substring(0, 3)}.${d.substring(3, 6)}.${d.substring(6, 9)}-${d.substring(9)}';
   if (RegExp(r'^\d{14}$').hasMatch(d)) return '${d.substring(0, 2)}.${d.substring(2, 5)}.${d.substring(5, 8)}/${d.substring(8, 12)}-${d.substring(12)}';
   return d;
+}
+
+/// The 27 Brazilian states, for the UF dropdown.
+const _ufs = {
+  'AC': 'AC',
+  'AL': 'AL',
+  'AP': 'AP',
+  'AM': 'AM',
+  'BA': 'BA',
+  'CE': 'CE',
+  'DF': 'DF',
+  'ES': 'ES',
+  'GO': 'GO',
+  'MA': 'MA',
+  'MT': 'MT',
+  'MS': 'MS',
+  'MG': 'MG',
+  'PA': 'PA',
+  'PB': 'PB',
+  'PR': 'PR',
+  'PE': 'PE',
+  'PI': 'PI',
+  'RJ': 'RJ',
+  'RN': 'RN',
+  'RS': 'RS',
+  'RO': 'RO',
+  'RR': 'RR',
+  'SC': 'SC',
+  'SP': 'SP',
+  'SE': 'SE',
+  'TO': 'TO',
+};
+
+/// A stored UF that is not one of the 27 (old data typed by hand) would break the dropdown: it is upper-cased, or dropped when unknown.
+Map<String, dynamic> _normalizeUf(Map<String, dynamic> m, String key) {
+  final v = '${m[key] ?? ''}'.trim().toUpperCase();
+  return {...m, key: _ufs.containsKey(v) ? v : null};
+}
+
+String _digits(Object? v) => '${v ?? ''}'.replaceAll(RegExp(r'\D'), '');
+
+/// Simple format checks on the fields that changed: CNPJ/CPF has 11 or 14 digits, CEP has 8. Old values nobody touched never block a save.
+/// [prefix] is the form key prefix of the fields ('company.' or ''); [before] the values already stored.
+Map<String, List<String>> _formatErrors(Map<String, dynamic> now, Map<String, dynamic>? before, {String prefix = ''}) {
+  final errors = <String, List<String>>{};
+  bool changed(String k) => _digits(now[k]) != _digits(before?[k]);
+  final doc = _digits(now['document']);
+  if (doc.isNotEmpty && changed('document') && doc.length != 11 && doc.length != 14) {
+    errors['${prefix}document'] = ['CNPJ tem 14 dígitos e CPF tem 11'];
+  }
+  final zip = _digits(now['zipCode']);
+  if (zip.isNotEmpty && changed('zipCode') && zip.length != 8) errors['${prefix}zipCode'] = ['CEP tem 8 dígitos'];
+  return errors;
+}
+
+void _throwIfInvalid(Map<String, List<String>> errors) {
+  if (errors.isNotEmpty) throw ApiException(400, 'Confira os campos destacados.', errors);
 }
 
 Map<String, dynamic>? _defaultAddress(Map<String, dynamic> c) => c['defaultAddress'] as Map<String, dynamic>?;
@@ -35,8 +96,8 @@ const _companyFields = [
   FieldSpec('complement', 'Complemento'),
   FieldSpec('district', 'Bairro'),
   FieldSpec('city', 'Cidade'),
-  FieldSpec('uf', 'UF'),
-  FieldSpec('zipCode', 'CEP'),
+  FieldSpec('uf', 'UF', type: FieldType.choice, choices: _ufs),
+  FieldSpec('zipCode', 'CEP', hint: '8 dígitos'),
   FieldSpec('contact', 'Contato'),
   FieldSpec('email', 'E-mail'),
   FieldSpec('phone', 'Telefone'),
@@ -45,7 +106,7 @@ const _companyFields = [
 ];
 
 List<FieldSpec> _companyFormFields() => [
-  for (final f in _companyFields) FieldSpec('company.${f.key}', f.label, type: f.type, hint: f.hint, lookup: f.lookup, defaultValue: f.defaultValue),
+  for (final f in _companyFields) FieldSpec('company.${f.key}', f.label, type: f.type, hint: f.hint, lookup: f.lookup, defaultValue: f.defaultValue, choices: f.choices),
 ];
 
 (Map<String, dynamic>, Map<String, dynamic>) _splitCompany(Map<String, dynamic> b) {
@@ -71,8 +132,8 @@ const _addressFields = [
   FieldSpec('complement', 'Complemento'),
   FieldSpec('district', 'Bairro'),
   FieldSpec('city', 'Cidade'),
-  FieldSpec('uf', 'UF', required: true),
-  FieldSpec('zipCode', 'CEP'),
+  FieldSpec('uf', 'UF', required: true, type: FieldType.choice, choices: _ufs),
+  FieldSpec('zipCode', 'CEP', hint: '8 dígitos'),
   FieldSpec('buyer', 'Contato'),
   FieldSpec('email', 'E-mail'),
   FieldSpec('phone', 'Telefone'),
@@ -90,6 +151,9 @@ final _shippingFields = [
           _ => f.label,
         },
         required: f.required,
+        type: f.type,
+        choices: f.choices,
+        hint: f.hint,
       ),
 ];
 
@@ -120,6 +184,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       ],
       onSubmit: (b) async {
         final (rest, company) = _splitCompany(b);
+        _throwIfInvalid(_formatErrors(company, null, prefix: 'company.'));
         final body = <String, dynamic>{'consumerType': 'Normal', 'active': true, ...rest, 'company': company};
         // Starting point only: the first delivery local copies the company data when it is complete enough to be saved.
         if (fmt(company['document']).isNotEmpty && fmt(company['uf']).isNotEmpty) {
@@ -217,10 +282,11 @@ class _CustomerScreenState extends State<CustomerScreen> {
         const FieldSpec('legacyCode', 'Código antigo'),
         ..._companyFormFields(),
       ],
-      initial: {..._c, if (company != null) for (final e in company.entries) 'company.${e.key}': e.value},
+      initial: {..._c, if (company != null) for (final e in _normalizeUf(company, 'uf').entries) 'company.${e.key}': e.value},
       readOnly: !s.canCustomers,
       onSubmit: (b) async {
         final (rest, co) = _splitCompany(b);
+        _throwIfInvalid(_formatErrors(co, company, prefix: 'company.'));
         return _save({...rest, 'company': co});
       },
     );
@@ -240,6 +306,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
   @override
   Widget build(BuildContext context) {
     final s = widget.session;
+    // The pencil is the one way to edit the company data; the tabs scroll when the page is narrow.
     return DefaultTabController(
       length: 4,
       child: Scaffold(
@@ -255,6 +322,8 @@ class _CustomerScreenState extends State<CustomerScreen> {
               ),
           ],
           bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: 'Empresa'),
               Tab(text: 'Locais de entrega'),
@@ -265,7 +334,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
         ),
         body: TabBarView(
           children: [
-            _CustomerCompany(session: s, customer: _c, canEdit: s.canCustomers, onEdit: _edit),
+            _CustomerCompany(session: s, customer: _c),
             _CustomerAddresses(session: s, customerId: id),
             _CustomerQuotes(session: s, customerId: id, customerName: '${_c['name']}'),
             _CustomerOrders(session: s, customerId: id),
@@ -277,12 +346,10 @@ class _CustomerScreenState extends State<CustomerScreen> {
 }
 
 class _CustomerCompany extends StatelessWidget {
-  const _CustomerCompany({required this.session, required this.customer, required this.canEdit, required this.onEdit});
+  const _CustomerCompany({required this.session, required this.customer});
 
   final Session session;
   final Map<String, dynamic> customer;
-  final bool canEdit;
-  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -293,9 +360,8 @@ class _CustomerCompany extends StatelessWidget {
       children: [
         Section(
           title: 'Dados da empresa',
-          actions: [if (canEdit) TextButton.icon(onPressed: onEdit, icon: const Icon(Icons.edit_outlined), label: const Text('Editar'))],
           child: !filled
-              ? const Text('Sem dados cadastrados. Use Editar para informar CNPJ/CPF, endereço e contato.')
+              ? const Text('Sem dados cadastrados. Use o lápis (Editar cadastro) para informar CNPJ/CPF, endereço e contato.')
               : InfoGrid([
                   ('Nome', fmt(customer['name'])),
                   ('Fantasia', fmt(customer['tradeName'])),
@@ -331,6 +397,7 @@ class _CustomerReceivable extends StatefulWidget {
 class _CustomerReceivableState extends State<_CustomerReceivable> {
   Map<String, dynamic>? _balance;
   bool _loaded = false;
+  String? _error;
 
   @override
   void initState() {
@@ -340,18 +407,37 @@ class _CustomerReceivableState extends State<_CustomerReceivable> {
 
   Future<void> _load() async {
     Map<String, dynamic>? b;
+    String? error;
     try {
       final rows = await widget.session.api.get('/api/receivables/balances', {'customerId': widget.customerId});
       b = rows is List && rows.isNotEmpty ? rows.first as Map<String, dynamic> : null;
-    } catch (_) {
-      b = null;
+    } catch (e) {
+      // A failed read is not "nothing owed": say so and offer another try.
+      error = friendlyError(e);
     }
     if (mounted) {
       setState(() {
         _balance = b;
+        _error = error;
         _loaded = true;
       });
     }
+  }
+
+  /// The customer's duplicatas in the full receivables list.
+  void _openList() {
+    final session = widget.session;
+    final id = widget.customerId;
+    unawaited(
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            appBar: AppBar(title: const Text('Duplicatas do cliente')),
+            body: ReceivablesScreen(session: session, customerId: id),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -362,7 +448,25 @@ class _CustomerReceivableState extends State<_CustomerReceivable> {
       padding: const EdgeInsets.only(top: 16),
       child: Section(
         title: 'Contas a receber',
-        child: b == null
+        actions: [
+          if (_error == null) TextButton.icon(key: const ValueKey('customer-open-receivables'), onPressed: _openList, icon: const Icon(Icons.list_alt_outlined), label: const Text('Ver duplicatas')),
+        ],
+        child: _error != null
+            ? Row(
+                children: [
+                  Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(child: Text(_error!)),
+                  TextButton(
+                    onPressed: () {
+                      setState(() => _loaded = false);
+                      unawaited(_load());
+                    },
+                    child: const Text('Tentar novamente'),
+                  ),
+                ],
+              )
+            : b == null
             ? const Text('Nada em aberto.')
             : InfoGrid([
                 ('Em aberto', fmtMoney(b['open'])),
@@ -414,9 +518,10 @@ class _CustomerAddressesState extends State<_CustomerAddresses> {
       api: s.api,
       title: current == null ? 'Novo local de entrega' : 'Local de entrega',
       fields: _shippingFields,
-      initial: current,
+      initial: current == null ? null : _normalizeUf(current, 'uf'),
       readOnly: !s.canCustomers,
       onSubmit: (b) async {
+        _throwIfInvalid(_formatErrors(b, current));
         final body = {
           ...?base,
           'legacyCode': current?['legacyCode'],

@@ -131,7 +131,7 @@ void main() {
     testWidgets('rarely used material fields stay folded, units are upper case and a delete names the record', (tester) async {
       final fake = Fake()..role = 'Admin';
       await pumpScreen(tester, fake, (s) => EntityListScreen(session: s, spec: materials));
-      await tester.tap(find.text('Novo'));
+      await tester.tap(find.textContaining('Novo:').first);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('field-code')), findsOneWidget);
       expect(find.byKey(const ValueKey('field-ncm')), findsNothing);

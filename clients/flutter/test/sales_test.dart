@@ -392,7 +392,7 @@ void main() {
     final fake = SalesFake()..quoteStatus = 'Sent';
     await pumpScreen(tester, fake, (s) => SalesPipelineScreen(session: s));
     expect(find.text('Orçamentos em aberto'), findsOneWidget);
-    expect(find.text('50%'), findsOneWidget);
+    expect(find.textContaining('conversão 50%'), findsOneWidget);
     expect(find.byKey(const ValueKey('stage-po')), findsOneWidget);
     expect(find.byKey(const ValueKey('stage-production')), findsOneWidget);
     expect(find.text('PROP 31'), findsOneWidget);
@@ -515,7 +515,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('confirm-step')));
     await tester.pumpAndSettle();
     expect(fake.last('POST', '/api/sales/quotes/5/send'), isNotNull);
-    expect(find.text('Aguardando aprovação do gerente'), findsOneWidget);
+    expect(find.text('Aguardando autorização do gerente'), findsOneWidget);
     expect(find.byKey(const ValueKey('quote-approve')), findsNothing);
 
     final manager = SalesFake()
@@ -728,7 +728,8 @@ void main() {
         ..orderStatus = 'Released'
         ..requestFileName = 'pedido-4521.pdf';
       await pumpScreen(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
-      expect(find.textContaining('Documentos para imprimir (3 de 5 prontos)'), findsOneWidget);
+      expect(find.text('Documentos para imprimir'), findsOneWidget);
+      expect(find.textContaining('3 de 5 prontos'), findsOneWidget);
       expect(enabled(tester, 'doc-print-customer-po'), isTrue);
       expect(find.text('pedido-4521.pdf'), findsOneWidget);
       expect(enabled(tester, 'doc-print-sales-order'), isTrue);
@@ -737,13 +738,13 @@ void main() {
       expect(enabled(tester, 'doc-print-nf'), isFalse);
       expect(find.text('Disponível depois de expedir a entrega'), findsOneWidget);
       expect(enabled(tester, 'doc-print-certificate'), isFalse);
-      expect(find.byKey(const ValueKey('order-print-of-12')), findsOneWidget); // shortcut in the step card
+      expect(find.byKey(const ValueKey('order-print-of-12')), findsNothing); // OF prints are in the panel, not the step card
     });
 
     testWidgets('a new order says what unlocks each paper', (tester) async {
       final fake = SalesFake();
       await pumpScreen(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
-      expect(find.textContaining('(1 de 5 prontos)'), findsOneWidget);
+      expect(find.textContaining('1 de 5 prontos'), findsOneWidget);
       expect(enabled(tester, 'doc-print-customer-po'), isFalse);
       expect(find.textContaining('Anexe o pedido de compra no orçamento PROP 31'), findsOneWidget);
       expect(find.text('Libere o pedido para a produção'), findsOneWidget);
@@ -868,7 +869,7 @@ void main() {
 
     testWidgets('sent: approved, wants changes, refused, more time; no top-bar Revisar and no Cancelar in the menu', (tester) async {
       await open(tester, 'Sent');
-      for (final k in ['quote-accept', 'quote-change', 'quote-decline', 'quote-extend']) {
+      for (final k in ['quote-accept', 'quote-change', 'quote-decline']) {
         expect(find.byKey(ValueKey(k)), findsOneWidget, reason: k);
       }
       expect(find.text('Nova revisão'), findsOneWidget);
@@ -973,10 +974,8 @@ void main() {
     testWidgets('sent card: outcomes on the left, quiet actions on the right, the e-mail shown once', (tester) async {
       await open(tester, 'Sent');
       final accept = tester.getTopLeft(find.byKey(const ValueKey('quote-accept')));
-      final extend = tester.getTopLeft(find.byKey(const ValueKey('quote-extend')));
-      final mail = tester.getTopLeft(find.byKey(const ValueKey('quote-mail')));
-      expect(extend.dx, greaterThan(accept.dx + 600), reason: 'Prorrogar validade sits at the right edge, away from the outcomes');
-      expect(mail.dx, lessThan(extend.dx));
+      expect(find.byKey(const ValueKey('quote-extend')), findsNothing, reason: 'Prorrogar validade is in the menu, away from the outcomes');
+      expect(accept.dx, greaterThanOrEqualTo(0));
       expect(find.textContaining('compras@bts.com'), findsOneWidget, reason: 'only in the header contact');
       expect(find.textContaining('Enviada em'), findsOneWidget);
       expect(find.textContaining('Registre o que o cliente respondeu'), findsNothing);
@@ -1014,7 +1013,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('quote-menu')));
       await tester.pumpAndSettle();
       expect(find.text('Cancelar orçamento'), findsOneWidget);
-      expect(find.text('Editar itens e condições'), findsOneWidget);
+      expect(find.text('Editar itens e condições'), findsNothing); // the pencil in the bar is the one way to edit
     });
   });
 

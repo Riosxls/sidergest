@@ -68,6 +68,7 @@ void main() {
     }
     expect(find.byIcon(Icons.arrow_upward), findsOneWidget);
     await tester.enterText(find.byType(TextField).last, 'bobina');
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
     expect(log.where((r) => r.url.path == '/api/reports/material-consumption').last.url.queryParameters['q'], 'bobina');
   });

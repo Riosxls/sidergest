@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -22,6 +23,9 @@ class LowStockScreen extends StatefulWidget {
 class _LowStockScreenState extends State<LowStockScreen> {
   final _list = GlobalKey<RecordListState>();
 
+  /// How many materials on the list "Gerar para todos" would draft a requisition for.
+  int _eligible = 0;
+
   ApiClient get api => widget.session.api;
 
   Future<void> _draft(List<int> ids) async {
@@ -38,7 +42,10 @@ class _LowStockScreenState extends State<LowStockScreen> {
           content: Text('${created.length} requisição(ões) criada(s), aguardando aprovação'),
           duration: const Duration(seconds: 10),
           persist: false,
-          action: SnackBarAction(label: created.length == 1 ? 'Abrir requisição' : 'Abrir a primeira', onPressed: () => unawaited(openRequisition(context, session, created.first))),
+          action: SnackBarAction(
+            label: created.length == 1 ? 'Abrir requisição' : 'Abrir a primeira',
+            onPressed: () => unawaited(openRequisition(context, session, created.first)),
+          ),
         ),
       );
     }
@@ -63,7 +70,8 @@ class _LowStockScreenState extends State<LowStockScreen> {
         if (e['purchasable'] == true && e['hasOpenRequisition'] != true) e['materialId'] as int,
     ];
     if (ids.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nada a requisitar: os materiais da lista já têm requisição em aberto ou não são comprados')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Nada a requisitar: os materiais da lista já têm requisição em aberto ou não são comprados')));
       return;
     }
     final left = rows.length - ids.length;
@@ -87,6 +95,10 @@ class _LowStockScreenState extends State<LowStockScreen> {
       path: '/api/stock/low-stock',
       searchable: false,
       emptyText: 'Nenhum material abaixo do estoque mínimo',
+      enrich: (items) async {
+        final n = items.where((e) => e['purchasable'] == true && e['hasOpenRequisition'] != true).length;
+        if (mounted && n != _eligible) setState(() => _eligible = n);
+      },
       columns: [
         col('Código', 'code'),
         col('Material', 'description'),
@@ -95,7 +107,7 @@ class _LowStockScreenState extends State<LowStockScreen> {
         ColumnSpec('Máximo', (e) => e['maxStock'] == null ? '—' : '${fmt(e['maxStock'])} ${e['stockUnit']}', numeric: true),
         ColumnSpec('A caminho', (e) => '${fmt(e['incoming'])} ${e['stockUnit']}', numeric: true),
         ColumnSpec('Sugestão de compra', (e) => '${fmt(e['suggestedPurchase'])} ${e['purchaseUnit']}', numeric: true),
-        ColumnSpec('Requisição', (e) => e['hasOpenRequisition'] == true ? 'Em aberto' : (e['purchasable'] == true ? '—' : 'Não comprado')),
+        ColumnSpec('Requisição', (e) => e['hasOpenRequisition'] == true ? 'Em aberto' : (e['purchasable'] == true ? 'Sem requisição' : 'Não é comprado')),
       ],
       rowColor: (ctx, e) => (e['onHand'] as num) <= 0 ? Theme.of(ctx).colorScheme.errorContainer : null,
       rowActions: (e) => [
@@ -107,7 +119,7 @@ class _LowStockScreenState extends State<LowStockScreen> {
               key: const ValueKey('low-stock-draft-all'),
               onPressed: _draftAll,
               icon: const Icon(Icons.assignment_add),
-              label: const Text('Gerar requisições'),
+              label: Text(_eligible > 0 ? 'Gerar para todos ($_eligible)' : 'Gerar para todos'),
             )
           : null,
     );

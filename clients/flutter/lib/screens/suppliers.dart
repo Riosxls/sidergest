@@ -166,10 +166,10 @@ class _PerformanceViewState extends State<PerformanceView> {
           alignment: Alignment.centerLeft,
           child: SegmentedButton<int>(
             segments: const [
-              ButtonSegment(value: 3, label: Text('3 meses')),
-              ButtonSegment(value: 6, label: Text('6 meses')),
-              ButtonSegment(value: 12, label: Text('12 meses')),
-              ButtonSegment(value: 36, label: Text('36 meses')),
+              ButtonSegment(value: 3, label: Text('3m', semanticsLabel: '3 meses')),
+              ButtonSegment(value: 6, label: Text('6m', semanticsLabel: '6 meses')),
+              ButtonSegment(value: 12, label: Text('12m', semanticsLabel: '12 meses')),
+              ButtonSegment(value: 36, label: Text('36m', semanticsLabel: '36 meses')),
             ],
             selected: {_months},
             onSelectionChanged: (v) => setState(() {
@@ -184,7 +184,10 @@ class _PerformanceViewState extends State<PerformanceView> {
           future: _future,
           builder: (context, p) {
             final pct = (p['onTimePercent'] as num).toDouble();
-            final color = p['receivedLines'] == 0 ? cs.outline : (pct >= 90 ? Colors.green : (pct >= 70 ? Colors.orange : cs.error));
+            // Theme colours (readable in both themes) plus a word, so the ring is not the only signal.
+            final noData = p['receivedLines'] == 0;
+            final color = noData ? cs.outline : (pct >= 90 ? cs.primary : (pct >= 70 ? cs.tertiary : cs.error));
+            final rating = noData ? 'Sem recebimentos' : (pct >= 90 ? 'Bom' : (pct >= 70 ? 'Atenção' : 'Crítico'));
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -192,6 +195,7 @@ class _PerformanceViewState extends State<PerformanceView> {
                   title: 'Pontualidade',
                   child: Row(
                     children: [
+                      Column(mainAxisSize: MainAxisSize.min, children: [
                       SizedBox.square(
                         dimension: 96,
                         child: Stack(
@@ -202,6 +206,9 @@ class _PerformanceViewState extends State<PerformanceView> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 6),
+                      Text(rating, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color, fontWeight: FontWeight.w600)),
+                      ]),
                       const SizedBox(width: 24),
                       Expanded(
                         child: InfoGrid([

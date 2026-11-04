@@ -18,6 +18,8 @@ import '../widgets/print_gate.dart';
 import '../widgets/print_panel.dart';
 import '../widgets/record_list.dart';
 import '../widgets/record_shortcuts.dart';
+import '../widgets/record_skeleton.dart';
+import '../widgets/responsive.dart';
 import 'certificates.dart';
 import 'customers.dart';
 import 'production_orders.dart';
@@ -69,9 +71,14 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
   @override
   Widget build(BuildContext context) => RecordList(
     key: _list,
-    filtersActive: _open || _status != null || _late || _month != null || _billTo != null,
+    // "Somente abertos" is how the list starts, so only turning it off or any other filter counts as one the user set.
+    filtersActive: !_open || _status != null || _late || _month != null || _billTo != null,
+    emptyText: 'Nenhum pedido de venda aberto.',
+    emptyAction: widget.session.canSell
+        ? FilledButton.icon(key: const ValueKey('empty-new-order'), onPressed: _new, icon: const Icon(Icons.add), label: const Text('Criar o primeiro pedido'))
+        : null,
     onClearFilters: () => setState(() {
-      _open = false;
+      _open = true;
       _status = null;
       _late = false;
       _month = null;
@@ -83,7 +90,8 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
     searchHint: 'Pedido, cliente ou pedido do cliente',
     filters: [
       ChoiceFilter(label: 'Situação', value: _status, choices: salesOrderStatuses, onChanged: (v) => setState(() => _status = v)),
-      FilterChip(label: const Text('Somente abertos'), selected: _open, onSelected: (v) => setState(() => _open = v)),
+      // A chosen Situação already decides what is listed, so the chip has nothing to say then.
+      FilterChip(label: const Text('Somente abertos'), selected: _open && _status == null, onSelected: _status != null ? null : (v) => setState(() => _open = v)),
       ChoiceFilter(label: 'Entrega no mês', value: _month, choices: _months(), onChanged: (v) => setState(() => _month = v)),
       FilterChip(key: const ValueKey('orders-late'), label: const Text('Atrasados'), selected: _late, onSelected: (v) => setState(() => _late = v)),
       ChoiceFilter(label: 'Faturar para', value: _billTo, choices: billToLabels, onChanged: (v) => setState(() => _billTo = v)),
@@ -94,21 +102,31 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
     columns: [
       col('Pedido', 'reference'),
       col('Cliente', 'customerName'),
-      col('Pedido do cliente', 'customerPo'),
-      labelCol('Situação', 'status', salesOrderStatuses),
-      labelCol('Faturar p/', 'billTo', billToLabels),
-      moneyCol('Total', 'total'),
-      moneyCol('Saldo R\$', 'balanceValue'),
-      ColumnSpec('Saldo kg', (e) => e['balanceKg'] == null ? '' : fmt(e['balanceKg']), numeric: true),
-      dateCol('Entrega', 'nextDue'),
-      ColumnSpec('Pronto', (e) => '${(_n(e['progress']) * 100).round()}%', numeric: true),
       ColumnSpec(
-        'Alerta',
+        'Situação',
         (e) => [
-          if (e['late'] == true) 'Atrasado',
-          if (e['ready'] == true && ['Released', 'PartiallyShipped'].contains(e['status'])) 'Pronto p/ expedir',
+          salesOrderStatuses[e['status']] ?? '${e['status']}',
+          if (e['late'] == true) 'Atrasada',
+          if (_readyToShip(e)) 'Pronto p/ expedir',
         ].join(' · '),
+        // The alert rides with the status, in words as well as in the row colour.
+        cell: (_, e) => Wrap(
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
+          children: [
+            StatusBadge(salesOrderStatuses[e['status']] ?? '${e['status']}', tone: orderTone(e['status'])),
+            if (e['late'] == true) const StatusBadge('Atrasada', tone: Tone.danger),
+            if (_readyToShip(e)) const StatusBadge('Pronto p/ expedir', tone: Tone.success),
+          ],
+        ),
       ),
+      moneyCol('Total', 'total'),
+      ColumnSpec(
+        'Saldo',
+        (e) => e['balanceKg'] == null ? fmtMoney(e['balanceValue']) : '${fmtMoney(e['balanceValue'])} · ${fmt(e['balanceKg'])} kg',
+        numeric: true,
+      ),
+      dateCol('Entrega', 'nextDue'),
     ],
     rowColor: (ctx, e) => e['late'] == true ? toneColors(ctx, Tone.danger).$1 : null,
     onTap: (e) async {
@@ -117,6 +135,8 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
     },
   );
 }
+
+bool _readyToShip(Map<String, dynamic> e) => e['ready'] == true && ['Released', 'PartiallyShipped'].contains(e['status']);
 
 String _measures(Object? spec) {
   if (spec is! Map) return '';
@@ -433,10 +453,28 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     }
   }
 
+  /// Closing the balance cuts the order for good, so the button looks like the destructive action it is.
   List<Widget> _closeAction() => [
     if (s.canSell && status == 'PartiallyShipped')
-      TextButton(key: const ValueKey('order-close-balance'), onPressed: _closeBalance, child: const Text('Encerrar saldo')),
+      TextButton(
+        key: const ValueKey('order-close-balance'),
+        style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+        onPressed: _closeBalance,
+        child: const Text('Encerrar saldo'),
+      ),
   ];
+
+  /// The "Mais" menu of a step card: the rare actions that would otherwise crowd the card.
+  Widget _moreMenu(List<PopupMenuEntry<VoidCallback>> items) => PopupMenuButton<VoidCallback>(
+    key: const ValueKey('order-card-more'),
+    tooltip: 'Mais ações',
+    onSelected: (f) => f(),
+    itemBuilder: (_) => items,
+    child: const Padding(
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [Text('Mais'), Icon(Icons.arrow_drop_down)]),
+    ),
+  );
 
   Future<void> _edit() async {
     final r = await Navigator.of(context).push<Map<String, dynamic>>(
@@ -544,18 +582,6 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
   Widget _cardPrint(String key, String label, Future<void> Function() onPressed) =>
       TextButton.icon(key: ValueKey(key), onPressed: onPressed, icon: const Icon(Icons.print_outlined), label: Text(label));
 
-  List<Widget> _ofPrints(Map<String, dynamic> o) {
-    final ofs = (o['lines'] as List).cast<Map<String, dynamic>>().where((l) => l['productionOrderId'] != null).fold(<int, String>{}, (m, l) => m..[l['productionOrderId'] as int] = '${l['productionReference']}');
-    return [
-      for (final e in ofs.entries)
-        _cardPrint(
-          'order-print-of-${e.key}',
-          ofs.length == 1 ? 'Imprimir OF' : 'Imprimir ${e.value}',
-          () => _printOf(e.key, e.value),
-        ),
-    ];
-  }
-
   Widget _nextStep(Map<String, dynamic> o) {
     final pct = '${(_n(o['progress']) * 100).round()}%';
     FilledButton primary(String key, String label, IconData icon, VoidCallback onPressed) =>
@@ -568,10 +594,11 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       ),
       'Released' || 'PartiallyShipped' when o['ready'] == true && !_certified => NextStepCard(
         title: 'Produção pronta · falta o certificado',
-        message: 'Emita o certificado de qualidade antes de programar a entrega. Se o cliente não exige certificado, dispense.',
+        message: 'Crie o certificado de qualidade antes de programar a entrega. Se o cliente não exige certificado, dispense.',
         tone: Tone.warning,
         actions: [
-          if (s.canCertificate) primary('order-certificate', 'Emitir certificado', Icons.verified_outlined, _newCertificate),
+          // One filled action, one outlined; the rare ones live under "Mais".
+          if (s.canCertificate) primary('order-certificate', 'Novo certificado', Icons.verified_outlined, _newCertificate),
           if (s.canShip)
             OutlinedButton.icon(
               key: const ValueKey('order-deliver'),
@@ -579,17 +606,28 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
               icon: const Icon(Icons.local_shipping_outlined),
               label: const Text('Programar entrega'),
             ),
-          if (s.canIssueCertificate)
-            TextButton(key: const ValueKey('order-certificate-waive'), onPressed: () => _waiveCertificate(true), child: const Text('Dispensar certificado')),
-          ..._ofPrints(o),
-          ..._closeAction(),
+          if (s.canIssueCertificate || (s.canSell && status == 'PartiallyShipped'))
+            _moreMenu([
+              if (s.canIssueCertificate)
+                PopupMenuItem(
+                  key: const ValueKey('order-certificate-waive'),
+                  value: () => unawaited(_waiveCertificate(true)),
+                  child: const Text('Dispensar certificado'),
+                ),
+              if (s.canSell && status == 'PartiallyShipped')
+                PopupMenuItem(
+                  key: const ValueKey('order-close-balance'),
+                  value: () => unawaited(_closeBalance()),
+                  child: Text('Encerrar saldo', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                ),
+            ]),
         ],
       ),
       'Released' || 'PartiallyShipped' when o['ready'] == true => NextStepCard(
         title: 'Pronto para expedir',
         message: 'Há produto acabado para os itens em aberto. Programe a entrega.',
         tone: Tone.success,
-        actions: [if (s.canShip) primary('order-deliver', 'Programar entrega', Icons.local_shipping, _planDelivery), ..._closeAction(), ..._ofPrints(o)],
+        actions: [if (s.canShip) primary('order-deliver', 'Programar entrega', Icons.local_shipping, _planDelivery), ..._closeAction()],
       ),
       'Released' || 'PartiallyShipped' => NextStepCard(
         title: 'Em produção · $pct pronto',
@@ -606,7 +644,6 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
               label: const Text('Programar entrega'),
             ),
           ..._closeAction(),
-          ..._ofPrints(o),
         ],
       ),
       'Shipped' => NextStepCard(
@@ -673,11 +710,6 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
           value: _edit,
           child: const ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar')),
         ),
-      if (s.canShip && ['Released', 'PartiallyShipped'].contains(status))
-        PopupMenuItem(
-          value: _planDelivery,
-          child: const ListTile(leading: Icon(Icons.local_shipping_outlined), title: Text('Programar entrega')),
-        ),
       if (s.canSell && ['Released', 'PartiallyShipped'].contains(status))
         PopupMenuItem(
           value: _reschedule,
@@ -716,7 +748,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       body: _error != null && o == null
           ? LoadError(message: _error!, onRetry: _load)
           : o == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const RecordSkeleton()
           : RefreshIndicator(onRefresh: () => _load(report: true), child: _body(o)),
       ),
     );
@@ -836,10 +868,6 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
   Widget _deliveriesSection(Map<String, dynamic> o, List<Map<String, dynamic>> deliveries) =>
     Section(
       title: 'Entregas (${deliveries.length})',
-      actions: [
-        if (s.canShip && ['Released', 'PartiallyShipped'].contains(o['status']))
-          FilledButton.tonalIcon(onPressed: _planDelivery, icon: const Icon(Icons.add), label: const Text('Programar')),
-      ],
       child: SimpleTable(
         columns: [
           col('Entrega', 'reference'),
@@ -870,7 +898,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
             key: const ValueKey('order-new-certificate'),
             onPressed: _newCertificate,
             icon: const Icon(Icons.add),
-            label: const Text('Emitir certificado'),
+            label: const Text('Novo certificado'),
           ),
       ],
       child: SimpleTable(
@@ -912,7 +940,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         for (final l in lines)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
-            child: LayoutBuilder(builder: (context, box) => _productionRow(l, narrow: box.maxWidth < 640)),
+            child: LayoutBuilder(builder: (context, box) => _productionRow(l, narrow: box.maxWidth < 860)),
           ),
       ],
     ),
@@ -935,12 +963,26 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     );
     final badges = <Widget>[
       if (l['productionReference'] != null)
-        InkWell(
-          onTap: () => openProductionOrder(context, s, l['productionOrderId'] as int).then((_) => _load()),
-          child: StatusBadge(
-            '${l['productionReference']} · ${productionStatuses[l['productionStatus']] ?? l['productionStatus']}',
-            tone: productionTone(l['productionStatus']),
-            icon: Icons.open_in_new,
+        Semantics(
+          button: true,
+          label: 'Abrir ${l['productionReference']}',
+          child: Tooltip(
+            message: 'Abrir a ordem de fabricação',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              onTap: () => openProductionOrder(context, s, l['productionOrderId'] as int).then((_) => _load()),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: kMinTouchTarget),
+                child: Center(
+                  widthFactor: 1,
+                  child: StatusBadge(
+                    '${l['productionReference']} · ${productionStatuses[l['productionStatus']] ?? l['productionStatus']}',
+                    tone: productionTone(l['productionStatus']),
+                    icon: Icons.open_in_new,
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       if (l['productionOrderId'] != null)
@@ -972,8 +1014,12 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     return Row(
       children: [
         SizedBox(width: 220, child: info),
-        for (final b in badges) Padding(padding: const EdgeInsets.only(right: 8), child: b),
-        Expanded(child: meter),
+        Flexible(
+          flex: 2,
+          child: Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.xs, crossAxisAlignment: WrapCrossAlignment.center, children: badges),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(flex: 2, child: meter),
       ],
     );
   }
@@ -1007,7 +1053,7 @@ class _OrderItems extends StatelessWidget {
 
   Widget _table(BuildContext context) {
     final theme = Theme.of(context);
-    final grey = TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant);
+    final grey = theme.textTheme.bodySmall!.copyWith(color: theme.colorScheme.onSurfaceVariant);
     Widget cell(Widget child, {bool right = false}) => Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
       child: Align(alignment: right ? Alignment.centerRight : Alignment.centerLeft, child: child),
@@ -1076,7 +1122,7 @@ class _OrderItems extends StatelessWidget {
 
   Widget _cards(BuildContext context) {
     final theme = Theme.of(context);
-    final grey = TextStyle(fontSize: 12.5, color: theme.colorScheme.onSurfaceVariant);
+    final grey = theme.textTheme.bodySmall!.copyWith(color: theme.colorScheme.onSurfaceVariant);
     return Column(
       key: const ValueKey('order-items'),
       children: [
@@ -1174,8 +1220,8 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: Text('Programar entrega · ${widget.order['reference']}'),
-    content: SizedBox(
-      width: 560,
+    content: DialogBody(
+      ideal: 560,
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1237,8 +1283,8 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
                         controller: _qty[l['id']],
                         textAlign: TextAlign.right,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        // Enter moves to the next field; only the last one (the notes) submits.
                         textInputAction: TextInputAction.next,
-                        onSubmitted: (_) => _ok(),
                         decoration: InputDecoration(labelText: 'Qtd. (${l['unit']})', border: const OutlineInputBorder(), isDense: true),
                       ),
                     ),
@@ -1247,6 +1293,8 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
               ),
             TextField(
               controller: _notes,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _ok(),
               decoration: const InputDecoration(labelText: 'Observações', border: OutlineInputBorder(), isDense: true),
             ),
             if (_error != null)
@@ -1304,8 +1352,8 @@ class _ReasonDialogState extends State<ReasonDialog> {
   Widget build(BuildContext context) => AlertDialog(
     icon: const Icon(Icons.warning_amber_rounded),
     title: Text(widget.title),
-    content: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 460),
+    content: DialogBody(
+      ideal: 460,
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1341,7 +1389,8 @@ class _ReasonDialogState extends State<ReasonDialog> {
       ),
     ),
     actions: [
-      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+      // "Cancelar" would read as cancelling the order itself; this only closes the dialog.
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Voltar')),
       FilledButton(
         key: const ValueKey('confirm-step'),
         style: widget.danger ? dangerButtonStyle(context) : null,

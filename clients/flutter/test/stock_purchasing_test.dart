@@ -564,7 +564,7 @@ void main() {
     final fake = Fake()..role = 'Purchasing';
     await pumpScreen(tester, fake, (s) => QuotationScreen(session: s, id: 7));
     expect(find.text('Sem resposta'), findsOneWidget);
-    await tester.tap(find.text('Comparativo'));
+    await tester.tap(find.textContaining('Comparativo'));
     await tester.pumpAndSettle();
     expect(find.text('1º'), findsOneWidget);
     expect(find.text('+8,5 %'), findsOneWidget);

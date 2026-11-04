@@ -5,6 +5,7 @@ import '../labels.dart';
 import '../session.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/load_error.dart';
+import '../widgets/pipeline.dart' show StatusBadge, Tone;
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
 import 'product_detail.dart';
@@ -76,10 +77,21 @@ class _BalancesScreenState extends State<BalancesScreen> {
         col('Código', 'itemCode'),
         col('Descrição', 'itemDescription'),
         col('Local', 'locationCode'),
-        labelCol('Tipo local', 'locationKind', locationKinds),
         col('Lote', 'lotCode'),
         labelCol('Situação lote', 'lotStatus', lotStatuses),
-        col('Quantidade', 'quantity', numeric: true),
+        // The red row says it with colour only; the badge says it in words.
+        ColumnSpec(
+          'Quantidade',
+          (e) => fmt(e['quantity']),
+          numeric: true,
+          cell: (context, e) => (e['quantity'] as num) < 0
+              ? Wrap(
+                  spacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [const StatusBadge('Negativo', tone: Tone.danger, icon: Icons.warning_amber_rounded), Text(fmt(e['quantity']))],
+                )
+              : Text(fmt(e['quantity'])),
+        ),
       ],
       rowColor: (_, e) => (e['quantity'] as num) < 0 || e['lotStatus'] == 'Rejected'
           ? cs.errorContainer

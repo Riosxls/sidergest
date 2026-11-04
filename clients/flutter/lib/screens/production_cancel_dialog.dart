@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../theme_tokens.dart';
+import '../widgets/responsive.dart';
+
 /// Asks why an OF is cancelled; the technical kind is for a planning reason (duplicate, wrong product...) and is not counted as a loss.
 class CancelOrderDialog extends StatefulWidget {
   const CancelOrderDialog({super.key, required this.reference});
@@ -22,9 +25,9 @@ class _CancelOrderDialogState extends State<CancelOrderDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text('Cancelar ${widget.reference}'),
+    title: Text('Cancelar ${widget.reference}?'),
     content: SizedBox(
-      width: 460,
+      width: dialogWidth(context, 460),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -34,9 +37,11 @@ class _CancelOrderDialogState extends State<CancelOrderDialog> {
             controller: _reason,
             autofocus: true,
             onChanged: (_) => setState(() {}),
+            minLines: 2,
+            maxLines: 4,
             decoration: const InputDecoration(labelText: 'Motivo'),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           SwitchListTile(
             key: const ValueKey('cancel-technical'),
             contentPadding: EdgeInsets.zero,
@@ -49,11 +54,12 @@ class _CancelOrderDialogState extends State<CancelOrderDialog> {
       ),
     ),
     actions: [
-      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Voltar')),
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Manter OF')),
       FilledButton(
+        style: dangerButtonStyle(context),
         key: const ValueKey('cancel-confirm'),
         onPressed: _reason.text.trim().isEmpty ? null : () => Navigator.pop(context, (reason: _reason.text.trim(), technical: _technical)),
-        child: const Text('Cancelar OF'),
+        child: const Text('Confirmar cancelamento'),
       ),
     ],
   );

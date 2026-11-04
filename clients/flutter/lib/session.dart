@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 import 'prefs.dart';
 import 'widgets/alerts.dart';
+import 'widgets/responsive.dart' show isTouchPlatform;
 
 const defaultApiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://localhost:8080');
 
@@ -33,8 +34,8 @@ class Session extends ChangeNotifier {
   ThemeMode themeMode = ThemeMode.system;
   final alerts = AlertCenter();
 
-  /// Interface density: compact (default) fits more rows; comfortable has larger touch targets.
-  bool comfortable = false;
+  /// Interface density: compact (default on desktop and web) fits more rows; comfortable (default on phones and tablets) has larger touch targets.
+  bool comfortable = isTouchPlatform;
 
   /// Text size multiplier (1 = normal).
   double textScale = 1;
@@ -149,7 +150,7 @@ class Session extends ChangeNotifier {
       themeMode = ThemeMode.values.asNameMap()[p.getString('themeMode')] ?? ThemeMode.system;
       remember = p.getBool('rememberLogin') ?? true;
       lastUser = p.getString('lastUser') ?? '';
-      comfortable = p.getBool('comfortable') ?? false;
+      comfortable = p.getBool('comfortable') ?? isTouchPlatform;
       textScale = snapTextScale(p.getDouble('textScale') ?? 1);
       homeScreen = p.getString('homeScreen') ?? 'dashboard';
       final refresh = p.getInt('dashboardRefreshMinutes') ?? 2;

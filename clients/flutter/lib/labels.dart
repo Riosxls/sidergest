@@ -52,7 +52,7 @@ const auditEntities = [
 ];
 
 /// Portuguese names for audit entities that are not shown by their class name.
-const auditEntityLabels = {'PurchasingSettings': 'Parâmetros de Suprimentos', 'BackupSettings': 'Cópia de segurança'};
+const auditEntityLabels = {  'PurchasingSettings': 'Parâmetros de Suprimentos',  'BackupSettings': 'Cópia de segurança',  'Customer': 'Cliente',  'CustomerAddress': 'Endereço de cliente',  'Supplier': 'Fornecedor',  'SupplierAddress': 'Endereço de fornecedor',  'Product': 'Produto',  'Material': 'Matéria-prima',  'AppUser': 'Usuário',  'StockSettings': 'Parâmetros de Estoque',  'StockLocation': 'Local de estoque',  'StockClosing': 'Fechamento de estoque',  'StockDocument': 'Documento de estoque',  'Quote': 'Orçamento',  'SalesOrder': 'Pedido de venda',  'Delivery': 'Entrega',  'ProductionOrder': 'Ordem de fabricação',  'PurchaseRequisition': 'Requisição de compra',  'PurchaseOrder': 'Pedido de compra',  'FiscalDocument': 'Nota fiscal',  'FiscalSettings': 'Parâmetros fiscais',  'QualityCertificate': 'Certificado',  'ReceivablePayment': 'Baixa de recebimento',};
 
 const policyDescriptions = {
   'read': 'Consultar todos os cadastros e telas',
@@ -199,7 +199,7 @@ const lostReasons = {
   'CustomerGaveUp': 'Cliente desistiu do pedido',
 };
 
-const billToLabels = {'Ebt': 'EBT', 'Bts': 'BTS'};
+const billToLabels = {'Ebt': 'EBT', 'Bts': 'BST'};
 const orderOrigins = {'Email': 'E-mail', 'Fax': 'Fax', 'Verbal': 'Verbal', 'System': 'Sistema'};
 const deliveryConditions = {'Bk': 'BK', 'Nbk': 'NBK', 'Gbk': 'GBK'};
 const saleUnits = {'KG': 'KG', 'PC': 'PÇ'};

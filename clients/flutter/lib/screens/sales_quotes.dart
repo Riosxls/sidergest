@@ -13,6 +13,7 @@ import '../entities.dart';
 import '../labels.dart';
 import '../reports/print_docs.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/actions.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/drafts.dart';
@@ -24,6 +25,7 @@ import '../widgets/print_panel.dart';
 import '../widgets/record_list.dart';
 import '../widgets/record_shortcuts.dart';
 import '../widgets/record_skeleton.dart';
+import '../widgets/responsive.dart';
 import '../workdays.dart';
 import 'customers.dart';
 import 'quote_email_dialog.dart';
@@ -315,21 +317,21 @@ class _QuotesScreenState extends State<QuotesScreen> {
     columns: [
       col('Orçamento', 'reference'),
       col('Cliente', 'customerName'),
-      ColumnSpec('Situação', (e) => quoteSituation(e, short: true), cell: (c, e) => StatusBadge(quoteSituation(e, short: true), tone: quoteToneOf(e))),
-      // The alert sits next to the situation: it is what the salesperson has to act on.
+      // The alerts ride with the situation: they are what the salesperson has to act on.
       ColumnSpec(
-        'Alerta',
-        quoteAlert,
+        'Situação',
+        (e) => [quoteSituation(e, short: true), quoteAlert(e)].where((t) => t.isNotEmpty).join(' · '),
         cell: (c, e) => Wrap(
-          spacing: 4,
-          runSpacing: 2,
-          children: [for (final a in quoteAlerts(e)) StatusBadge(a.text, tone: a.tone, icon: a.icon)],
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
+          children: [
+            StatusBadge(quoteSituation(e, short: true), tone: quoteToneOf(e)),
+            for (final a in quoteAlerts(e)) StatusBadge(a.text, tone: a.tone, icon: a.icon),
+          ],
         ),
       ),
       moneyCol('Total', 'total'),
       dateCol('Validade', 'validUntil'),
-      dateCol('Criada', 'createdAt'),
-      col('Criada por', 'createdBy'),
     ],
     phoneTile: _phoneTile,
     rowActions: (e) => [
@@ -607,7 +609,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     final d = (1 - typed / list) * 100;
     if (d.abs() < 0.005) return '$base · igual à tabela';
     final pct = fmt(double.parse(d.abs().toStringAsFixed(2)));
-    final over = _maxDiscount != null && d > _maxDiscount! ? ' (acima do limite de ${fmt(_maxDiscount)}%: vai para aprovação)' : '';
+    final over = _maxDiscount != null && d > _maxDiscount! ? ' (acima do limite de ${fmt(_maxDiscount)}%: vai para autorização)' : '';
     return '$base · ${d > 0 ? 'desconto' : 'acréscimo'} de $pct%$over';
   }
 
@@ -632,14 +634,14 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     if (widget.asOrder || limit == null) return const SizedBox.shrink();
     final p = _pricing();
     final String? message = p.discount > limit
-        ? 'O maior desconto sobre a tabela é ${fmt(double.parse(p.discount.toStringAsFixed(2)))}% (limite ${fmt(limit)}%), na ${_lineName(p.line)}. O envio vai para a aprovação do gerente comercial.'
+        ? 'O maior desconto sobre a tabela é ${fmt(double.parse(p.discount.toStringAsFixed(2)))}% (limite ${fmt(limit)}%), na ${_lineName(p.line)}. O envio vai para a autorização do gerente comercial.'
         : _offListApproval && p.offList > 0
-        ? '${p.offList} ${p.offList == 1 ? 'item tem' : 'itens têm'} preço digitado sem preço de tabela para comparar. O envio vai para a aprovação do gerente comercial.'
+        ? '${p.offList} ${p.offList == 1 ? 'item tem' : 'itens têm'} preço digitado sem preço de tabela para comparar. O envio vai para a autorização do gerente comercial.'
         : null;
     if (message == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 8),
-      child: NextStepCard(key: const ValueKey('quote-approval-banner'), title: 'Vai precisar de aprovação', message: message, tone: Tone.warning),
+      child: NextStepCard(key: const ValueKey('quote-approval-banner'), title: 'Vai precisar de autorização', message: message, tone: Tone.warning),
     );
   }
 
@@ -899,7 +901,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
         ? InputDecorator(
             key: const ValueKey('quote-custom-term'),
             decoration: InputDecoration(
-              labelText: 'Prazo * (personalizado)',
+              labelText: 'Prazo de pagamento * (personalizado)',
               errorText: _errTerm,
               border: const OutlineInputBorder(),
               isDense: true,
@@ -1059,7 +1061,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
         _total('Produtos', fmtMoney(parts.products)),
         _total('IPI', fmtMoney(parts.ipi)),
         if (parts.icms > 0) _total('ICMS (estimativa)', fmtMoney(parts.icms)),
-        _total('Total (lista e PDF)', fmtMoney(parts.products + parts.ipi), strong: true, key: const ValueKey('quote-estimate')),
+        _total(widget.asOrder ? 'Total do pedido' : 'Total do orçamento', fmtMoney(parts.products + parts.ipi), strong: true, key: const ValueKey('quote-estimate')),
       ],
     );
     return Material(
@@ -1107,9 +1109,13 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 700;
-    final w = wide ? 300.0 : double.infinity;
     final parts = estimateParts(_lines);
+    // The layout follows the room the page is given (it can sit beside the sidebar), not the window.
+    return LayoutBuilder(builder: (context, box) => _editorPage(context, parts, wide: box.maxWidth >= 700));
+  }
+
+  Widget _editorPage(BuildContext context, ({num products, num ipi, num icms}) parts, {required bool wide}) {
+    final w = wide ? 300.0 : double.infinity;
     return DiscardGuard(
       isDirty: () => _signature() != _initial,
       child: CallbackShortcuts(
@@ -1319,13 +1325,13 @@ class _QuoteScreenState extends State<QuoteScreen> {
     if (q['status'] == 'Draft' && q['needsApproval'] == true) {
       final ok = await confirmStep(
         context,
-        title: 'Enviar para aprovação?',
+        title: 'Enviar para autorização?',
         message:
-            'O desconto deste orçamento (${fmt(q['totals']['maxDiscountPercent'])}%) passa do limite de ${fmt(_maxDiscount)}%. Ele vai para o gerente comercial aprovar antes de seguir ao cliente.',
-        confirmLabel: 'Enviar para aprovação',
+            'O desconto deste orçamento (${fmt(q['totals']['maxDiscountPercent'])}%) passa do limite de ${fmt(_maxDiscount)}%. Ele vai para o gerente comercial autorizar antes de seguir ao cliente.',
+        confirmLabel: 'Enviar para autorização',
         icon: Icons.verified_user_outlined,
       );
-      if (ok && mounted) await _act('send', success: 'Enviada para aprovação do gerente');
+      if (ok && mounted) await _act('send', success: 'Enviada para autorização do gerente');
       return;
     }
     // This step records that the quote went to the customer; the system sends nothing. The dialog and the message say so.
@@ -1393,8 +1399,11 @@ class _QuoteScreenState extends State<QuoteScreen> {
     final q = _q;
     if (q == null) return;
     final registers = q['status'] != 'Sent';
+    Map<String, dynamic>? sent;
+    // The dialog stays open, with its button busy, while the PDF is built and posted; a failure leaves it open for another try.
     final form = await showDialog<Map<String, String>>(
       context: context,
+      barrierDismissible: false,
       builder: (c) => QuoteEmailDialog(
         to: '${q['sentTo'] ?? q['contactEmail'] ?? ''}'.trim(),
         subject: _mailSubject(q),
@@ -1402,21 +1411,24 @@ class _QuoteScreenState extends State<QuoteScreen> {
         from: _mailFrom,
         fileName: 'Orçamento ${q['reference']}.pdf',
         registers: registers,
+        onSend: (form) async {
+          final r = await runAction(
+            c,
+            () async {
+              final pdf = await buildQuotePdf(api, q);
+              return api.post('$base/email', {...form, 'pdfBase64': base64Encode(pdf), 'fileName': 'Orçamento ${q['reference']}.pdf'});
+            },
+            success: registers ? 'E-mail enviado e envio registrado' : 'E-mail enviado',
+          );
+          if (r is Map<String, dynamic>) sent = r;
+          return r is Map<String, dynamic>;
+        },
       ),
     );
-    if (form == null || !mounted) return;
-    final r = await runAction(
-      context,
-      () async {
-        final pdf = await buildQuotePdf(api, q);
-        return api.post('$base/email', {...form, 'pdfBase64': base64Encode(pdf), 'fileName': 'Orçamento ${q['reference']}.pdf'});
-      },
-      success: registers ? 'E-mail enviado e envio registrado' : 'E-mail enviado',
-    );
-    if (r is Map<String, dynamic> && mounted) {
-      setState(() => _q = r);
-      unawaited(_load());
-    }
+    final r = sent;
+    if (form == null || r == null || !mounted) return;
+    setState(() => _q = r);
+    unawaited(_load());
   }
 
   /// Opens the user's mail program with the recipient, subject and text filled in. The PDF still has to be attached (print/share button).
@@ -1474,7 +1486,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       context,
       title: 'Voltar para rascunho?',
       message:
-          'A aprovação do gerente é descartada e você pode editar os itens e preços. Depois envie de novo; se o desconto continuar acima do limite, o gerente aprova outra vez.',
+          'A autorização do gerente é descartada e você pode editar os itens e preços. Depois envie de novo; se o desconto continuar acima do limite, o gerente autoriza outra vez.',
       confirmLabel: 'Voltar para rascunho',
       cancelLabel: 'Manter como está',
       icon: Icons.edit_outlined,
@@ -1782,7 +1794,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       ..writeln('Cliente: ${q['customerName']}')
       ..writeln(q['contactName'] == null ? '' : 'A/C: ${q['contactName']}')
       ..writeln(q['customerReference'] == null ? '' : 'Sua referência: ${q['customerReference']}')
-      ..writeln('Prazo: ${q['paymentTermName'] ?? q['customPaymentTerm'] ?? 'a combinar'} · Frete: ${freightTerms[q['freight']] ?? q['freight']}')
+      ..writeln('Prazo de pagamento: ${q['paymentTermName'] ?? q['customPaymentTerm'] ?? 'a combinar'} · Frete: ${freightTerms[q['freight']] ?? q['freight']}')
       ..writeln()
       ..writeln('Item  Produto  Descrição  Qtd  Un  Vl. unit.  IPI%  Vl. total  Entrega');
     for (final l in (q['lines'] as List).cast<Map<String, dynamic>>()) {
@@ -1852,10 +1864,10 @@ class _QuoteScreenState extends State<QuoteScreen> {
       context: context,
       builder: (c) => AlertDialog(
         title: Text('Orçamento ${_q!['reference']}'),
-        content: SizedBox(
-          width: 720,
+        content: DialogBody(
+          ideal: 720,
           child: SingleChildScrollView(
-            child: SelectableText(text, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+            child: SelectableText(text, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),
           ),
         ),
         actions: [
@@ -1971,7 +1983,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     return NextStepCard(
       title: q['needsApproval'] == true ? 'Desconto acima do limite' : 'Pronta para enviar?',
       message: q['needsApproval'] == true
-          ? 'O maior desconto sobre a tabela é ${fmt(q['totals']['maxDiscountPercent'])}%${_maxDiscount == null ? '' : ' (limite ${fmt(_maxDiscount)}%)'}. O envio passa pela aprovação do gerente comercial.'
+          ? 'O maior desconto sobre a tabela é ${fmt(q['totals']['maxDiscountPercent'])}%${_maxDiscount == null ? '' : ' (limite ${fmt(_maxDiscount)}%)'}. O envio passa pela autorização do gerente comercial.'
           : _rejectionNote(q) != null
           ? 'O gerente recusou o desconto: ${_rejectionNote(q)}. Ajuste os preços e envie de novo.'
           : _mailOn
@@ -1983,20 +1995,19 @@ class _QuoteScreenState extends State<QuoteScreen> {
           _primary('quote-email', 'Enviar ao cliente', Icons.forward_to_inbox, _emailQuote),
           _secondary('quote-send', 'Já enviei por outro meio', Icons.send, _send),
         ] else if (sell)
-          _primary('quote-send', q['needsApproval'] == true ? 'Enviar para aprovação' : 'Registrar envio ao cliente', Icons.send, _send),
+          _primary('quote-send', q['needsApproval'] == true ? 'Enviar para autorização' : 'Registrar envio ao cliente', Icons.send, _send),
       ],
-      trailing: [if (q['needsApproval'] != true) _pdfButton()],
     );
   }
 
   Widget _pendingApprovalStep(Map<String, dynamic> q) {
     final sell = s.canSell;
     return NextStepCard(
-      title: 'Aguardando aprovação do gerente',
+      title: 'Aguardando autorização do gerente',
       message: 'Desconto de ${fmt(q['totals']['maxDiscountPercent'])}% sobre a tabela de preços. Para mudar algo antes disso, volte para rascunho.',
       tone: Tone.warning,
       actions: [
-        if (s.canApproveSales) _primary('quote-approve', 'Aprovar desconto', Icons.thumb_up_alt_outlined, () => _act('approve', success: 'Desconto aprovado')),
+        if (s.canApproveSales) _primary('quote-approve', 'Autorizar desconto', Icons.thumb_up_alt_outlined, () => _act('approve', success: 'Desconto autorizado')),
         if (s.canApproveSales)
           _secondary(
             'quote-reject-approval',
@@ -2012,9 +2023,9 @@ class _QuoteScreenState extends State<QuoteScreen> {
   Widget _approvedStep(Map<String, dynamic> q) {
     final sell = s.canSell;
     return NextStepCard(
-      title: 'Desconto aprovado',
+      title: 'Desconto autorizado',
       message:
-          'Aprovado por ${q['approvedBy'] ?? ''} em ${fmtDate(q['approvedAt'])}. Agora ${_mailOn ? 'envie o orçamento ao cliente' : 'registre o envio ao cliente'}. Para mudar algo antes, volte para rascunho.',
+          'Autorizado por ${q['approvedBy'] ?? ''} em ${fmtDate(q['approvedAt'])}. Agora ${_mailOn ? 'envie o orçamento ao cliente' : 'registre o envio ao cliente'}. Para mudar algo antes, volte para rascunho.',
       actions: [
         if (sell && _mailOn) ...[
           _primary('quote-email', 'Enviar ao cliente', Icons.forward_to_inbox, _emailQuote),
@@ -2023,13 +2034,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
           _primary('quote-send', 'Registrar envio ao cliente', Icons.send, _send),
         if (sell) _secondary('quote-reopen', 'Voltar para rascunho para editar', Icons.edit_outlined, _reopen),
       ],
-      trailing: [_pdfButton()],
     );
   }
-
-  /// Download of the quote, next to the e-mail button: the file is what gets attached.
-  Widget _pdfButton() =>
-      TextButton.icon(key: const ValueKey('quote-pdf'), onPressed: _downloadPdf, icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('Baixar PDF'));
 
   Widget _sentStep(Map<String, dynamic> q) {
     final sell = s.canSell;
@@ -2041,14 +2047,6 @@ class _QuoteScreenState extends State<QuoteScreen> {
         if (sell) _primary('quote-accept', 'Cliente aprovou', Icons.thumb_up_alt_outlined, _accept),
         if (sell) _secondary('quote-change', 'Nova revisão', Icons.edit_note, _revise, tip: _reviseTip),
         if (sell) _negative('quote-decline', 'Cliente recusou (venda perdida)', Icons.thumb_down_alt_outlined, _decline),
-      ],
-      trailing: [
-        _pdfButton(),
-        if (sell && _mailOn)
-          TextButton.icon(key: const ValueKey('quote-email'), onPressed: _emailQuote, icon: const Icon(Icons.forward_to_inbox), label: const Text('Reenviar por e-mail'))
-        else
-          TextButton.icon(key: const ValueKey('quote-mail'), onPressed: _mail, icon: const Icon(Icons.mail_outline), label: const Text('Abrir e-mail')),
-        if (sell) TextButton.icon(key: const ValueKey('quote-extend'), onPressed: _extend, icon: const Icon(Icons.event_repeat), label: const Text('Prorrogar validade')),
       ],
     );
   }
@@ -2145,13 +2143,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     final danger = Theme.of(context).colorScheme.error;
     // Grouped by what the user is trying to do: edit, handle the document, create something new from this quote, change its situation.
     // Outcomes of the customer's answer (approved, wants changes, refused, gave up) are the buttons on the status card, not menu items.
-    final edit = <PopupMenuEntry<VoidCallback>>[
-      if (s.canSell && status == 'Draft')
-        PopupMenuItem(
-          value: _edit,
-          child: const ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar itens e condições')),
-        ),
-    ];
+    // Editing a draft is the pencil in the bar; document actions (PDF, e-mail) and the validity live only in this menu, not on the status card.
     final document = <PopupMenuEntry<VoidCallback>>[
       PopupMenuItem(
         value: _preview,
@@ -2162,10 +2154,23 @@ class _QuoteScreenState extends State<QuoteScreen> {
         value: _downloadPdf,
         child: const ListTile(leading: Icon(Icons.picture_as_pdf_outlined), title: Text('Baixar PDF')),
       ),
+      if (s.canSell && _mailOn && status == 'Sent')
+        PopupMenuItem(
+          key: const ValueKey('quote-menu-email'),
+          value: _emailQuote,
+          child: const ListTile(leading: Icon(Icons.forward_to_inbox), title: Text('Reenviar por e-mail')),
+        ),
       if (['Sent', 'Accepted', 'PurchaseOrder'].contains(status))
         PopupMenuItem(
+          key: const ValueKey('quote-menu-mail'),
           value: _mail,
           child: const ListTile(leading: Icon(Icons.mail_outline), title: Text('Abrir e-mail para o cliente')),
+        ),
+      if (s.canSell && status == 'Sent')
+        PopupMenuItem(
+          key: const ValueKey('quote-menu-extend'),
+          value: _extend,
+          child: const ListTile(leading: Icon(Icons.event_repeat), title: Text('Prorrogar validade')),
         ),
     ];
     final create = <PopupMenuEntry<VoidCallback>>[
@@ -2205,7 +2210,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
         ),
     ];
     final menu = <PopupMenuEntry<VoidCallback>>[];
-    for (final group in [edit, document, create, situation]) {
+    for (final group in [document, create, situation]) {
       if (group.isEmpty) continue;
       if (menu.isNotEmpty) menu.add(const PopupMenuDivider());
       menu.addAll(group);
@@ -2256,14 +2261,14 @@ class _QuoteScreenState extends State<QuoteScreen> {
   // The stage path already names these statuses; the badge stays for the ones it cannot say (draft, approval, lost with a reason, replaced...).
   badge: const ['Sent', 'Accepted', 'PurchaseOrder', 'Converted'].contains(q['status']) ? null : StatusBadge(quoteSituation(q), tone: quoteToneOf(q)),
   amount: fmtMoney(t['total']),
-  amountLabel: 'Total + IPI',
+  amountLabel: 'Total do orçamento',
   fieldLinks: {'Cliente': () => openCustomer(context, s, q['customerId'] as int)},
   fields: [
     ('Cliente', '${q['customerName']}'),
     // Contact, validity and freight matter while the quote is being worked; afterwards they sit in Detalhes.
     if (_working(q)) ('Contato', _contact(q)),
     if (_validityMatters(q)) ('Validade', _validity(q)),
-    ('Prazo', fmt(q['paymentTermName'] ?? q['customPaymentTerm'])),
+    ('Prazo de pagamento', fmt(q['paymentTermName'] ?? q['customPaymentTerm'])),
     if (_working(q)) ('Frete', _freight(q)),
     ('Ref. do cliente', fmt(q['customerReference'])),
     ('Pedido do cliente', fmt(q['customerPo'])),
@@ -2324,7 +2329,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
           child: Text(
             '⚠ Desconto acima do limite de ${fmt(_maxDiscount)}%.',
             key: const ValueKey('quote-discount-note'),
-            style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
         ),
       if (lines.any((l) => l['leadTimeDays'] != null && l['deliveryDate'] == null))
@@ -2333,7 +2338,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
           child: Text(
             'Prazo de entrega em dias úteis, contado a partir da data em que o cliente aprovar o orçamento.',
             key: const ValueKey('quote-lead-note'),
-            style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
         ),
       const SizedBox(height: 14),
@@ -2365,7 +2370,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     ('Condições gerais', fmt(q['conditions'])),
     ('Observações', fmt(q['notes'])),
     ('Criada', '${fmt(q['createdBy'])} · ${fmtDate(q['createdAt'])}'),
-    ('Aprovação interna', q['approvedAt'] == null ? '' : '${fmt(q['approvedBy'])} · ${fmtDate(q['approvedAt'])}'),
+    ('Autorização do gerente', q['approvedAt'] == null ? '' : '${fmt(q['approvedBy'])} · ${fmtDate(q['approvedAt'])}'),
     ('Enviada', q['sentAt'] == null ? '' : _sentDetail(q)),
     ('Resposta do cliente', q['decidedAt'] == null ? '' : '${fmtDate(q['decidedAt'])}${q['decisionNote'] == null ? '' : ' · ${q['decisionNote']}'}'),
     ('Motivo da perda', q['lostReason'] == null ? '' : lostReasons['${q['lostReason']}'] ?? '${q['lostReason']}'),

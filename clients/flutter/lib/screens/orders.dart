@@ -82,7 +82,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
       searchable: false,
       filters: [
         ChoiceFilter(label: 'Situação', value: _status, choices: orderStatuses, onChanged: (v) => setState(() => _status = v)),
-        FilterChip(label: const Text('Somente abertos'), selected: _open && _status == null, onSelected: _status == null ? (v) => setState(() => _open = v) : null),
+        Tooltip(
+          message: _status == null ? '' : 'A situação escolhida já define quais pedidos aparecem',
+          child: FilterChip(label: const Text('Somente abertos'), selected: _open && _status == null, onSelected: _status == null ? (v) => setState(() => _open = v) : null),
+        ),
       ],
       fab: widget.session.canBuy
           ? FloatingActionButton.extended(heroTag: 'new-po', onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo pedido'))
@@ -92,7 +95,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
         col('Fornecedor', 'supplierName'),
         dateCol('Emissão', 'issuedAt'),
         labelCol('Situação', 'status', orderStatuses),
-        dateCol('Próxima entrega', 'nextDueDate'),
+        // The tint alone is not enough (colour blindness, print): late rows also say so.
+        ColumnSpec('Próxima entrega', (e) => isLate(e['nextDueDate']) ? '${fmtDay(e['nextDueDate'])} · Atrasado' : fmtDay(e['nextDueDate'])),
         col('Linhas', 'lineCount', numeric: true),
       ],
       rowColor: (_, e) => isLate(e['nextDueDate']) ? cs.errorContainer : null,
@@ -229,26 +233,24 @@ class _OrderScreenState extends State<OrderScreen> {
                 ],
               ),
             if (active && s.canReceive) TextButton.icon(onPressed: _receive, icon: const Icon(Icons.move_to_inbox), label: const Text('Receber NF')),
-            // One action at a time (cancelling is only possible before anything arrived), so it is a labelled button, not a menu.
-            if (active && s.canBuy && !received)
-              TextButton.icon(
-                key: const ValueKey('order-cancel'),
-                onPressed: () => _reason('cancel', 'Cancelar pedido nº ${o!['number']}'),
-                icon: const Icon(Icons.block),
-                label: const Text('Cancelar pedido'),
-              ),
-            if (active && s.canBuy && received)
-              TextButton.icon(
-                key: const ValueKey('order-close'),
-                onPressed: () => _reason('close', 'Encerrar saldo do pedido nº ${o['number']}'),
-                icon: const Icon(Icons.playlist_remove),
-                label: const Text('Encerrar saldo'),
+            // Receiving is the one primary action; cancelling and closing the balance are rare and sit in the overflow menu.
+            if (active && s.canBuy)
+              PopupMenuButton<String>(
+                key: const ValueKey('order-menu'),
+                tooltip: 'Mais ações',
+                onSelected: (v) => v == 'cancel' ? _reason('cancel', 'Cancelar pedido nº ${o!['number']}') : _reason('close', 'Encerrar saldo do pedido nº ${o!['number']}'),
+                itemBuilder: (_) => [
+                  if (!received)
+                    const PopupMenuItem(value: 'cancel', key: ValueKey('order-cancel'), child: ListTile(leading: Icon(Icons.block), title: Text('Cancelar pedido'))),
+                  if (received)
+                    const PopupMenuItem(value: 'close', key: ValueKey('order-close'), child: ListTile(leading: Icon(Icons.playlist_remove), title: Text('Encerrar saldo'))),
+                ],
               ),
           ],
-          bottom: const TabBar(
+          bottom: TabBar(
             tabs: [
-              Tab(text: 'Itens'),
-              Tab(text: 'Recebimentos'),
+              Tab(text: o == null ? 'Itens' : 'Itens (${(o['lines'] as List).length})'),
+              Tab(text: o == null ? 'Recebimentos' : 'Recebimentos (${((o['receipts'] as List?) ?? const []).length})'),
             ],
           ),
         ),
@@ -285,7 +287,7 @@ class _OrderScreenState extends State<OrderScreen> {
                             ColumnSpec('Preço', (e) => fmtNum(e['unitPrice'], 4), numeric: true),
                             col('Desc. %', 'discountPercent', numeric: true),
                             col('IPI %', 'ipiPercent', numeric: true),
-                            dateCol('Entrega', 'dueDate'),
+                            ColumnSpec('Entrega', (e) => (e['openQuantity'] as num) > 0 && isLate(e['dueDate']) ? '${fmtDay(e['dueDate'])} · Atrasado' : fmtDay(e['dueDate'])),
                             col('Recebido', 'receivedQuantity', numeric: true),
                             col('Em aberto', 'openQuantity', numeric: true),
                             moneyCol('Total', 'total'),

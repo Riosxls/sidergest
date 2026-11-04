@@ -139,11 +139,14 @@ Future<void> _pickLookup(WidgetTester tester, String label, String display) asyn
   await tester.pumpAndSettle();
 }
 
-Future<void> _tapTip(WidgetTester tester, String tip, {bool first = false}) async {
-  final f = first ? find.byTooltip(tip).first : find.byTooltip(tip).last;
+/// Opens the ⋮ menu of a row and picks an entry.
+Future<void> _rowMenu(WidgetTester tester, String key, String item) async {
+  final f = find.byKey(ValueKey(key));
   await tester.ensureVisible(f);
   await tester.pumpAndSettle();
   await tester.tap(f);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(item).last);
   await tester.pumpAndSettle();
 }
 
@@ -390,7 +393,7 @@ void main() {
     testWidgets('edit shipment from the lot table', (tester) async {
       final fake = _Fake();
       await _pump(tester, fake, (s) => SteelLotScreen(session: s, id: 3));
-      await _tapTip(tester, 'Editar', first: true);
+      await _rowMenu(tester, 'job-menu-9', 'Editar');
       await tester.pumpAndSettle();
       expect(find.text('Remessa N9'), findsOneWidget);
       await tester.enterText(find.byKey(const ValueKey('field-shipmentInvoice')), 'N99');
@@ -403,14 +406,14 @@ void main() {
       final fake = _Fake();
       await _pump(tester, fake, (s) => SteelLotScreen(session: s, id: 3));
       expect(find.byKey(const ValueKey('job-return-10')), findsNothing);
-      await _tapTip(tester, 'Remover', first: true);
+      await _rowMenu(tester, 'job-menu-9', 'Remover');
       await tester.pumpAndSettle();
       expect(find.text('Remover remessa?'), findsOneWidget);
       expect(find.text('O saldo do lote é recalculado.'), findsOneWidget);
       await tester.tap(find.text('Cancelar'));
       await tester.pumpAndSettle();
       expect(fake.log.any((r) => r.method == 'DELETE'), isFalse);
-      await _tapTip(tester, 'Remover', first: true);
+      await _rowMenu(tester, 'job-menu-9', 'Remover');
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('confirm-step')));
       await tester.pumpAndSettle();
@@ -432,7 +435,7 @@ void main() {
       expect(b['laborCost'], 0);
 
       // The usage row is the last "Editar" / "Remover" in the page (jobs come first).
-      await _tapTip(tester, 'Editar');
+      await _rowMenu(tester, 'usage-menu-4', 'Editar');
       await tester.pumpAndSettle();
       expect(find.text('Uso interno · B-100'), findsOneWidget);
       await tester.enterText(find.byKey(const ValueKey('field-kg')), '90');
@@ -440,7 +443,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(fake.body(fake.last('PUT', '/api/steel/usages/4'))['kg'], 90);
 
-      await _tapTip(tester, 'Remover');
+      await _rowMenu(tester, 'usage-menu-4', 'Remover');
       await tester.pumpAndSettle();
       expect(find.text('Remover consumo?'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('confirm-step')));

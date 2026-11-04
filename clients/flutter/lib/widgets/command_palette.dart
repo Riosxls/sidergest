@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../session.dart';
+import 'responsive.dart';
 
 /// A screen the command palette can open, shown under [section].
 class SearchTarget {
@@ -144,7 +145,7 @@ class SearchLauncher extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Buscar telas, ações, pedidos, OFs, clientes e NFs',
+                    'Buscar telas, ações e registros',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: cs.onSurfaceVariant),
@@ -157,7 +158,7 @@ class SearchLauncher extends StatelessWidget {
                     border: Border.all(color: cs.outlineVariant),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Text('Ctrl K', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                  child: Text('Ctrl K', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
                 ),
               ],
             ),
@@ -210,6 +211,7 @@ class _Palette extends StatefulWidget {
 
 class _PaletteState extends State<_Palette> {
   static const _rowHeight = 52.0;
+  static const _headerHeight = 28.0;
   final _text = TextEditingController();
   final _scroll = ScrollController();
   Timer? _debounce;
@@ -217,6 +219,7 @@ class _PaletteState extends State<_Palette> {
   int _index = 0;
   int _request = 0;
   List<Map<String, dynamic>> _groups = [];
+  bool _searchFailed = false;
 
   @override
   void dispose() {
@@ -241,15 +244,26 @@ class _PaletteState extends State<_Palette> {
     // Every keystroke invalidates the answers still on the way, short terms included.
     final req = ++_request;
     if (q.length < 2) {
+      _searchFailed = false;
       setState(() => _groups = []);
       return;
     }
     _debounce = Timer(const Duration(milliseconds: 250), () async {
       try {
         final r = await widget.session.api.get('/api/search', {'q': q, 'take': 4}) as Map<String, dynamic>;
-        if (mounted && req == _request) setState(() => _groups = ((r['groups'] as List?) ?? const []).cast<Map<String, dynamic>>());
+        if (mounted && req == _request) {
+          setState(() {
+            _searchFailed = false;
+            _groups = ((r['groups'] as List?) ?? const []).cast<Map<String, dynamic>>();
+          });
+        }
       } catch (_) {
-        if (mounted && req == _request) setState(() => _groups = []);
+        if (mounted && req == _request) {
+          setState(() {
+            _groups = [];
+            _searchFailed = true;
+          });
+        }
       }
     });
   }
@@ -325,16 +339,26 @@ class _PaletteState extends State<_Palette> {
     return out;
   }
 
-  void _move(int delta, int count) {
+  void _move(int delta, List<_Entry> entries) {
+    final count = entries.length;
     if (count == 0) return;
     setState(() => _index = (_index + delta) % count);
-    final top = _index * _rowHeight;
+    // Rows are _rowHeight tall and each group opens with a _headerHeight band; both grow with the text scale.
+    final scale = MediaQuery.textScalerOf(context).scale(1);
+    final row = _rowHeight * scale, header = _headerHeight * scale;
+    var headers = 0;
+    for (var i = 0; i <= _index; i++) {
+      if (i == 0 || entries[i - 1].group != entries[i].group) headers++;
+    }
+    final firstOfGroup = _index == 0 || entries[_index - 1].group != entries[_index].group;
+    final top = _index * row + headers * header - (firstOfGroup ? header : 0);
+    final bottom = _index * row + headers * header + row;
     if (!_scroll.hasClients) return;
     final view = _scroll.position.viewportDimension;
     if (top < _scroll.offset) {
       _scroll.jumpTo(top);
-    } else if (top + _rowHeight > _scroll.offset + view) {
-      _scroll.jumpTo(top + _rowHeight - view);
+    } else if (bottom > _scroll.offset + view) {
+      _scroll.jumpTo(bottom - view);
     }
   }
 
@@ -353,11 +377,11 @@ class _PaletteState extends State<_Palette> {
           onKeyEvent: (_, e) {
             if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
             if (e.logicalKey == LogicalKeyboardKey.arrowDown) {
-              _move(1, entries.length);
+              _move(1, entries);
               return KeyEventResult.handled;
             }
             if (e.logicalKey == LogicalKeyboardKey.arrowUp) {
-              _move(entries.length - 1, entries.length);
+              _move(entries.length - 1, entries);
               return KeyEventResult.handled;
             }
             if (e.logicalKey == LogicalKeyboardKey.enter || e.logicalKey == LogicalKeyboardKey.numpadEnter) {
@@ -375,7 +399,7 @@ class _PaletteState extends State<_Palette> {
                   controller: _text,
                   autofocus: true,
                   onChanged: _onChanged,
-                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Digite uma tela, ação, produto, pedido, OF, cliente ou NF', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar telas, ações e registros'),
                 ),
               ),
               const Divider(height: 1),
@@ -383,21 +407,21 @@ class _PaletteState extends State<_Palette> {
                 child: entries.isEmpty
                     ? Padding(
                         padding: const EdgeInsets.all(24),
-                        child: Semantics(liveRegion: true, child: const Text('Nada encontrado')),
+                        child: Semantics(liveRegion: true, child: Text(_searchFailed ? 'Não foi possível buscar registros agora. Verifique a conexão e tente de novo.' : 'Nada encontrado', style: TextStyle(color: _searchFailed ? cs.error : null))),
                       )
                     : ListView.builder(
                         controller: _scroll,
                         shrinkWrap: true,
-                        itemExtent: _rowHeight,
                         itemCount: entries.length,
                         itemBuilder: (_, i) {
                           final e = entries[i];
                           final selected = i == _index;
                           final first = i == 0 || entries[i - 1].group != e.group;
-                          return Semantics(
+                          final scale = MediaQuery.textScalerOf(context).scale(1);
+                          final row = SizedBox(height: _rowHeight * scale, child: Semantics(
                             button: true,
                             selected: selected,
-                            label: e.subtitle == null ? e.title : '${e.title}, ${e.subtitle}',
+                            label: '${e.group}: ${e.subtitle == null ? e.title : '${e.title}, ${e.subtitle}'}',
                             excludeSemantics: true,
                             child: Material(
                             color: selected ? cs.secondaryContainer : Colors.transparent,
@@ -429,16 +453,31 @@ class _PaletteState extends State<_Palette> {
                                         ],
                                       ),
                                     ),
-                                    if (first) Text(e.group, style: theme.textTheme.labelSmall?.copyWith(color: cs.primary)),
                                   ],
                                 ),
                               ),
                             ),
                             ),
+                          ));
+                          if (!first) return row;
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Container(
+                                height: _headerHeight * scale,
+                                alignment: Alignment.centerLeft,
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                color: cs.surfaceContainerHighest,
+                                child: Semantics(header: true, child: Text(e.group, style: theme.textTheme.labelMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w700))),
+                              ),
+                              row,
+                            ],
                           );
                         },
                       ),
               ),
+if (!isTouchPlatform) ...[                const Divider(height: 1),                Padding(                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),                  child: Text('↑ ↓ para navegar · Enter abre · Esc fecha', style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),                ),              ],
             ],
           ),
         ),

@@ -1,12 +1,15 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/load_error.dart';
 import '../widgets/record_nav.dart';
+import '../widgets/responsive.dart';
 import 'stock_balances.dart';
 import 'where_used.dart';
 
@@ -153,26 +156,59 @@ class _Summary extends StatelessWidget {
         : p['shape'] == 'Rectangular'
         ? '${fmt(p['widthMm'])} × ${fmt(p['heightMm'])} × ${fmt(p['thicknessMm'])} × ${fmt(p['lengthMm'])} mm'
         : null;
-    final chips = <String>[
-      ?kinds[p['kind']],
-      'NCM ${p['ncm']}',
-      'Un. ${p['stockUnit']}',
-      ?dims,
-      if (p['netWeightKg'] != null) '${fmt(p['netWeightKg'])} kg',
-    ];
+    final theme = Theme.of(context);
+    // Plain facts are labelled text, so they do not look like the revision chips, which are the only things here that open something.
+    final facts = <(String, String)>[
+      ('Tipo', kinds[p['kind']] ?? ''),
+      ('NCM', '${p['ncm']}'),
+      ('Unidade', '${p['stockUnit']}'),
+      ('Dimensões', dims ?? ''),
+      ('Peso líquido', p['netWeightKg'] == null ? '' : '${fmt(p['netWeightKg'])} kg'),
+    ].where((f) => f.$2.isNotEmpty).toList();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
       child: Wrap(
-        spacing: 8,
-        runSpacing: 4,
+        spacing: AppSpacing.lg,
+        runSpacing: AppSpacing.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           if (p['blocked'] == true)
-            Chip(label: const Text('Bloqueado'), backgroundColor: Theme.of(context).colorScheme.errorContainer, visualDensity: VisualDensity.compact),
-          for (final c in chips) Chip(label: Text(c), visualDensity: VisualDensity.compact),
+            Chip(
+              avatar: Icon(Icons.block, size: 16, color: theme.colorScheme.onErrorContainer),
+              label: Text('Bloqueado', style: TextStyle(color: theme.colorScheme.onErrorContainer)),
+              backgroundColor: theme.colorScheme.errorContainer,
+              visualDensity: VisualDensity.compact,
+            ),
+          for (final f in facts)
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '${f.$1}: ',
+                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  TextSpan(
+                    text: f.$2,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              style: theme.textTheme.bodyMedium,
+            ),
           if (p['drawingRevision'] != null)
-            ActionChip(label: Text('Desenho rev. ${p['drawingRevision']}'), onPressed: onRevisions, visualDensity: VisualDensity.compact, tooltip: 'Ver histórico de revisões'),
+            ActionChip(
+              label: Text('Desenho rev. ${p['drawingRevision']}'),
+              onPressed: onRevisions,
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Ver histórico de revisões',
+            ),
           if (p['processRevision'] != null)
-            ActionChip(label: Text('Processo rev. ${p['processRevision']}'), onPressed: onRevisions, visualDensity: VisualDensity.compact, tooltip: 'Ver histórico de revisões'),
+            ActionChip(
+              label: Text('Processo rev. ${p['processRevision']}'),
+              onPressed: onRevisions,
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Ver histórico de revisões',
+            ),
         ],
       ),
     );
@@ -227,39 +263,43 @@ class _RoutingTabState extends State<RoutingTab> {
 
   Future<void> _editOp([Map<String, dynamic>? op]) async {
     final next = (_ops ?? []).fold<int>(0, (m, o) => (o['sequence'] as int) > m ? o['sequence'] as int : m) + 10;
-    unawaited(_done(
-      await showEntityForm(
-        context,
-        api: api,
-        title: op == null ? 'Nova operação' : 'Operação ${op['sequence']}',
-        fields: routingFields,
-        initial: op ?? {'sequence': next},
-        readOnly: !canWrite,
-        onSubmit: (body) async =>
-            (op == null ? await api.post('/api/products/${widget.productId}/routing', body) : await api.put('/api/routing-operations/${op['id']}', body))
-                as Map<String, dynamic>?,
-        onDelete: op == null ? null : () => api.delete('/api/routing-operations/${op['id']}'),
-        deleteMessage: 'A operação e os itens dela saem do roteiro. Não dá para desfazer.',
+    unawaited(
+      _done(
+        await showEntityForm(
+          context,
+          api: api,
+          title: op == null ? 'Nova operação' : 'Operação ${op['sequence']}',
+          fields: routingFields,
+          initial: op ?? {'sequence': next},
+          readOnly: !canWrite,
+          onSubmit: (body) async =>
+              (op == null ? await api.post('/api/products/${widget.productId}/routing', body) : await api.put('/api/routing-operations/${op['id']}', body))
+                  as Map<String, dynamic>?,
+          onDelete: op == null ? null : () => api.delete('/api/routing-operations/${op['id']}'),
+          deleteMessage: 'A operação e os itens dela saem do roteiro. Não dá para desfazer.',
+        ),
       ),
-    ));
+    );
   }
 
   Future<void> _editItem(Map<String, dynamic> op, [Map<String, dynamic>? item]) async {
-    unawaited(_done(
-      await showEntityForm(
-        context,
-        api: api,
-        title: item == null ? 'Novo item na operação ${op['sequence']}' : 'Item ${item['code']}',
-        fields: bomItemFields,
-        initial: item,
-        readOnly: !canWrite,
-        onSubmit: (body) async =>
-            (item == null ? await api.post('/api/routing-operations/${op['id']}/items', body) : await api.put('/api/bom-items/${item['id']}', body))
-                as Map<String, dynamic>?,
-        onDelete: item == null ? null : () => api.delete('/api/bom-items/${item['id']}'),
-        deleteMessage: 'O item sai da estrutura desta operação. Não dá para desfazer.',
+    unawaited(
+      _done(
+        await showEntityForm(
+          context,
+          api: api,
+          title: item == null ? 'Novo item na operação ${op['sequence']}' : 'Item ${item['code']}',
+          fields: bomItemFields,
+          initial: item,
+          readOnly: !canWrite,
+          onSubmit: (body) async =>
+              (item == null ? await api.post('/api/routing-operations/${op['id']}/items', body) : await api.put('/api/bom-items/${item['id']}', body))
+                  as Map<String, dynamic>?,
+          onDelete: item == null ? null : () => api.delete('/api/bom-items/${item['id']}'),
+          deleteMessage: 'O item sai da estrutura desta operação. Não dá para desfazer.',
+        ),
       ),
-    ));
+    );
   }
 
   @override
@@ -268,9 +308,7 @@ class _RoutingTabState extends State<RoutingTab> {
     final ops = _ops;
     if (ops == null) return const Center(child: CircularProgressIndicator());
     return Scaffold(
-      floatingActionButton: canWrite
-          ? FloatingActionButton.extended(onPressed: _editOp, icon: const Icon(Icons.add), label: const Text('Operação'))
-          : null,
+      floatingActionButton: canWrite ? FloatingActionButton.extended(onPressed: _editOp, icon: const Icon(Icons.add), label: const Text('Operação')) : null,
       body: ops.isEmpty
           ? Center(
               child: Padding(
@@ -287,7 +325,12 @@ class _RoutingTabState extends State<RoutingTab> {
                     ),
                     if (canWrite) ...[
                       const SizedBox(height: 12),
-                      OutlinedButton.icon(key: const ValueKey('routing-first'), onPressed: _editOp, icon: const Icon(Icons.add), label: const Text('Adicionar a primeira operação')),
+                      OutlinedButton.icon(
+                        key: const ValueKey('routing-first'),
+                        onPressed: _editOp,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Adicionar a primeira operação'),
+                      ),
                     ],
                   ],
                 ),
@@ -354,25 +397,32 @@ class _RoutingTabState extends State<RoutingTab> {
   }
 }
 
-/// Small buttons after a BOM line: the stock of a material, the page of a component product.
-List<Widget> _itemLinks(BuildContext context, Session session, {int? materialId, int? productId}) => [
-  if (materialId != null)
-    IconButton(
-      tooltip: 'Saldo em estoque',
-      visualDensity: VisualDensity.compact,
-      iconSize: 18,
-      icon: const Icon(Icons.inventory_outlined),
-      onPressed: () => openItemStock(context, session, materialId: materialId),
-    ),
-  if (productId != null)
-    IconButton(
-      tooltip: 'Abrir componente',
-      visualDensity: VisualDensity.compact,
-      iconSize: 18,
-      icon: const Icon(Icons.open_in_new),
-      onPressed: () => openProduct(context, session, productId),
-    ),
-];
+/// Small buttons after a BOM line: the stock of a material, the page of a component product. Compact with a mouse, 44 px on a phone or touch screen.
+List<Widget> _itemLinks(BuildContext context, Session session, {int? materialId, int? productId}) {
+  final touch = isTouchPlatform || MediaQuery.sizeOf(context).width < 600;
+  final density = touch ? VisualDensity.standard : VisualDensity.compact;
+  final size = touch ? const BoxConstraints(minWidth: kMinTouchTarget, minHeight: kMinTouchTarget) : null;
+  return [
+    if (materialId != null)
+      IconButton(
+        tooltip: 'Saldo em estoque',
+        visualDensity: density,
+        constraints: size,
+        iconSize: 18,
+        icon: const Icon(Icons.inventory_outlined),
+        onPressed: () => openItemStock(context, session, materialId: materialId),
+      ),
+    if (productId != null)
+      IconButton(
+        tooltip: 'Abrir componente',
+        visualDensity: density,
+        constraints: size,
+        iconSize: 18,
+        icon: const Icon(Icons.open_in_new),
+        onPressed: () => openProduct(context, session, productId),
+      ),
+  ];
+}
 
 /// BOM explosion tab.
 class ExplosionTab extends StatefulWidget {
@@ -391,6 +441,10 @@ class _ExplosionTabState extends State<ExplosionTab> {
   String? _error;
   bool _loading = false;
 
+  /// The quantity the result on screen was calculated for; when the field says something else the result is old.
+  String? _resultQty;
+  String? _qtyError;
+
   @override
   void initState() {
     super.initState();
@@ -405,13 +459,15 @@ class _ExplosionTabState extends State<ExplosionTab> {
 
   Future<void> _run() async {
     final q = parseDecimal(_qty.text.trim());
-    if (q == null || q <= 0) return setState(() => _error = 'Quantidade inválida');
+    if (q == null || q <= 0) return setState(() => _qtyError = 'Quantidade inválida');
+    _qtyError = null;
     setState(() => _loading = true);
     try {
       final r = await widget.session.api.get('/api/products/${widget.productId}/bom/explode', {'quantity': q});
       if (mounted) {
         setState(() {
           _result = r as Map<String, dynamic>;
+          _resultQty = _qty.text.trim();
           _error = null;
         });
       }
@@ -442,7 +498,8 @@ class _ExplosionTabState extends State<ExplosionTab> {
         ),
         for (final l in lines)
           Padding(
-            padding: EdgeInsets.fromLTRB(8.0 + 20.0 * ((l['level'] as int) - 1), 4, 8, 4),
+            // Deep structures stop indenting after five levels, so the description keeps its room on a narrow screen.
+            padding: EdgeInsets.fromLTRB(8.0 + 20.0 * (((l['level'] as int) - 1).clamp(0, 5)), 4, 8, 4),
             child: Row(
               children: [
                 Icon(l['materialId'] != null ? Icons.inventory_2_outlined : Icons.subdirectory_arrow_right, size: 18, color: theme.colorScheme.primary),
@@ -490,7 +547,8 @@ class _ExplosionTabState extends State<ExplosionTab> {
                   key: const ValueKey('explode-qty'),
                   controller: _qty,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Quantidade', isDense: true, border: OutlineInputBorder()),
+                  onChanged: (_) => setState(() => _qtyError = null),
+                  decoration: InputDecoration(labelText: 'Quantidade', isDense: true, border: const OutlineInputBorder(), errorText: _qtyError),
                   onSubmitted: (_) => _run(),
                 ),
               ),
@@ -500,6 +558,12 @@ class _ExplosionTabState extends State<ExplosionTab> {
           ),
         ),
         if (_loading) const LinearProgressIndicator(),
+        if (r != null && !_loading && _resultQty != _qty.text.trim())
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            key: const ValueKey('explode-stale'),
+            child: Text('Quantidade alterada: o resultado abaixo é de $_resultQty. Toque em Explodir para atualizar.', style: theme.textTheme.bodySmall),
+          ),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.all(16),

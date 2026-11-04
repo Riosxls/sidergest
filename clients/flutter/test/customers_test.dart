@@ -99,7 +99,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('field-name')), 'Nova Ltda');
     await tester.enterText(find.byKey(const ValueKey('field-company.document')), '98765432000111');
-    await tester.enterText(find.byKey(const ValueKey('field-company.uf')), 'SP');
+    await tester.ensureVisible(find.byKey(const ValueKey('field-company.uf')));
+    await tester.tap(find.byKey(const ValueKey('field-company.uf')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AC').last);
+    await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('field-company.contact')), 'Carla');
     await tester.tap(find.text('Salvar'));
     await tester.pumpAndSettle();
@@ -108,7 +112,7 @@ void main() {
     expect(post.url.path, '/api/customers');
     expect(body['name'], 'Nova Ltda');
     expect(body['company']['document'], '98765432000111');
-    expect(body['address']['uf'], 'SP');
+    expect(body['address']['uf'], 'AC');
     expect(body['address']['buyer'], 'Carla');
   });
 
@@ -172,7 +176,11 @@ void main() {
     expect(find.text('Nenhum local de entrega'), findsOneWidget);
     await tester.tap(find.text('Novo local'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('field-uf')), 'SP');
+    await tester.ensureVisible(find.byKey(const ValueKey('field-uf')));
+    await tester.tap(find.byKey(const ValueKey('field-uf')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AC').last);
+    await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('field-city')), 'Votorantim');
     await tester.tap(find.text('Salvar'));
     await tester.pumpAndSettle();

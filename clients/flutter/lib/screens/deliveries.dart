@@ -18,6 +18,7 @@ import '../widgets/print_gate.dart';
 import '../widgets/print_panel.dart';
 import '../widgets/record_list.dart';
 import '../widgets/record_shortcuts.dart';
+import '../widgets/record_skeleton.dart';
 import 'certificates.dart';
 import 'customers.dart';
 import 'fiscal.dart';
@@ -38,26 +39,39 @@ class DeliveriesScreen extends StatefulWidget {
 
 class _DeliveriesScreenState extends State<DeliveriesScreen> {
   final _list = GlobalKey<RecordListState>();
-  String? _status = 'Planned';
+  static const _defaultStatus = 'Planned';
+  String? _status = _defaultStatus;
 
   @override
   Widget build(BuildContext context) => RecordList(
     key: _list,
-    filtersActive: _status != null,
-    onClearFilters: () => setState(() => _status = null),
+    // The default "Programadas" view is not a user filter: only a changed Situação counts as one.
+    filtersActive: _status != _defaultStatus,
+    onClearFilters: () => setState(() => _status = _defaultStatus),
     api: widget.session.api,
     path: '/api/sales/deliveries',
     query: {'status': _status},
     searchHint: 'Entrega, pedido, cliente ou NF',
+    emptyText: 'Nenhuma entrega programada. Elas nascem no pedido de venda, em "Programar entrega".',
     filters: [ChoiceFilter(label: 'Situação', value: _status, choices: deliveryStatuses, onChanged: (v) => setState(() => _status = v))],
     columns: [
       col('Entrega', 'reference'),
       col('Pedido', 'orderReference'),
       col('Cliente', 'customerName'),
       dateCol('Data', 'plannedDate'),
-      labelCol('Situação', 'status', deliveryStatuses),
-      col('Volumes', 'packages', numeric: true),
-      col('Peso (kg)', 'grossWeightKg', numeric: true),
+      ColumnSpec(
+        'Situação',
+        (e) => deliveryStatuses[e['status']] ?? '${e['status']}',
+        cell: (_, e) => Wrap(
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
+          children: [
+            StatusBadge(deliveryStatuses[e['status']] ?? '${e['status']}', tone: deliveryTone(e['status'])),
+            // Colour alone must not carry the late state.
+            if (e['status'] == 'Planned' && isLate(e['plannedDate'])) const StatusBadge('Atrasada', tone: Tone.danger),
+          ],
+        ),
+      ),
       col('NF', 'invoiceNumber'),
     ],
     rowColor: (ctx, e) => e['status'] == 'Planned' && isLate(e['plannedDate']) ? toneColors(ctx, Tone.danger).$1 : null,
@@ -349,7 +363,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
             key: const ValueKey('delivery-confirm'),
             onPressed: _confirm,
             icon: const Icon(Icons.task_alt),
-            label: const Text('Confirmar entrega'),
+            label: const Text('Confirmar recebimento'),
           ),
       ],
     ),
@@ -401,7 +415,15 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
               itemBuilder: (_) => [
                 PopupMenuItem(
                   value: _cancel,
-                  child: ListTile(leading: const Icon(Icons.block), iconColor: danger, textColor: danger, title: const Text('Cancelar entrega')),
+                  // An authorized NF blocks the cancel: say so here instead of failing after the click.
+                  enabled: _nf == null,
+                  child: ListTile(
+                    leading: const Icon(Icons.block),
+                    iconColor: _nf == null ? danger : null,
+                    textColor: _nf == null ? danger : null,
+                    title: const Text('Cancelar entrega'),
+                    subtitle: _nf == null ? null : Text('A NF ${_nf!['number']} está autorizada. Cancele a NF em Fiscal primeiro: isso desfaz a entrega.'),
+                  ),
                 ),
               ],
             ),
@@ -410,7 +432,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
       body: _error != null && d == null
           ? LoadError(message: _error!, onRetry: _load)
           : d == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const RecordSkeleton()
           : RefreshIndicator(onRefresh: () => _load(report: true), child: _body(d)),
       ),
     );
@@ -511,27 +533,42 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
     );
   }
 
+  Future<void> _newCertificate(Map<String, dynamic> d) async {
+    final order = await api.get('/api/sales/orders/${d['orderId']}') as Map<String, dynamic>;
+    if (mounted && await newCertificate(context, s, order, deliveryId: d['id'] as int)) unawaited(_load());
+  }
+
   Widget _certsSection(Map<String, dynamic> d) {
     return Section(
       title: 'Certificados de qualidade (${_certs.length})',
       actions: [
-        if (s.canCertificate && ['Planned', 'Shipped'].contains(d['status']) && _missingCertificates(d) > 0)
-          FilledButton.tonalIcon(
-            key: const ValueKey('delivery-all-certificates'),
-            onPressed: _createAllCertificates,
-            icon: const Icon(Icons.playlist_add),
-            label: Text(_missingCertificates(d) == 1 ? 'Gerar certificado do item' : 'Gerar ${_missingCertificates(d)} certificados'),
-          ),
         if (s.canCertificate && ['Planned', 'Shipped'].contains(d['status']))
-          OutlinedButton.icon(
-            key: const ValueKey('delivery-new-certificate'),
-            onPressed: () async {
-              final order = await api.get('/api/sales/orders/${d['orderId']}') as Map<String, dynamic>;
-              if (mounted && await newCertificate(context, s, order, deliveryId: d['id'] as int)) unawaited(_load());
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Emitir certificado'),
-          ),
+          if (_missingCertificates(d) > 0)
+            // Both ways to make certificates live in one menu; the primary one is the batch.
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FilledButton.tonalIcon(
+                  key: const ValueKey('delivery-all-certificates'),
+                  onPressed: _createAllCertificates,
+                  icon: const Icon(Icons.playlist_add),
+                  label: Text(_missingCertificates(d) == 1 ? 'Gerar certificado do item' : 'Gerar ${_missingCertificates(d)} certificados'),
+                ),
+                PopupMenuButton<int>(
+                  key: const ValueKey('delivery-certificate-menu'),
+                  tooltip: 'Mais opções de certificado',
+                  onSelected: (_) => unawaited(_newCertificate(d)),
+                  itemBuilder: (_) => const [PopupMenuItem(value: 1, child: Text('Novo certificado'))],
+                ),
+              ],
+            )
+          else
+            OutlinedButton.icon(
+              key: const ValueKey('delivery-new-certificate'),
+              onPressed: () => _newCertificate(d),
+              icon: const Icon(Icons.add),
+              label: const Text('Novo certificado'),
+            ),
       ],
       child: SimpleTable(
         columns: [

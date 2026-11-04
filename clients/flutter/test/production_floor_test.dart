@@ -461,7 +461,7 @@ void main() {
           {..._shipment, 'dueDate': '2026-10-25'},
         ];
       await _pump(tester, fake, (s) => OutsideProcessingScreen(session: s));
-      expect(find.textContaining('atrasada'), findsOneWidget);
+      expect(find.textContaining('Atrasada'), findsOneWidget);
     });
 
     testWidgets('dismissing the action sheet does nothing', (tester) async {

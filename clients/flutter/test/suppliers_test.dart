@@ -68,7 +68,7 @@ void main() {
     expect(find.text('Pontualidade'), findsOneWidget);
     expect(find.text('95,0 %'), findsOneWidget);
     expect(find.text('Volume'), findsOneWidget);
-    await tester.tap(find.text('3 meses'));
+    await tester.tap(find.text('3m'));
     await tester.pumpAndSettle();
     expect(log.where((r) => r.url.path == '/api/suppliers/1/performance').length, 2);
     await tester.tap(find.text('Materiais'));

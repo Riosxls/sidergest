@@ -363,15 +363,15 @@ void main() {
       await _openQuote(tester, f);
       expect(find.text('Desconto acima do limite'), findsOneWidget);
       await tapKey(tester, 'quote-send');
-      expect(find.text('Enviar para aprovação?'), findsOneWidget);
+      expect(find.text('Enviar para autorização?'), findsOneWidget);
       expect(find.textContaining('O desconto deste orçamento (12%) passa do limite de 5%'), findsOneWidget);
       await tapText(tester, 'Cancelar');
       expect(f.called('POST', '/api/sales/quotes/5/send'), isFalse);
       await tapKey(tester, 'quote-send');
       await tapKey(tester, 'confirm-step');
       expect(f.called('POST', '/api/sales/quotes/5/send'), isTrue);
-      expect(find.text('Enviada para aprovação do gerente'), findsOneWidget);
-      expect(find.text('Aguardando aprovação do gerente'), findsOneWidget);
+      expect(find.text('Enviada para autorização do gerente'), findsOneWidget);
+      expect(find.text('Aguardando autorização do gerente'), findsOneWidget);
       expect(find.byKey(const ValueKey('quote-approve')), findsNothing); // a salesperson cannot approve
     });
 
@@ -408,7 +408,7 @@ void main() {
         ..['approvedBy'] = 'gerente'
         ..['approvedAt'] = '2026-10-27T12:00:00Z';
       await _openQuote(tester, f);
-      expect(find.textContaining('Aprovado por gerente'), findsOneWidget);
+      expect(find.textContaining('Autorizado por gerente'), findsOneWidget);
       await tapKey(tester, 'quote-reopen');
       await tapText(tester, 'Manter como está');
       expect(f.called('POST', '/api/sales/quotes/5/reopen'), isFalse);
@@ -424,7 +424,8 @@ void main() {
     testWidgets('extending the validity posts the new date', (tester) async {
       final f = _fake('Sent');
       await _openQuote(tester, f);
-      await tapKey(tester, 'quote-extend');
+      await tapKey(tester, 'quote-menu');
+      await tapKey(tester, 'quote-menu-extend');
       expect(find.text('Prorrogar validade de PROP 31'), findsOneWidget);
       await tester.enterText(find.byKey(const ValueKey('field-validUntil')), '30/12/2026');
       await tester.enterText(find.byKey(const ValueKey('field-note')), 'Pediu mais prazo');
@@ -481,7 +482,9 @@ void main() {
     testWidgets('mail button reports when no mail program exists', (tester) async {
       final f = _fake('Sent');
       await _openQuote(tester, f);
-      await tester.tap(find.byKey(const ValueKey('quote-mail')));
+      await tester.tap(find.byKey(const ValueKey('quote-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('quote-menu-mail')));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
       await tester.pumpAndSettle();
       expect(find.text('Nenhum programa de e-mail configurado neste computador'), findsOneWidget);
@@ -627,7 +630,7 @@ void main() {
         ..['customerPartNumber'] = null;
       await _openQuote(tester, f);
       await menu(tester, 'Ver texto do orçamento');
-      expect(find.textContaining('Prazo: 45 dias', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Prazo de pagamento: 45 dias', findRichText: true), findsOneWidget);
       expect(find.textContaining('01/12/2026', findRichText: true), findsWidgets);
       await tapText(tester, 'Fechar');
     });

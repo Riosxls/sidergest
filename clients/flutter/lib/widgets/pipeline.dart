@@ -1,32 +1,108 @@
 import 'package:flutter/material.dart';
 
 import '../entities.dart';
+import '../theme_tokens.dart';
 
 /// Colour family of badges, tiles and meters.
 enum Tone { neutral, info, progress, success, warning, danger }
 
-(Color, Color) toneColors(BuildContext context, Tone tone) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
-  final cs = Theme.of(context).colorScheme;
-  Color c(int light, int darkBg) => Color(dark ? darkBg : light);
-  return switch (tone) {
-    Tone.neutral => (cs.surfaceContainerHighest, cs.onSurfaceVariant),
-    Tone.info => (c(0xFFDCEBFB, 0xFF1D3A5C), c(0xFF0B4A8B, 0xFFB9D8FA)),
-    Tone.progress => (c(0xFFEDE3FB, 0xFF3A2A56), c(0xFF5B2BA0, 0xFFDCC8FA)),
-    Tone.success => (c(0xFFDDF3E4, 0xFF1C4A2B), c(0xFF1E6B3A, 0xFFB8E6C6)),
-    Tone.warning => (c(0xFFFFF0D1, 0xFF54400F), c(0xFF8A5A00, 0xFFFFDB92)),
-    Tone.danger => (c(0xFFFDE2E1, 0xFF5C1E1C), c(0xFFA3221D, 0xFFFFC4C0)),
-  };
+/// Colours of one [Tone]: soft background + readable text for badges and cards, a strong accent (bars, filled steps) and the text colour on that accent.
+class ToneColors {
+  const ToneColors({required this.bg, required this.fg, required this.accent, required this.onAccent});
+
+  final Color bg;
+  final Color fg;
+  final Color accent;
+  final Color onAccent;
+
+  static ToneColors lerp(ToneColors a, ToneColors b, double t) => ToneColors(
+    bg: Color.lerp(a.bg, b.bg, t)!,
+    fg: Color.lerp(a.fg, b.fg, t)!,
+    accent: Color.lerp(a.accent, b.accent, t)!,
+    onAccent: Color.lerp(a.onAccent, b.onAccent, t)!,
+  );
 }
 
-Color toneAccent(BuildContext context, Tone tone) => switch (tone) {
-  Tone.neutral => Theme.of(context).colorScheme.outline,
-  Tone.info => const Color(0xFF1F6FBF),
-  Tone.progress => const Color(0xFF7A4CC2),
-  Tone.success => const Color(0xFF23803F),
-  Tone.warning => const Color(0xFFD08A00),
-  Tone.danger => const Color(0xFFC62828),
-};
+/// Status palette registered in the app theme (light, dark and high contrast); read it with [StatusColors.of].
+class StatusColors extends ThemeExtension<StatusColors> {
+  const StatusColors({required this.neutral, required this.info, required this.progress, required this.success, required this.warning, required this.danger});
+
+  final ToneColors neutral;
+  final ToneColors info;
+  final ToneColors progress;
+  final ToneColors success;
+  final ToneColors warning;
+  final ToneColors danger;
+
+  ToneColors of(Tone tone) => switch (tone) {
+    Tone.neutral => neutral,
+    Tone.info => info,
+    Tone.progress => progress,
+    Tone.success => success,
+    Tone.warning => warning,
+    Tone.danger => danger,
+  };
+
+  /// The palette of the current theme (built from the colour scheme when the theme did not register one, e.g. in a bare MaterialApp).
+  static StatusColors from(BuildContext context) {
+    final theme = Theme.of(context);
+    return theme.extension<StatusColors>() ?? StatusColors.build(theme.colorScheme);
+  }
+
+  static StatusColors build(ColorScheme cs, {bool highContrast = false}) {
+    final dark = cs.brightness == Brightness.dark;
+    ToneColors t(int lightBg, int darkBg, int lightFg, int darkFg, int lightAccent, int darkAccent, int lightOn, int darkOn, {int? hcFg, int? hcAccent}) => ToneColors(
+      bg: Color(dark ? darkBg : lightBg),
+      fg: Color(dark ? darkFg : (highContrast && hcFg != null ? hcFg : lightFg)),
+      accent: Color(dark ? darkAccent : (highContrast && hcAccent != null ? hcAccent : lightAccent)),
+      onAccent: Color(dark ? darkOn : lightOn),
+    );
+    return StatusColors(
+      neutral: ToneColors(bg: cs.surfaceContainerHighest, fg: cs.onSurfaceVariant, accent: cs.outline, onAccent: cs.surface),
+      info: t(0xFFDCEBFB, 0xFF1D3A5C, 0xFF0B4A8B, 0xFFB9D8FA, 0xFF1F6FBF, 0xFF7DB8F0, 0xFFFFFFFF, 0xFF06223F, hcFg: 0xFF063463, hcAccent: 0xFF15528F),
+      progress: t(0xFFEDE3FB, 0xFF3A2A56, 0xFF5B2BA0, 0xFFDCC8FA, 0xFF7A4CC2, 0xFFB99BEA, 0xFFFFFFFF, 0xFF24103F, hcFg: 0xFF3F1B73, hcAccent: 0xFF5F37A0),
+      success: t(0xFFDDF3E4, 0xFF1C4A2B, 0xFF1E6B3A, 0xFFB8E6C6, 0xFF23803F, 0xFF6CCB8A, 0xFFFFFFFF, 0xFF072713, hcFg: 0xFF11471F, hcAccent: 0xFF1B6431),
+      // White on this amber is only 2.7:1, so the accent carries dark text instead.
+      warning: t(0xFFFFF0D1, 0xFF54400F, 0xFF8A5A00, 0xFFFFDB92, 0xFFD08A00, 0xFFF0B84A, 0xFF241600, 0xFF2B1B00, hcFg: 0xFF5E3C00, hcAccent: 0xFFB87500),
+      danger: t(0xFFFDE2E1, 0xFF5C1E1C, 0xFFA3221D, 0xFFFFC4C0, 0xFFC62828, 0xFFF28B82, 0xFFFFFFFF, 0xFF410B09, hcFg: 0xFF7A1410, hcAccent: 0xFFA81F1F),
+    );
+  }
+
+  @override
+  StatusColors copyWith({ToneColors? neutral, ToneColors? info, ToneColors? progress, ToneColors? success, ToneColors? warning, ToneColors? danger}) => StatusColors(
+    neutral: neutral ?? this.neutral,
+    info: info ?? this.info,
+    progress: progress ?? this.progress,
+    success: success ?? this.success,
+    warning: warning ?? this.warning,
+    danger: danger ?? this.danger,
+  );
+
+  @override
+  StatusColors lerp(ThemeExtension<StatusColors>? other, double t) {
+    if (other is! StatusColors) return this;
+    return StatusColors(
+      neutral: ToneColors.lerp(neutral, other.neutral, t),
+      info: ToneColors.lerp(info, other.info, t),
+      progress: ToneColors.lerp(progress, other.progress, t),
+      success: ToneColors.lerp(success, other.success, t),
+      warning: ToneColors.lerp(warning, other.warning, t),
+      danger: ToneColors.lerp(danger, other.danger, t),
+    );
+  }
+}
+
+/// (background, text) of [tone] from the theme's [StatusColors].
+(Color, Color) toneColors(BuildContext context, Tone tone) {
+  final c = StatusColors.from(context).of(tone);
+  return (c.bg, c.fg);
+}
+
+/// Strong colour of [tone] (bars, filled steps). Text on it uses [toneOnAccent].
+Color toneAccent(BuildContext context, Tone tone) => StatusColors.from(context).of(tone).accent;
+
+/// Text/icon colour that reads on [toneAccent].
+Color toneOnAccent(BuildContext context, Tone tone) => StatusColors.from(context).of(tone).onAccent;
 
 /// Small coloured label for a status.
 class StatusBadge extends StatelessWidget {
@@ -81,7 +157,8 @@ class StagePath extends StatelessWidget {
     final done = toneAccent(context, Tone.success);
     final failed = failedLabel != null;
     // The active step uses the theme's primary colour, which is light in dark mode: its text must be onPrimary, not white.
-    final onActive = failed ? Colors.white : cs.onPrimary;
+    final onActive = failed ? toneOnAccent(context, Tone.danger) : cs.onPrimary;
+    final onDone = toneOnAccent(context, Tone.success);
     // White on the green and red accents measures 4.96:1 and 5.62:1 (WCAG AA is 4.5:1) in both themes, because the accents do not change.
     return LayoutBuilder(
       builder: (context, box) {
@@ -116,7 +193,7 @@ class StagePath extends StatelessWidget {
                           children: [
                             if (i < current)
                               // Narrow: the label is gone, so a finished step keeps its own icon (the green says it is done).
-                              Icon(compact && s.icon != null ? s.icon : Icons.check, size: 16, color: Colors.white)
+                              Icon(compact && s.icon != null ? s.icon : Icons.check, size: 16, color: onDone)
                             else if (s.icon != null)
                               Icon(s.icon, size: 16, color: i == current ? onActive : cs.onSurfaceVariant),
                             if (!compact || i == current) ...[
@@ -128,9 +205,9 @@ class StagePath extends StatelessWidget {
                                   textAlign: TextAlign.center,
                                   overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                    fontSize: roomy ? null : 11.5,
+                                    fontSize: roomy ? null : (Theme.of(context).textTheme.labelSmall?.fontSize),
                                     height: 1.1,
-                                    color: i < current ? Colors.white : (i == current ? onActive : cs.onSurfaceVariant),
+                                    color: i < current ? onDone : (i == current ? onActive : cs.onSurfaceVariant),
                                     fontWeight: i == current ? FontWeight.w700 : FontWeight.w500,
                                   ),
                                 ),
@@ -255,8 +332,8 @@ class KpiTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final (bg, fg) = toneColors(context, tone);
-    return SizedBox(
-      width: 210,
+    return LayoutBuilder(builder: (context, box) => SizedBox(
+      width: box.maxWidth.isFinite && box.maxWidth < 210 ? box.maxWidth : 210,
       child: Card(
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -282,12 +359,13 @@ class KpiTile extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (onTap != null) Icon(Icons.chevron_right, size: 18, color: theme.colorScheme.onSurfaceVariant),
               ],
             ),
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -580,7 +658,7 @@ class RecordHeader extends StatelessWidget {
   }
 }
 
-/// Asks before a step that is hard to undo. The way out is [cancelLabel] ("Cancelar"): "Voltar" is kept for navigation, and a dialog whose own
+/// Asks before a step that is hard to undo. The way out is [cancelLabel] ("Cancelar"; pass "Voltar" when the action itself is a "Cancelar ...", so the two words do not clash): "Voltar" is otherwise kept for navigation, and a dialog whose own
 /// action is about going back (e.g. "Voltar para rascunho") reads better with "Manter como está".
 Future<bool> confirmStep(
   BuildContext context, {
@@ -601,7 +679,7 @@ Future<bool> confirmStep(
           TextButton(onPressed: () => Navigator.pop(c, false), child: Text(cancelLabel)),
           FilledButton(
             key: const ValueKey('confirm-step'),
-            style: danger ? FilledButton.styleFrom(backgroundColor: toneAccent(c, Tone.danger)) : null,
+            style: danger ? dangerButtonStyle(c) : null,
             onPressed: () => Navigator.pop(c, true),
             child: Text(confirmLabel),
           ),

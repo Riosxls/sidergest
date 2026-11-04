@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show FilteringTextInputFormatter, Logical
 
 import '../api.dart';
 import '../entities.dart';
+import '../theme_tokens.dart';
 import '../workdays.dart';
 import 'discard_guard.dart';
 import 'drafts.dart';
@@ -54,14 +55,16 @@ typedef PickHook = Future<Map<String, Object?>?> Function(String key, int? id, M
 /// Helper text of a field that depends on what is typed elsewhere in the form ("Tabela R$ 10,00 · desconto 5%"); null keeps the field's own hint.
 typedef HintHook = String? Function(String key, Map<String, dynamic> values);
 
-Future<bool> confirm(BuildContext context, String message) async =>
+/// Yes/no question. Pass [confirmLabel] with the verb of the action ("Excluir", "Reprogramar") instead of the generic "Confirmar", [danger] for a
+/// destructive one (red button) and [cancelLabel] "Voltar" when the action itself is a "Cancelar ...". The defaults stay "Confirmar"/"Cancelar".
+Future<bool> confirm(BuildContext context, String message, {String confirmLabel = 'Confirmar', String cancelLabel = 'Cancelar', bool danger = false}) async =>
     await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         content: Text(message),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Confirmar')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(cancelLabel)),
+          FilledButton(style: danger ? dangerButtonStyle(c) : null, onPressed: () => Navigator.pop(c, true), child: Text(confirmLabel)),
         ],
       ),
     ) ??
@@ -268,13 +271,52 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
     return _clientErrors.isEmpty ? body : null;
   }
 
+  /// "Verifique: Nome, Código": which fields failed, so the message does not only say "highlighted".
+  String _invalidSummary() {
+    final names = [
+      for (final f in widget.fields)
+        if (_clientErrors.containsKey(f.key)) f.label,
+    ];
+    if (names.isEmpty) return 'Verifique os campos destacados';
+    final shown = names.take(4).join(', ');
+    return 'Verifique ${names.length == 1 ? 'o campo' : 'os campos'}: $shown${names.length > 4 ? ' e mais ${names.length - 4}' : ''}';
+  }
+
+  final _boxKeys = <String, GlobalKey>{};
+
+  /// After a failed validation: brings the first invalid field into view and puts the cursor in it.
+  void _revealFirstError() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final f in widget.fields) {
+        if (!_clientErrors.containsKey(f.key)) continue;
+        final ctx = _boxKeys[f.key]?.currentContext;
+        if (ctx == null) continue;
+        unawaited(Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 200), alignment: 0.1));
+        void visit(Element e) {
+          if (e.widget is EditableText) {
+            (e.widget as EditableText).focusNode.requestFocus();
+            return;
+          }
+          e.visitChildren(visit);
+        }
+
+        (ctx as Element).visitChildren(visit);
+        return;
+      }
+    });
+  }
+
   Future<void> _save({bool again = false}) async {
     final body = _body();
     setState(() {
       _serverErrors = {};
-      _message = body == null ? 'Verifique os campos destacados' : null;
+      _message = body == null ? _invalidSummary() : null;
     });
-    if (body == null) return;
+    if (body == null) {
+      _revealFirstError();
+      return;
+    }
     setState(() => _busy = true);
     // One key per submit attempt: kept while the same content is resubmitted after a lost answer, dropped once the form is edited or the server refused.
     final signature = jsonEncode(body);
@@ -425,7 +467,6 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
             helperText: widget.hintFor?.call(f.key, _currentValues()) ?? f.hint,
             helperMaxLines: 4,
             errorText: error,
-            border: const OutlineInputBorder(),
             isDense: true,
             hintText: f.type == FieldType.date ? 'dd/mm/aaaa' : (f.type == FieldType.time ? 'hh:mm' : null),
             suffixIcon: f.type == FieldType.date && !widget.readOnly
@@ -472,7 +513,6 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
             helperText: f.hint,
             helperMaxLines: 4,
             errorText: error,
-            border: const OutlineInputBorder(),
             isDense: true,
           ),
           items: [
@@ -533,7 +573,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
             runSpacing: 14,
             children: [
               for (final f in widget.fields)
-                if (!folded(f)) SizedBox(width: w, child: _field(f)),
+                if (!folded(f)) SizedBox(key: _boxKeys.putIfAbsent(f.key, GlobalKey.new), width: w, child: _field(f)),
               if (extra.isNotEmpty)
                 TextButton.icon(
                   key: const ValueKey('form-more'),
@@ -546,22 +586,20 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
         );
       },
     );
-    final actions = [
-      if (widget.onDelete != null && !widget.readOnly)
-        TextButton.icon(
-          onPressed: _busy ? null : _delete,
-          icon: const Icon(Icons.delete_outline),
-          label: const Text('Excluir'),
-          style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
-        ),
-      const Spacer(),
+    final deleteButton = (widget.onDelete != null && !widget.readOnly)
+        ? TextButton.icon(
+            onPressed: _busy ? null : _delete,
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Excluir'),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+          )
+        : null;
+    final actions = <Widget>[
       TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: Text(widget.readOnly ? 'Fechar' : 'Cancelar')),
       if (!widget.readOnly) ...[
         if (widget.saveAndNewLabel != null) ...[
-          const SizedBox(width: 8),
           OutlinedButton(key: const ValueKey('form-save-new'), onPressed: _busy ? null : () => _save(again: true), child: Text(widget.saveAndNewLabel!)),
         ],
-        const SizedBox(width: 8),
         FilledButton(
           onPressed: _busy ? null : _save,
           child: _busy ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(widget.submitLabel),
@@ -589,13 +627,19 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
         if (_message != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            child: Semantics(liveRegion: true, child: Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
           ),
         const SizedBox(height: 12),
-        Row(children: actions),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ?deleteButton,
+            Expanded(child: Wrap(alignment: WrapAlignment.end, spacing: 8, runSpacing: 8, children: actions)),
+          ],
+        ),
       ],
     );
-    final dialog = narrow
+    final rawDialog = narrow
         ? Dialog.fullscreen(
             child: SafeArea(
               child: Padding(padding: const EdgeInsets.all(16), child: content),
@@ -607,6 +651,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
               child: Padding(padding: const EdgeInsets.all(20), child: content),
             ),
           );
+    final dialog = Semantics(scopesRoute: true, namesRoute: true, explicitChildNodes: true, label: widget.title, child: rawDialog);
     if (widget.readOnly) return dialog;
     // Ctrl+Enter saves from any field.
     return CallbackShortcuts(
@@ -724,7 +769,6 @@ class _LookupFieldState extends State<LookupField> {
           helperText: widget.hint,
           helperMaxLines: 4,
           errorText: widget.error,
-          border: const OutlineInputBorder(),
           isDense: true,
           suffixIcon: widget.value != null && widget.enabled
               ? IconButton(
@@ -970,7 +1014,6 @@ class _CustomPrazoDialogState extends State<_CustomPrazoDialog> {
           helperText: 'Vale só para este orçamento; não entra na lista de prazos.',
           helperMaxLines: 3,
           errorText: _error,
-          border: const OutlineInputBorder(),
           isDense: true,
         ),
         onSubmitted: (_) => _ok(),

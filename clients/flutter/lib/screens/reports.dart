@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
 import '../reports/report_doc.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/record_list.dart';
 
 DateTime _firstOfMonth(DateTime d) => DateTime(d.year, d.month);
@@ -60,7 +63,12 @@ class ReportTable extends StatelessWidget {
       flex: flex[i],
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
-        child: Text(t, style: style, textAlign: doc.numeric[i] ? TextAlign.right : TextAlign.left, overflow: TextOverflow.ellipsis, maxLines: 2),
+        // A long value is cut with an ellipsis; the tooltip carries the whole text.
+        child: Tooltip(
+          message: t,
+          waitDuration: const Duration(milliseconds: 500),
+          child: Text(t, style: style, textAlign: doc.numeric[i] ? TextAlign.right : TextAlign.left, overflow: TextOverflow.ellipsis, maxLines: 2),
+        ),
       ),
     );
     final minWidth = flex.fold<int>(0, (a, b) => a + b) * 70.0;
@@ -79,16 +87,24 @@ class ReportTable extends StatelessWidget {
                     for (var i = 0; i < doc.headers.length; i++)
                       Expanded(
                         flex: flex[i],
-                        child: InkWell(
-                          onTap: () => onSort(i),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
-                            child: Row(
-                              mainAxisAlignment: doc.numeric[i] ? MainAxisAlignment.end : MainAxisAlignment.start,
-                              children: [
-                                Flexible(child: Text(doc.headers[i], style: theme.textTheme.labelLarge, overflow: TextOverflow.ellipsis)),
-                                if (sortCol == i) Icon(ascending ? Icons.arrow_upward : Icons.arrow_downward, size: 14),
-                              ],
+                        child: Semantics(
+                          button: true,
+                          label: 'Ordenar por ${doc.headers[i]}',
+                          child: InkWell(
+                            onTap: () => onSort(i),
+                            hoverColor: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(minHeight: 40),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
+                                child: Row(
+                                  mainAxisAlignment: doc.numeric[i] ? MainAxisAlignment.end : MainAxisAlignment.start,
+                                  children: [
+                                    Flexible(child: Tooltip(message: doc.headers[i], child: Text(doc.headers[i], style: theme.textTheme.labelLarge, overflow: TextOverflow.ellipsis))),
+                                    if (sortCol == i) Icon(ascending ? Icons.arrow_upward : Icons.arrow_downward, size: 14),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -111,8 +127,10 @@ class ReportTable extends StatelessWidget {
                             ReportRowKind.subtotal => theme.colorScheme.surfaceContainerHigh,
                             _ => null,
                           };
-                          return Container(
-                            decoration: BoxDecoration(color: bg, border: Border(bottom: BorderSide(color: theme.dividerColor.withValues(alpha: .4)))),
+                          return _HoverRow(
+                            color: bg,
+                            hover: r.kind == ReportRowKind.normal ? theme.colorScheme.surfaceContainerHigh : null,
+                            border: Border(bottom: BorderSide(color: theme.dividerColor.withValues(alpha: .4))),
                             child: r.kind == ReportRowKind.section
                                 ? Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7), child: Text(r.cells.first, style: style))
                                 : Row(children: [for (var i = 0; i < doc.headers.length; i++) cell(i < r.cells.length ? r.cells[i] : '', i, style: style)]),
@@ -128,10 +146,86 @@ class ReportTable extends StatelessWidget {
   }
 }
 
-/// Common layout: filters + search + actions above a table.
-class _ReportPage extends StatelessWidget {
-  const _ReportPage({required this.filters, required this.onSearch, required this.searchHint, required this.doc, required this.state, required this.sortCol, required this.ascending, required this.onSort});
+/// A table row that lights up under the mouse (normal rows only).
+class _HoverRow extends StatefulWidget {
+  const _HoverRow({required this.color, required this.hover, required this.border, required this.child});
 
+  final Color? color;
+  final Color? hover;
+  final Border border;
+  final Widget child;
+
+  @override
+  State<_HoverRow> createState() => _HoverRowState();
+}
+
+class _HoverRowState extends State<_HoverRow> {
+  bool _over = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => setState(() => _over = widget.hover != null),
+    onExit: (_) => setState(() => _over = false),
+    child: Container(decoration: BoxDecoration(color: _over ? widget.hover : widget.color, border: widget.border), child: widget.child),
+  );
+}
+
+/// Runs [action] once the user has stopped typing for [delay].
+class _Debounce {
+  Timer? _t;
+
+  void call(VoidCallback action, [Duration delay = const Duration(milliseconds: 350)]) {
+    _t?.cancel();
+    _t = Timer(delay, action);
+  }
+
+  void flush(VoidCallback action) {
+    _t?.cancel();
+    action();
+  }
+
+  void dispose() => _t?.cancel();
+}
+
+/// A caption above a group of controls.
+class _Group extends StatelessWidget {
+  const _Group(this.label, this.child);
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+          child: Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ),
+        child,
+      ],
+    );
+  }
+}
+
+/// Common layout: period and filters (each group named) + search on the left, the export actions on the right, then the table.
+class _ReportPage extends StatelessWidget {
+  const _ReportPage({
+    required this.period,
+    required this.filters,
+    required this.onSearch,
+    required this.searchHint,
+    required this.doc,
+    required this.state,
+    required this.sortCol,
+    required this.ascending,
+    required this.onSort,
+  });
+
+  final Widget period;
   final List<Widget> filters;
   final ValueChanged<String> onSearch;
   final String searchHint;
@@ -142,13 +236,16 @@ class _ReportPage extends StatelessWidget {
   final ValueChanged<int> onSort;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget build(BuildContext context) {
+    final controls = Wrap(
+      spacing: AppSpacing.lg,
+      runSpacing: AppSpacing.md,
+      crossAxisAlignment: WrapCrossAlignment.end,
       children: [
-        Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-          ...filters,
+        _Group('Período', period),
+        if (filters.isNotEmpty) _Group('Filtros', Wrap(spacing: AppSpacing.md, runSpacing: AppSpacing.sm, crossAxisAlignment: WrapCrossAlignment.center, children: filters)),
+        _Group(
+          'Busca',
           SizedBox(
             width: 260,
             child: TextField(
@@ -156,16 +253,29 @@ class _ReportPage extends StatelessWidget {
               onChanged: onSearch,
             ),
           ),
-          ReportActions(doc: () => doc, enabled: !state.loading && state.error == null),
-        ]),
-        const SizedBox(height: 8),
-        if (state.loading) const LinearProgressIndicator(),
-        if (state.error != null) Padding(padding: const EdgeInsets.all(8), child: Text(state.error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-        Expanded(child: ReportTable(doc: doc, sortCol: sortCol, ascending: ascending, onSort: onSort)),
-        for (final n in doc.notes) Text(n, style: Theme.of(context).textTheme.bodySmall),
+        ),
       ],
-    ),
-  );
+    );
+    final actions = ReportActions(doc: () => doc, enabled: !state.loading && state.error == null);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, c) => c.maxWidth >= 900
+                ? Row(crossAxisAlignment: CrossAxisAlignment.end, children: [Expanded(child: controls), const SizedBox(width: AppSpacing.lg), actions])
+                : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [controls, const SizedBox(height: AppSpacing.sm), actions]),
+          ),
+          const SizedBox(height: 8),
+          if (state.loading) const LinearProgressIndicator(),
+          if (state.error != null) Padding(padding: const EdgeInsets.all(8), child: Text(state.error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+          Expanded(child: ReportTable(doc: doc, sortCol: sortCol, ascending: ascending, onSort: onSort)),
+          for (final n in doc.notes) Text(n, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
 }
 
 double _n(Object? v) => (v as num?)?.toDouble() ?? 0;
@@ -303,16 +413,24 @@ class _MaterialConsumptionScreenState extends State<MaterialConsumptionScreen> {
     );
   }
 
+  final _debounce = _Debounce();
+
+  @override
+  void dispose() {
+    _debounce.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => _ReportPage(
+    period: PeriodPicker(from: _from, to: _to, onChanged: (f, t) {
+      setState(() {
+        _from = f;
+        _to = t;
+      });
+      _load();
+    }),
     filters: [
-      PeriodPicker(from: _from, to: _to, onChanged: (f, t) {
-        setState(() {
-          _from = f;
-          _to = t;
-        });
-        _load();
-      }),
       ChoiceFilter(label: 'Categoria', value: _group, choices: _groups, onChanged: (v) {
         setState(() => _group = v);
         _load();
@@ -321,18 +439,23 @@ class _MaterialConsumptionScreenState extends State<MaterialConsumptionScreen> {
         width: 160,
         child: TextField(
           decoration: const InputDecoration(labelText: 'Código material', isDense: true, border: OutlineInputBorder()),
-          onSubmitted: (v) {
+          // Same as the search box: it filters while typing (after a pause); Enter applies at once.
+          onChanged: (v) => _debounce(() {
             _code = v.trim();
             _load();
-          },
+          }),
+          onSubmitted: (v) => _debounce.flush(() {
+            _code = v.trim();
+            _load();
+          }),
         ),
       ),
     ],
     searchHint: 'Buscar',
-    onSearch: (v) {
+    onSearch: (v) => _debounce(() {
       _q = v.trim();
       _load();
-    },
+    }),
     doc: _doc(),
     state: (loading: _loading, error: _error),
     sortCol: _sortCol,
@@ -473,14 +596,14 @@ class _BillingSummaryScreenState extends State<BillingSummaryScreen> {
 
   @override
   Widget build(BuildContext context) => _ReportPage(
+    period: PeriodPicker(from: _from, to: _to, onChanged: (f, t) {
+      setState(() {
+        _from = f;
+        _to = t;
+      });
+      _load();
+    }),
     filters: [
-      PeriodPicker(from: _from, to: _to, onChanged: (f, t) {
-        setState(() {
-          _from = f;
-          _to = t;
-        });
-        _load();
-      }),
       ChoiceFilter(label: 'Empresa', value: _company, choices: _companies, allLabel: 'EBT + BST', onChanged: (v) {
         setState(() => _company = v);
         _load();

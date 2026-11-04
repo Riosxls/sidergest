@@ -31,7 +31,7 @@ Future<void> _open(WidgetTester tester, String module, String role, {List<String
 const _all = {
   'Comercial': ['Novo orçamento', 'Novo pedido de venda', 'Nova análise de viabilidade'],
   'Engenharia': ['Novo produto', 'Nova matéria-prima'],
-  'PCP': ['Nova Ordem de Fabricação', 'Novo apontamento'],
+  'PCP': ['Nova ordem de fabricação', 'Novo apontamento'],
   'Suprimentos': ['Nova requisição', 'Novo pedido de compra', 'Estoque mínimo'],
   'Estoque': ['Novo lançamento', 'Nova reserva', 'Estoque mínimo'],
 };

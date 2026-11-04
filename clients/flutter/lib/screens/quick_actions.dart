@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../entities.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/actions.dart';
 import 'orders.dart';
 import 'product_detail.dart';
@@ -33,7 +34,7 @@ Future<void> newProduct(BuildContext context, Session session) async {
 List<QuickAction> quickActionsFor(Session s) => [
   if (s.canSell) QuickAction(Icons.request_quote_outlined, 'Novo orçamento', (c) => newQuote(c, s)),
   if (s.canWrite) QuickAction(Icons.add_box_outlined, 'Novo produto', (c) => newProduct(c, s)),
-  if (s.canProduce) QuickAction(Icons.add_task, 'Nova Ordem de Fabricação', (c) => newProductionOrder(c, s)),
+  if (s.canProduce) QuickAction(Icons.add_task, 'Nova ordem de fabricação', (c) => newProductionOrder(c, s)),
   if (s.canRequest) QuickAction(Icons.post_add, 'Nova requisição', (c) => newRequisition(c, s)),
   if (s.canBuy) QuickAction(Icons.add_shopping_cart, 'Novo pedido', (c) => newPurchaseOrder(c, s)),
 ];
@@ -67,7 +68,7 @@ List<QuickAction> moduleQuickActions(Session s, String section, {void Function(S
     if (s.canWrite) QuickAction(Icons.category_outlined, 'Nova matéria-prima', (c) => newMaterial(c, s)),
   ],
   'PCP' => [
-    if (s.canProduce) QuickAction(Icons.add_task, 'Nova Ordem de Fabricação', (c) => newProductionOrder(c, s)),
+    if (s.canProduce) QuickAction(Icons.add_task, 'Nova ordem de fabricação', (c) => newProductionOrder(c, s)),
     if (s.canProduce) QuickAction(Icons.timer_outlined, 'Novo apontamento', (c) => newReport(c, s)),
   ],
   'Suprimentos' => [
@@ -83,7 +84,7 @@ List<QuickAction> moduleQuickActions(Session s, String section, {void Function(S
   _ => const [],
 };
 
-/// Row of quick-action buttons. On a phone it scrolls sideways in one row so the content below stays on the first screen.
+/// Row of quick-action buttons. It wraps onto more lines instead of scrolling sideways, so no action is hidden off screen on a phone.
 class QuickActionBar extends StatelessWidget {
   const QuickActionBar({super.key, required this.actions, this.onDone});
 
@@ -96,21 +97,14 @@ class QuickActionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     if (actions.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: LayoutBuilder(
-        builder: (context, c) {
-          final buttons = [
-            for (final a in actions)
-              FilledButton.tonalIcon(onPressed: () => a.run(context).then((_) => onDone?.call()), icon: Icon(a.icon), label: Text(a.label)),
-          ];
-          if (c.maxWidth < 600) {
-            return SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(children: [for (final b in buttons) Padding(padding: const EdgeInsets.only(right: 8), child: b)]),
-            );
-          }
-          return Wrap(spacing: 8, runSpacing: 8, children: buttons);
-        },
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Wrap(
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.sm,
+        children: [
+          for (final a in actions)
+            FilledButton.tonalIcon(onPressed: () => a.run(context).then((_) => onDone?.call()), icon: Icon(a.icon), label: Text(a.label)),
+        ],
       ),
     );
   }

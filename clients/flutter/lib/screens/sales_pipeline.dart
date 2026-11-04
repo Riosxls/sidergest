@@ -1,13 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
-import '../widgets/record_list.dart';
+import '../widgets/responsive.dart';
 import 'certificates.dart';
 import 'sales_common.dart';
 import 'sales_quotes.dart';
@@ -52,9 +55,23 @@ class SalesPipelineScreen extends StatefulWidget {
 
 class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
   int? _customerId;
-  late Future<Map<String, dynamic>> _future = _fetch();
   String? _hover;
+
+  /// Stage the dragged card comes from; the columns that cannot take it are dimmed meanwhile.
+  String? _dragFrom;
   final _kanbanScroll = ScrollController();
+
+  /// Last data stays on screen while a reload runs, so the board does not blank and the scroll position is kept.
+  Map<String, dynamic>? _data;
+  Object? _error;
+  bool _loading = false;
+  int _seq = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_reload());
+  }
 
   @override
   void dispose() {
@@ -65,13 +82,29 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
   ApiClient get api => widget.session.api;
   Session get s => widget.session;
 
-  Future<Map<String, dynamic>> _fetch() async => await api.get('/api/sales/pipeline', {'customerId': _customerId}) as Map<String, dynamic>;
-
-  void _reload() {
+  Future<void> _reload() async {
     if (!mounted) return;
+    final seq = ++_seq;
     setState(() {
-      _future = _fetch();
+      _loading = true;
+      _error = null;
     });
+    try {
+      final d = await api.get('/api/sales/pipeline', {'customerId': _customerId}) as Map<String, dynamic>;
+      if (mounted && seq == _seq) {
+        setState(() {
+          _data = d;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted && seq == _seq) {
+        setState(() {
+          _error = e;
+          _loading = false;
+        });
+      }
+    }
   }
 
   Future<void> _open(Map<String, dynamic> c) async {
@@ -80,12 +113,12 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
     } else {
       await openSalesOrder(context, s, c['id'] as int);
     }
-    _reload();
+    unawaited(_reload());
   }
 
   Future<void> _new() async {
     await newQuote(context, s);
-    _reload();
+    unawaited(_reload());
   }
 
   /// The lookups before a step (quote, drafts, order) can fail; the error is shown instead of leaving the click without any answer.
@@ -106,17 +139,17 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
       case 'quote':
         if (!s.canSell) return;
         if (c['status'] == 'PendingApproval') {
-          if (!s.canApproveSales) return showError(context, '$ref aguarda aprovação do gerente comercial');
+          if (!s.canApproveSales) return showError(context, '$ref aguarda autorização do gerente comercial');
           if (!await confirmStep(
             context,
-            title: 'Aprovar desconto de $ref?',
+            title: 'Autorizar desconto de $ref?',
             message: 'O orçamento fica liberado para envio ao cliente.',
-            confirmLabel: 'Aprovar',
+            confirmLabel: 'Autorizar',
           )) {
             return;
           }
           call = api.post('/api/sales/quotes/$id/approve', {});
-          success = 'Desconto aprovado';
+          success = 'Desconto autorizado';
           break;
         }
         final q = await api.get('/api/sales/quotes/$id') as Map<String, dynamic>;
@@ -124,9 +157,9 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
         final approval = q['status'] == 'Draft' && q['needsApproval'] == true;
         if (!await confirmStep(
           context,
-          title: approval ? 'Enviar $ref para aprovação?' : 'Enviar $ref ao cliente?',
+          title: approval ? 'Enviar $ref para autorização?' : 'Enviar $ref ao cliente?',
           message: approval
-              ? 'O desconto passa do limite; o gerente comercial precisa aprovar antes.'
+              ? 'O desconto passa do limite; o gerente comercial precisa autorizar antes.'
               : 'Será registrada como enviada para ${q['contactEmail'] ?? q['contactName'] ?? 'o contato do cliente'} e a validade começa hoje.',
           confirmLabel: 'Enviar',
           icon: Icons.send,
@@ -134,7 +167,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
           return;
         }
         call = api.post('/api/sales/quotes/$id/send', {'sentTo': q['contactEmail'] ?? q['contactName']});
-        success = approval ? 'Enviada para aprovação' : 'Orçamento enviado ao cliente';
+        success = approval ? 'Enviada para autorização' : 'Orçamento enviado ao cliente';
       case 'sent':
         if (!s.canSell) return;
         call = api.post('/api/sales/quotes/$id/accept', {});
@@ -187,87 +220,40 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
     }
     if (!mounted) return;
     await runAction(context, () => call!, success: success);
-    _reload();
+    unawaited(_reload());
   }
 
   @override
-  Widget build(BuildContext context) => FutureView<Map<String, dynamic>>(
-    future: _future,
-    onRetry: _reload,
-    builder: (context, data) {
-      final k = data['kpis'] as Map<String, dynamic>;
-      final stages = (data['stages'] as List).cast<Map<String, dynamic>>();
-      final winRate = k['winRate'];
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                KpiTile(
-                  label: 'Orçamentos em aberto',
-                  value: fmtMoney(k['openQuotesValue']),
-                  caption: '${k['openQuotes']} orçamentos',
-                  icon: Icons.request_quote_outlined,
-                ),
-                KpiTile(
-                  label: 'Conversão (90 dias)',
-                  value: winRate == null ? '—' : '${((winRate as num) * 100).round()}%',
-                  caption: 'aceitas / respondidas',
-                  icon: Icons.trending_up,
-                  tone: Tone.success,
-                ),
-                KpiTile(
-                  label: 'Pedidos em aberto',
-                  value: fmtMoney(k['openOrdersValue']),
-                  caption: '${k['openOrders']} pedidos',
-                  icon: Icons.receipt_long_outlined,
-                  tone: Tone.progress,
-                ),
-                KpiTile(label: 'Prontos p/ expedir', value: '${k['readyToShip']}', icon: Icons.local_shipping_outlined, tone: Tone.success),
-                KpiTile(label: 'Atrasados', value: '${k['lateOrders']}', icon: Icons.schedule, tone: (k['lateOrders'] as num) > 0 ? Tone.danger : Tone.neutral),
-                if ((k['pendingApprovals'] as num) > 0)
-                  KpiTile(label: 'Aguardando aprovação', value: '${k['pendingApprovals']}', icon: Icons.verified_user_outlined, tone: Tone.warning),
-              ],
+  Widget build(BuildContext context) {
+    final data = _data;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _filterBar(context),
+        SizedBox(height: 4, child: _loading ? const LinearProgressIndicator() : null),
+        if (data == null)
+          Expanded(
+            child: _error != null
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [Text(friendlyError(_error!)), TextButton(onPressed: _reload, child: const Text('Tentar novamente'))],
+                    ),
+                  )
+                : const Center(child: CircularProgressIndicator()),
+          )
+        else ...[
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(child: Text(friendlyError(_error!), style: TextStyle(color: Theme.of(context).colorScheme.error))),
+                  TextButton(onPressed: _reload, child: const Text('Tentar novamente')),
+                ],
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                SizedBox(
-                  width: 320,
-                  child: LookupField(
-                    api: api,
-                    spec: const LookupSpec('/api/customers'),
-                    label: 'Filtrar por cliente',
-                    value: _customerId,
-                    onChanged: (id, _) {
-                      _customerId = id;
-                      _reload();
-                    },
-                  ),
-                ),
-                IconButton(tooltip: 'Atualizar', onPressed: _reload, icon: const Icon(Icons.refresh)),
-                if (s.canSell)
-                  FilledButton.icon(key: const ValueKey('pipeline-new'), onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo orçamento')),
-                Text(
-                  // A phone has no mouse to drag with: the card is held (long press) before it moves.
-                  const {TargetPlatform.android, TargetPlatform.iOS}.contains(Theme.of(context).platform)
-                      ? 'Segure um cartão e arraste para a próxima etapa, ou use a seta do cartão.'
-                      : 'Arraste um cartão para a próxima etapa ou use a seta do cartão.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
+          _kpis(data['kpis'] as Map<String, dynamic>),
           Expanded(
             child: Scrollbar(
               controller: _kanbanScroll,
@@ -276,14 +262,86 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
                 controller: _kanbanScroll,
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.all(12),
-                children: [for (final st in stages) _column(st)],
+                children: [for (final st in (data['stages'] as List).cast<Map<String, dynamic>>()) _column(st)],
               ),
             ),
           ),
         ],
-      );
-    },
-  );
+      ],
+    );
+  }
+
+  /// Filters and actions stay mounted while the board reloads, so the customer field keeps its focus and text.
+  Widget _filterBar(BuildContext context) {
+    final touch = isTouchPlatform;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
+      child: Wrap(
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.sm,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: 320,
+            child: LookupField(
+              api: api,
+              spec: const LookupSpec('/api/customers'),
+              label: 'Filtrar por cliente',
+              value: _customerId,
+              onChanged: (id, _) {
+                _customerId = id;
+                unawaited(_reload());
+              },
+            ),
+          ),
+          IconButton(tooltip: 'Atualizar', onPressed: _loading ? null : _reload, icon: const Icon(Icons.refresh)),
+          Tooltip(
+            // A phone has no mouse to drag with: the card is held (long press) before it moves.
+            message: touch
+                ? 'Segure um cartão e arraste para a próxima etapa, ou use a seta do cartão.'
+                : 'Arraste um cartão para a próxima etapa ou use a seta do cartão.',
+            triggerMode: TooltipTriggerMode.tap,
+            child: const Padding(padding: EdgeInsets.all(AppSpacing.sm), child: Icon(Icons.info_outline, size: 20)),
+          ),
+          if (s.canSell)
+            FilledButton.icon(key: const ValueKey('pipeline-new'), onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo orçamento')),
+        ],
+      ),
+    );
+  }
+
+  /// Four figures only; conversion rides on the quotes tile and the approvals tile shows up only when something waits.
+  Widget _kpis(Map<String, dynamic> k) {
+    final winRate = k['winRate'];
+    final conversion = winRate == null ? '' : ' · conversão ${((winRate as num) * 100).round()}% (90 dias)';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
+      child: Wrap(
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.sm,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          KpiTile(
+            label: 'Orçamentos em aberto',
+            value: fmtMoney(k['openQuotesValue']),
+            caption: '${k['openQuotes']} orçamentos$conversion',
+            icon: Icons.request_quote_outlined,
+          ),
+          KpiTile(
+            label: 'Pedidos em aberto',
+            value: fmtMoney(k['openOrdersValue']),
+            caption: '${k['openOrders']} pedidos',
+            icon: Icons.receipt_long_outlined,
+            tone: Tone.progress,
+          ),
+          KpiTile(label: 'Prontos p/ expedir', value: '${k['readyToShip']}', icon: Icons.local_shipping_outlined, tone: Tone.success),
+          KpiTile(label: 'Atrasados', value: '${k['lateOrders']}', icon: Icons.schedule, tone: (k['lateOrders'] as num) > 0 ? Tone.danger : Tone.neutral),
+          if ((k['pendingApprovals'] as num) > 0)
+            KpiTile(label: 'Aguardando autorização', value: '${k['pendingApprovals']}', icon: Icons.verified_user_outlined, tone: Tone.warning),
+        ],
+      ),
+    );
+  }
 
   Widget _column(Map<String, dynamic> st) {
     final key = st['key'] as String;
@@ -301,13 +359,16 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
         setState(() => _hover = null);
         _advance(d.data.$1, d.data.$2);
       },
-      builder: (context, candidates, _) => Container(
+      builder: (context, candidates, _) => AnimatedOpacity(
+        duration: const Duration(milliseconds: 120),
+        opacity: _dragFrom != null && _dragFrom != key && _moves[_dragFrom] != key ? 0.45 : 1,
+        child: Container(
         key: ValueKey('stage-$key'),
         width: 272,
         margin: const EdgeInsets.only(right: 10),
         decoration: BoxDecoration(
           color: _hover == key ? toneColors(context, tone).$1 : theme.colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border(top: BorderSide(color: toneAccent(context, tone), width: 4)),
         ),
         child: Column(
@@ -337,6 +398,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
             ),
           ],
         ),
+        ),
       ),
     );
   }
@@ -351,9 +413,28 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
     );
     final ghost = Opacity(opacity: 0.35, child: card);
     final wide = MediaQuery.sizeOf(context).width >= 900;
+    void start() => setState(() => _dragFrom = stage);
+    void end() {
+      if (mounted) setState(() => _dragFrom = null);
+    }
+
     return wide
-        ? Draggable<(Map<String, dynamic>, String)>(data: (c, stage), feedback: feedback, childWhenDragging: ghost, child: card)
-        : LongPressDraggable<(Map<String, dynamic>, String)>(data: (c, stage), feedback: feedback, childWhenDragging: ghost, child: card);
+        ? Draggable<(Map<String, dynamic>, String)>(
+            data: (c, stage),
+            feedback: feedback,
+            childWhenDragging: ghost,
+            onDragStarted: start,
+            onDragEnd: (_) => end(),
+            child: card,
+          )
+        : LongPressDraggable<(Map<String, dynamic>, String)>(
+            data: (c, stage),
+            feedback: feedback,
+            childWhenDragging: ghost,
+            onDragStarted: start,
+            onDragEnd: (_) => end(),
+            child: card,
+          );
   }
 
   Widget _card(Map<String, dynamic> c, String stage) {
@@ -382,9 +463,9 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
                   if (next != null)
                     IconButton(
                       key: ValueKey('advance-${c['kind']}-${c['id']}'),
-                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: kMinTouchTarget, minHeight: kMinTouchTarget),
                       tooltip: 'Avançar para ${pipelineStages[next]}',
-                      icon: const Icon(Icons.arrow_forward, size: 18),
+                      icon: const Icon(Icons.arrow_forward, size: 20),
                       onPressed: () => _advance(c, stage),
                     ),
                 ],
@@ -405,7 +486,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
                       child: Padding(
                         padding: const EdgeInsets.only(right: 6),
                         child: Text(
-                          '${isQuote ? (c['status'] == 'Sent' ? 'Válida até' : '') : 'Entrega'} ${fmtDay(c['date'])}'.trim(),
+                          '${isQuote ? (c['status'] == 'Sent' ? 'Válida até' : 'Criada em') : 'Entrega'} ${fmtDay(c['date'])}',
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.right,
                           style: theme.textTheme.labelSmall,

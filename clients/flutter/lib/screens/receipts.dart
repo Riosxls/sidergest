@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -11,6 +12,7 @@ import '../widgets/entity_form.dart';
 import '../widgets/load_error.dart';
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
+import '../widgets/responsive.dart';
 import 'orders.dart';
 import 'purchasing_path.dart';
 import 'quotations.dart';
@@ -59,7 +61,7 @@ class _ReceiptsViewState extends State<ReceiptsView> {
       dateCol('Data NF', 'invoiceDate'),
       ColumnSpec('Recebido em', (e) => fmtDate(e['receivedAt'])),
       moneyCol('Total', 'calculatedTotal'),
-      ColumnSpec('Divergente', (e) => e['divergent'] == true ? 'Sim' : ''),
+      ColumnSpec('Divergência', (e) => e['divergent'] == true ? 'Sim' : '—'),
     ],
     rowColor: (ctx, e) => e['divergent'] == true ? Theme.of(ctx).colorScheme.tertiaryContainer : null,
     onTap: (e) => openReceipt(context, widget.session, e['id'] as int),
@@ -371,6 +373,16 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     return true;
   }
 
+  /// The supplier's orders (all situations), to see why none is open.
+  void _seeOrders() => Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => Scaffold(
+        appBar: AppBar(title: Text('Pedidos · ${_supplierName ?? 'fornecedor'}')),
+        body: OrdersScreen(session: widget.session, supplierId: _supplierId, supplierName: _supplierName),
+      ),
+    ),
+  );
+
   num get _calculated => _lines.fold<num>(0, (a, l) => a + l.total());
 
   Future<void> _save() async {
@@ -434,7 +446,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   }
 
   Widget _field(TextEditingController c, String label, {double width = 200, Key? key, String? hint, bool numeric = false}) => SizedBox(
-    width: MediaQuery.sizeOf(context).width >= 700 ? width : double.infinity,
+    // Scales with the text size and never exceeds the window, so a long label does not push the field off screen.
+    width: MediaQuery.sizeOf(context).width >= 700 ? math.min(scaledHeight(context, width), MediaQuery.sizeOf(context).width - 32) : double.infinity,
     child: TextField(
       key: key,
       controller: c,
@@ -518,9 +531,18 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 : _lines.isEmpty
                 ? Padding(
                     padding: const EdgeInsets.all(8),
-                    child: Text(_supplierId == null ? 'Escolha o fornecedor' : 'Nenhum pedido em aberto para este fornecedor'),
+                    child: _supplierId == null
+                        ? const Text('Escolha o fornecedor')
+                        : Wrap(
+                            spacing: 12,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              const Text('Nenhum pedido em aberto para este fornecedor.'),
+                              TextButton(onPressed: _seeOrders, child: const Text('Ver pedidos')),
+                            ],
+                          ),
                   )
-                : Column(children: [for (final l in _lines) _lineRow(l, wide)]),
+                : Column(children: [for (final l in _lines) _lineRow(l)]),
           ),
           Padding(
             padding: const EdgeInsets.all(8),
@@ -536,7 +558,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     ));
   }
 
-  Widget _lineRow(_OpenLine l, bool wide) {
+  Widget _lineRow(_OpenLine l) {
     final ln = l.line;
     final late = isLate(ln['dueDate']);
     // When the form was opened from an order, the lines of other orders say so.
@@ -582,21 +604,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     ];
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: wide
-          ? Row(
-              children: [
-                Expanded(child: info),
-                for (final w in inputs) Padding(padding: const EdgeInsets.only(left: 8), child: w),
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                info,
-                const SizedBox(height: 6),
-                Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: inputs),
-              ],
-            ),
+      child: LayoutBuilder(builder: (context, c) => c.maxWidth >= 900 ? Row(children: [Expanded(child: info), for (final w in inputs) Padding(padding: const EdgeInsets.only(left: 8), child: w)]) : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [info, const SizedBox(height: 6), Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: inputs)])),
     );
   }
 }

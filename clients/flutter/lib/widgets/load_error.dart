@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api.dart' show friendlyError;
+import 'record_skeleton.dart';
 
 /// Shown in place of a page whose data could not be loaded: says why and offers to try again or go back.
 class LoadError extends StatelessWidget {
@@ -71,7 +72,7 @@ class _RecordLoaderState extends State<RecordLoader> {
     if (d != null) return widget.builder(d);
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
-      body: _error != null ? LoadError(message: _error!, onRetry: _fetch) : const Center(child: CircularProgressIndicator()),
+      body: _error != null ? LoadError(message: _error!, onRetry: _fetch) : const RecordSkeleton(),
     );
   }
 }

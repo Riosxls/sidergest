@@ -250,7 +250,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(fake.body(fake.last('POST', '/api/production/orders/7/release'))['force'], isTrue);
     expect(find.byKey(const ValueKey('of-release')), findsNothing);
-    expect(find.text('Entrada PA'), findsOneWidget);
+    expect(find.byKey(const ValueKey('of-finish')), findsOneWidget);
   });
 
   testWidgets('planner edits the process written on the OF before release', (tester) async {
@@ -316,7 +316,7 @@ void main() {
     final fake = Fake()..role = 'Reader';
     await pumpScreen(tester, fake, (s) => Shell(session: s));
     await openScreen(tester, 'PCP', 'production-orders');
-    expect(find.text('Nova Ordem de Fabricação'), findsNothing);
+    expect(find.text('Nova OF'), findsNothing);
     await tester.tap(find.text('OF 12'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('of-release')), findsNothing);

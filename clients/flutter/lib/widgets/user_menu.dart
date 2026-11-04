@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../labels.dart';
 import '../screens/settings/settings_dialog.dart';
 import '../session.dart';
 
@@ -44,7 +45,7 @@ class UserMenu extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(session.shownName, style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.onSurface)),
-              Text(session.role ?? '', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              Text(userRoles[session.role] ?? session.role ?? '', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ],
           ),
         ),
@@ -62,7 +63,7 @@ class UserMenu extends StatelessWidget {
           PopupMenuItem<String>(
             enabled: false,
             height: 28,
-            child: Text('Administração', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+            child: Text(session.isAdmin ? 'Administração' : 'Sistema', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
           ),
           for (final s in adminScreens)
             PopupMenuItem<String>(
@@ -77,15 +78,15 @@ class UserMenu extends StatelessWidget {
           child: Row(children: [Icon(Icons.logout, size: 20), SizedBox(width: 12), Text('Sair')]),
         ),
       ],
-      child: Padding(
+      child: Semantics(label: 'Conta de ${session.shownName}', button: true, excludeSemantics: true, child: ConstrainedBox(constraints: const BoxConstraints(minWidth: 48, minHeight: 48), child: Center(child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: CircleAvatar(
           radius: 16,
           backgroundColor: theme.colorScheme.primaryContainer,
           foregroundColor: theme.colorScheme.onPrimaryContainer,
-          child: Text(_initials, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          child: Text(_initials, style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
         ),
-      ),
+      )))),
     );
   }
 }

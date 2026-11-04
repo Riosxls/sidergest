@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -24,7 +25,8 @@ Tone feasibilityTone(Object? s) => switch (s) {
   'Draft' => (0, null),
   'InReview' => (1, null),
   'Approved' => (2, null),
-  _ => (1, 'Reprovada'),
+  // A rejection is the outcome of the signatures, so it takes the last slot, where Aprovada would be.
+  _ => (2, 'Reprovada'),
 };
 
 const _steps = [
@@ -35,7 +37,13 @@ const _steps = [
 
 const feasibilityFields = [
   FieldSpec('customerId', 'Cliente', type: FieldType.lookup, required: true, lookup: LookupSpec('/api/customers')),
-  FieldSpec('quoteId', 'Proposta', type: FieldType.lookup, lookup: LookupSpec('/api/sales/quotes'), hint: 'Opcional; os pedidos da proposta herdam a análise'),
+  FieldSpec(
+    'quoteId',
+    'Orçamento',
+    type: FieldType.lookup,
+    lookup: LookupSpec('/api/sales/quotes'),
+    hint: 'Opcional; os pedidos do orçamento herdam a análise',
+  ),
   FieldSpec('productId', 'Produto', type: FieldType.lookup, lookup: LookupSpec('/api/products')),
   FieldSpec('title', 'Título', required: true, hint: 'Ex.: Tubo Ø25,4 x 1,5 – DIN 2393'),
   FieldSpec('characteristics', 'Características'),
@@ -99,7 +107,7 @@ class _ViabilityScreenState extends State<ViabilityScreen> {
       col('FAV', 'reference'),
       col('Título', 'title'),
       col('Cliente', 'customerName'),
-      col('Proposta', 'quoteReference'),
+      col('Orçamento', 'quoteReference'),
       col('Produto', 'productCode'),
       labelCol('Situação', 'status', feasibilityStatuses),
       ColumnSpec('Assinaturas', (e) => '${e['signed']}/3', numeric: true),
@@ -296,7 +304,15 @@ class _FeasibilityScreenState extends State<FeasibilityScreen> {
                 spacing: 8,
                 children: [
                   FilledButton.tonal(key: ValueKey('sign-$area'), onPressed: () => _sign(area), child: const Text('Assinar')),
-                  TextButton(key: ValueKey('reject-$area'), onPressed: () => _reject(area), child: const Text('Reprovar')),
+                  FilledButton.tonal(
+                    key: ValueKey('reject-$area'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.errorContainer,
+                      foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
+                    ),
+                    onPressed: () => _reject(area),
+                    child: const Text('Reprovar'),
+                  ),
                 ],
               ),
             ],
@@ -340,6 +356,19 @@ class _FeasibilityScreenState extends State<FeasibilityScreen> {
     );
   }
 
+  /// One icon per kind of event, so the timeline reads at a glance.
+  IconData _historyIcon(String action) {
+    if (action.startsWith('signed')) return Icons.draw;
+    if (action.startsWith('rejected')) return Icons.cancel_outlined;
+    return switch (action) {
+      'created' => Icons.add_circle_outline,
+      'edited' => Icons.edit_outlined,
+      'submitted' => Icons.send,
+      'reopened' => Icons.undo,
+      _ => Icons.circle,
+    };
+  }
+
   Widget _body(Map<String, dynamic> f) {
     final (step, failed) = feasibilityPath(f['status']);
     final orders = (f['orders'] as List).cast<Map<String, dynamic>>();
@@ -353,7 +382,7 @@ class _FeasibilityScreenState extends State<FeasibilityScreen> {
           badge: StatusBadge(feasibilityStatuses[f['status']] ?? '${f['status']}', tone: feasibilityTone(f['status'])),
           fields: [
             ('Cliente', '${f['customerName']}'),
-            ('Proposta', fmt(f['quoteReference'])),
+            ('Orçamento', fmt(f['quoteReference'])),
             ('Produto', f['productCode'] == null ? '' : '${f['productCode']} · ${f['productName']}'),
             ('Consumo mensal (kg)', fmt(f['monthlyConsumptionKg'])),
           ],
@@ -368,7 +397,15 @@ class _FeasibilityScreenState extends State<FeasibilityScreen> {
           child: Wrap(
             spacing: 12,
             runSpacing: 12,
-            children: [for (final x in (f['signoffs'] as List).cast<Map<String, dynamic>>()) SizedBox(width: 260, child: _signoff(f, x))],
+            children: [
+              for (final x in (f['signoffs'] as List).cast<Map<String, dynamic>>())
+                LayoutBuilder(
+                  builder: (context, box) {
+                    // 260 px cards sit side by side; on a narrow column a card takes the whole width instead of overflowing.
+                    return SizedBox(width: box.maxWidth.isFinite && box.maxWidth < 260 ? box.maxWidth : 260, child: _signoff(f, x));
+                  },
+                ),
+            ],
           ),
         ),
         gap,
@@ -415,7 +452,7 @@ class _FeasibilityScreenState extends State<FeasibilityScreen> {
                   user: h['user'] as String?,
                   at: h['at'],
                   tone: '${h['action']}'.startsWith('signed') ? Tone.success : (('${h['action']}'.startsWith('rejected')) ? Tone.danger : Tone.info),
-                  icon: '${h['action']}'.startsWith('signed') ? Icons.draw : Icons.circle,
+                  icon: _historyIcon('${h['action']}'),
                 ),
             ],
           ),

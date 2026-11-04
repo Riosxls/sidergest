@@ -39,7 +39,8 @@ void main() {
         ..['ready'] = true;
       await pumpMore(tester, fake, (s) => SalesOrdersScreen(session: s));
       expect(fake.log.first.url.queryParameters['open'], 'true');
-      expect(find.text('Atrasado · Pronto p/ expedir'), findsOneWidget);
+      expect(find.text('Atrasada'), findsOneWidget);
+      expect(find.text('Pronto p/ expedir'), findsOneWidget);
       expect(find.text('PV 9'), findsOneWidget);
       await tapKey(tester, 'orders-late');
       expect(fake.log.last.url.queryParameters['late'], 'true');
@@ -118,7 +119,7 @@ void main() {
       final fake = MoreFake();
       await pumpMore(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
       await openMenu(tester, 'order-menu', 'Cancelar pedido');
-      await tapText(tester, 'Cancelar');
+      await tapText(tester, 'Voltar');
       expect(fake.called('POST', '/api/sales/orders/9/cancel'), isFalse);
     });
 
@@ -189,6 +190,7 @@ void main() {
       expect(find.text('Produção pronta · falta o certificado'), findsOneWidget);
       expect(find.byKey(const ValueKey('order-certificate')), findsOneWidget);
       expect(find.byKey(const ValueKey('order-new-certificate')), findsOneWidget);
+      await tapKey(tester, 'order-card-more');
       await tapKey(tester, 'order-certificate-waive');
       expect(fake.body(fake.last('POST', '/api/sales/orders/9/certificate-waiver')), {'waived': true});
       expect(find.text('Certificado dispensado'), findsOneWidget);
@@ -300,7 +302,7 @@ void main() {
       expect(find.text('30 do estoque + 70 na OF 500'), findsOneWidget);
       expect(find.text('50/100 · exp. 0'), findsOneWidget);
       expect(find.byKey(const ValueKey('print-menu')), findsOneWidget); // OFs in production: one print menu with the pedido and the OF
-      expect(find.byKey(const ValueKey('order-print-of-12')), findsOneWidget);
+      expect(find.byKey(const ValueKey('order-print-of-12')), findsNothing); // the OF prints live in the print menu and panel, not in the step card
     });
 
     testWidgets('two OFs get a print button each and the cards name them', (tester) async {
@@ -314,7 +316,7 @@ void main() {
       await pumpMore(tester, fake, (s) => SalesOrderScreen(session: s, id: 9));
       expect(find.byKey(const ValueKey('print-of-12')), findsWidgets);
       expect(find.byKey(const ValueKey('print-of-13')), findsWidgets);
-      expect(find.text('Imprimir OF 501'), findsOneWidget);
+      expect(find.text('Imprimir OF 501'), findsNothing);
     });
 
     testWidgets('a shipped order only informs', (tester) async {

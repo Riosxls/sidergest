@@ -41,7 +41,7 @@ void main() {
   testWidgets('a quote waiting for the discount approval is not mailed', (tester) async {
     await _open(tester, needsApproval: true);
     expect(find.byKey(const ValueKey('quote-email')), findsNothing);
-    expect(find.text('Enviar para aprovação'), findsOneWidget);
+    expect(find.text('Enviar para autorização'), findsOneWidget);
   });
 
   testWidgets('"Enviar ao cliente" asks for valid addresses, then posts the PDF and registers the send', (tester) async {
@@ -78,9 +78,10 @@ void main() {
 
   testWidgets('a quote already sent can be mailed again', (tester) async {
     await _open(tester, status: 'Sent');
-    expect(find.byKey(const ValueKey('quote-email')), findsOneWidget);
-    expect(find.byKey(const ValueKey('quote-mail')), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('quote-email')));
+    await tester.tap(find.byKey(const ValueKey('quote-menu')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('quote-menu-email')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('quote-menu-email')));
     await tester.pumpAndSettle();
     expect(find.textContaining('este é um reenvio'), findsOneWidget);
   });

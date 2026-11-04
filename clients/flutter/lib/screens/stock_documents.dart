@@ -7,6 +7,7 @@ import '../api.dart';
 import '../entities.dart';
 import '../labels.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/actions.dart';
 import '../widgets/discard_guard.dart';
 import '../widgets/entity_form.dart';
@@ -14,6 +15,7 @@ import '../widgets/load_error.dart';
 import '../widgets/pipeline.dart' show confirmStep;
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
+import '../widgets/responsive.dart';
 import 'stock_balances.dart';
 import 'suppliers.dart';
 
@@ -104,10 +106,11 @@ class _DocumentScreenState extends State<DocumentScreen> {
     return d;
   }
 
-  Future<void> _reverse() async {
+  Future<void> _reverse(Map<String, dynamic> d) async {
     final notes = await promptText(
       context,
-      title: 'Estornar documento nº ${widget.id}',
+      // Named by its reference when it has one, the way people refer to it; the number is the fallback.
+      title: 'Estornar documento ${d['reference'] != null && '${d['reference']}'.trim().isNotEmpty ? d['reference'] : 'nº ${widget.id}'}',
       label: 'Motivo do estorno (as linhas voltam ao estoque)',
       required: true,
       confirmLabel: 'Estornar',
@@ -135,12 +138,26 @@ class _DocumentScreenState extends State<DocumentScreen> {
                 RelatedMenu(
                   links: [
                     if (d['reversalOfId'] != null)
-                      RelatedLink(Icons.undo, 'Documento estornado: nº ${d['reversalOfId']}', () => openStockDocument(context, widget.session, d['reversalOfId'] as int)),
+                      RelatedLink(
+                        Icons.undo,
+                        'Documento estornado: nº ${d['reversalOfId']}',
+                        () => openStockDocument(context, widget.session, d['reversalOfId'] as int),
+                      ),
                     if (d['supplierId'] != null)
-                      RelatedLink(Icons.business_outlined, 'Fornecedor: ${d['supplierName'] ?? '#${d['supplierId']}'}', () => openSupplier(context, widget.session, d['supplierId'] as int)),
+                      RelatedLink(
+                        Icons.business_outlined,
+                        'Fornecedor: ${d['supplierName'] ?? '#${d['supplierId']}'}',
+                        () => openSupplier(context, widget.session, d['supplierId'] as int),
+                      ),
                   ],
                 ),
-              if (canReverse) TextButton.icon(onPressed: _reverse, icon: const Icon(Icons.undo), label: const Text('Estornar')),
+              if (canReverse)
+                TextButton.icon(
+                  onPressed: () => _reverse(d),
+                  style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+                  icon: const Icon(Icons.undo),
+                  label: const Text('Estornar'),
+                ),
             ],
           ),
           body: snap.hasError
@@ -394,121 +411,157 @@ class _StockPostScreenState extends State<StockPostScreen> {
     if (d != null) setState(() => _date.text = fmtDay(isoDate(d)));
   }
 
+  /// Inline problem of the date field while it is typed; null when it is empty (the form then says so on Lançar) or valid.
+  String? get _dateError => _date.text.trim().isEmpty || parseDate(_date.text) != null ? null : 'Data inválida (dd/mm/aaaa)';
+
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 700;
-    final w = wide ? 260.0 : double.infinity;
+    final cs = Theme.of(context).colorScheme;
     return DiscardGuard(
       isDirty: () => _signature() != _initial,
       child: Scaffold(
-      appBar: AppBar(
-        title: const Text('Novo lançamento de estoque'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton.icon(
-              key: const ValueKey('post-stock'),
-              onPressed: _busy ? null : _save,
-              icon: _busy ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.check),
-              label: const Text('Lançar'),
+        appBar: AppBar(title: const Text('Novo lançamento de estoque')),
+        // The button stays in reach however long the lines get; the count says what will be posted.
+        bottomNavigationBar: Material(
+          elevation: 3,
+          color: cs.surface,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _lines.isEmpty ? 'Nenhuma linha' : '${_lines.length} ${_lines.length == 1 ? 'linha' : 'linhas'}',
+                      key: const ValueKey('post-line-count'),
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  FilledButton.icon(
+                    key: const ValueKey('post-stock'),
+                    style: FilledButton.styleFrom(minimumSize: Size(0, scaledHeight(context, kMinTouchTarget))),
+                    onPressed: _busy ? null : _save,
+                    icon: _busy ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.check),
+                    label: const Text('Lançar'),
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
-      ),
-      body: ListView(
-        controller: _scroll,
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (_message != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Semantics(
-                liveRegion: true,
-                child: Row(
-                  key: const ValueKey('post-message'),
+        ),
+        body: ListView(
+          controller: _scroll,
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          children: [
+            if (_message != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                child: Semantics(
+                  liveRegion: true,
+                  child: Row(
+                    key: const ValueKey('post-message'),
+                    children: [
+                      Icon(Icons.error_outline, color: cs.error),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(_message!, style: TextStyle(color: cs.error)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            // The widths follow the room the form has, not the window, so a narrow column never overflows.
+            LayoutBuilder(
+              builder: (context, box) {
+                final wide = box.maxWidth >= 700;
+                final w = wide ? 260.0 : box.maxWidth;
+                return Wrap(
+                  spacing: AppSpacing.md,
+                  runSpacing: AppSpacing.md,
                   children: [
-                    Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+                    SizedBox(
+                      width: w,
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey('post-type-$_type'),
+                        initialValue: _type,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'Tipo *', hintText: 'Escolha o tipo', border: OutlineInputBorder(), isDense: true),
+                        items: [for (final t in postableTypes) DropdownMenuItem(value: t, child: Text(movementTypes[t]!))],
+                        onChanged: _changeType,
+                      ),
+                    ),
+                    SizedBox(
+                      width: wide ? 180 : w,
+                      child: TextField(
+                        key: const ValueKey('post-date'),
+                        controller: _date,
+                        keyboardType: TextInputType.datetime,
+                        textInputAction: TextInputAction.next,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          labelText: 'Data *',
+                          hintText: 'dd/mm/aaaa',
+                          errorText: _dateError,
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                          suffixIcon: IconButton(tooltip: 'Escolher data', icon: const Icon(Icons.calendar_today, size: 18), onPressed: _pickDate),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: w,
+                      child: TextField(
+                        key: const ValueKey('post-reference'),
+                        controller: _reference,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(labelText: 'Referência (OP, NF, pedido…)', border: OutlineInputBorder(), isDense: true),
+                      ),
+                    ),
+                    if (_withSupplier.contains(_type))
+                      SizedBox(
+                        width: w,
+                        child: LookupField(
+                          api: api,
+                          spec: supplierLookup,
+                          label: 'Fornecedor',
+                          value: _supplierId,
+                          onChanged: (id, _) => setState(() => _supplierId = id),
+                        ),
+                      ),
+                    SizedBox(
+                      width: wide ? 540 : w,
+                      child: TextField(
+                        controller: _notes,
+                        textInputAction: TextInputAction.done,
+                        decoration: const InputDecoration(labelText: 'Observações', border: OutlineInputBorder(), isDense: true),
+                      ),
+                    ),
                   ],
-                ),
-              ),
+                );
+              },
             ),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              SizedBox(
-                width: w,
-                child: DropdownButtonFormField<String>(
-                  key: ValueKey('post-type-$_type'),
-                  initialValue: _type,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Tipo *', hintText: 'Escolha o tipo', border: OutlineInputBorder(), isDense: true),
-                  items: [for (final t in postableTypes) DropdownMenuItem(value: t, child: Text(movementTypes[t]!))],
-                  onChanged: _changeType,
-                ),
-              ),
-              SizedBox(
-                width: wide ? 180 : w,
-                child: TextField(
-                  controller: _date,
-                  decoration: InputDecoration(
-                    labelText: 'Data *',
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                    suffixIcon: IconButton(tooltip: 'Escolher data', icon: const Icon(Icons.calendar_today, size: 18), onPressed: _pickDate),
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: w,
-                child: TextField(
-                  key: const ValueKey('post-reference'),
-                  controller: _reference,
-                  decoration: const InputDecoration(labelText: 'Referência (OP, NF, pedido…)', border: OutlineInputBorder(), isDense: true),
-                ),
-              ),
-              if (_withSupplier.contains(_type))
-                SizedBox(
-                  width: w,
-                  child: LookupField(
-                    api: api,
-                    spec: supplierLookup,
-                    label: 'Fornecedor',
-                    value: _supplierId,
-                    onChanged: (id, _) => setState(() => _supplierId = id),
-                  ),
-                ),
-              SizedBox(
-                width: wide ? 540 : w,
-                child: TextField(
-                  controller: _notes,
-                  decoration: const InputDecoration(labelText: 'Observações', border: OutlineInputBorder(), isDense: true),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          LinesEditor(
-            api: api,
-            title: 'Linhas',
-            fields: stockLineFields(_type ?? ''),
-            lines: _lines,
-            addEnabled: _type != null,
-            disabledHint: 'Escolha o tipo antes de incluir linhas',
-            onChanged: (l) => setState(() => _lines = l),
-            columns: [
-              ColumnSpec('Item', (e) => e['materialId'] != null ? lbl(e, 'materialId') : lbl(e, 'productId')),
-              if (_paired.contains(_type)) ColumnSpec('Origem', (e) => lbl(e, 'fromLocationId')),
-              ColumnSpec('Local', (e) => lbl(e, 'locationId')),
-              ColumnSpec('Lote', (e) => e['lotCode'] as String? ?? lbl(e, 'lotId')),
-              col('Quantidade', 'quantity', numeric: true),
-              if (_valued.contains(_type)) col('Custo', 'unitCost', numeric: true),
-            ],
-          ),
-        ],
+            const SizedBox(height: AppSpacing.lg),
+            LinesEditor(
+              api: api,
+              title: 'Linhas',
+              fields: stockLineFields(_type ?? ''),
+              lines: _lines,
+              addEnabled: _type != null,
+              disabledHint: 'Escolha o tipo antes de incluir linhas',
+              onChanged: (l) => setState(() => _lines = l),
+              columns: [
+                ColumnSpec('Item', (e) => e['materialId'] != null ? lbl(e, 'materialId') : lbl(e, 'productId')),
+                if (_paired.contains(_type)) ColumnSpec('Origem', (e) => lbl(e, 'fromLocationId')),
+                ColumnSpec('Local', (e) => lbl(e, 'locationId')),
+                ColumnSpec('Lote', (e) => e['lotCode'] as String? ?? lbl(e, 'lotId')),
+                col('Quantidade', 'quantity', numeric: true),
+                if (_valued.contains(_type)) col('Custo', 'unitCost', numeric: true),
+              ],
+            ),
+          ],
+        ),
       ),
-    ));
+    );
   }
 }

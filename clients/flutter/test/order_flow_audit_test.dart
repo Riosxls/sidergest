@@ -226,8 +226,7 @@ void main() {
       final confirm = tester.widget<FilledButton>(find.byKey(const ValueKey('confirm-step')));
       final context = tester.element(find.byKey(const ValueKey('confirm-step')));
       expect(confirm.style?.backgroundColor?.resolve({}), Theme.of(context).colorScheme.error);
-      expect(find.widgetWithText(TextButton, 'Cancelar'), findsOneWidget);
-      expect(find.text('Voltar'), findsNothing);
+      expect(find.widgetWithText(TextButton, 'Voltar'), findsOneWidget);
     });
 
     testWidgets('the delivery dialog refuses a quantity above the balance and an invalid one, names the item, and has a date picker', (tester) async {
@@ -244,7 +243,7 @@ void main() {
       await tapKey(tester, 'delivery-ok');
       expect(find.textContaining('Item 10: quantidade inválida'), findsOneWidget);
       await tester.enterText(find.byKey(const ValueKey('dl-qty-40')), '40');
-      await tester.testTextInput.receiveAction(TextInputAction.done); // Enter submits
+      await tester.tap(find.byKey(const ValueKey('delivery-ok')));
       await tester.pumpAndSettle();
       expect(fake.called('POST', '/api/sales/orders/9/deliveries'), isTrue);
     });

@@ -1,9 +1,11 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../entities.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart' show showError;
 import '../widgets/load_error.dart';
@@ -145,7 +147,7 @@ class _SteelScreenState extends State<SteelScreen> {
               tabAlignment: TabAlignment.start,
               tabs: [
                 Tab(key: ValueKey('steel-tab-lots'), text: 'Bobinas e lotes'),
-                Tab(key: ValueKey('steel-tab-slitter'), text: 'Slitter (beneficiamento)'),
+                Tab(key: ValueKey('steel-tab-slitter'), text: 'Slitter'),
                 Tab(key: ValueKey('steel-tab-usage'), text: 'Uso interno'),
               ],
             ),
@@ -157,9 +159,7 @@ class _SteelScreenState extends State<SteelScreen> {
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             ),
           ),
-          Expanded(
-            child: TabBarView(children: [_lotsTab(), _jobsTab(), _usagesTab()]),
-          ),
+          Expanded(child: TabBarView(children: [_lotsTab(), _jobsTab(), _usagesTab()])),
         ],
       ),
     );
@@ -179,7 +179,22 @@ class _SteelScreenState extends State<SteelScreen> {
       col('Espec.', 'specification'),
       col('Peso (kg)', 'weightKg', numeric: true),
       ColumnSpec('R\$/kg', (e) => fmtNum(e['pricePerKg'], 4), numeric: true),
-      col('Saldo (kg)', 'balanceKg', numeric: true),
+      ColumnSpec(
+        'Saldo (kg)',
+        (e) => fmt(e['balanceKg']),
+        numeric: true,
+        // The red row says it with colour only; the badge says it in words.
+        cell: (context, e) => (e['balanceKg'] as num? ?? 0) < 0
+            ? Wrap(
+                spacing: AppSpacing.sm,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(fmt(e['balanceKg'])),
+                  const StatusBadge('Negativo', tone: Tone.danger, icon: Icons.warning_amber_rounded),
+                ],
+              )
+            : Text(fmt(e['balanceKg'])),
+      ),
       moneyCol('Saldo R\$', 'balanceValue'),
       ColumnSpec('Slitter', (e) => (e['pendingJobs'] as num? ?? 0) > 0 ? '${e['pendingJobs']} pendente(s)' : ''),
     ],
@@ -206,7 +221,12 @@ class _SteelScreenState extends State<SteelScreen> {
       col('Acabado (kg)', 'finishedKg', numeric: true),
       col('Refilo (kg)', 'scrapKg', numeric: true),
       ColumnSpec('Perda %', (e) => e['lossPercent'] == null ? '' : fmtNum(e['lossPercent'], 2), numeric: true),
-      ColumnSpec('Situação', (e) => e['returned'] == true ? 'Retornou' : 'No slitter'),
+      ColumnSpec(
+        'Situação',
+        (e) => e['returned'] == true ? 'Retornou' : 'No slitter',
+        // The amber row says it with colour only; the badge says it in words.
+        cell: (context, e) => e['returned'] == true ? const Text('Retornou') : const StatusBadge('No slitter', tone: Tone.warning, icon: Icons.hourglass_empty),
+      ),
     ],
     rowColor: (ctx, e) => e['returned'] == true ? null : toneColors(ctx, Tone.warning).$1,
     onTap: _editJob,
@@ -405,7 +425,9 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
         title: Text(l == null ? 'Lote de aço' : '${l['lotCode']} · ${l['supplierName']}', overflow: TextOverflow.ellipsis),
         actions: [
           if (l != null && l['supplierId'] is int)
-            RelatedMenu(links: [RelatedLink(Icons.business_outlined, 'Fornecedor: ${l['supplierName']}', () => openSupplier(context, s, l['supplierId'] as int))]),
+            RelatedMenu(
+              links: [RelatedLink(Icons.business_outlined, 'Fornecedor: ${l['supplierName']}', () => openSupplier(context, s, l['supplierId'] as int))],
+            ),
           if (l != null && s.canSteel)
             PopupMenuButton<VoidCallback>(
               key: const ValueKey('lot-menu'),
@@ -431,16 +453,24 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
     );
   }
 
+  double _kpiWidth = 220;
+
   Widget _kpi(String label, String value, {String? caption, IconData? icon, Tone tone = Tone.info}) => SizedBox(
-    width: 220,
+    width: _kpiWidth,
     child: KpiTile(label: label, value: value, caption: caption, icon: icon, tone: tone),
   );
 
   Widget _body(Map<String, dynamic> l) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
-        Wrap(spacing: 12, runSpacing: 12, children: _kpis(l)),
+        // Below 500 px two tiles share a row instead of one tile per line.
+        LayoutBuilder(
+          builder: (context, box) {
+            _kpiWidth = box.maxWidth < 500 ? (box.maxWidth - AppSpacing.md) / 2 : 220;
+            return Wrap(spacing: AppSpacing.md, runSpacing: AppSpacing.md, children: _kpis(l));
+          },
+        ),
         gap,
         Section(
           title: 'Dados do lote',
@@ -497,15 +527,14 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
         tone: Tone.progress,
       ),
       _kpi('Uso interno', '${fmt(l['usedKg'])} kg', caption: 'Mão de obra ${fmtMoney(l['laborCost'])}', icon: Icons.precision_manufacturing_outlined),
-      _kpi('Custo total', fmtMoney(l['totalCost']), caption: 'Compra + slitter ${fmtMoney(l['serviceCost'])} + mão de obra', icon: Icons.calculate_outlined),
+      _kpi('Custo total', fmtMoney(l['totalCost']), caption: 'Compra, slitter e mão de obra', icon: Icons.calculate_outlined),
     ];
   }
 
   Widget _slitterSection() => Section(
     title: 'Slitter (${_jobs.length})',
     actions: [
-      if (s.canSteel)
-        FilledButton.tonalIcon(key: const ValueKey('lot-new-job'), onPressed: _newJob, icon: const Icon(Icons.add), label: const Text('Remessa')),
+      if (s.canSteel) FilledButton.tonalIcon(key: const ValueKey('lot-new-job'), onPressed: _newJob, icon: const Icon(Icons.add), label: const Text('Remessa')),
     ],
     child: SimpleTable(
       columns: [
@@ -523,22 +552,21 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
       rows: _jobs,
       actions: s.canSteel || _jobs.any((j) => j['processorId'] is int)
           ? (j) => [
+              // The return is what is done to a shipment, so it is the visible button; edit and remove wait in the menu.
+              if (s.canSteel && j['returned'] != true)
+                FilledButton.tonal(key: ValueKey('job-return-${j['id']}'), onPressed: () => _returnJob(j), child: const Text('Registrar retorno')),
               if (j['processorId'] is int)
                 IconButton(
                   tooltip: 'Abrir ${j['processorName']}',
                   icon: const Icon(Icons.business_outlined, size: 20),
                   onPressed: () => openSupplier(context, s, j['processorId'] as int),
                 ),
-              if (s.canSteel && j['returned'] != true)
-                TextButton(key: ValueKey('job-return-${j['id']}'), onPressed: () => _returnJob(j), child: const Text('Registrar retorno')),
-              if (s.canSteel) ...[
-                IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _editJob(j)),
-                IconButton(
-                  tooltip: 'Remover',
-                  icon: const Icon(Icons.delete_outline, size: 20),
-                  onPressed: () => _deleteChild('/api/steel/slitter/${j['id']}', 'remessa', 'Remessa removida'),
+              if (s.canSteel)
+                _rowMenu(
+                  ValueKey('job-menu-${j['id']}'),
+                  onEdit: () => _editJob(j),
+                  onRemove: () => _deleteChild('/api/steel/slitter/${j['id']}', 'remessa', 'Remessa removida'),
                 ),
-              ],
             ]
           : null,
     ),
@@ -561,14 +589,28 @@ class _SteelLotScreenState extends State<SteelLotScreen> {
       rows: _usages,
       actions: s.canSteel
           ? (u) => [
-              IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _editUsage(u)),
-              IconButton(
-                tooltip: 'Remover',
-                icon: const Icon(Icons.delete_outline, size: 20),
-                onPressed: () => _deleteChild('/api/steel/usages/${u['id']}', 'consumo', 'Consumo removido'),
+              _rowMenu(
+                ValueKey('usage-menu-${u['id']}'),
+                onEdit: () => _editUsage(u),
+                onRemove: () => _deleteChild('/api/steel/usages/${u['id']}', 'consumo', 'Consumo removido'),
               ),
             ]
           : null,
     ),
+  );
+
+  /// Edit and remove of a row in one menu; remove is last and in the error colour.
+  Widget _rowMenu(Key key, {required VoidCallback onEdit, required VoidCallback onRemove}) => PopupMenuButton<VoidCallback>(
+    key: key,
+    tooltip: 'Mais ações',
+    onSelected: (f) => f(),
+    itemBuilder: (_) => [
+      PopupMenuItem(value: onEdit, child: const Text('Editar')),
+      const PopupMenuDivider(),
+      PopupMenuItem(
+        value: onRemove,
+        child: Text('Remover', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      ),
+    ],
   );
 }

@@ -6,7 +6,9 @@ import '../api.dart';
 import '../entities.dart';
 import '../session.dart';
 import '../widgets/actions.dart';
+import '../widgets/pipeline.dart';
 import '../widgets/record_list.dart';
+import '../widgets/responsive.dart';
 
 const receivableStatuses = {
   'pending': 'A receber (todas em aberto)',
@@ -36,7 +38,8 @@ class ReceivablesScreen extends StatefulWidget {
 class _ReceivablesScreenState extends State<ReceivablesScreen> {
   final _list = GlobalKey<RecordListState>();
   final _aging = GlobalKey<ReceivablesAgingCardState>();
-  String? _status = 'pending';
+  static const _defaultStatus = 'pending';
+  String? _status = _defaultStatus;
   bool _overdue = false;
 
   ApiClient get api => widget.session.api;
@@ -53,7 +56,15 @@ class _ReceivablesScreenState extends State<ReceivablesScreen> {
       title: 'Dar baixa · NF ${e['number']} (${e['sequence']}/${e['count']})',
       fields: [
         FieldSpec('paidOn', 'Data do pagamento', type: FieldType.date, required: true, defaultValue: isoDate(DateTime.now())),
-        FieldSpec('amount', 'Valor recebido (R\$)', type: FieldType.decimal, required: true, positive: true, defaultValue: e['balance'], hint: 'Saldo da duplicata: ${fmtMoney(e['balance'])}. Menos que o saldo = baixa parcial'),
+        FieldSpec(
+          'amount',
+          'Valor recebido (R\$)',
+          type: FieldType.decimal,
+          required: true,
+          positive: true,
+          defaultValue: e['balance'],
+          hint: 'Saldo da duplicata: ${fmtMoney(e['balance'])}. Menos que o saldo = baixa parcial',
+        ),
         const FieldSpec('method', 'Forma', hint: 'PIX, boleto, transferência...'),
         const FieldSpec('notes', 'Observação'),
       ],
@@ -65,8 +76,12 @@ class _ReceivablesScreenState extends State<ReceivablesScreen> {
     }
   }
 
+  /// Opens the read-only payment list of a duplicata; Dar baixa / Estornar are explicit buttons there.
   Future<void> _reverse(Map<String, dynamic> e) async {
-    final changed = await showDialog<bool>(context: context, builder: (_) => _PaymentsDialog(session: widget.session, row: e));
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _PaymentsDialog(session: widget.session, row: e, onPost: () => _post(e)),
+    );
     if (changed == true && mounted) _changed();
   }
 
@@ -81,9 +96,9 @@ class _ReceivablesScreenState extends State<ReceivablesScreen> {
           path: '/api/receivables',
           query: {'customerId': widget.customerId, 'status': _statusQuery(_status), 'overdue': _overdue ? true : null},
           searchHint: 'Cliente ou número da NF',
-          filtersActive: _status != null || _overdue,
+          filtersActive: _status != _defaultStatus || _overdue,
           onClearFilters: () => setState(() {
-            _status = null;
+            _status = _defaultStatus;
             _overdue = false;
           }),
           filters: [
@@ -102,10 +117,13 @@ class _ReceivablesScreenState extends State<ReceivablesScreen> {
             ColumnSpec(
               'Situação',
               (e) => receivableStatuses[e['status']] ?? fmt(e['status']),
-              cell: (_, e) => StatusChip(
+              cell: (_, e) => StatusBadge(
                 e['status'] == 'Overdue' ? 'Vencida há ${e['daysOverdue']} d' : (receivableStatuses[e['status']] ?? fmt(e['status'])),
-                alert: e['status'] == 'Overdue',
-                ok: e['status'] == 'Paid',
+                tone: switch (e['status']) {
+                  'Overdue' => Tone.danger,
+                  'Paid' => Tone.success,
+                  _ => Tone.neutral,
+                },
               ),
             ),
           ],
@@ -113,9 +131,7 @@ class _ReceivablesScreenState extends State<ReceivablesScreen> {
             if (widget.session.canPostReceivables && (e['balance'] as num) > 0) RowAction('Dar baixa', Icons.payments_outlined, () => _post(e)),
             if (widget.session.canPostReceivables && (e['paid'] as num) > 0) RowAction('Estornar', Icons.undo, () => _reverse(e)),
           ],
-          onTap: (e) async {
-            if (widget.session.canPostReceivables && (e['balance'] as num) > 0) await _post(e);
-          },
+          onTap: _reverse,
         ),
       ),
     ],
@@ -161,7 +177,12 @@ class ReceivablesAgingCardState extends State<ReceivablesAgingCard> {
   @override
   Widget build(BuildContext context) {
     final t = _total;
-    if (_error != null) return Padding(padding: const EdgeInsets.all(12), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)));
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      );
+    }
     if (t == null) return const SizedBox.shrink();
     final cs = Theme.of(context).colorScheme;
     Widget cell(String label, String key, {bool alert = false}) => Padding(
@@ -197,10 +218,11 @@ class ReceivablesAgingCardState extends State<ReceivablesAgingCard> {
 
 /// Payments posted on one duplicata, each with its estorno button.
 class _PaymentsDialog extends StatefulWidget {
-  const _PaymentsDialog({required this.session, required this.row});
+  const _PaymentsDialog({required this.session, required this.row, required this.onPost});
 
   final Session session;
   final Map<String, dynamic> row;
+  final Future<void> Function() onPost;
 
   @override
   State<_PaymentsDialog> createState() => _PaymentsDialogState();
@@ -229,7 +251,13 @@ class _PaymentsDialogState extends State<_PaymentsDialog> {
   }
 
   Future<void> _reverse(Map<String, dynamic> p) async {
-    final reason = await promptText(context, title: 'Estornar pagamento de ${fmtMoney(p['amount'])}', label: 'Motivo do estorno', required: true, confirmLabel: 'Estornar');
+    final reason = await promptText(
+      context,
+      title: 'Estornar pagamento de ${fmtMoney(p['amount'])}',
+      label: 'Motivo do estorno',
+      required: true,
+      confirmLabel: 'Estornar',
+    );
     if (reason == null || !mounted) return;
     final ok = await runAction(context, () async {
       await api.delete('/api/receivables/payments/${p['id']}?reason=${Uri.encodeQueryComponent(reason)}');
@@ -241,13 +269,21 @@ class _PaymentsDialogState extends State<_PaymentsDialog> {
     }
   }
 
+  Future<void> _post() async {
+    await widget.onPost();
+    _changed = true;
+    if (mounted) await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = widget.row;
+    final canPost = widget.session.canPostReceivables;
+    final balance = r['balance'] as num;
     return AlertDialog(
       title: Text('Pagamentos · NF ${r['number']} (${r['sequence']}/${r['count']})'),
-      content: SizedBox(
-        width: 460,
+      content: DialogBody(
+        ideal: 460,
         child: _error != null
             ? Text(_error!)
             : _payments == null
@@ -262,10 +298,7 @@ class _PaymentsDialogState extends State<_PaymentsDialog> {
                       ListTile(
                         key: ValueKey('payment-${p['id']}'),
                         dense: true,
-                        title: Text(
-                          fmtMoney(p['amount']),
-                          style: p['reversedAt'] != null ? const TextStyle(decoration: TextDecoration.lineThrough) : null,
-                        ),
+                        title: Text(fmtMoney(p['amount']), style: p['reversedAt'] != null ? const TextStyle(decoration: TextDecoration.lineThrough) : null),
                         subtitle: Text(
                           [
                             fmtDay(p['paidOn']),
@@ -274,13 +307,16 @@ class _PaymentsDialogState extends State<_PaymentsDialog> {
                             if (p['reversedAt'] != null) 'estornado: ${p['reverseReason']}',
                           ].join(' · '),
                         ),
-                        trailing: p['reversedAt'] == null ? TextButton(onPressed: () => _reverse(p), child: const Text('Estornar')) : null,
+                        trailing: p['reversedAt'] == null && canPost ? TextButton(onPressed: () => _reverse(p), child: const Text('Estornar')) : null,
                       ),
                   ],
                 ),
               ),
       ),
-      actions: [TextButton(onPressed: () => Navigator.pop(context, _changed), child: const Text('Fechar'))],
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, _changed), child: const Text('Fechar')),
+        if (canPost && balance > 0) FilledButton.icon(onPressed: _post, icon: const Icon(Icons.payments_outlined), label: const Text('Dar baixa')),
+      ],
     );
   }
 }

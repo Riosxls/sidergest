@@ -109,7 +109,7 @@ void main() {
       expect(find.text('Autorizada'), findsOneWidget);
       expect(find.text('Rejeitada'), findsOneWidget);
       expect(find.text('Metalúrgica Alfa'), findsWidgets);
-      expect(find.text('Sim'), findsOneWidget);
+      expect(find.text('SIMULADA'), findsOneWidget);
     });
 
     testWidgets('only a role that may cancel sees the inutilização button', (tester) async {
@@ -279,6 +279,8 @@ void main() {
       await tester.tap(find.byType(PopupMenuButton<VoidCallback>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cancelar NF'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continuar')); // the consequences are read first
       await tester.pumpAndSettle();
       final fields = find.descendant(of: find.byType(Dialog), matching: find.byType(TextField));
       expect(fields, findsNWidgets(2));

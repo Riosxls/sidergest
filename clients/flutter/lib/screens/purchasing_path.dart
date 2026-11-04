@@ -29,7 +29,34 @@ class PurchasingPath extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final links = [requisition, quotation, order, receipt];
-    return StagePath(steps: purchasingSteps, current: current, failedLabel: failedLabel, onStep: (i) => i == page ? null : links[i]);
+    VoidCallback? link(int i) => i == page ? null : links[i];
+    return LayoutBuilder(
+      builder: (context, box) {
+        if (box.maxWidth >= 480) {
+          return StagePath(steps: purchasingSteps, current: current, failedLabel: failedLabel, onStep: link);
+        }
+        // Narrow: the chevrons would have no room for words, so the stage is said in one line and the linked stages are chips below.
+        final theme = Theme.of(context);
+        final label = failedLabel ?? purchasingSteps[current].label;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Etapa ${current + 1} de ${purchasingSteps.length} · $label',
+              key: const ValueKey('path-compact'),
+              style: theme.textTheme.titleSmall?.copyWith(color: failedLabel != null ? theme.colorScheme.error : null),
+            ),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final (i, s) in purchasingSteps.indexed)
+                  if (link(i) != null) ActionChip(key: ValueKey('path-tap-$i'), avatar: Icon(s.icon, size: 16), label: Text(s.label), onPressed: link(i)),
+              ],
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 

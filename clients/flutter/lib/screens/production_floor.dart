@@ -6,9 +6,12 @@ import '../entities.dart';
 import '../labels.dart';
 import '../reports/nf_doc.dart';
 import '../session.dart';
+import '../theme_tokens.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
+import '../widgets/pipeline.dart' show StatusBadge, Tone;
 import '../widgets/record_list.dart';
+import '../widgets/responsive.dart';
 import 'orders.dart' show isLate;
 import 'production_orders.dart';
 
@@ -335,6 +338,11 @@ class _ShipmentsViewState extends State<ShipmentsView> {
       return;
     }
     if (!canReturn) return;
+    await _return(e);
+  }
+
+  /// Registers the return of an open shipment from the supplier (form, then reloads the list).
+  Future<void> _return(Map<String, dynamic> e) async {
     final r = await submitForm(
       context,
       api: s.api,
@@ -386,13 +394,42 @@ class _ShipmentsViewState extends State<ShipmentsView> {
       col('Op.', 'operationSequence'),
       col('Fornecedor', 'supplierName'),
       dateCol('Enviado', 'sentOn'),
-      ColumnSpec('Retorno previsto', (e) => e['dueDate'] == null ? '' : '${fmtDay(e['dueDate'])}${_late(e) ? ' · atrasada' : ''}'),
+      ColumnSpec(
+        'Retorno previsto',
+        (e) => e['dueDate'] == null ? '' : '${fmtDay(e['dueDate'])}${_late(e) ? ' · atrasada' : ''}',
+        // The row tint is backed by a word.
+        cell: (context, e) => e['dueDate'] == null
+            ? const Text('')
+            : Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(fmtDay(e['dueDate'])),
+                  if (_late(e)) const StatusBadge('Atrasada', tone: Tone.danger, icon: Icons.schedule),
+                ],
+              ),
+      ),
       col('Enviado (qtd)', 'quantity', numeric: true),
       col('Retornado', 'returnedQuantity', numeric: true),
       col('Refugo', 'scrapQuantity', numeric: true),
       col('Em aberto', 'open', numeric: true),
       moneyCol('Serviço', 'serviceValue'),
       col('NF', 'invoiceNumber'),
+      // The return is the thing done most here, so it is a visible button and not only an entry in the sheet behind the row tap.
+      if (s.canProduce)
+        ColumnSpec(
+          'Ação',
+          (e) => '',
+          cell: (context, e) => (e['open'] as num) > 0
+              ? TextButton.icon(
+                  key: ValueKey('shipment-return-row-${e['id']}'),
+                  onPressed: () => _return(e),
+                  icon: const Icon(Icons.assignment_returned_outlined, size: 18),
+                  label: const Text('Registrar retorno'),
+                )
+              : const SizedBox.shrink(),
+        ),
     ],
     onTap: _tap,
   );
@@ -496,6 +533,61 @@ class _PlanningScreenState extends State<PlanningScreen> {
     return null;
   }
 
+  /// Colour key of the grid, in the same colours and thresholds as the cells.
+  Widget _legend() {
+    final cs = Theme.of(context).colorScheme;
+    Widget item(Color color, String text, {IconData? icon}) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 18,
+          height: 18,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(AppRadius.field),
+            border: Border.all(color: cs.outlineVariant),
+          ),
+          child: icon == null ? null : Icon(icon, size: 12, color: cs.onErrorContainer),
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        Text(text, style: Theme.of(context).textTheme.bodySmall),
+      ],
+    );
+    return Wrap(
+      key: const ValueKey('load-legend'),
+      spacing: AppSpacing.lg,
+      runSpacing: AppSpacing.xs,
+      children: [
+        item(cs.primaryContainer.withValues(alpha: 0.5), 'Até 84 % da capacidade'),
+        item(cs.tertiaryContainer, '85 % a 100 %'),
+        item(cs.errorContainer, 'Acima de 100 % (sobrecarga)', icon: Icons.priority_high),
+      ],
+    );
+  }
+
+  /// What the tooltip says on a desktop, as a sheet for a touch screen where there is no hover.
+  Future<void> _cellDetails(String code, String week, Map<String, dynamic> r) => showModalBottomSheet<void>(
+    context: context,
+    builder: (_) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$code · semana de ${fmtDay(week)}', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.md),
+            InfoGrid([
+              ('Carga', '${fmtNum(r['loadPercent'], 0)} %'),
+              ('Horas', '${fmtNum(r['hours'], 1)} h de ${fmtNum(r['capacity'], 1)} h'),
+              ('Operações', '${r['operations']}'),
+            ]),
+          ],
+        ),
+      ),
+    ),
+  );
+
   Widget _grid(List<Map<String, dynamic>> rows) {
     if (rows.isEmpty) return const Padding(padding: EdgeInsets.all(16), child: Text('Sem carga programada no período'));
     final weeks = rows.map((r) => '${r['weekStart']}').toSet().toList()..sort();
@@ -503,6 +595,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
     final cell = {for (final r in rows) '${r['code']}|${r['weekStart']}': r};
     final now = DateTime.now();
     final thisWeek = isoDate(DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1)));
+    final cs = Theme.of(context).colorScheme;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
@@ -531,15 +624,34 @@ class _PlanningScreenState extends State<PlanningScreen> {
                     Builder(
                       builder: (_) {
                         final r = cell['$c|$w'];
-                        if (r == null) return const Text('');
-                        return Tooltip(
-                          message: '${fmtNum(r['hours'], 1)} h de ${fmtNum(r['capacity'], 1)} h · ${r['operations']} operação(ões)',
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            color: _color(r['loadPercent'] as num),
-                            child: Text('${fmtNum(r['loadPercent'], 0)} %'),
+                        if (r == null) return const SizedBox(width: 72);
+                        final pct = r['loadPercent'] as num;
+                        final over = pct > 100;
+                        // Fixed width and centred, so the percentages line up in columns whatever the header says.
+                        final box = Container(
+                          width: 72,
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: AppSpacing.xs),
+                          decoration: BoxDecoration(color: _color(pct), borderRadius: BorderRadius.circular(AppRadius.field)),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Above 100 % the colour is backed by an icon and bold text.
+                                if (over) ...[Icon(Icons.priority_high, size: 14, color: cs.onErrorContainer), const SizedBox(width: 2)],
+                                Text('${fmtNum(pct, 0)} %', style: over ? const TextStyle(fontWeight: FontWeight.w700) : null),
+                              ],
+                            ),
                           ),
                         );
+                        final tappable = InkWell(onTap: () => _cellDetails(c, w, r), child: box);
+                        return isTouchPlatform
+                            ? tappable
+                            : Tooltip(
+                                message: '${fmtNum(r['hours'], 1)} h de ${fmtNum(r['capacity'], 1)} h · ${r['operations']} operação(ões)',
+                                child: tappable,
+                              );
                       },
                     ),
                   ),
@@ -599,10 +711,12 @@ class _PlanningScreenState extends State<PlanningScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'A capacidade de cada semana é horas por dia (Parâmetros) × dias úteis; feriados cadastrados (Cadastros > Feriados) ficam de fora. Destaque forte a partir de 85 % da capacidade; vermelho acima de 100 %.',
+              'A capacidade de cada semana é horas por dia (Parâmetros) × dias úteis; feriados cadastrados (Cadastros > Feriados) ficam de fora.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
+            _legend(),
+            const SizedBox(height: AppSpacing.md),
             FutureView<dynamic>(future: _load, onRetry: _reload, builder: (_, r) => _grid((r as List).cast<Map<String, dynamic>>())),
           ],
         ),

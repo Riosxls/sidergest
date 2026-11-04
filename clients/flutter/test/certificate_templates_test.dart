@@ -70,6 +70,8 @@ Future<(List<http.Request>, Session)> _pump(WidgetTester tester, Widget Function
 void main() {
   testWidgets('editor adds and removes rows, sets the title and inserts note snippets', (tester) async {
     final (log, _) = await _pump(tester, (s) => CertificateEditorScreen(session: s, certificate: _certificate()));
+    await tester.tap(find.byKey(const ValueKey('cert-banner-toggle')));
+    await tester.pumpAndSettle();
     expect(find.textContaining('As especificações vêm do último certificado emitido'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('row-del-Chemical-Mn')));

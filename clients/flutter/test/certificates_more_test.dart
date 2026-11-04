@@ -174,7 +174,7 @@ void main() {
       await _pump(tester, fake, (s) => Scaffold(body: CertificatesScreen(session: s)));
       expect(find.text('5176-26'), findsOneWidget);
       expect(find.text('Rascunho'), findsOneWidget);
-      expect(find.text('413 KG'), findsOneWidget);
+      expect(find.textContaining('413 KG'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('filter-Situação')));
       await tester.pumpAndSettle();
@@ -565,12 +565,16 @@ void main() {
     testWidgets('importing from Excel reports when nothing is new and when models were created', (tester) async {
       final fake = _Fake();
       await _pump(tester, fake, (s) => CertificateTemplatesScreen(session: s));
+      await tester.tap(find.byKey(const ValueKey('templates-menu')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('templates-import')));
       await tester.pumpAndSettle();
       expect(find.text('Nada novo: os modelos dos certificados em Excel já estão carregados.'), findsOneWidget);
       await tester.pump(const Duration(seconds: 5));
       fake.importResult = {'created': 12, 'noCustomer': 3, 'noProduct': 2};
       fake.templates = [_template()];
+      await tester.tap(find.byKey(const ValueKey('templates-menu')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('templates-import')));
       await tester.pumpAndSettle();
       expect(find.text('12 modelos criados a partir dos certificados em Excel (3 sem cliente cadastrado, 2 sem produto cadastrado).'), findsOneWidget);

@@ -19,7 +19,9 @@ class _LoginScreenState extends State<LoginScreen> {
   late final _user = TextEditingController(text: widget.session.lastUser);
   final _password = TextEditingController();
   final _passwordFocus = FocusNode();
-  late String? _error = widget.session.idleSignedOut ? 'Você foi desconectado por inatividade. Entre de novo.' : null;
+  String? _error;
+  // Signed out by the idle lock: an explanation, not a failure, so it is not drawn as an error.
+  late String? _notice = widget.session.idleSignedOut ? 'Você foi desconectado por inatividade. Entre de novo.' : null;
   bool _busy = false;
   bool _showServer = false;
   bool _showPassword = false;
@@ -50,7 +52,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _clearError() {
-    if (_error != null) setState(() => _error = null);
+    if (_error != null || _notice != null) {
+      setState(() {
+        _error = null;
+        _notice = null;
+      });
+    }
   }
 
   String _message(ApiException e) {
@@ -67,6 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _notice = null;
     });
     try {
       await widget.session.login(_url.text, _user.text.trim(), _password.text, remember: _remember);
@@ -114,10 +122,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     autofillHints: const [AutofillHints.username],
                     textInputAction: TextInputAction.next,
                     onChanged: (_) => _clearError(),
-                    decoration: const InputDecoration(labelText: 'Usuário', prefixIcon: Icon(Icons.person_outline), border: OutlineInputBorder()),
+                    decoration: const InputDecoration(labelText: 'Usuário', prefixIcon: Icon(Icons.person_outline)),
                   ),
                   const SizedBox(height: 12),
                   _passwordField(),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text('Esqueceu a senha? Fale com o administrador.', textAlign: TextAlign.center, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                  ),
                   if (_capsLock) _capsLockHint(theme, cs),
                   const SizedBox(height: 4),
                   _rememberTile(),
@@ -127,9 +139,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       key: const ValueKey('login-url'),
                       controller: _url,
                       keyboardType: TextInputType.url,
-                      decoration: const InputDecoration(labelText: 'Servidor da API', prefixIcon: Icon(Icons.dns_outlined), border: OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: 'Servidor da API', prefixIcon: Icon(Icons.dns_outlined)),
                     ),
                   ],
+                  if (_notice != null && _error == null) _noticeRow(theme, cs),
                   if (_error != null) _errorRow(cs),
                   const SizedBox(height: 16),
                   _submitButton(),
@@ -156,7 +169,7 @@ class _LoginScreenState extends State<LoginScreen> {
       decoration: InputDecoration(
         labelText: 'Senha',
         prefixIcon: const Icon(Icons.lock_outline),
-        border: const OutlineInputBorder(),
+
         suffixIcon: IconButton(
           key: const ValueKey('login-toggle-password'),
           tooltip: _showPassword ? 'Ocultar senha' : 'Mostrar senha',
@@ -195,6 +208,24 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Widget _noticeRow(ThemeData theme, ColorScheme cs) {
+    return Padding(
+      key: const ValueKey('login-notice'),
+      padding: const EdgeInsets.only(top: 8),
+      child: Semantics(
+        liveRegion: true,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline, size: 18, color: cs.primary),
+            const SizedBox(width: 6),
+            Expanded(child: Text(_notice!, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant))),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _errorRow(ColorScheme cs) {
     return Padding(
       padding: const EdgeInsets.only(top: 8),
@@ -225,7 +256,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _serverToggle() {
     return TextButton(
       onPressed: () => setState(() => _showServer = !_showServer),
-      child: Text(_showServer ? 'Ocultar servidor' : 'Servidor: ${_url.text}', overflow: TextOverflow.ellipsis),
+      child: Text(_showServer ? 'Ocultar opções avançadas' : 'Avançado', overflow: TextOverflow.ellipsis),
     );
   }
 }

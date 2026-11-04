@@ -217,7 +217,7 @@ void main() {
 
   testWidgets('quick actions follow the role', (tester) async {
     await pumpShell(tester, 'Production');
-    expect(find.text('Nova Ordem de Fabricação'), findsOneWidget);
+    expect(find.text('Nova ordem de fabricação'), findsWidgets);
     expect(find.text('Novo pedido'), findsNothing);
     expect(find.text('Novo produto'), findsNothing);
     expect(find.text('Novo orçamento'), findsNothing);
@@ -225,12 +225,12 @@ void main() {
 
   testWidgets('admin quick actions open the creation forms', (tester) async {
     await pumpShell(tester, 'Admin');
-    for (final l in ['Novo orçamento', 'Novo produto', 'Nova Ordem de Fabricação', 'Nova requisição', 'Novo pedido']) {
+    for (final l in ['Novo orçamento', 'Novo produto', 'Nova ordem de fabricação', 'Nova requisição', 'Novo pedido']) {
       expect(find.text(l), findsOneWidget);
     }
-    await tester.tap(find.text('Nova Ordem de Fabricação'));
+    await tester.tap(find.text('Nova ordem de fabricação'));
     await tester.pumpAndSettle();
-    expect(find.text('Nova ordem de fabricação'), findsOneWidget);
+    expect(find.text('Nova ordem de fabricação'), findsWidgets);
   });
 
   testWidgets('the Novo orçamento quick action opens the quote editor', (tester) async {
@@ -282,7 +282,7 @@ void main() {
   testWidgets('command palette: keyboard navigation, actions, products and recents', (tester) async {
     final (_, log) = await pumpShell(tester, 'Admin');
     await openPalette(tester);
-    expect(find.text('Nova Ordem de Fabricação'), findsWidgets);
+    expect(find.text('Nova ordem de fabricação'), findsWidgets);
     await tester.enterText(find.descendant(of: find.byType(Dialog), matching: find.byType(TextField)), 'saldo');
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -381,6 +381,8 @@ void legacyListTest() {
     final (_, log) = await pumpShell(tester, 'Production');
     expect(log.any((r) => r.url.path == '/api/production/orders/dashboard' && r.url.queryParameters['legacyDays'] == '30'), isTrue);
     expect(log.any((r) => r.url.path == '/api/production/orders' && r.url.queryParameters['skip'] != null && r.url.queryParameters['open'] == 'true'), isFalse, reason: 'no full OF list');
+    await tester.tap(find.textContaining('Pendências antigas'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('OFs atrasadas há mais de 30 dias'));
     await tester.pumpAndSettle();
     expect(find.text('OFs atrasadas há mais de 30 dias (120)'), findsOneWidget);
