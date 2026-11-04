@@ -6,6 +6,7 @@ import '../../prefs.dart';
 import '../../session.dart';
 import '../../widgets/print_gate.dart';
 import '../../widgets/user_settings.dart';
+import '../quick_actions_editor.dart';
 import '../shell.dart' show homeScreenChoices;
 import 'settings_activity.dart';
 import 'settings_devices.dart';
@@ -154,6 +155,12 @@ class GeneralSection extends StatelessWidget {
                 selected: {session.rowsPerPage},
                 onSelectionChanged: (s) => session.setRowsPerPage(s.first),
               ),
+            ),
+            SettingsLink(
+              icon: Icons.bolt_outlined,
+              title: 'Atalhos do Painel',
+              subtitle: 'Escolha até ${Session.maxQuickActions} atalhos de criação e a ordem deles',
+              onTap: () => showQuickActionsEditor(context, session),
             ),
           ],
         ),

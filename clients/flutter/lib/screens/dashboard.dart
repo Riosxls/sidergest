@@ -17,6 +17,7 @@ import 'orders.dart';
 import 'product_detail.dart';
 import 'production_orders.dart';
 import 'quick_actions.dart';
+import 'quick_actions_editor.dart';
 import 'settings/settings_dialog.dart';
 
 typedef Navigate = void Function(String id, [String? filter]);
@@ -838,7 +839,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final actions = quickActionsFor(widget.session);
     return CallbackShortcuts(
       bindings: {const SingleActivator(LogicalKeyboardKey.f5): _refresh},
       child: Focus(
@@ -855,7 +855,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    QuickActionBar(actions: actions, onDone: _refresh),
+                    ListenableBuilder(
+                      listenable: widget.session,
+                      builder: (_, _) => QuickActionBar(
+                        actions: quickActionsFor(widget.session, go: widget.onNavigate == null ? null : (id) => widget.onNavigate!(id)),
+                        onDone: _refresh,
+                        onEdit: () => showQuickActionsEditor(context, widget.session),
+                      ),
+                    ),
                     ListenableBuilder(listenable: widget.session, builder: (_, _) => _attention()),
                     ListenableBuilder(listenable: widget.session, builder: (_, _) => _modules()),
                     _onboarding(),

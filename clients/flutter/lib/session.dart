@@ -49,6 +49,10 @@ class Session extends ChangeNotifier {
   /// Screen opened after sign-in (a nav item id).
   String homeScreen = 'dashboard';
 
+  /// Ids of the Painel shortcuts the user picked (see quickActionCatalog), at most [maxQuickActions]; null means the default set.
+  List<String>? quickActionIds;
+  static const maxQuickActions = 5;
+
   /// Minutes between automatic Painel refreshes; 0 turns it off.
   int dashboardRefreshMinutes = 2;
 
@@ -162,6 +166,7 @@ class Session extends ChangeNotifier {
       comfortable = p.getBool('comfortable') ?? isTouchPlatform;
       textScale = snapTextScale(p.getDouble('textScale') ?? 1);
       homeScreen = p.getString('homeScreen') ?? 'dashboard';
+      quickActionIds = p.getStringList('quickActions')?.take(maxQuickActions).toList();
       final refresh = p.getInt('dashboardRefreshMinutes') ?? 2;
       dashboardRefreshMinutes = dashboardRefreshChoices.contains(refresh) ? refresh : 2;
       final rows = p.getInt('rowsPerPage') ?? 50;
@@ -464,6 +469,22 @@ class Session extends ChangeNotifier {
     } catch (e) {
       debugPrint('session: Local storage is best effort; the in-memory value stays: $e');
       // Local storage is best effort; the in-memory value stays.
+    }
+  }
+
+  /// Saves the Painel shortcuts; null restores the default set.
+  Future<void> setQuickActionIds(List<String>? ids) async {
+    quickActionIds = ids?.take(maxQuickActions).toList();
+    notifyListeners();
+    try {
+      final p = await SharedPreferences.getInstance();
+      if (quickActionIds == null) {
+        await p.remove('quickActions');
+      } else {
+        await p.setStringList('quickActions', quickActionIds!);
+      }
+    } catch (e) {
+      debugPrint('session: Local storage is best effort; the in-memory value stays: $e');
     }
   }
 

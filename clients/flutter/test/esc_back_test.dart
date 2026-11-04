@@ -138,6 +138,8 @@ void main() {
 
   testWidgets('settings dialog: Esc closes the sub-view, then the dialog', (tester) async {
     await settings.open(tester, 'SalesManager', (r) async => settings.none(r), section: 'general');
+    await tester.ensureVisible(find.text('Atalhos de teclado'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Atalhos de teclado'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('settings-sub-back')), findsOneWidget);

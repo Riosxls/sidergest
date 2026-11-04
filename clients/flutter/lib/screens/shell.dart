@@ -673,7 +673,7 @@ class _ShellState extends State<Shell> {
           i.section == hiddenSection ? 'Módulos' : (_shownGroup(i.id) == null ? i.section : '${i.section} › ${tabGroupOf(i.id)!.title}'),
         ),
     ],
-    actions: [for (final a in quickActionsFor(widget.session)) PaletteAction(a.icon, a.label, () => a.run(_navContext))],
+    actions: [for (final a in quickActionsFor(widget.session, go: _go)) PaletteAction(a.icon, a.label, () => a.run(_navContext))],
     onNavigate: _go,
     onOpenHit: _openHit,
     onOpenLink: _openLocation,
