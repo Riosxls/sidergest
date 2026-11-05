@@ -2996,6 +2996,129 @@ namespace Ebt.Core.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.PriceSimulation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("basis");
+
+                    b.Property<string>("Confidence")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("confidence");
+
+                    b.Property<decimal?>("CostPerKg")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("cost_per_kg");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("created_by");
+
+                    b.Property<int?>("CustomerId")
+                        .HasColumnType("integer")
+                        .HasColumnName("customer_id");
+
+                    b.Property<string>("CustomerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("customer_name");
+
+                    b.Property<decimal?>("DiameterMm")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("diameter_mm");
+
+                    b.Property<decimal?>("HeightMm")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("height_mm");
+
+                    b.Property<decimal?>("LengthMm")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("length_mm");
+
+                    b.Property<decimal?>("MarkupPercent")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("markup_percent");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<decimal>("PricePerKg")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("price_per_kg");
+
+                    b.Property<decimal?>("PricePerPiece")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("price_per_piece");
+
+                    b.Property<decimal?>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("Shape")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("shape");
+
+                    b.Property<string>("Spec")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("spec");
+
+                    b.Property<decimal?>("ThicknessMm")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("thickness_mm");
+
+                    b.Property<bool>("UsedInQuote")
+                        .HasColumnType("boolean")
+                        .HasColumnName("used_in_quote");
+
+                    b.Property<decimal?>("WidthMm")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("width_mm");
+
+                    b.HasKey("Id")
+                        .HasName("pk_price_simulations");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_price_simulations_created_at");
+
+                    b.ToTable("price_simulations", (string)null);
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.Product", b =>
                 {
                     b.Property<int>("Id")

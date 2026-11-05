@@ -21,6 +21,7 @@ public partial class EbtDbContext
     public DbSet<DeliveryLine> DeliveryLines => Set<DeliveryLine>();
     public DbSet<SalesEvent> SalesEvents => Set<SalesEvent>();
     public DbSet<PriceHistory> PriceHistory => Set<PriceHistory>();
+    public DbSet<PriceSimulation> PriceSimulations => Set<PriceSimulation>();
 
     partial void ConfigureSales(ModelBuilder b)
     {
@@ -44,6 +45,31 @@ public partial class EbtDbContext
             e.Property(x => x.UnitPrice).HasPrecision(18, 6);
             e.Property(x => x.WeightKg).HasPrecision(18, 5);
             e.Property(x => x.PricePerKg).HasPrecision(18, 6);
+        });
+
+        // Saved simulator runs: reference data too (no foreign keys, not part of the data reset).
+        b.Entity<PriceSimulation>(e =>
+        {
+            e.ToTable("price_simulations");
+            e.HasIndex(x => x.CreatedAt);
+            e.Property(x => x.CreatedBy).HasMaxLength(100);
+            e.Property(x => x.Shape).HasMaxLength(12);
+            e.Property(x => x.Spec).HasMaxLength(60);
+            e.Property(x => x.CustomerName).HasMaxLength(200);
+            e.Property(x => x.Basis).HasMaxLength(20);
+            e.Property(x => x.Confidence).HasMaxLength(10);
+            e.Property(x => x.Reason).HasMaxLength(500);
+            e.Property(x => x.Note).HasMaxLength(1000);
+            e.Property(x => x.DiameterMm).HasPrecision(12, 4);
+            e.Property(x => x.WidthMm).HasPrecision(12, 4);
+            e.Property(x => x.HeightMm).HasPrecision(12, 4);
+            e.Property(x => x.ThicknessMm).HasPrecision(12, 4);
+            e.Property(x => x.LengthMm).HasPrecision(12, 4);
+            e.Property(x => x.Quantity).HasPrecision(18, 4);
+            e.Property(x => x.MarkupPercent).HasPrecision(9, 4);
+            e.Property(x => x.CostPerKg).HasPrecision(18, 6);
+            e.Property(x => x.PricePerKg).HasPrecision(18, 6);
+            e.Property(x => x.PricePerPiece).HasPrecision(18, 4);
         });
 
         b.Entity<SalesSettings>(e =>
