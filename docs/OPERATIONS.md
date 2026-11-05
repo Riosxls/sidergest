@@ -211,7 +211,7 @@ The result says read / imported / updated / duplicates / skipped.
 
 - A sale is identified by the first 6 letters of the customer name, diameter, thickness, length, unit and price (2 decimals). Importing again is
   safe: a known sale only gets the later date and, if it lacked one, the specification (upsert); nothing is duplicated.
-- `spec` is classified (`PriceSpec.Classify`): the word BK or NBK wins ("EN 10305-2 - BK" is BK), then EN10305 (E420, E355, 10305, CR2), NBR (5599, NBR), SAE (SAE, 1010, 1008, 1020), else other (counts as unknown in the distance, no penalty).
+- `spec` is classified (`PriceSpec.Classify`): STKM13A (JIS G3445 steel grade, regex `STKMs*-?s*13s*-?s*A`) is checked first, then the delivery-condition words GBK (DIN 2393 annealed, needs the furnace), NBK and BK win over the standard ("EN 10305-2 - BK" is BK), then EN10305 (E420, E355, 10305, CR2), NBR (5599, NBR), SAE (SAE, 1010, 1008, 1020), else other (counts as unknown in the distance, no penalty).
 - Units read as piece: UN, UND, UNID, PC, PCS, PÇ, PEÇA(S); as kg: KG, KGS, QUILO(S). Dates more than 30 days in the future are rejected. The result also has `skippedReasons`
   (`unidade`, `data`, `medidas`, `preço`: counts of skipped rows by reason). Two imports racing on the same rows: the loser retries once, then answers 409.
 - The loaded points (history + live order lines, a history row already covered by a live line is dropped) are cached 60 s (`PriceSuggestion:CacheSeconds`, 0 = off); an import clears the cache.

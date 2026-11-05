@@ -103,6 +103,28 @@ public class PriceSimulatorExtrasTests(ApiFixture api) : IAsyncLifetime
         Assert.Equal(PriceSuggestionService.SpecPenalty, PriceSuggestionService.Distance(50m, 2m, 1000m, 50m, 2m, 1000m, "BK", "NBK"), 6);
     }
 
+    [Fact]
+    public async Task Import_stores_the_STKM13A_and_GBK_classes_and_a_GBK_query_still_gets_an_answer_from_BK_rows()
+    {
+        await ClearHistoryAsync();
+        await ImportAsync(Head
+            + $"{Day(5)};Alfa Oblongos;17;1.4;680;KG;40;JIS G3445 STKM13A\n"
+            + $"{Day(6)};Beta Recozidos;17;1.4;680;KG;35;EN 10305-2 - GBK\n"
+            + $"{Day(7)};Gama Brilhantes;17;1.4;680;KG;30;BK DIN 2393\n");
+        await using (var db = api.NewDb())
+            Assert.Equal(["BK", "GBK", "STKM13A"], await db.PriceHistory.AsNoTracking().Select(h => h.Spec!).OrderBy(s => s).ToArrayAsync());
+
+        await ClearHistoryAsync();
+        await ImportAsync(Head + $"{Day(5)};Delta Brilhantes;17;1.4;680;KG;30;BK\n{Day(6)};Eps Brilhantes;17;1.4;680;KG;31;BK\n");
+        var r = await SuggestAsync("diameter=17&thickness=1.4&length=680&spec=GBK");
+        Assert.Equal("Neighbours", r.Suggestion.Basis);
+        Assert.NotNull(r.Suggestion.PricePerKg);
+        Assert.All(r.Similar.Take(2), s => Assert.Equal("BK", s.Spec));
+        Assert.Equal(PriceSuggestionService.SpecPenalty, r.Similar[0].Distance, 3); // known and different: penalised
+        var stkm = await SuggestAsync("diameter=17&thickness=1.4&length=680&spec=" + Uri.EscapeDataString("JIS G3445 STKM13A"));
+        Assert.NotNull(stkm.Suggestion.PricePerKg);
+    }
+
     // ---- A2 / A3 / confidence
 
     [Fact]
