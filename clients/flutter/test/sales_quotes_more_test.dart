@@ -663,7 +663,7 @@ void main() {
       await tester.pumpAndSettle();
       await menu(tester, 'Excluir');
       expect(find.text('Excluir PROP 31?'), findsOneWidget);
-      expect(find.text('O rascunho é apagado definitivamente.'), findsOneWidget);
+      expect(find.text('O orçamento e o histórico dele somem de vez. Não dá para desfazer.'), findsOneWidget);
       await tapKey(tester, 'confirm-step');
       expect(f.called('DELETE', '/api/sales/quotes/5'), isTrue);
       expect(find.text('Orçamento excluído'), findsOneWidget);
