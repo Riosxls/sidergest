@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ebt.Core.Production;
 
-public sealed partial class ProductionService(EbtDbContext db, StockService stock, BomService bom, FiscalService? fiscal = null)
+public sealed partial class ProductionService(EbtDbContext db, StockService stock, BomService bom, FiscalService? fiscal = null, ProcessSuggester? suggester = null)
 {
     public const string DefaultIssueLocationCode = "ALM";
     public const string DefaultReceiptLocationCode = "PA";

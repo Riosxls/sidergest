@@ -19,11 +19,39 @@ public partial class EbtDbContext
     public DbSet<OverrunRelease> OverrunReleases => Set<OverrunRelease>();
     public DbSet<OutsideShipment> OutsideShipments => Set<OutsideShipment>();
     public DbSet<ProductionReport> ProductionReports => Set<ProductionReport>();
+    public DbSet<ProcessTemplate> ProcessTemplates => Set<ProcessTemplate>();
+    public DbSet<ProcessTemplateOperation> ProcessTemplateOperations => Set<ProcessTemplateOperation>();
 
     partial void ConfigureProduction(ModelBuilder b)
     {
         b.HasSequence<int>(ProductionOrderNumbers);
         b.HasSequence<int>(InternalOrderNumbers);
+
+        // Legacy processes by customer and tube: reference data, not part of the data reset.
+        b.Entity<ProcessTemplate>(e =>
+        {
+            e.ToTable("process_templates");
+            e.HasIndex(x => new { x.CustomerKey, x.DiameterMm, x.ThicknessMm, x.LengthMm }).IsUnique().AreNullsDistinct(false);
+            e.HasIndex(x => x.DiameterMm);
+            e.Property(x => x.CustomerKey).HasMaxLength(6);
+            e.Property(x => x.CustomerName).HasMaxLength(200);
+            e.Property(x => x.Spec).HasMaxLength(100);
+            e.Property(x => x.SourceRef).HasMaxLength(40);
+            e.Property(x => x.DiameterMm).HasPrecision(12, 4);
+            e.Property(x => x.ThicknessMm).HasPrecision(12, 4);
+            e.Property(x => x.LengthMm).HasPrecision(12, 4);
+        });
+        b.Entity<ProcessTemplateOperation>(e =>
+        {
+            e.ToTable("process_template_operations");
+            e.HasIndex(x => new { x.TemplateId, x.Sequence });
+            e.Property(x => x.Description).HasMaxLength(200);
+            e.Property(x => x.Tolerance).HasMaxLength(60);
+            e.Property(x => x.MeasureStart).HasMaxLength(60);
+            e.Property(x => x.MeasureEnd).HasMaxLength(60);
+            e.Property(x => x.Resource).HasMaxLength(100);
+            e.HasOne(x => x.Template).WithMany(x => x.Operations).HasForeignKey(x => x.TemplateId).OnDelete(DeleteBehavior.Cascade);
+        });
 
         b.Entity<ProductionSettings>(e =>
         {

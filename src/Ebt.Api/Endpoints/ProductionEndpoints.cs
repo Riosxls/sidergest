@@ -30,6 +30,7 @@ public record OperationDetailsIn(string? Tolerance, string? MeasureStart, string
 public record BulkApplyIn(bool Apply);
 public record BulkStaleIn(int OlderThanDays, string? Reason, bool Apply);
 public record ProcessIn(List<ProcessLine>? Operations);
+public record ProcessSuggestionOut(string Source, string? SourceRef, IReadOnlyList<SuggestedOperation> Operations);
 public record ProductionReasonIn(string? Reason, bool Technical = false);
 public record ReleaseIn(bool Force = false);
 public record OverrunIn(decimal Quantity, string? Justification);
@@ -37,7 +38,7 @@ public record ProductionOrderSummaryOut(int Id, ProductionOrderKind Kind, int Nu
     DateOnly? PlannedStart, DateOnly? PlannedEnd, DateOnly? AdjustedStart, DateOnly? AdjustedEnd, ProductionOrderStatus Status, int? ParentOrderId, DateTimeOffset CreatedAt);
 public record ProductionOperationOut(int Id, int Sequence, string? Description, int? MachineId, string? MachineCode, int? WorkCenterId, decimal? SetupHours, decimal? PiecesPerHour, decimal? Operators, bool External, int? SupplierId, int? ExternalLeadDays,
     decimal PlannedHours, DateOnly? PlannedStart, DateOnly? PlannedEnd, decimal Good, decimal Scrap, decimal InTransit, decimal OverrunReleased, decimal Limit, decimal Remaining,
-    string? Tolerance = null, string? MeasureStart = null, string? MeasureEnd = null);
+    string? Tolerance = null, string? MeasureStart = null, string? MeasureEnd = null, string? MachineName = null);
 public record ProductionOrderOut(int Id, ProductionOrderKind Kind, int Number, string Reference, int ProductId, string ProductCode, string ProductName, string ProductUnit, int? CustomerId, decimal Quantity, DateOnly DueDate,
     DateOnly? PlannedStart, DateOnly? PlannedEnd, DateOnly? AdjustedStart, DateOnly? AdjustedEnd, ProductionOrderStatus Status, string? StatusReason, int? ParentOrderId, int? PreviousOrderId, int? Bales, string? Notes,
     string? CreatedBy, DateTimeOffset CreatedAt, DateTimeOffset? ReleasedAt, DateTimeOffset? FinishedAt, DateTimeOffset? ClosedAt, string? ClosedBy, DateTimeOffset? CostClosedAt, decimal? MaterialCost, decimal? ServiceCost, decimal? UnitCost,
@@ -76,6 +77,8 @@ public static class ProductionEndpoints
 {
     public static IServiceCollection AddProduction(this IServiceCollection services)
     {
+        services.AddScoped<ProcessSuggester>();
+        services.AddScoped<ProcessTemplateImporter>();
         services.AddScoped<ProductionService>();
         services.AddExceptionHandler<ProductionExceptionHandler>();
         return services;
@@ -88,6 +91,7 @@ public static class ProductionEndpoints
         MapOrders(app);
         MapShopFloor(app);
         MapPlanning(app);
+        MapProcessTemplates(app);
     }
 
     private static void MapMasters(WebApplication app)
@@ -280,7 +284,28 @@ public static class ProductionEndpoints
         g.MapPost("/bulk/suggest-process", async (BulkApplyIn i, ProductionService svc, CancellationToken ct) =>
             Results.Ok(await svc.BulkSuggestProcessAsync(i.Apply, ct))).RequireAuthorization(Policies.Admin);
 
-        g.MapPost("/bulk/cancel-stale", async (BulkStaleIn i, ProductionService svc, CancellationToken ct) =>
+        g.MapPost("/bulk/complete-requirements", async (BulkApplyIn i, ProductionService svc, EbtDbContext db, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            var result = await svc.BulkCompleteRequirementsAsync(i.Apply, ct);
+            if (i.Apply)
+            {
+                db.AuditLog.Add(new AuditEntry
+                {
+                    At = DateTimeOffset.UtcNow, User = user.Identity?.Name, Entity = nameof(ProductionOrder), EntityId = "bulk", Action = "Requirements",
+                    Changes = System.Text.Json.JsonSerializer.Serialize(new { result.Matched, result.Done, result.Skipped, result.OperationsFilled })
+                });
+                await db.SaveChangesAsync(ct);
+            }
+            return Results.Ok(result);
+        }).RequireAuthorization(Policies.Admin);
+
+        g.MapPost("/{id:int}/process/suggest", async (int id, EbtDbContext db, ProductionService svc, CancellationToken ct) =>
+        {
+            var s = await svc.SuggestForOrderAsync(id, ct);
+            return Results.Ok(new ProcessSuggestionOut(s.Source.ToString(), s.SourceRef, s.Operations));
+        }).RequireAuthorization(ProductionPolicies.Plan);
+
+        g.MapPost("/bulk/cancel-stale",async (BulkStaleIn i, ProductionService svc, CancellationToken ct) =>
             Results.Ok(await svc.BulkCancelStaleAsync(i.OlderThanDays, i.Reason, i.Apply, ct))).RequireAuthorization(Policies.Admin);
 
         g.MapPut("/{id:int}/process", async (int id, ProcessIn i, EbtDbContext db, ProductionService svc, CancellationToken ct) =>
@@ -397,6 +422,31 @@ public static class ProductionEndpoints
         });
     }
 
+    private const long MaxTemplateImportBytes = 20 * 1024 * 1024;
+
+    /// <summary>Legacy processes by customer and tube (reference data behind the process suggestion).</summary>
+    private static void MapProcessTemplates(WebApplication app)
+    {
+        var g = app.MapGroup("/api/production/process-templates").WithTags("Production");
+
+        g.MapGet("/summary", async (ProcessTemplateImporter importer, CancellationToken ct) => Results.Ok(await importer.SummaryAsync(ct))).RequireAuthorization(Policies.Read);
+
+        g.MapPost("/import", async (IFormFile file, ProcessTemplateImporter importer, EbtDbContext db, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            if (file.Length is 0 or > MaxTemplateImportBytes) return Results.BadRequest(new { message = "Arquivo vazio ou maior que 20 MB", field = "file" });
+            await using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, ct);
+            var result = await importer.ImportAsync(ms.ToArray(), ct);
+            db.AuditLog.Add(new AuditEntry
+            {
+                At = DateTimeOffset.UtcNow, User = user.Identity?.Name, Entity = "ProcessTemplate", EntityId = "import", Action = "Import",
+                Changes = System.Text.Json.JsonSerializer.Serialize(new { file = Path.GetFileName(file.FileName), result.Read, result.Templates, result.Updated, result.Operations, result.Skipped })
+            });
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(result);
+        }).RequireAuthorization(Policies.Admin).DisableAntiforgery();
+    }
+
     private static IResult Created(StockDocument doc) =>
         Results.Created($"/api/stock/documents/{doc.Id}", new StockDocumentSummary(doc.Id, doc.Type, doc.Date, doc.Reference, doc.SupplierId, doc.CustomerId, doc.ReversalOfId, doc.Reversed, doc.CreatedBy, doc.CreatedAt, doc.Movements.Count));
 
@@ -421,7 +471,7 @@ public static class ProductionEndpoints
         {
             var p = progress.Operations.First(x => x.OperationId == op.Id);
             return new ProductionOperationOut(op.Id, op.Sequence, op.Description, op.MachineId, op.Machine?.Code, op.WorkCenterId, op.SetupHours, op.PiecesPerHour, op.Operators, op.External, op.SupplierId, op.ExternalLeadDays,
-                op.PlannedHours, op.PlannedStart, op.PlannedEnd, p.Good, p.Scrap, p.InTransit, p.OverrunReleased, p.Limit, p.Remaining, op.Tolerance, op.MeasureStart, op.MeasureEnd);
+                op.PlannedHours, op.PlannedStart, op.PlannedEnd, p.Good, p.Scrap, p.InTransit, p.OverrunReleased, p.Limit, p.Remaining, op.Tolerance, op.MeasureStart, op.MeasureEnd, op.Machine?.Name);
         }).ToList();
         return new ProductionOrderOut(o.Id, o.Kind, o.Number, o.Reference, o.ProductId, o.Product!.Code, o.Product.Name, o.Product.StockUnit, o.CustomerId, o.Quantity, o.DueDate, o.PlannedStart, o.PlannedEnd, o.AdjustedStart, o.AdjustedEnd,
             o.Status, o.StatusReason, o.ParentOrderId, o.PreviousOrderId, o.Bales, o.Notes, o.CreatedBy, o.CreatedAt, o.ReleasedAt, o.FinishedAt, o.ClosedAt, o.ClosedBy, o.CostClosedAt, o.MaterialCost, o.ServiceCost, o.UnitCost,

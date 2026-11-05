@@ -16,7 +16,8 @@ public sealed record OrderInput(int ProductId, decimal Quantity, DateOnly DueDat
 public sealed record OrderUpdate(decimal Quantity, DateOnly DueDate, int? CustomerId, int? Bales, string? Notes, string? PrimaryTube = null);
 public sealed record OperationDetailsInput(string? Tolerance, string? MeasureStart, string? MeasureEnd);
 public sealed record BulkResult(int Matched, int Done, int Skipped, IReadOnlyList<string> Sample);
-public sealed record ProcessLine(int? Sequence, string? Description, string? Tolerance, string? MeasureStart, string? MeasureEnd);
+public sealed record ProcessLine(int? Sequence, string? Description, string? Tolerance, string? MeasureStart, string? MeasureEnd, int? MachineId = null);
+public sealed record BulkRequirementsResult(int Matched, int Done, int Skipped, IReadOnlyList<string> Sample, int OperationsFilled);
 public sealed record IssueLineInput(int MaterialLineId, decimal Quantity, int? LotId = null);
 public sealed record IssueInput(DateOnly Date, int? LocationId = null, IReadOnlyList<IssueLineInput>? Lines = null);
 public sealed record FinishedGoodsInput(DateOnly Date, decimal Quantity, int? LocationId = null, string? LotCode = null);

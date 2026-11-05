@@ -37,39 +37,63 @@ public sealed partial class ProductionService
                 });
             }
         }
-        if (suggestProcess && order.Operations.Count == 0 && order.ParentOrderId is null && order.Kind == ProductionOrderKind.Standard)
+        if (!suggestProcess) return;
+        var product = await db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == order.ProductId, ct);
+        if (product is null) return;
+        var machines = await MachineIndex.LoadAsync(db, ct);
+        if (order.Operations.Count == 0 && order.ParentOrderId is null && order.Kind == ProductionOrderKind.Standard)
         {
-            var product = await db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == order.ProductId, ct);
-            if (product != null) order.Operations.AddRange(SuggestProcess(product, order.PrimaryTube));
+            var (name, trade) = await CustomerOfAsync(order.CustomerId, null, ct);
+            var suggestion = await Suggester.SuggestAsync(product, order.PrimaryTube, name, ct, null, trade, machines);
+            order.Operations.AddRange(suggestion.Operations.Select(ToOperation));
+        }
+        else
+        {
+            // The routing came with its own data: only the empty requirement and machine are filled, by the rule of the operation type.
+            foreach (var op in order.Operations) FillGaps(op, product.LengthMm, machines);
         }
     }
 
-    /// <summary>
-    /// Draft process for a product that has no routing, so the OF paper never goes to the shop floor with an empty process:
-    /// profile, draw to the final diameter, straighten and cut, final inspection. The planner confirms it on the order.
-    /// </summary>
-    public static List<ProductionOrderOperation> SuggestProcess(Product product, string? primaryTube)
+    private ProcessSuggester? suggesterInstance;
+    private ProcessSuggester Suggester => suggesterInstance ??= suggester ?? new ProcessSuggester(db);
+
+    private static ProductionOrderOperation ToOperation(SuggestedOperation s) =>
+        new() { Sequence = s.Sequence, Description = s.Description, Tolerance = s.Tolerance, MeasureStart = s.MeasureStart, MeasureEnd = s.MeasureEnd, MachineId = s.MachineId };
+
+    /// <summary>Fills only the empty requirement and the missing machine of an operation from the rules of its type. Returns whether something changed.</summary>
+    private static bool FillGaps(ProductionOrderOperation op, decimal? lengthMm, MachineIndex machines)
     {
-        string Mm(decimal v, string format = "0.00") => v.ToString(format, System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
-        var ops = new List<string>();
-        decimal? profile = null;
-        var m = System.Text.RegularExpressions.Regex.Match(primaryTube ?? "", @"\d+(?:[.,]\d+)?");
-        if (m.Success && decimal.TryParse(m.Value.Replace(',', '.'), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var d)) profile = d;
-        ops.Add(profile is { } p ? $"Perfilar {Mm(p)}mm" : "Perfilar");
-        if (product.DiameterMm is { } dia and > 0 && (profile is null || dia < profile)) ops.Add($"Trefilar para {Mm(dia)}mm");
-        ops.Add(product.LengthMm is { } len and > 0 ? $"Endireitar e Cortar {Mm(len, "0.##")}" : "Endireitar e Cortar");
-        ops.Add("Inspeção Final");
-        return ops.Select((text, i) => new ProductionOrderOperation
-        {
-            Sequence = (i + 1) * 10, Description = text, Tolerance = i == ops.Count - 1 ? "Visual/Dimensional" : null
-        }).ToList();
+        var kind = ProcessSuggester.KindOf(op.Description);
+        var changed = false;
+        if (string.IsNullOrWhiteSpace(op.Tolerance) && ProcessSuggester.RuleTolerance(kind, lengthMm) is { } t) { op.Tolerance = t; changed = true; }
+        if (op.MachineId is null && !op.External && machines.For(kind) is { } m) { op.MachineId = m.Id; changed = true; }
+        return changed;
     }
 
-    /// <summary>Rewrites the process written on the OF (description, requirements, measures) in the order given. Rows that come with their sequence keep their data; the sequences are renumbered 10, 20, 30... by position.</summary>
+    /// <summary>Name and trade name of the customer of an order: the customer on the OF, else the one of the sales order that generated it.</summary>
+    private async Task<(string? Name, string? Trade)> CustomerOfAsync(int? customerId, int? orderId, CancellationToken ct)
+    {
+        if (customerId is { } c && await db.Customers.AsNoTracking().Where(x => x.Id == c).Select(x => new { x.Name, x.TradeName }).FirstOrDefaultAsync(ct) is { } cu) return (cu.Name, cu.TradeName);
+        if (orderId is { } o && await db.SalesOrderLines.AsNoTracking().Where(l => l.ProductionOrderId == o).Select(l => new { l.Order!.Customer!.Name, l.Order.Customer.TradeName }).FirstOrDefaultAsync(ct) is { } s) return (s.Name, s.TradeName);
+        return (null, null);
+    }
+
+    /// <summary>The process the system would write on this order now (nothing is saved): the last OF of the same customer and product, the legacy process of the customer and tube, the usual process of the tube, or the rules.</summary>
+    public async Task<ProcessSuggestion> SuggestForOrderAsync(int id, CancellationToken ct = default)
+    {
+        var order = await db.ProductionOrders.AsNoTracking().Include(o => o.Product).FirstOrDefaultAsync(o => o.Id == id, ct) ?? throw ProductionException.NotFound("Order");
+        if (order.Status != ProductionOrderStatus.Created) throw ProductionException.Conflict("The process can only be suggested before the order is released");
+        var (name, trade) = await CustomerOfAsync(order.CustomerId, order.Id, ct);
+        return await Suggester.SuggestAsync(order.Product!, order.PrimaryTube, name, ct, order.Id, trade);
+    }
+
+    /// <summary>Rewrites the process written on the OF (description, requirements, measures, machine) in the order given. Rows that come with their sequence keep their data; the sequences are renumbered 10, 20, 30... by position. A line without a machine keeps the one the operation has.</summary>
     public async Task<ProductionOrder> ReplaceProcessAsync(int id, IReadOnlyList<ProcessLine> lines, CancellationToken ct = default)
     {
         if (lines.Count == 0) throw ProductionException.Invalid("operations", "Give at least one operation");
         if (lines.Any(l => string.IsNullOrWhiteSpace(l.Description))) throw ProductionException.Invalid("operations", "Every operation needs a description");
+        var machineIds = lines.Where(l => l.MachineId is not null).Select(l => l.MachineId!.Value).Distinct().ToList();
+        if (machineIds.Count > 0 && await db.Machines.CountAsync(m => machineIds.Contains(m.Id), ct) != machineIds.Count) throw ProductionException.Invalid("machineId", "Machine not found");
         return await InTransaction(async () =>
         {
             var order = await LockAsync(id, ct);
@@ -100,6 +124,7 @@ public sealed partial class ProductionService
                 op.Tolerance = Clean(l.Tolerance);
                 op.MeasureStart = Clean(l.MeasureStart);
                 op.MeasureEnd = Clean(l.MeasureEnd);
+                if (l.MachineId is { } machineId) op.MachineId = machineId;
             }
             foreach (var m in order.Materials.Where(m => oldToNew.ContainsKey(m.OperationSequence))) m.OperationSequence = oldToNew[m.OperationSequence];
             await db.SaveChangesAsync(ct);
@@ -109,7 +134,7 @@ public sealed partial class ProductionService
 
     /// <summary>
     /// Writes the suggested process on every OF that is still only created and has none, so the paper is never printed empty.
-    /// With <paramref name="apply"/> false it only counts.
+    /// With <paramref name="apply"/> false it only counts. Each process comes from <see cref="ProcessSuggester"/> (last OF of the customer, legacy template, rules).
     /// </summary>
     public async Task<BulkResult> BulkSuggestProcessAsync(bool apply, CancellationToken ct = default)
     {
@@ -118,11 +143,73 @@ public sealed partial class ProductionService
             .OrderBy(o => o.DueDate).ToListAsync(ct);
         if (apply)
         {
+            var machines = await MachineIndex.LoadAsync(db, ct);
             foreach (var o in orders.Where(o => o.Product != null))
-                o.Operations.AddRange(SuggestProcess(o.Product!, o.PrimaryTube));
+            {
+                var (name, trade) = await CustomerOfAsync(o.CustomerId, o.Id, ct);
+                var suggestion = await Suggester.SuggestAsync(o.Product!, o.PrimaryTube, name, ct, o.Id, trade, machines);
+                o.Operations.AddRange(suggestion.Operations.Select(ToOperation));
+            }
             await db.SaveChangesAsync(ct);
         }
         return new BulkResult(orders.Count, apply ? orders.Count : 0, 0, orders.Take(20).Select(o => o.Reference).ToList());
+    }
+
+    /// <summary>
+    /// Completes the process of OFs that are still only created, have no shop-floor reports and miss a requirement or a machine on some operation, and fixes the legacy swap
+    /// (the text "Visual/Dimensional" written as the inspection requirement instead of "-"). Only empty fields are filled, from the suggestion for the order's customer and product
+    /// (the operation of the same type; the rules of the type when the suggestion has none); descriptions, sequences and anything already written stay. Preview (<paramref name="apply"/> false) counts without writing.
+    /// </summary>
+    public async Task<BulkRequirementsResult> BulkCompleteRequirementsAsync(bool apply, CancellationToken ct = default)
+    {
+        var query = db.ProductionOrders.Include(o => o.Product).Include(o => o.Operations)
+            .Where(o => o.Status == ProductionOrderStatus.Created && o.Kind == ProductionOrderKind.Standard && o.ParentOrderId == null
+                && !db.ProductionReports.Any(r => r.OrderId == o.Id)
+                && o.Operations.Any(op => op.Tolerance == null || op.Tolerance.Trim() == "" || op.Tolerance == ProcessSuggester.LegacyInspectionResource || (op.MachineId == null && !op.External)));
+        if (!apply) query = query.AsNoTracking();
+        var orders = await query.OrderBy(o => o.DueDate).ThenBy(o => o.Id).ToListAsync(ct);
+        var machines = await MachineIndex.LoadAsync(db, ct);
+        int changed = 0, filled = 0;
+        var sample = new List<string>();
+        foreach (var o in orders)
+        {
+            var (name, trade) = await CustomerOfAsync(o.CustomerId, o.Id, ct);
+            var suggestion = await Suggester.SuggestAsync(o.Product!, o.PrimaryTube, name, ct, o.Id, trade, machines);
+            var byKind = suggestion.Operations.GroupBy(s => ProcessSuggester.KindOf(s.Description)).ToDictionary(g => g.Key, g => g.ToList());
+            var seen = new Dictionary<OperationKind, int>();
+            var n = 0;
+            foreach (var op in o.Operations.OrderBy(x => x.Sequence))
+            {
+                var kind = ProcessSuggester.KindOf(op.Description);
+                var ordinal = seen.GetValueOrDefault(kind);
+                seen[kind] = ordinal + 1;
+                SuggestedOperation? s = kind != OperationKind.Other && byKind.TryGetValue(kind, out var same) ? same[Math.Min(ordinal, same.Count - 1)] : null;
+                var touched = false;
+                if (ProcessSuggester.IsLegacySwap(op.Tolerance))
+                {
+                    op.Tolerance = ProcessSuggester.Dash;
+                    if (op.MachineId is null && machines.For(OperationKind.Inspection) is { } insp) op.MachineId = insp.Id;
+                    touched = true;
+                }
+                else if (string.IsNullOrWhiteSpace(op.Tolerance))
+                {
+                    var tolerance = s is not null ? s.Tolerance : ProcessSuggester.RuleTolerance(kind, o.Product!.LengthMm);
+                    if (!string.IsNullOrWhiteSpace(tolerance)) { op.Tolerance = tolerance; touched = true; }
+                }
+                if (op.MachineId is null && !op.External)
+                {
+                    var machineId = s?.MachineId ?? machines.For(kind)?.Id;
+                    if (machineId is not null) { op.MachineId = machineId; touched = true; }
+                }
+                if (touched) n++;
+            }
+            if (n == 0) continue;
+            changed++;
+            filled += n;
+            if (sample.Count < 20) sample.Add(o.Reference);
+        }
+        if (apply && changed > 0) await db.SaveChangesAsync(ct);
+        return new BulkRequirementsResult(orders.Count, apply ? changed : 0, orders.Count - changed, sample, filled);
     }
 
     /// <summary>

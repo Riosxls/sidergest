@@ -3119,6 +3119,127 @@ namespace Ebt.Core.Data.Migrations
                     b.ToTable("price_simulations", (string)null);
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.ProcessTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CustomerKey")
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)")
+                        .HasColumnName("customer_key");
+
+                    b.Property<string>("CustomerName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("customer_name");
+
+                    b.Property<decimal>("DiameterMm")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("diameter_mm");
+
+                    b.Property<decimal?>("LengthMm")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("length_mm");
+
+                    b.Property<DateOnly?>("SourceDate")
+                        .HasColumnType("date")
+                        .HasColumnName("source_date");
+
+                    b.Property<string>("SourceRef")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("source_ref");
+
+                    b.Property<string>("Spec")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("spec");
+
+                    b.Property<decimal?>("ThicknessMm")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("thickness_mm");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_process_templates");
+
+                    b.HasIndex("DiameterMm")
+                        .HasDatabaseName("ix_process_templates_diameter_mm");
+
+                    b.HasIndex("CustomerKey", "DiameterMm", "ThicknessMm", "LengthMm")
+                        .IsUnique()
+                        .HasDatabaseName("ix_process_templates_customer_key_diameter_mm_thickness_mm_len");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("CustomerKey", "DiameterMm", "ThicknessMm", "LengthMm"), false);
+
+                    b.ToTable("process_templates", (string)null);
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProcessTemplateOperation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("MeasureEnd")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("measure_end");
+
+                    b.Property<string>("MeasureStart")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("measure_start");
+
+                    b.Property<string>("Resource")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("resource");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence");
+
+                    b.Property<int>("TemplateId")
+                        .HasColumnType("integer")
+                        .HasColumnName("template_id");
+
+                    b.Property<string>("Tolerance")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("tolerance");
+
+                    b.HasKey("Id")
+                        .HasName("pk_process_template_operations");
+
+                    b.HasIndex("TemplateId", "Sequence")
+                        .HasDatabaseName("ix_process_template_operations_template_id_sequence");
+
+                    b.ToTable("process_template_operations", (string)null);
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.Product", b =>
                 {
                     b.Property<int>("Id")
@@ -7063,6 +7184,18 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.ProcessTemplateOperation", b =>
+                {
+                    b.HasOne("Ebt.Core.Entities.ProcessTemplate", "Template")
+                        .WithMany("Operations")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_process_template_operations_process_templates_template_id");
+
+                    b.Navigation("Template");
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.ProductCustomer", b =>
                 {
                     b.HasOne("Ebt.Core.Entities.Customer", "Customer")
@@ -7986,6 +8119,11 @@ namespace Ebt.Core.Data.Migrations
                     b.Navigation("Installments");
 
                     b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Ebt.Core.Entities.ProcessTemplate", b =>
+                {
+                    b.Navigation("Operations");
                 });
 
             modelBuilder.Entity("Ebt.Core.Entities.Product", b =>

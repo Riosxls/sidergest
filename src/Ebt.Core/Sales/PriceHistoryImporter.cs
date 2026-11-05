@@ -184,7 +184,7 @@ public sealed class PriceHistoryImporter(EbtDbContext db, PriceDataCache? cache 
         return decimal.TryParse(s, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var v) && Math.Abs(v) < 1_000_000_000m ? v : null;
     }
 
-    private static string Fold(string s)
+    public static string Fold(string s)
     {
         var d = s.Normalize(NormalizationForm.FormD);
         var sb = new StringBuilder();
