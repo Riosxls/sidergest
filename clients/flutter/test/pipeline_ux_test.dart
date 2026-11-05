@@ -112,7 +112,7 @@ void main() {
   group('the board', () {
     testWidgets('captions say "1 orçamento" and "2 pedidos"', (tester) async {
       await _open(tester, _fake({}));
-      expect(find.text('1 orçamento'), findsOneWidget);
+      expect(find.textContaining('1 orçamento'), findsOneWidget);
       expect(find.text('2 pedidos'), findsOneWidget);
     });
 

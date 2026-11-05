@@ -492,24 +492,18 @@ void main() {
   });
 
   group('purchase order and conversion', () {
-    testWidgets('without an attachment the register step is not offered, text unlocks it', (tester) async {
+    testWidgets('without an attachment the register step is not offered, the step card opens the purchase order dialog', (tester) async {
       final f = _fake('Accepted');
       await _openQuote(tester, f);
       expect(find.byKey(const ValueKey('quote-po')), findsNothing);
-      expect(find.text('Nenhum pedido de compra anexado (PDF, imagem ou texto)'), findsOneWidget);
-      // The text button on the section (the staged way) still saves the text alone and leaves the registration for later.
-      await tapKey(tester, 'quote-po-text');
-      expect(find.text('Texto do pedido de compra'), findsWidgets);
-      await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Pedido 77 do cliente');
-      await tapText(tester, 'Salvar');
-      expect(f.body(f.last('PUT', '/api/sales/quotes/5/request')), {'text': 'Pedido 77 do cliente'});
-      // saving goes straight on to registering: print gate, then the form; leaving it keeps the text attached
-      expect(find.text('Imprimir o pedido de compra do cliente?'), findsOneWidget);
-      await tapKey(tester, 'gate-skip');
+      expect(find.text('Nenhum pedido de compra anexado (PDF, imagem ou texto)'), findsNothing); // the step card carries the buttons
+      await tapKey(tester, 'quote-po-start-text');
       expect(find.text('Pedido de compra de PROP 31'), findsOneWidget);
-      await tapText(tester, 'Cancelar');
-      expect(find.text('Pedido de compra anexado · registre-o'), findsOneWidget);
-      expect(find.text('Pedido 77 do cliente'), findsOneWidget);
+      // Leaving before anything was typed saves and registers nothing.
+      await tapKey(tester, 'po-cancel');
+      expect(f.called('PUT', '/api/sales/quotes/5/request'), isFalse);
+      expect(f.called('POST', '/api/sales/quotes/5/purchase-order'), isFalse);
+      expect(find.byKey(const ValueKey('quote-po-start')), findsOneWidget);
     });
 
     testWidgets('an attached file can be removed and an unprintable one says so', (tester) async {

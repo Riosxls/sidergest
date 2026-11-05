@@ -207,7 +207,7 @@ void main() {
       await tapText(tester, 'Cancelar');
       await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Engano');
       final before = f.where('GET', '/api/sales/quotes').length;
-      await tapText(tester, 'Confirmar');
+      await tapText(tester, 'Cancelar orçamento');
       expect(f.where('GET', '/api/sales/quotes').length, greaterThan(before));
     });
 
@@ -224,7 +224,7 @@ void main() {
         {...(f.quote['lines'] as List).first as Map<String, dynamic>, 'unitPrice': 12.3456, 'quantity': 3, 'total': 37.04},
       ];
       await _open(tester, f);
-      expect(find.text('R\$ 12,3456'), findsOneWidget);
+      expect(find.text('R\$ 12,3456 /PC'), findsOneWidget); // up to four decimals, then the unit of the price
     });
   });
 
@@ -236,7 +236,7 @@ void main() {
       expect(find.byKey(const ValueKey('quote-credit-banner')), findsOneWidget);
       await openMenu(tester, 'quote-menu', 'Cancelar orçamento');
       await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Engano');
-      await tapText(tester, 'Confirmar');
+      await tapText(tester, 'Cancelar orçamento');
       expect(find.text('Cancelada'), findsWidgets);
       expect(find.byKey(const ValueKey('quote-credit-banner')), findsNothing);
       // A lost quote opened later never shows it either, even if the server still says exceeded.
@@ -288,7 +288,7 @@ void main() {
       await _open(tester, f);
       final path = tester.widget<StagePath>(find.byType(StagePath));
       expect(path.current, 5);
-      expect(path.steps[path.current].label, 'Ordem de Produção');
+      expect(path.steps[path.current].label, 'Ordem de Fabricação');
       expect(find.byTooltip('Abrir: Pedido de venda'), findsOneWidget); // still the link to the order
     });
   });
