@@ -205,7 +205,7 @@ powershell -File scripts\export-price-history.ps1 [-Workbook <xlsx>] [-PedidosFo
 ```
 
 The script prints the counts per source and writes `price-history.csv` (`date;customer;diameter;thickness;length;unit;price;quantity;spec`, UTF-8).
-The file holds real customer prices: `price-history*.csv` is git-ignored, never commit it. Import it in the app (price list screen, needs the
+The file holds real customer prices: `price-history*.csv` is git-ignored, never commit it. Import it in the app (Comercial > Simulador de preço > "Importar histórico (CSV)", needs the
 `price-edit` role: Admin, SalesManager) or with `POST /api/sales/price-history/import` (multipart field `file`; UTF-8 or Windows-1252, `;` `,` or tab).
 The result says read / imported / updated / duplicates / skipped.
 
