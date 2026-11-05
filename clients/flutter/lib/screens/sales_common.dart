@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../api.dart' show ApiClient;
 import '../entities.dart' show fmt, fmtNum;
 import '../labels.dart';
 import '../session.dart';
@@ -89,6 +90,16 @@ Tone quoteToneOf(Map<String, dynamic> q) => isSuperseded(q) ? Tone.neutral : quo
   _ => (7, 'Cancelada'),
 };
 
+/// Whether an NF is still owed for a shipped delivery: the server's `needsInvoice` when it sends one, else derived from the history
+/// (shipped by someone who may not emit it: the event says "NF pendente"; a list row has no history, so there it is unknown and false).
+bool deliveryNeedsInvoice(Map<String, dynamic> d) {
+  final v = d['needsInvoice'];
+  if (v is bool) return v;
+  return ['Shipped', 'Delivered'].contains(d['status']) &&
+      d['invoiceNumber'] == null &&
+      ((d['history'] as List?) ?? const []).any((h) => h['action'] == 'shipped' && '${h['note']}'.contains('NF pendente'));
+}
+
 /// A status name. [kind] ('quote', 'order' or 'delivery') says whose status it is: the three records share words such as Cancelled, Shipped and
 /// Delivered, and each names them in its own gender ("Cancelada", "Cancelado"). Without it the quote's wording wins, then the order's.
 String statusLabel(Object? s, {String? kind}) {
@@ -133,13 +144,71 @@ String fmtQty(Object? v) {
   return s.replaceFirst(RegExp(r',?0+$'), '');
 }
 
-/// One line about a sales order for a page that points at it (a converted quote): its situation and what comes next.
-({String title, String message, Tone tone}) orderSnapshot(Map<String, dynamic> o) {
+/// An order line (or delivery line) is covered by a certificate when the certificate names that order line, or names none and is for the same product.
+bool _certificateCovers(Map<String, dynamic> cert, Object? orderLineId, Object? productId) =>
+    cert['orderLineId'] == orderLineId || (cert['orderLineId'] == null && productId != null && cert['productId'] == productId);
+
+/// Items of [delivery] with no issued certificate, by the rule the server applies when shipping (`CertificatesCoverAsync`): an Issued certificate
+/// for that order line, or for its product when it names no line. One linked to another delivery does not count, nor does a draft or a cancelled one.
+/// [certs] are certificates of the order carrying `status`, `deliveryId`, `orderLineId` and `productId` (see [issuedCertificateCoverage]).
+List<Map<String, dynamic>> uncoveredDeliveryLines(Map<String, dynamic> delivery, List<Map<String, dynamic>> certs) {
+  final id = delivery['id'];
+  final usable = certs.where((c) => c['status'] == 'Issued' && (c['deliveryId'] == null || c['deliveryId'] == id)).toList();
+  return [
+    for (final l in ((delivery['lines'] as List?) ?? const []).cast<Map<String, dynamic>>())
+      if (!usable.any((c) => _certificateCovers(c, l['orderLineId'], l['productId']))) l,
+  ];
+}
+
+/// Order items that still have goods to ship and no issued certificate that could go with them (one linked to a delivery already out does not).
+/// The delivery screen applies the exact per-delivery rule; this is what the order card needs to say "falta o certificado" before one is planned.
+List<Map<String, dynamic>> uncoveredOrderLines(Map<String, dynamic> order, List<Map<String, dynamic>> certs) {
+  final out = {
+    for (final d in ((order['deliveries'] as List?) ?? const []).cast<Map<String, dynamic>>())
+      if (['Shipped', 'Delivered'].contains(d['status'])) d['id'],
+  };
+  final usable = certs.where((c) => c['status'] == 'Issued' && !out.contains(c['deliveryId'])).toList();
+  return [
+    for (final l in ((order['lines'] as List?) ?? const []).cast<Map<String, dynamic>>())
+      if (((l['remaining'] as num?) ?? 1) > 0 && !usable.any((c) => _certificateCovers(c, l['id'], l['productId']))) l,
+  ];
+}
+
+/// Whether the order may ship without the "sem certificado" exception: waived, or every item still to ship has an issued certificate.
+bool orderCertified(Map<String, dynamic> order, List<Map<String, dynamic>> certs) => order['certificateWaived'] == true || uncoveredOrderLines(order, certs).isEmpty;
+
+/// The issued certificates among [certs] (a list of the order's certificates), each with the order line and product it covers. The list rows carry
+/// neither, so each issued certificate is read once (in parallel). Null when a read fails: the caller treats coverage as unknown and the server
+/// still enforces the rule when shipping.
+Future<List<Map<String, dynamic>>?> issuedCertificateCoverage(ApiClient api, List<Map<String, dynamic>> certs) async {
+  try {
+    return await Future.wait<Map<String, dynamic>>([
+      for (final c in certs.where((c) => c['status'] == 'Issued'))
+        if (c.containsKey('orderLineId'))
+          Future.value(c)
+        else
+          api.get('/api/sales/certificates/${c['id']}').then((d) {
+            final full = <String, dynamic>{...c, ...(d as Map<String, dynamic>)};
+            // The server always sends `orderLineId` (null when the certificate names no line); an answer without it is not a certificate.
+            if (!full.containsKey('orderLineId')) throw StateError('certificate ${c['id']} has no orderLineId');
+            return full;
+          }),
+    ]);
+  } catch (e) {
+    debugPrint('sales_common: certificate coverage unknown: $e');
+    return null;
+  }
+}
+
+/// One line about a sales order for a page that points at it (a converted quote): its situation and what comes next. [certified] (see
+/// [orderCertified]) says whether the quality certificate is settled; false turns "Pronto para expedir" into "falta o certificado", as the order card does.
+({String title, String message, Tone tone}) orderSnapshot(Map<String, dynamic> o, {bool? certified}) {
   final ref = '${o['reference'] ?? ''}'.trim();
   final status = '${o['status']}';
   final pct = '${(((o['progress'] as num?) ?? 0) * 100).round()}%';
   final (situation, next, tone) = switch (status) {
     'Created' => ('Criado', 'Falta liberar para a produção.', Tone.info),
+    'Released' || 'PartiallyShipped' when o['ready'] == true && certified == false => (salesOrderStatuses[status]!, 'Produção pronta, falta o certificado de qualidade (emitir ou dispensar).', Tone.warning),
     'Released' || 'PartiallyShipped' when o['ready'] == true => (salesOrderStatuses[status]!, 'Pronto para expedir: programe a entrega.', Tone.success),
     'Released' || 'PartiallyShipped' => (salesOrderStatuses[status]!, 'Em produção, $pct pronto.', o['late'] == true ? Tone.danger : Tone.progress),
     'Shipped' => ('Expedido', 'Falta confirmar o recebimento pelo cliente.', Tone.progress),

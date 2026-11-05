@@ -130,11 +130,13 @@ class _PrintPanelState extends State<PrintPanel> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final docs = widget.docs;
-    final ready = docs.where((d) => d.ready).length;
-    final printed = docs.where((d) => d.doneKey != null && _done.containsKey(d.doneKey)).length;
+    // Papers that do not apply (waived certificate, order served from stock) are not part of the total.
+    final counted = docs.where((d) => !d.notApplicable).toList();
+    final ready = counted.where((d) => d.ready).length;
+    final printed = counted.where((d) => d.ready && d.doneKey != null && _done.containsKey(d.doneKey)).length;
     return Section(
       key: const ValueKey('print-panel'),
-      title: '${widget.title} ($ready de ${docs.length} prontos${printed > 0 ? ' · $printed impressos' : ''})',
+      title: '${widget.title} ($ready de ${counted.length} prontos${printed > 0 ? ' · $printed impressos' : ''})',
       actions: [
         IconButton(
           key: const ValueKey('print-panel-toggle'),

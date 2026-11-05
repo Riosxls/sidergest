@@ -44,7 +44,11 @@ class RecordList extends StatefulWidget {
     this.onClearFilters,
     this.emptyAction,
     this.phoneTile,
+    this.onSearchChanged,
   });
+
+  /// Called with the search text (trimmed) when it changes, so a screen can drop its default filters while the user is searching.
+  final ValueChanged<String>? onSearchChanged;
 
   /// Content of a row on a phone, in place of the title and the grey line of label/value pairs.
   final Widget Function(BuildContext context, Map<String, dynamic> e)? phoneTile;
@@ -321,6 +325,7 @@ class RecordListState extends State<RecordList> {
     _debounce = Timer(const Duration(milliseconds: 300), () {
       _q = q.trim();
       _skip = 0;
+      widget.onSearchChanged?.call(_q);
       reload();
     });
   }

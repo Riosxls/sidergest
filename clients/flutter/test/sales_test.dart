@@ -612,21 +612,23 @@ void main() {
     expect(find.text('ENT 15 · BTS Tubos'), findsOneWidget);
   });
 
-  testWidgets('stock user ships a planned delivery with the invoice number', (tester) async {
+  testWidgets('stock user ships a planned delivery without an NF number: the NF is left for Sales', (tester) async {
     final fake = SalesFake()
       ..role = 'Stock'
       ..waived = true;
     await pumpScreen(tester, fake, (s) => DeliveryScreen(session: s, id: 15));
     await tester.tap(find.byKey(const ValueKey('delivery-ship')));
     await tester.pumpAndSettle();
+    // Stock may not emit the NF: no field for its number, and the form says Sales issues it (NF pendente).
+    expect(find.byKey(const ValueKey('field-invoiceNumber')), findsNothing);
+    expect(find.textContaining('emitida pelo Comercial'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('form-more')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('field-invoiceNumber')), '2581');
     await tester.enterText(find.byKey(const ValueKey('field-lotNumber')), 'L-77');
     await tester.enterText(find.byKey(const ValueKey('field-invoicedValue')), '420,5');
     await tester.tap(find.text('Salvar'));
     await tester.pumpAndSettle();
-    expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['invoiceNumber'], '2581');
+    expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship')).containsKey('invoiceNumber'), isFalse);
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['lotNumber'], 'L-77');
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship'))['invoicedValue'], 420.5);
     expect(fake.body(fake.last('POST', '/api/sales/deliveries/15/ship')).containsKey('withoutCertificate'), isFalse);
@@ -646,7 +648,8 @@ void main() {
   testWidgets('shipping without a certificate or waiver asks first and says so to the API', (tester) async {
     final fake = SalesFake()..role = 'Stock';
     await pumpScreen(tester, fake, (s) => DeliveryScreen(session: s, id: 15));
-    expect(find.textContaining('ainda não tem certificado'), findsOneWidget);
+    expect(find.textContaining('Atenção: '), findsOneWidget);
+    expect(find.textContaining('certificado'), findsWidgets);
     await tester.tap(find.byKey(const ValueKey('delivery-ship')));
     await tester.pumpAndSettle();
     expect(find.text('Expedir sem certificado?'), findsOneWidget);

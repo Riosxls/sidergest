@@ -6,6 +6,7 @@ import '../labels.dart';
 import '../session.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/load_error.dart';
+import '../widgets/pipeline.dart' show Tone, toneAccent;
 import '../widgets/record_list.dart';
 import '../widgets/record_nav.dart';
 import 'sales_common.dart';
@@ -311,7 +312,12 @@ class _CustomerCompany extends StatelessWidget {
                   ('Prazo padrão', fmt(a['paymentTermName'])),
                 ]),
         ),
-        _CustomerReceivable(session: session, customerId: customer['id'] as int),
+        _CustomerReceivable(
+          session: session,
+          customerId: customer['id'] as int,
+          creditLimit: a?['creditLimit'] as num?,
+          termName: a?['paymentTermName'] as String?,
+        ),
       ],
     );
   }
@@ -319,10 +325,14 @@ class _CustomerCompany extends StatelessWidget {
 
 /// What the customer owes on authorized NFs and how much of it is late; hidden when the figures cannot be read.
 class _CustomerReceivable extends StatefulWidget {
-  const _CustomerReceivable({required this.session, required this.customerId});
+  const _CustomerReceivable({required this.session, required this.customerId, this.creditLimit, this.termName});
 
   final Session session;
   final int customerId;
+
+  /// The customer's own limit; null = the limit of the prazo applies.
+  final num? creditLimit;
+  final String? termName;
 
   @override
   State<_CustomerReceivable> createState() => _CustomerReceivableState();
@@ -330,6 +340,12 @@ class _CustomerReceivable extends StatefulWidget {
 
 class _CustomerReceivableState extends State<_CustomerReceivable> {
   Map<String, dynamic>? _balance;
+
+  /// Unshipped value of the open orders; null when it could not be read.
+  num? _openOrders;
+
+  /// False when the orders did not carry the value with IPI (the figure is then without IPI).
+  bool _withIpi = true;
   bool _loaded = false;
 
   @override
@@ -346,30 +362,85 @@ class _CustomerReceivableState extends State<_CustomerReceivable> {
     } catch (_) {
       b = null;
     }
+    num? open;
+    var withIpi = true;
+    try {
+      final orders = (await widget.session.api.list('/api/sales/orders', query: {'customerId': widget.customerId, 'open': true}, take: 200)).items;
+      withIpi = orders.every((o) => o['balanceWithIpi'] is num);
+      open = orders.fold<num>(0, (a, o) => a + ((o['balanceWithIpi'] ?? o['balanceValue']) as num? ?? 0));
+    } catch (e) {
+      debugPrint('customers: Optional context; the screen works without it: $e');
+    }
     if (mounted) {
       setState(() {
         _balance = b;
+        _openOrders = open;
+        _withIpi = withIpi;
         _loaded = true;
       });
     }
+  }
+
+  /// Limit, exposure (open orders + open receivables) and what is left, the way the server's credit check adds them.
+  Widget _credit(BuildContext context) {
+    final limit = widget.creditLimit;
+    final receivable = (_balance?['open'] as num?) ?? 0;
+    final exposure = (_openOrders ?? 0) + receivable;
+    final exceeded = limit != null && exposure > limit;
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Section(
+        key: const ValueKey('customer-credit'),
+        title: 'Crédito',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InfoGrid([
+              ('Limite', limit != null ? fmtMoney(limit) : (widget.termName != null ? 'Vale o limite do prazo ${widget.termName}' : 'Sem limite')),
+              ('Pedidos em aberto', _openOrders == null ? 'Não foi possível ler' : '${fmtMoney(_openOrders)}${_withIpi ? '' : ' (sem IPI)'}'),
+              ('A receber (NF autorizadas)', fmtMoney(receivable)),
+              ('Exposição', fmtMoney(exposure)),
+              if (limit != null) ('Disponível', fmtMoney(limit - exposure)),
+            ]),
+            if (exceeded)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, size: 18, color: toneAccent(context, Tone.warning)),
+                    const SizedBox(width: 6),
+                    const Expanded(child: Text('Acima do limite: liberar pedidos e expedir exigem a autorização do gerente comercial.')),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (!_loaded) return const SizedBox.shrink();
     final b = _balance;
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Section(
-        title: 'Contas a receber',
-        child: b == null
-            ? const Text('Nada em aberto.')
-            : InfoGrid([
-                ('Em aberto', fmtMoney(b['open'])),
-                ('Vencido', fmtMoney(b['overdue'])),
-                ('Próximo vencimento', fmtDay(b['nextDue'])),
-              ]),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.creditLimit != null || widget.termName != null || (_openOrders ?? 0) > 0 || b != null) _credit(context),
+        Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: Section(
+            title: 'Contas a receber',
+            child: b == null
+                ? const Text('Nada em aberto.')
+                : InfoGrid([
+                    ('Em aberto', fmtMoney(b['open'])),
+                    ('Vencido', fmtMoney(b['overdue'])),
+                    ('Próximo vencimento', fmtDay(b['nextDue'])),
+                  ]),
+          ),
+        ),
+      ],
     );
   }
 }

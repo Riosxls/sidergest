@@ -27,9 +27,17 @@ num _n(Object? v) => v is num ? v : 0;
 
 /// Sales orders (Pedidos de venda) list.
 class SalesOrdersScreen extends StatefulWidget {
-  const SalesOrdersScreen({super.key, required this.session});
+  /// [initialFilter]: what the Painel hands over: [lateFilter] or [readyFilter].
+  const SalesOrdersScreen({super.key, required this.session, this.initialFilter});
 
   final Session session;
+  final String? initialFilter;
+
+  /// Open orders with an overdue item.
+  static const lateFilter = 'late';
+
+  /// Orders in production whose items are all ready to ship (the "Prontos para expedir" number of the Painel).
+  static const readyFilter = 'ready';
 
   @override
   State<SalesOrdersScreen> createState() => _SalesOrdersScreenState();
@@ -47,9 +55,17 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
   final _list = GlobalKey<RecordListState>();
   String? _status;
   bool _open = true;
-  bool _late = false;
+
+  /// "Somente abertos" starts on, but only as a default: it is dropped while the user types a search (a finished order would never show) and once
+  /// they touch the chip themselves.
+  bool _openDefault = true;
+  late bool _late = widget.initialFilter == SalesOrdersScreen.lateFilter;
+  late bool _ready = widget.initialFilter == SalesOrdersScreen.readyFilter;
   String? _month;
   String? _billTo;
+  String _search = '';
+
+  bool get _openEffective => _open && !(_openDefault && _search.isNotEmpty);
 
   static Map<String, String> _months() {
     final now = DateTime.now();
@@ -68,23 +84,37 @@ class _SalesOrdersScreenState extends State<SalesOrdersScreen> {
   @override
   Widget build(BuildContext context) => RecordList(
     key: _list,
-    filtersActive: _open || _status != null || _late || _month != null || _billTo != null,
+    filtersActive: _openEffective || _status != null || _late || _ready || _month != null || _billTo != null,
     onClearFilters: () => setState(() {
       _open = false;
       _status = null;
       _late = false;
+      _ready = false;
       _month = null;
       _billTo = null;
     }),
+    onSearchChanged: (q) => setState(() => _search = q),
     api: widget.session.api,
     path: '/api/sales/orders',
-    query: {'status': _status, 'open': _open && _status == null ? true : null, 'month': _month, 'late': _late ? true : null, 'billTo': _billTo},
+    query: {'status': _status, 'open': _openEffective && _status == null ? true : null, 'month': _month, 'late': _late ? true : null, 'billTo': _billTo},
+    // "Prontos" is computed per order (production and stock), so it is applied to the rows the server sent.
+    enrich: (items) async {
+      if (_ready) items.removeWhere((e) => !(e['ready'] == true && ['Released', 'PartiallyShipped'].contains(e['status'])));
+    },
     searchHint: 'Pedido, cliente ou pedido do cliente',
     filters: [
       ChoiceFilter(label: 'Situação', value: _status, choices: salesOrderStatuses, onChanged: (v) => setState(() => _status = v)),
-      FilterChip(label: const Text('Somente abertos'), selected: _open, onSelected: (v) => setState(() => _open = v)),
+      FilterChip(
+        label: const Text('Somente abertos'),
+        selected: _openEffective,
+        onSelected: (v) => setState(() {
+          _open = v;
+          _openDefault = false;
+        }),
+      ),
       ChoiceFilter(label: 'Entrega no mês', value: _month, choices: _months(), onChanged: (v) => setState(() => _month = v)),
       FilterChip(key: const ValueKey('orders-late'), label: const Text('Atrasados'), selected: _late, onSelected: (v) => setState(() => _late = v)),
+      FilterChip(key: const ValueKey('orders-ready'), label: const Text('Prontos p/ expedir'), selected: _ready, onSelected: (v) => setState(() => _ready = v)),
       ChoiceFilter(label: 'Faturar para', value: _billTo, choices: billToLabels, onChanged: (v) => setState(() => _billTo = v)),
     ],
     fab: widget.session.canSell
@@ -148,11 +178,14 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
   Map<String, dynamic>? _quote;
   String? _error;
 
+  /// Per-item certificate coverage (see [orderCertified]); null while unknown, then the plain "any issued certificate" reading stands in.
+  bool? _coverage;
+
   ApiClient get api => widget.session.api;
   Session get s => widget.session;
   String get base => '/api/sales/orders/${widget.id}';
   String get status => '${_o?['status']}';
-  bool get _certified => _o?['certificateWaived'] == true || _certs.any((c) => c['status'] == 'Issued');
+  bool get _certified => _o?['certificateWaived'] == true || (_coverage ?? _certs.any((c) => c['status'] == 'Issued'));
 
   Future<void> _newCertificate() async {
     if (await newCertificate(context, s, _o!) && mounted) unawaited(_load());
@@ -177,27 +210,32 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
   Future<void> _load({bool report = false}) async {
     try {
       final o = await api.get(base) as Map<String, dynamic>;
-      // Certificates are optional context: a failure here must not hide the order.
-      var certs = const <Map<String, dynamic>>[];
-      try {
-        certs = (await api.list('/api/sales/certificates', query: {'orderId': widget.id}, take: 200)).items;
-      } catch (e) {
-        debugPrint('sales_orders: Optional context; the screen works without it: $e');
-        // Optional context; the screen works without it.
-      }
-      // The customer's purchase order lives on the quote; optional as well (orders can be typed without one).
-      Map<String, dynamic>? quote;
-      if (o['quoteId'] != null) {
+      // Certificates and the quote are optional context: a failure here must not hide the order. Read together.
+      Future<T?> optional<T>(Future<T> Function() read) async {
         try {
-          quote = await api.get('/api/sales/quotes/${o['quoteId']}') as Map<String, dynamic>;
+          return await read();
         } catch (e) {
           debugPrint('sales_orders: Optional context; the screen works without it: $e');
-          // Optional context; the screen works without it.
+          return null;
         }
+      }
+
+      final (certsRead, quote) = await (
+        optional(() async => (await api.list('/api/sales/certificates', query: {'orderId': widget.id}, take: 200)).items),
+        // The customer's purchase order lives on the quote; orders can be typed without one.
+        o['quoteId'] == null ? Future<Map<String, dynamic>?>.value() : optional(() async => await api.get('/api/sales/quotes/${o['quoteId']}') as Map<String, dynamic>),
+      ).wait;
+      final certs = certsRead ?? const <Map<String, dynamic>>[];
+      // Which items have an issued certificate matters only while goods wait to ship (and the order does not waive it): read the issued ones then.
+      bool? coverage;
+      if (certsRead != null && o['certificateWaived'] != true && ['Released', 'PartiallyShipped'].contains(o['status']) && o['ready'] == true) {
+        final issued = await issuedCertificateCoverage(api, certs);
+        if (issued != null) coverage = orderCertified(o, issued);
       }
       if (mounted) {
         setState(() {
           _o = o;
+          _coverage = coverage;
           _certs = certs;
           _quote = quote;
           _error = null;
@@ -300,7 +338,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
 
   Future<void> _planDelivery() async {
     final o = _o!;
-    final lines = (o['lines'] as List).cast<Map<String, dynamic>>().where((l) => _n(l['remaining']) - _n(l['planned']) > 0).toList();
+    final lines = (o['lines'] as List).cast<Map<String, dynamic>>().where((l) => _DeliveryDialogState._open(l) > 0).toList();
     if (lines.isEmpty) return showError(context, 'Todos os itens já estão programados ou expedidos');
     final pending = await _pendingOfs();
     if (pending.isNotEmpty && mounted) {
@@ -346,6 +384,9 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
   }
 
   Future<void> _cancel() async {
+    if (status == 'PartiallyShipped') {
+      return showError(context, 'Já houve expedição neste pedido. Use "Encerrar saldo" para fechá-lo com o que já saiu (ou cancele antes as entregas expedidas).');
+    }
     Map<String, dynamic> preview;
     try {
       preview = await api.get('$base/cancel-preview') as Map<String, dynamic>;
@@ -468,6 +509,17 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
 
   String _ref() => '${_o?['reference'] ?? ''}';
 
+  /// Prints the NF of a shipped delivery; a failure (network, PDF) is said in a snackbar instead of escaping from the button.
+  Future<void> _printDeliveryNf(Map<String, dynamic> d) async {
+    try {
+      final full = await api.get('/api/sales/deliveries/${d['id']}') as Map<String, dynamic>;
+      if (!mounted) return;
+      await printNf(context, name: 'NF ${d['reference']}', number: d['invoiceNumber'] == null ? '' : '${d['invoiceNumber']}', build: (f) => buildSaleNfPdf(api, full, f));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao imprimir a NF: ${friendlyError(e)}')));
+    }
+  }
+
   /// The five papers of a purchase, in the order they are printed.
   List<PrintDoc> _printDocs(Map<String, dynamic> o) {
     final status = '${o['status']}';
@@ -514,11 +566,10 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
             id: 'nf-${d['id']}',
             label: 'Nota fiscal',
             detail: '${d['invoiceNumber'] == null ? 'sem nº de NF' : 'NF ${d['invoiceNumber']}'} · ${d['reference']}',
-            onPrint: () async {
-              final full = await api.get('/api/sales/deliveries/${d['id']}') as Map<String, dynamic>;
-              if (!mounted) return;
-              await printNf(context, name: 'NF ${d['reference']}', number: d['invoiceNumber'] == null ? '' : '${d['invoiceNumber']}', build: (f) => buildSaleNfPdf(api, full, f));
-            },
+            // No number yet (NF pendente): there is no paper to print, so it is not counted as ready.
+            ready: d['invoiceNumber'] != null,
+            waiting: '${d['reference']}: a NF ainda não foi emitida (NF pendente)',
+            onPrint: () => _printDeliveryNf(d),
           ),
       if (issued.isEmpty)
         PrintDoc(
@@ -533,7 +584,10 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
           PrintDoc(
             id: 'certificate-${c['id']}',
             label: 'Certificado de qualidade',
-            detail: '${c['reference']} · ${c['description']}${c['status'] == 'Draft' ? ' · rascunho' : ''}',
+            detail: '${c['reference']} · ${c['description']}',
+            // A draft is not the paper that goes with the goods: it is not counted as ready.
+            ready: c['status'] == 'Issued',
+            waiting: '${c['reference']} · ${c['description']} · rascunho: emita o certificado',
             onPrint: () => printPdf(context, 'Certificado ${c['reference']}', () async => buildCertificatePdf(await api.get('/api/sales/certificates/${c['id']}') as Map<String, dynamic>)),
           ),
     ];
@@ -555,6 +609,29 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     ];
   }
 
+  /// The earliest Planned delivery when it already carries everything still open: planning another would be refused, the next move is to ship it.
+  Map<String, dynamic>? _plannedCoversBalance(Map<String, dynamic> o) {
+    final lines = (o['lines'] as List).cast<Map<String, dynamic>>();
+    if (lines.any((l) => _DeliveryDialogState._open(l) > 0)) return null;
+    final planned = (o['deliveries'] as List).cast<Map<String, dynamic>>().where((d) => d['status'] == 'Planned').toList()
+      ..sort((a, b) => '${a['plannedDate']}'.compareTo('${b['plannedDate']}'));
+    return planned.isEmpty ? null : planned.first;
+  }
+
+  /// "Programar entrega", or "Expedir ENT-x" (opens that delivery) when a planned delivery already covers the balance. Empty without the shipping right.
+  List<Widget> _deliverButton(Map<String, dynamic> o, {required bool primary}) {
+    if (!s.canShip) return const [];
+    final planned = _plannedCoversBalance(o);
+    final label = planned == null ? 'Programar entrega' : 'Expedir ${planned['reference']}';
+    final icon = primary ? Icons.local_shipping : Icons.local_shipping_outlined;
+    final onPressed = planned == null ? _planDelivery : () => unawaited(openDelivery(context, s, planned['id'] as int).then((_) => _load()));
+    // One key either way: it is "the delivery button" of the card.
+    final key = ValueKey(planned == null ? 'order-deliver' : 'order-ship-delivery');
+    return [
+      primary ? FilledButton.icon(key: key, onPressed: onPressed, icon: Icon(icon), label: Text(label)) : OutlinedButton.icon(key: key, onPressed: onPressed, icon: Icon(icon), label: Text(label)),
+    ];
+  }
+
   Widget _nextStep(Map<String, dynamic> o) {
     final pct = '${(_n(o['progress']) * 100).round()}%';
     FilledButton primary(String key, String label, IconData icon, VoidCallback onPressed) =>
@@ -571,13 +648,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
         tone: Tone.warning,
         actions: [
           if (s.canCertificate) primary('order-certificate', 'Emitir certificado', Icons.verified_outlined, _newCertificate),
-          if (s.canShip)
-            OutlinedButton.icon(
-              key: const ValueKey('order-deliver'),
-              onPressed: _planDelivery,
-              icon: const Icon(Icons.local_shipping_outlined),
-              label: const Text('Programar entrega'),
-            ),
+          ..._deliverButton(o, primary: false),
           if (s.canIssueCertificate)
             TextButton(key: const ValueKey('order-certificate-waive'), onPressed: () => _waiveCertificate(true), child: const Text('Dispensar certificado')),
           ..._ofPrints(o),
@@ -586,9 +657,11 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       ),
       'Released' || 'PartiallyShipped' when o['ready'] == true => NextStepCard(
         title: 'Pronto para expedir',
-        message: 'Há produto acabado para os itens em aberto. Programe a entrega.',
+        message: _plannedCoversBalance(o) == null
+            ? 'Há produto acabado para os itens em aberto. Programe a entrega.'
+            : 'Há produto acabado e a entrega ${_plannedCoversBalance(o)!['reference']} já está programada. Expeça quando a mercadoria sair.',
         tone: Tone.success,
-        actions: [if (s.canShip) primary('order-deliver', 'Programar entrega', Icons.local_shipping, _planDelivery), ..._closeAction(), ..._ofPrints(o)],
+        actions: [..._deliverButton(o, primary: true), ..._closeAction(), ..._ofPrints(o)],
       ),
       'Released' || 'PartiallyShipped' => NextStepCard(
         title: 'Em produção · $pct pronto',
@@ -596,24 +669,15 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
             ? 'Há itens com data de entrega vencida.'
             : 'Acompanhe as OFs abaixo. Dá para programar uma entrega parcial do que já está pronto.',
         tone: o['late'] == true ? Tone.danger : Tone.progress,
-        actions: [
-          if (s.canShip)
-            OutlinedButton.icon(
-              key: const ValueKey('order-deliver'),
-              onPressed: _planDelivery,
-              icon: const Icon(Icons.local_shipping_outlined),
-              label: const Text('Programar entrega'),
-            ),
-          ..._closeAction(),
-          ..._ofPrints(o),
-        ],
+        actions: [..._deliverButton(o, primary: false), ..._closeAction(), ..._ofPrints(o)],
       ),
       'Shipped' => NextStepCard(
         title: 'Tudo expedido',
-        message: 'Confirme o recebimento pelo cliente em cada entrega.',
+        message: s.canShip ? 'Confirme o recebimento pelo cliente em cada entrega.' : 'Aguardando a confirmação do recebimento pelo cliente (feita por quem expede).',
         tone: Tone.progress,
         actions: [
-          // The confirmation lives on the delivery: one click from here instead of hunting for the small icon in the table.
+          // The confirmation lives on the delivery: one click from here instead of hunting for the small icon in the table. Confirming needs the shipping right.
+          if (s.canShip)
           for (final d in (o['deliveries'] as List).cast<Map<String, dynamic>>().where((d) => d['status'] == 'Shipped'))
             FilledButton.icon(
               key: ValueKey('order-confirm-delivery-${d['id']}'),
@@ -687,10 +751,17 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
           value: _closeBalance,
           child: ListTile(leading: Icon(Icons.playlist_remove, color: danger), iconColor: danger, textColor: danger, title: const Text('Encerrar saldo')),
         ),
-      if (s.canSell && ['Created', 'Released', 'PartiallyShipped'].contains(status))
+      if (s.canSell && ['Created', 'Released'].contains(status))
         PopupMenuItem(
           value: _cancel,
           child: ListTile(leading: const Icon(Icons.block), iconColor: danger, textColor: danger, title: const Text('Cancelar pedido')),
+        ),
+      // Part of it already left: the server refuses to cancel, the way out is "Encerrar saldo" (above).
+      if (s.canSell && status == 'PartiallyShipped')
+        const PopupMenuItem(
+          key: ValueKey('order-cancel-disabled'),
+          enabled: false,
+          child: ListTile(leading: Icon(Icons.block), title: Text('Cancelar pedido'), subtitle: Text('Já houve expedição: use "Encerrar saldo"')),
         ),
     ];
     return RecordShortcuts(
@@ -756,6 +827,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     return SideBySide(
       main: [
         _orderHeader(o, credit),
+        if (credit['exceeded'] == true && _openOrderStatuses.contains(o['status'])) ...[gap, _creditBanner(o, credit)],
         gap,
         StagePath(
           steps: flowSteps,
@@ -785,12 +857,33 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     );
   }
 
+  static const _openOrderStatuses = ['Created', 'Released', 'PartiallyShipped'];
+
+  /// The customer is over the credit limit (open orders + receivable of authorized NFs): release and shipment need a manager's authorization.
+  Widget _creditBanner(Map<String, dynamic> o, Map<String, dynamic> credit) => NextStepCard(
+    key: const ValueKey('order-credit-banner'),
+    title: 'Limite de crédito excedido',
+    message:
+        'Pedidos em aberto ${fmtMoney(credit['open'])} + a receber ${fmtMoney(credit['receivable'] ?? 0)} passam do limite de ${fmtMoney(credit['limit'])} '
+        '${credit['limitSource'] == 'customer' ? 'do cliente' : 'do prazo'}. Liberar para a produção e expedir exigem a autorização do gerente comercial'
+        '${(o['history'] as List).any((h) => h['action'] == 'credit-override') ? ' (este pedido já foi autorizado)' : ''}.',
+    tone: Tone.warning,
+  );
+
   Widget _orderHeader(Map<String, dynamic> o, Map<String, dynamic> credit) =>
     RecordHeader(
       icon: Icons.receipt_long_outlined,
       kind: 'Pedido de venda',
       title: '${o['reference']}',
-      badge: StatusBadge(salesOrderStatuses[o['status']] ?? '${o['status']}', tone: orderTone(o['status'])),
+      badge: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          StatusBadge(salesOrderStatuses[o['status']] ?? '${o['status']}', tone: orderTone(o['status'])),
+          if ((o['deliveries'] as List).cast<Map<String, dynamic>>().any(deliveryNeedsInvoice)) const StatusBadge('NF pendente', tone: Tone.warning, icon: Icons.receipt_long_outlined),
+        ],
+      ),
       amount: fmtMoney(o['total']),
       fields: [
         ('Cliente', '${o['customerName']}'),
@@ -844,7 +937,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
           col('Entrega', 'reference'),
           dateCol('Data', 'plannedDate'),
           labelCol('Situação', 'status', deliveryStatuses),
-          col('NF', 'invoiceNumber'),
+          ColumnSpec('NF', (e) => e['invoiceNumber'] != null ? '${e['invoiceNumber']}' : (deliveryNeedsInvoice(e) ? 'NF pendente' : '')),
           col('Volumes', 'packages', numeric: true),
         ],
         rows: deliveries,
@@ -1129,14 +1222,19 @@ class _DeliveryDialog extends StatefulWidget {
 class _DeliveryDialogState extends State<_DeliveryDialog> {
   late final _date = TextEditingController(text: fmtDay(isoDate(DateTime.now())));
   final _notes = TextEditingController();
-  late final _qty = {
-    for (final l in widget.lines)
-      l['id'] as int: TextEditingController(
-        text: fmt(
-          _n(l['remaining']) - _n(l['planned']) > _n(l['available']) && _n(l['available']) > 0 ? _n(l['available']) : _n(l['remaining']) - _n(l['planned']),
-        ),
-      ),
-  };
+  /// What is left to schedule on an item, rounded to the 4 decimals the server keeps (2.3 - 2.0 is 0.2999999999999998 in a double).
+  static num _open(Map<String, dynamic> l) => _round4(_n(l['remaining']) - _n(l['planned']));
+
+  static num _round4(num v) => (v * 10000).round() / 10000;
+
+  /// Prefill: what is ready to go (the smaller of the open balance and the available stock); nothing when no finished product is available.
+  static String _prefill(Map<String, dynamic> l) {
+    final open = _open(l), available = _round4(_n(l['available']));
+    if (available <= 0) return '';
+    return fmt(available < open ? available : open);
+  }
+
+  late final _qty = {for (final l in widget.lines) l['id'] as int: TextEditingController(text: _prefill(l))};
   String? _error;
 
   @override
@@ -1162,11 +1260,15 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
       if (text.isEmpty) continue;
       final q = parseDecimal(text);
       if (q == null || q < 0) return setState(() => _error = 'Item ${l['sequence']}: quantidade inválida');
-      final open = _n(l['remaining']) - _n(l['planned']);
-      if (q > open) return setState(() => _error = 'Item ${l['sequence']}: a quantidade passa do saldo a programar (${fmt(open)} ${l['unit']})');
-      if (q > 0) lines.add({'orderLineId': l['id'], 'quantity': q});
+      final open = _open(l);
+      // Compared rounded: typing 0,3 against a balance of 2,3 - 2,0 must pass.
+      if (_round4(q) > open) return setState(() => _error = 'Item ${l['sequence']}: a quantidade passa do saldo a programar (${fmt(open)} ${l['unit']})');
+      if (q > 0) lines.add({'orderLineId': l['id'], 'quantity': _round4(q)});
     }
-    if (lines.isEmpty) return setState(() => _error = 'Informe a quantidade de ao menos um item');
+    if (lines.isEmpty) {
+      final none = widget.lines.every((l) => _round4(_n(l['available'])) <= 0);
+      return setState(() => _error = none ? 'Nenhum item tem produto acabado disponível agora. Digite a quantidade só se a entrega for para depois da produção.' : 'Informe a quantidade de ao menos um item');
+    }
     Navigator.pop(context, {'plannedDate': date, 'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(), 'lines': lines});
   }
 
@@ -1213,14 +1315,14 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
                           // The text keeps the theme's own colour (contrast); the icon and the word carry the warning.
                           Row(
                             children: [
-                              if (_n(l['available']) < _n(l['remaining']) - _n(l['planned'])) ...[
+                              if (_round4(_n(l['available'])) < _open(l)) ...[
                                 Icon(Icons.warning_amber_rounded, size: 15, color: toneAccent(context, Tone.warning)),
                                 const SizedBox(width: 4),
                               ],
                               Flexible(
                                 child: Text(
-                                  'Saldo ${fmt(_n(l['remaining']) - _n(l['planned']))} ${l['unit']} · disponível ${fmt(l['available'])}'
-                                  '${_n(l['available']) < _n(l['remaining']) - _n(l['planned']) ? ' (menos que o saldo)' : ''}',
+                                  'Saldo ${fmt(_open(l))} ${l['unit']} · disponível ${fmt(l['available'])}'
+                                  '${_round4(_n(l['available'])) <= 0 ? ' (nenhum produto pronto: não dá para expedir agora)' : (_round4(_n(l['available'])) < _open(l) ? ' (menos que o saldo)' : '')}',
                                   style: Theme.of(context).textTheme.bodySmall,
                                 ),
                               ),

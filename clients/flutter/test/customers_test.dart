@@ -16,10 +16,10 @@ http.Response _json(Object? body, [int status = 200]) => http.Response(jsonEncod
 
 Map<String, dynamic> _page(List<Map<String, dynamic>> items) => {'items': items, 'total': items.length, 'skip': 0, 'take': 50};
 
-Map<String, dynamic> _customer({bool active = true, bool withCompany = true}) => {
+Map<String, dynamic> _customer({bool active = true, bool withCompany = true, num? creditLimit}) => {
   'id': 1, 'name': 'Metalúrgica Alfa', 'tradeName': 'Alfa', 'legacyCode': '12', 'consumerType': 'Normal', 'active': active,
   'company': withCompany
-      ? {'document': '12345678000199', 'stateRegistration': '111', 'icmsContributor': true, 'street': 'Rua A', 'number': '10', 'city': 'Sorocaba', 'uf': 'SP', 'contact': 'Ana', 'email': 'a@alfa.com', 'phone': '1500', 'paymentTermName': '28 dias'}
+      ? {'document': '12345678000199', 'stateRegistration': '111', 'icmsContributor': true, 'street': 'Rua A', 'number': '10', 'city': 'Sorocaba', 'uf': 'SP', 'contact': 'Ana', 'email': 'a@alfa.com', 'phone': '1500', 'paymentTermName': '28 dias', 'creditLimit': creditLimit}
       : null,
   'defaultAddress': null,
 };
@@ -27,10 +27,14 @@ Map<String, dynamic> _customer({bool active = true, bool withCompany = true}) =>
 Map<String, dynamic> _address(int id) => {'id': id, 'city': 'Sorocaba', 'uf': 'SP', 'street': 'Rua B', 'number': '5', 'buyer': 'Beto', 'email': 'b@alfa.com', 'phone': '1511'};
 
 class _Env {
-  _Env({this.addresses = const [], this.withCompany = true});
+  _Env({this.addresses = const [], this.withCompany = true, this.creditLimit, this.openOrders = 0});
 
   final List<Map<String, dynamic>> addresses;
   final bool withCompany;
+  final num? creditLimit;
+
+  /// Unshipped value (with IPI) of the customer's open orders.
+  final num openOrders;
   final log = <http.Request>[];
 
   http.Response answer(http.Request r) {
@@ -47,6 +51,13 @@ class _Env {
       return _json([
         {'customerId': 1, 'customerName': 'Metalúrgica Alfa', 'open': 1500, 'overdue': 400, 'nextDue': '2026-11-20'},
       ]);
+    }
+    if (path == '/api/sales/orders') {
+      return _json(
+        _page([
+          if (openOrders > 0) {'id': 5, 'reference': 'PV 5', 'balanceValue': openOrders - 100, 'balanceWithIpi': openOrders},
+        ]),
+      );
     }
     if (path == '/api/customers/1/addresses') return _json(addresses);
     if (path == '/api/customers/1') return _json(_customer(withCompany: withCompany));
@@ -139,8 +150,32 @@ void main() {
   testWidgets('customer screen shows the open and overdue receivable balance', (tester) async {
     await _pump(tester, _Env(), (s) => CustomerScreen(session: s, customer: _customer()));
     expect(find.text('Contas a receber'), findsOneWidget);
-    expect(find.text('R\$ 1.500,00'), findsOneWidget);
+    // The same R$ 1.500,00 also feeds the credit exposure above it.
+    expect(find.text('R\$ 1.500,00'), findsWidgets);
     expect(find.text('R\$ 400,00'), findsOneWidget);
+  });
+
+  testWidgets('customer screen shows the credit limit, the exposure and warns when it is over', (tester) async {
+    final env = _Env(creditLimit: 2000, openOrders: 800);
+    await _pump(tester, env, (s) => CustomerScreen(session: s, customer: _customer(creditLimit: 2000)));
+    expect(find.byKey(const ValueKey('customer-credit')), findsOneWidget);
+    expect(find.text('R\$ 2.000,00'), findsOneWidget); // limit
+    expect(find.text('R\$ 800,00'), findsOneWidget); // open orders (balanceWithIpi)
+    expect(find.text('R\$ 2.300,00'), findsOneWidget); // exposure: 800 + 1.500
+    expect(find.text('R\$ -300,00'), findsOneWidget); // what is left
+    expect(find.textContaining('Acima do limite'), findsOneWidget);
+    expect(env.log.any((r) => r.url.path == '/api/sales/orders' && r.url.queryParameters['customerId'] == '1' && r.url.queryParameters['open'] == 'true'), isTrue);
+  });
+
+  testWidgets('within the limit there is no warning', (tester) async {
+    await _pump(tester, _Env(creditLimit: 5000, openOrders: 800), (s) => CustomerScreen(session: s, customer: _customer(creditLimit: 5000)));
+    expect(find.text('R\$ 5.000,00'), findsOneWidget);
+    expect(find.textContaining('Acima do limite'), findsNothing);
+  });
+
+  testWidgets('without a limit of its own the prazo decides', (tester) async {
+    await _pump(tester, _Env(), (s) => CustomerScreen(session: s, customer: _customer()));
+    expect(find.textContaining('limite do prazo 28 dias'), findsOneWidget);
   });
 
   testWidgets('customer without company data points to Editar', (tester) async {
