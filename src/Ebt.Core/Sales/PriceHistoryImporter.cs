@@ -8,12 +8,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ebt.Core.Sales;
 
-public sealed record PriceHistoryImportResult(int Read, int Imported, int Duplicates, int Skipped, DateOnly? FirstDate, DateOnly? LastDate, int Updated = 0);
+/// <param name="SkippedReasons">Skipped rows by reason: <c>unidade</c> (unknown unit), <c>data</c> (missing, unreadable or more than 30 days in the future), <c>medidas</c> (customer or measures that do not make a tube), <c>preço</c> (no price). Always all four keys.</param>
+public sealed record PriceHistoryImportResult(int Read, int Imported, int Duplicates, int Skipped, DateOnly? FirstDate, DateOnly? LastDate, int Updated = 0, IReadOnlyDictionary<string, int>? SkippedReasons = null);
 
 /// <summary>Reads the price history CSV (see scripts/export-price-history.ps1) into <c>price_history</c>. Re-importing the same file adds nothing.</summary>
-public sealed class PriceHistoryImporter(EbtDbContext db)
+public sealed class PriceHistoryImporter(EbtDbContext db, PriceDataCache? cache = null)
 {
     private const int Chunk = 1000;
+    /// <summary>Sales dated further ahead than this are typos (a year written wrong), not sales.</summary>
+    public const int MaxFutureDays = 30;
+    private const string ReasonUnit = "unidade", ReasonDate = "data", ReasonMeasures = "medidas", ReasonPrice = "preço";
 
     private sealed record Row(DateOnly Date, string Customer, decimal D, decimal T, decimal L, string Unit, decimal Price, decimal Weight, decimal PerKg, string Key, string? Spec);
 
@@ -31,7 +35,31 @@ public sealed class PriceHistoryImporter(EbtDbContext db)
         }
     }
 
+    /// <summary>Imports the file. Two imports racing on the same new rows hit the unique key: the loser starts over once (it then sees the winner's rows as existing) and, if that fails too, answers 409.</summary>
     public async Task<PriceHistoryImportResult> ImportAsync(byte[] file, CancellationToken ct = default)
+    {
+        try
+        {
+            try { return await ImportCoreAsync(file, ct); }
+            catch (DbUpdateException e) when (IsUniqueViolation(e))
+            {
+                db.ChangeTracker.Clear();
+                return await ImportCoreAsync(file, ct);
+            }
+        }
+        catch (DbUpdateException e) when (IsUniqueViolation(e))
+        {
+            throw SalesException.Conflict("Outra importação está em andamento. Tente de novo em instantes.");
+        }
+        finally
+        {
+            cache?.Invalidate();
+        }
+    }
+
+    private static bool IsUniqueViolation(DbUpdateException e) => e.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation };
+
+    private async Task<PriceHistoryImportResult> ImportCoreAsync(byte[] file, CancellationToken ct)
     {
         var lines = Records(DecodeText(file)).ToList();
         if (lines.Count == 0) throw SalesException.Invalid("file", "Empty file");
@@ -41,11 +69,13 @@ public sealed class PriceHistoryImporter(EbtDbContext db)
 
         int read = 0, skipped = 0, duplicates = 0, updated = 0;
         var rows = new Dictionary<string, Row>();
+        var reasons = new Dictionary<string, int> { [ReasonUnit] = 0, [ReasonDate] = 0, [ReasonMeasures] = 0, [ReasonPrice] = 0 };
+        var today = Clock.Today();
         foreach (var rec in lines.Skip(1))
         {
             if (rec.All(string.IsNullOrWhiteSpace)) continue;
             read++;
-            if (Parse(rec, cols) is not { } row) { skipped++; continue; }
+            if (Parse(rec, cols, today, out var why) is not { } row) { skipped++; reasons[why!]++; continue; }
             if (rows.TryGetValue(row.Key, out var seen))
             {
                 duplicates++;
@@ -85,27 +115,35 @@ public sealed class PriceHistoryImporter(EbtDbContext db)
             });
         }
         if (imported + updated > 0) await db.SaveChangesAsync(ct);
-        return new(read, imported, duplicates, skipped, rows.Count == 0 ? null : rows.Values.Min(r => r.Date), rows.Count == 0 ? null : rows.Values.Max(r => r.Date), updated);
+        return new(read, imported, duplicates, skipped, rows.Count == 0 ? null : rows.Values.Min(r => r.Date), rows.Count == 0 ? null : rows.Values.Max(r => r.Date), updated, reasons);
     }
 
     /// <summary>First six letters (A-Z, no accents) of the customer name: tolerant to LTDA/S.A. and spelling differences between sources.</summary>
     public static string CustomerKey(string name) =>
         new string(Fold(name).ToLowerInvariant().Where(c => c is >= 'a' and <= 'z').Take(6).ToArray());
 
-    private static Row? Parse(IReadOnlyList<string> rec, Dictionary<string, int> cols)
+    private static Row? Parse(IReadOnlyList<string> rec, Dictionary<string, int> cols, DateOnly today, out string? why)
     {
         string Cell(string name) => cols.TryGetValue(name, out var i) && i < rec.Count ? rec[i].Trim() : "";
-        if (ParseDate(Cell("date")) is not { } date) return null;
+        why = ReasonDate;
+        if (ParseDate(Cell("date")) is not { } date || date > today.AddDays(MaxFutureDays)) return null;
+        why = ReasonMeasures;
         var customer = Regex.Replace(Cell("customer"), @"\s+", " ");
         if (customer.Length == 0 || customer.Length > 200) return null;
+        why = ReasonUnit;
+        if (ParseUnit(Cell("unit")) is not { } unit) return null;
+        why = ReasonMeasures;
         var d = ParseNumber(Cell("diameter"));
         var t = ParseNumber(Cell("thickness"));
         var l = ParseNumber(Cell("length"));
+        if (d is not > 0 || t is not > 0 || l is not > 0 || t * 2 >= d) return null;
+        why = ReasonPrice;
         var price = ParseNumber(Cell("price"));
-        if (d is not > 0 || t is not > 0 || l is not > 0 || price is not > 0 || t * 2 >= d) return null;
-        if (ParseUnit(Cell("unit")) is not { } unit) return null;
+        if (price is not > 0) return null;
+        why = ReasonMeasures;
         var weight = TubeWeight.NetWeightKg(TubeShape.Circular, d, null, null, t, l);
         if (weight is not > 0) return null;
+        why = null;
         var perKg = unit == "KG" ? price.Value : price.Value / weight.Value;
         var key = string.Join('|', CustomerKey(customer), Num(d.Value), Num(t.Value), Num(l.Value), unit, Math.Round(price.Value, 2, MidpointRounding.AwayFromZero).ToString("0.00", CultureInfo.InvariantCulture));
         return new(date, customer, d.Value, t.Value, l.Value, unit, price.Value, weight.Value, Math.Round(perKg, 6), key, PriceSpec.Classify(Cell("spec")));
@@ -116,7 +154,7 @@ public sealed class PriceHistoryImporter(EbtDbContext db)
     public static string? ParseUnit(string? raw)
     {
         var u = Fold(raw ?? "").Replace(".", "").Replace(" ", "").ToUpperInvariant();
-        return u switch { "KG" or "KGS" => "KG", "PC" or "PCS" or "PECA" or "PECAS" => "PC", _ => null };
+        return u switch { "KG" or "KGS" or "QUILO" or "QUILOS" => "KG", "PC" or "PCS" or "PECA" or "PECAS" or "UN" or "UND" or "UNID" => "PC", _ => null };
     }
 
     public static DateOnly? ParseDate(string? raw)
