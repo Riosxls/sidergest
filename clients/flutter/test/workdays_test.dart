@@ -7,7 +7,7 @@ void main() {
     // Friday 30 Oct 2026 + 1: Saturday, Sunday and Monday 2 Nov (Finados) are skipped.
     expect(addWorkDays(DateTime(2026, 10, 30), 1), DateTime(2026, 11, 3));
     expect(addWorkDays(DateTime(2026, 11, 3), 4), DateTime(2026, 11, 9));
-    expect(addWorkDays(DateTime(2026, 10, 24), 0), DateTime(2026, 10, 24));
+    expect(addWorkDays(DateTime(2026, 10, 24), 0), DateTime(2026, 10, 26)); // day 0 from a Saturday rolls forward, like the server
     expect(addWorkDays(DateTime(2026, 10, 24), 1), DateTime(2026, 10, 26));
   });
 

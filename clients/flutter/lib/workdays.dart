@@ -48,10 +48,14 @@ DateTime _next(DateTime d) => DateTime(d.year, d.month, d.day + 1);
 /// The date [days] working days after [start] (day 0 is [start] itself, whatever kind of day it is).
 DateTime addWorkDays(DateTime start, int days) {
   var d = _day(start);
-  var left = days;
+  var left = days < 0 ? 0 : days;
   while (left > 0) {
     d = _next(d);
     if (isWorkDay(d)) left--;
+  }
+  // Day 0 from a weekend or holiday rolls forward, like WorkDays.Add on the server.
+  while (!isWorkDay(d)) {
+    d = _next(d);
   }
   return d;
 }

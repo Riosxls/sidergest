@@ -157,7 +157,11 @@ void main() {
     testWidgets('the certificate picker lists the delivery items only and flags the covered one', (tester) async {
       final fake = _twoItems();
       await pumpMore(tester, fake, (s) => DeliveryScreen(session: s, id: 15));
-      await tapKey(tester, 'delivery-new-certificate');
+      // Items still to certify: the batch button leads and the single certificate sits in the menu next to it.
+      await tapKey(tester, 'delivery-certificate-menu');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Emitir certificado'));
+      await tester.pumpAndSettle();
       expect(find.text('Certificado de qual item?'), findsOneWidget);
       expect(find.textContaining('(já tem certificado)'), findsOneWidget);
       expect(find.descendant(of: find.byKey(const ValueKey('cert-pick-40')), matching: find.textContaining('já tem certificado')), findsOneWidget);
@@ -472,7 +476,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('(1 de 2 prontos'), findsOneWidget);
+      expect(find.textContaining('1 de 2 prontos'), findsOneWidget);
     });
   });
 
