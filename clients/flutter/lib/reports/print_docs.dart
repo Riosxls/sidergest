@@ -587,7 +587,44 @@ pw.Widget _freightBox({required String freight, required String place}) => pw.Co
   ),
 );
 
-const _opFlex = [10, 36, 14, 11, 11, 18];
+const _opFlex = [8, 32, 17, 10, 10, 23];
+
+/// Printable width of the A4 page (margins 36 + 36) and the room the text of a process column really has (padding 3 + 3, border 1).
+const _opPageWidth = 595.28 - 72;
+double _opTextWidth(int column) => _opPageWidth * _opFlex[column] / _opFlex.fold<int>(0, (a, b) => a + b) - 7;
+
+/// Lays out the text of a process cell so it always fits and never breaks a word: one line at the normal size, else two lines (breaking at spaces and
+/// after a slash, so "Visual/Dimensional" becomes "Visual/" + "Dimensional") at a smaller size. Widths are estimated, the paper has no room to measure.
+({double size, List<String> lines}) opCellFit(String text, double width) {
+  final t = text.trim();
+  if (t.isEmpty) return (size: 8.5, lines: const []);
+  final tokens = [for (final m in RegExp(r'[^\s/]+/?|/').allMatches(t)) m.group(0)!];
+  double w(String s, double size) => s.length * size * 0.56;
+  for (final (size, maxLines) in const [(8.5, 1), (7.0, 2), (6.5, 2), (6.0, 2)]) {
+    final lines = <String>[''];
+    for (final tok in tokens) {
+      final cur = lines.last;
+      final joined = cur.isEmpty ? tok : '$cur${cur.endsWith('/') ? '' : ' '}$tok';
+      if (cur.isEmpty || w(joined, size) <= width) {
+        lines[lines.length - 1] = joined;
+      } else {
+        lines.add(tok);
+      }
+    }
+    if (lines.length <= maxLines && lines.every((l) => w(l, size) <= width)) return (size: size, lines: lines);
+  }
+  return (size: 6.0, lines: t.length > 1 && tokens.length > 1 ? [tokens.take((tokens.length + 1) ~/ 2).join(' '), tokens.skip((tokens.length + 1) ~/ 2).join(' ')] : [t]);
+}
+
+/// A text cell of the process table, fitted to the column (see [opCellFit]).
+pw.Widget _opText(String text, int column) {
+  final fit = opCellFit(text, _opTextWidth(column));
+  if (fit.lines.isEmpty) return pw.SizedBox();
+  return pw.Column(
+    mainAxisSize: pw.MainAxisSize.min,
+    children: [for (final l in fit.lines) pw.Text(l, style: _t(fit.size), textAlign: pw.TextAlign.center)],
+  );
+}
 
 pw.Widget _opCell(pw.Widget child, int i, {double height = 17}) => pw.Expanded(
   flex: _opFlex[i],
@@ -669,7 +706,14 @@ Future<Uint8List> buildProductionOrderPdf(ApiClient api, Map<String, dynamic> o)
           ],
         ),
         for (final op in ops) ...[
-          _opRow([small(_s(op['sequence'])), small(_s(op['description'])), small(_s(op['tolerance'])), small(_s(op['measureStart'])), small(_s(op['measureEnd'])), small(op['external'] == true ? 'Terceiro' : _s(op['machineCode']))]),
+          _opRow([
+            small(_s(op['sequence'])),
+            _opText(_s(op['description']), 1),
+            _opText(_s(op['tolerance']), 2),
+            small(_s(op['measureStart'])),
+            small(_s(op['measureEnd'])),
+            _opText(op['external'] == true ? 'Terceiro' : (_s(op['machineName']).isNotEmpty ? _s(op['machineName']) : _s(op['machineCode'])), 5),
+          ]),
           _opRow([none, none, none, none, none, none]),
         ],
         for (var i = 0; i < blankRows; i++) _opRow([none, none, none, none, none, none]),

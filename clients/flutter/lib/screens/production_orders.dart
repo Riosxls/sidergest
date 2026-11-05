@@ -751,7 +751,7 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
   Future<void> _editProcess(List<Map<String, dynamic>> ops) async {
     final lines = await showDialog<List<Map<String, dynamic>>>(
       context: context,
-      builder: (_) => _ProcessDialog(ops: ops),
+      builder: (_) => _ProcessDialog(ops: ops, api: api, suggestPath: '$base/process/suggest'),
     );
     if (lines == null || !mounted) return;
     final r = await runAction(context, () => api.put('$base/process', {'operations': lines}), success: 'Processo salvo');
@@ -884,8 +884,8 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
     final cs = theme.colorScheme;
     final measures = [op['measureStart'], op['measureEnd']].where((m) => m != null).join(' / ');
     final facts = <(String, String)>[
-      ('Máquina', fmt(op['machineCode'])),
-      ('Tolerância', fmt(op['tolerance'])),
+      ('Máquina', _dash(_machineLabel(op))),
+      ('Tolerância', _dash(fmt(op['tolerance']))),
       ('Medidas', measures),
       ('Horas', fmtNum(op['plannedHours'])),
       ('Programado', op['plannedStart'] == null ? '' : '${fmtDay(op['plannedStart'])} a ${fmtDay(op['plannedEnd'])}'),
@@ -921,7 +921,8 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
               runSpacing: AppSpacing.sm,
               children: [
                 for (final f in facts)
-                  if (f.$2.isNotEmpty && f.$2 != '—')
+                  // Machine and tolerance are what the paper prints: always shown, "—" when empty.
+                  if (f.$2.isNotEmpty && (f.$2 != '—' || f.$1 == 'Máquina' || f.$1 == 'Tolerância'))
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
@@ -993,8 +994,8 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
                 columns: [
                   col('Seq.', 'sequence'),
                   ColumnSpec('Descrição', (e) => "${e['description'] ?? ''}${e['external'] == true ? ' (externo)' : ''}"),
-                  col('Máquina', 'machineCode'),
-                  col('Tolerância', 'tolerance'),
+                  ColumnSpec('Máquina', (e) => _dash(_machineLabel(e))),
+                  ColumnSpec('Tolerância', (e) => _dash(fmt(e['tolerance']))),
                   ColumnSpec('Medidas', (e) => [e['measureStart'], e['measureEnd']].where((m) => m != null).join(' / ')),
                   col('Setup (h)', 'setupHours', numeric: true),
                   col('Peças/h', 'piecesPerHour', numeric: true),
@@ -1200,11 +1201,28 @@ class _ProductionOrderScreenState extends State<ProductionOrderScreen> with Sing
   );
 }
 
-/// Edits the process written on the OF paper: one row per operation (description, requirements, start and final measures).
+String _dash(String v) => v.trim().isEmpty ? '—' : v;
+
+/// Machine of an operation as the paper names it: the name, else the code.
+String _machineLabel(Map<String, dynamic> op) => fmt(op['machineName']).isNotEmpty ? fmt(op['machineName']) : fmt(op['machineCode']);
+
+/// Where a suggested process came from, in the words of the confirmation sheet.
+String processSuggestionSource(Object? source, Object? ref) => switch (source) {
+  'PreviousOrder' => 'na última OF desta peça para este cliente${ref == null || '$ref'.isEmpty ? '' : ' ($ref)'}',
+  'TemplateCustomer' => 'nos processos antigos deste cliente para esta peça',
+  'TemplateDims' => 'nos processos antigos desta peça (outros clientes)',
+  _ => 'nas regras padrão (sem histórico desta peça)',
+};
+
+enum _SuggestChoice { fillEmpty, replaceAll }
+
+/// Edits the process written on the OF paper: one row per operation (description, requirements, start and final measures, machine).
 class _ProcessDialog extends StatefulWidget {
-  const _ProcessDialog({required this.ops});
+  const _ProcessDialog({required this.ops, required this.api, required this.suggestPath});
 
   final List<Map<String, dynamic>> ops;
+  final ApiClient api;
+  final String suggestPath;
 
   @override
   State<_ProcessDialog> createState() => _ProcessDialogState();
@@ -1213,12 +1231,14 @@ class _ProcessDialog extends StatefulWidget {
 class _ProcessRow {
   _ProcessRow(Map<String, dynamic>? op)
     : sequence = op?['sequence'] as int?,
+      machineId = (op?['machineId'] as num?)?.toInt(),
       description = TextEditingController(text: '${op?['description'] ?? ''}'),
       tolerance = TextEditingController(text: '${op?['tolerance'] ?? ''}'),
       start = TextEditingController(text: '${op?['measureStart'] ?? ''}'),
       end = TextEditingController(text: '${op?['measureEnd'] ?? ''}');
 
-  final int? sequence;
+  int? sequence;
+  int? machineId;
   final TextEditingController description, tolerance, start, end;
 
   void dispose() {
@@ -1233,14 +1253,140 @@ class _ProcessDialogState extends State<_ProcessDialog> {
   String _initial = '';
 
   /// What the dialog holds, to tell whether leaving would lose an edit.
-  String _signature() => [for (final r in _rows) '${r.sequence}|${r.description.text}|${r.tolerance.text}|${r.start.text}|${r.end.text}'].join('\n');
+  String _signature() => [for (final r in _rows) '${r.sequence}|${r.description.text}|${r.tolerance.text}|${r.start.text}|${r.end.text}|${r.machineId}'].join('\n');
 
   bool get _dirty => _signature() != _initial;
+
+  List<Map<String, dynamic>> _machines = const [];
+  bool _suggesting = false;
 
   @override
   void initState() {
     super.initState();
     _initial = _signature();
+    _loadMachines();
+  }
+
+  Future<void> _loadMachines() async {
+    try {
+      final list = await widget.api.listAll('/api/machines');
+      if (mounted) setState(() => _machines = list);
+    } catch (_) {
+      // Without the list the dropdown stays empty: the machines of the operations are kept as they are.
+    }
+  }
+
+  String _machineName(Map<String, dynamic> m) => fmt(m['name']).isNotEmpty ? fmt(m['name']) : fmt(m['code']);
+
+  /// The outer key restarts the field when the list loads or a suggestion changes the machine (the field only reads its initial value).
+  Widget _machineField(_ProcessRow r, int i) => KeyedSubtree(
+    key: ValueKey('process-machine-box-$i-${r.machineId}-${_machines.length}'),
+    child: DropdownButtonFormField<int?>(
+      key: ValueKey('process-machine-$i'),
+      initialValue: _machines.any((m) => m['id'] == r.machineId) ? r.machineId : null,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: 'Máquina', isDense: true),
+      items: [
+        const DropdownMenuItem<int?>(value: null, child: Text('—')),
+        for (final m in _machines) DropdownMenuItem<int?>(value: (m['id'] as num).toInt(), child: Text(_machineName(m), overflow: TextOverflow.ellipsis)),
+      ],
+      onChanged: (v) => setState(() => r.machineId = v),
+    ),
+  );
+
+  /// Asks the server for the requirements and machines of this part's process and lets the planner choose how to take them.
+  Future<void> _suggest() async {
+    if (_suggesting) return;
+    setState(() => _suggesting = true);
+    Map<String, dynamic>? res;
+    try {
+      res = await runAction(context, () async => (await widget.api.post(widget.suggestPath, const <String, dynamic>{})) as Map<String, dynamic>);
+    } finally {
+      if (mounted) setState(() => _suggesting = false);
+    }
+    if (res == null || !mounted) return;
+    final suggested = ((res['operations'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    final source = processSuggestionSource(res['source'], res['sourceRef']);
+    final choice = await showDialog<_SuggestChoice>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Sugestão baseada $source'),
+        content: SizedBox(
+          width: dialogWidth(c, 560),
+          child: suggested.isEmpty
+              ? const Text('Nenhuma sugestão encontrada para esta peça.')
+              : SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final s in suggested)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text(
+                            '${s['description'] ?? ''}\nTolerância: ${_dash(fmt(s['tolerance']))}   ·   Máquina: ${_dash(_machineLabel(s))}',
+                            key: ValueKey('suggest-row-${s['sequence']}'),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+        ),
+        actions: [
+          TextButton(key: const ValueKey('suggest-cancel'), onPressed: () => Navigator.pop(c), child: const Text('Cancelar')),
+          if (suggested.isNotEmpty) ...[
+            OutlinedButton(key: const ValueKey('suggest-replace'), onPressed: () => Navigator.pop(c, _SuggestChoice.replaceAll), child: const Text('Substituir tudo')),
+            FilledButton(key: const ValueKey('suggest-fill'), onPressed: () => Navigator.pop(c, _SuggestChoice.fillEmpty), child: const Text('Preencher só os vazios')),
+          ],
+        ],
+      ),
+    );
+    if (choice == null || !mounted) return;
+    setState(() => _applySuggestion(suggested, choice));
+  }
+
+  static String _norm(String s) => s.trim().toLowerCase();
+
+  _ProcessRow _rowFromSuggestion(Map<String, dynamic> s, {int? sequence}) {
+    final r = _ProcessRow({'sequence': sequence, 'description': s['description'], 'tolerance': s['tolerance'], 'measureStart': s['measureStart'], 'measureEnd': s['measureEnd'], 'machineId': s['machineId']});
+    return r;
+  }
+
+  void _applySuggestion(List<Map<String, dynamic>> suggested, _SuggestChoice choice) {
+    if (choice == _SuggestChoice.fillEmpty) {
+      if (_rows.isEmpty) {
+        _rows.addAll([for (final s in suggested) _rowFromSuggestion(s)]);
+        return;
+      }
+      // Only rows with the same description are matched (a position match could put the tolerance of another operation on this one).
+      final used = <int>{};
+      for (final r in _rows) {
+        final d = _norm(r.description.text);
+        if (d.isEmpty) continue;
+        final k = suggested.indexWhere((s) => !used.contains(identityHashCode(s)) && _norm('${s['description'] ?? ''}') == d);
+        if (k < 0) continue;
+        final s = suggested[k];
+        used.add(identityHashCode(s));
+        if (r.tolerance.text.trim().isEmpty) r.tolerance.text = fmt(s['tolerance']);
+        r.machineId ??= (s['machineId'] as num?)?.toInt();
+      }
+      return;
+    }
+    // Replace everything: operations that keep their description keep their sequence (and with it their material links).
+    final old = {for (final r in _rows) if (r.sequence != null) _norm(r.description.text): r.sequence};
+    final fresh = <_ProcessRow>[];
+    final taken = <int?>{};
+    for (final s in suggested) {
+      final seq = old[_norm('${s['description'] ?? ''}')];
+      final keep = seq != null && taken.add(seq) ? seq : null;
+      fresh.add(_rowFromSuggestion(s, sequence: keep));
+    }
+    for (final r in _rows) {
+      r.dispose();
+    }
+    _rows
+      ..clear()
+      ..addAll(fresh);
   }
 
   void _move(int i, int delta) => setState(() {
@@ -1286,11 +1432,13 @@ class _ProcessDialogState extends State<_ProcessDialog> {
         _number(i),
         Expanded(flex: 4, child: _field(r.description, 'Descrição da operação', key: ValueKey('process-desc-$i'))),
         const SizedBox(width: AppSpacing.sm),
-        Expanded(flex: 2, child: _field(r.tolerance, 'Requisitos/Tolerância')),
+        Expanded(flex: 2, child: _field(r.tolerance, 'Requisitos/Tolerância', key: ValueKey('process-tol-$i'))),
         const SizedBox(width: AppSpacing.sm),
-        Expanded(flex: 2, child: _field(r.start, 'Início')),
+        Expanded(flex: 2, child: _machineField(r, i)),
         const SizedBox(width: AppSpacing.sm),
-        Expanded(flex: 2, child: _field(r.end, 'Final')),
+        Expanded(child: _field(r.start, 'Início')),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(child: _field(r.end, 'Final')),
         IconButton(key: ValueKey('process-up-$i'), tooltip: 'Subir', icon: const Icon(Icons.arrow_upward), onPressed: i == 0 ? null : () => _move(i, -1)),
         IconButton(
           key: ValueKey('process-down-$i'),
@@ -1343,7 +1491,8 @@ class _ProcessDialogState extends State<_ProcessDialog> {
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.sm,
             children: [
-              SizedBox(width: 150, child: _field(r.tolerance, 'Requisitos/Tolerância')),
+              SizedBox(width: 150, child: _field(r.tolerance, 'Requisitos/Tolerância', key: ValueKey('process-tol-$i'))),
+              SizedBox(width: 170, child: _machineField(r, i)),
               SizedBox(width: 100, child: _field(r.start, 'Início')),
               SizedBox(width: 100, child: _field(r.end, 'Final')),
             ],
@@ -1355,12 +1504,12 @@ class _ProcessDialogState extends State<_ProcessDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final narrow = dialogWidth(context, 760) < 600;
+    final narrow = dialogWidth(context, 900) < 700;
     final valid = _rows.isNotEmpty && _rows.every((r) => r.description.text.trim().isNotEmpty);
     return AlertDialog(
       title: const Text('Processo da ordem de fabricação'),
       content: SizedBox(
-        width: dialogWidth(context, 760),
+        width: dialogWidth(context, 900),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1374,6 +1523,12 @@ class _ProcessDialogState extends State<_ProcessDialog> {
                 onPressed: () => setState(() => _rows.add(_ProcessRow(null))),
                 icon: const Icon(Icons.add),
                 label: const Text('Adicionar operação'),
+              ),
+              TextButton.icon(
+                key: const ValueKey('process-suggest'),
+                onPressed: _suggesting ? null : _suggest,
+                icon: const Icon(Icons.auto_fix_high_outlined),
+                label: const Text('Sugerir requisitos e máquinas'),
               ),
             ],
           ),
@@ -1393,6 +1548,7 @@ class _ProcessDialogState extends State<_ProcessDialog> {
                       'tolerance': r.tolerance.text,
                       'measureStart': r.start.text,
                       'measureEnd': r.end.text,
+                      'machineId': r.machineId,
                     },
                 ]),
           child: const Text('Salvar'),

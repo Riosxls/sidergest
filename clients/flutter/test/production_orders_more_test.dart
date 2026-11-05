@@ -73,6 +73,15 @@ class _Fake {
   List<Map<String, dynamic>> materials = [_material(80)];
   List<Map<String, dynamic>> orders = [];
   int orderStatus = 200;
+  int suggestStatus = 200;
+  Map<String, dynamic> suggestion = {
+    'source': 'PreviousOrder',
+    'sourceRef': 'OF 8',
+    'operations': [
+      {'sequence': 10, 'description': 'Perfilar', 'tolerance': '± 0,10', 'measureStart': null, 'measureEnd': null, 'machineId': 1, 'machineCode': 'M10', 'machineName': 'Perfiladeira'},
+      {'sequence': 20, 'description': 'Trefilar', 'tolerance': '+30', 'measureStart': null, 'measureEnd': null, 'machineId': 2, 'machineCode': 'M20', 'machineName': 'Trefiladeira'},
+    ],
+  };
   String release = 'ok';
   List<dynamic> childResult = [];
 
@@ -212,6 +221,15 @@ class _Fake {
         ],
       });
     }
+    if (p == '/api/machines') {
+      return _json(
+        _page([
+          {'id': 1, 'code': 'M10', 'name': 'Perfiladeira'},
+          {'id': 2, 'code': 'M20', 'name': 'Trefiladeira'},
+        ]),
+      );
+    }
+    if (p == '/api/production/orders/7/process/suggest' && m == 'POST') return suggestStatus == 200 ? _json(suggestion) : _json({'title': 'Conflict', 'detail': 'A OF já foi liberada.', 'status': suggestStatus}, suggestStatus);
     if (p == '/api/production/orders/7/process' && m == 'PUT') return _json(order());
     if (p == '/api/production/orders/7/receipts') return _json({'id': 1}, 201);
     if (p == '/api/production/orders/7/issues' || p == '/api/production/orders/7/material-returns') return _json({'id': 2}, 201);
@@ -767,6 +785,105 @@ void main() {
       final lines = (fake.body(fake.last('PUT', '/api/production/orders/7/process'))['operations'] as List).cast<Map<String, dynamic>>();
       expect(lines.map((l) => l['description']), ['Cortar', 'Perfilar']);
       expect(lines.map((l) => l['sequence']), [20, 10]);
+    });
+
+    testWidgets('the operations tab shows tolerance and machine name, with a dash when empty', (tester) async {
+      final named = _op(10)..['machineName'] = 'Perfiladeira';
+      final empty = _op(20, description: 'Cortar')
+        ..['tolerance'] = null
+        ..['machineId'] = null
+        ..['machineCode'] = null;
+      final fake = _Fake()..ops = [named, empty];
+      await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
+      await _tab(tester, 'Operações');
+      expect(find.text('Perfiladeira'), findsOneWidget);
+      expect(find.text('± 0,10'), findsOneWidget);
+      expect(find.text('—'), findsNWidgets(2));
+    });
+
+    testWidgets('suggest fills only the empty tolerance and machine, keeps what was typed and sends machineId', (tester) async {
+      final a = _op(10)
+        ..['tolerance'] = ''
+        ..['machineId'] = null;
+      final b = _op(20, description: 'Trefilar')
+        ..['tolerance'] = 'digitado'
+        ..['machineId'] = 1;
+      final fake = _Fake()..ops = [a, b];
+      await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
+      await _tab(tester, 'Operações');
+      await tester.tap(find.byKey(const ValueKey('op-edit-process')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('process-suggest')));
+      await tester.tap(find.byKey(const ValueKey('process-suggest')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Sugestão baseada na última OF desta peça para este cliente (OF 8)'), findsOneWidget);
+      expect(fake.has('POST', '/api/production/orders/7/process/suggest'), isTrue);
+      await tester.tap(find.byKey(const ValueKey('suggest-fill')));
+      await tester.pumpAndSettle();
+      String tol(int i) => tester.widget<TextField>(find.byKey(ValueKey('process-tol-$i'))).controller!.text;
+      expect(tol(0), '± 0,10');
+      expect(tol(1), 'digitado');
+      expect(find.byKey(const ValueKey('process-desc-2')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('process-save')));
+      await tester.pumpAndSettle();
+      final lines = (fake.body(fake.last('PUT', '/api/production/orders/7/process'))['operations'] as List).cast<Map<String, dynamic>>();
+      expect(lines.map((l) => l['machineId']), [1, 1]);
+      expect(lines.map((l) => l['tolerance']), ['± 0,10', 'digitado']);
+    });
+
+    testWidgets('suggest with Substituir tudo replaces the rows and keeps the sequence of matching descriptions', (tester) async {
+      final fake = _Fake()
+        ..ops = [_op(10, description: 'Cortar'), _op(20, description: 'Perfilar')]
+        ..suggestion = {
+          'source': 'Rules',
+          'sourceRef': null,
+          'operations': [
+            {'sequence': 10, 'description': 'Perfilar', 'tolerance': '± 0,10', 'machineId': 1, 'machineName': 'Perfiladeira'},
+            {'sequence': 20, 'description': 'Inspeção Final', 'tolerance': '-', 'machineId': 2, 'machineName': 'Visual/Dimensional'},
+          ],
+        };
+      await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
+      await _tab(tester, 'Operações');
+      await tester.tap(find.byKey(const ValueKey('op-edit-process')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('process-suggest')));
+      await tester.tap(find.byKey(const ValueKey('process-suggest')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Sugestão baseada nas regras padrão (sem histórico desta peça)'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('suggest-replace')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('process-save')));
+      await tester.pumpAndSettle();
+      final lines = (fake.body(fake.last('PUT', '/api/production/orders/7/process'))['operations'] as List).cast<Map<String, dynamic>>();
+      expect(lines.map((l) => l['description']), ['Perfilar', 'Inspeção Final']);
+      expect(lines.map((l) => l['sequence']), [20, null]);
+      expect(lines.map((l) => l['machineId']), [1, 2]);
+    });
+
+    testWidgets('suggest cancelled changes nothing and a refused suggestion shows the server message', (tester) async {
+      final fake = _Fake()..suggestStatus = 409;
+      await _pump(tester, fake, (s) => ProductionOrderScreen(session: s, id: 7));
+      await _tab(tester, 'Operações');
+      await tester.tap(find.byKey(const ValueKey('op-edit-process')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('process-suggest')));
+      await tester.tap(find.byKey(const ValueKey('process-suggest')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('A OF já foi liberada.'), findsOneWidget);
+      fake.suggestStatus = 200;
+      await tester.tap(find.byKey(const ValueKey('process-suggest')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('suggest-cancel')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('process-cancel')));
+      await tester.pumpAndSettle();
+      expect(find.text('Descartar alterações?'), findsNothing);
+    });
+
+    test('processSuggestionSource words every source', () {
+      expect(processSuggestionSource('TemplateCustomer', null), 'nos processos antigos deste cliente para esta peça');
+      expect(processSuggestionSource('TemplateDims', null), 'nos processos antigos desta peça (outros clientes)');
+      expect(processSuggestionSource('PreviousOrder', 'OF 3'), 'na última OF desta peça para este cliente (OF 3)');
     });
 
     testWidgets('the new OF form folds the rare fields', (tester) async {
