@@ -99,6 +99,8 @@ public static class SalesEndpoints
     public static IServiceCollection AddSales(this IServiceCollection services)
     {
         services.AddScoped<SalesService>();
+        services.AddScoped<PriceSuggestionService>();
+        services.AddScoped<PriceHistoryImporter>();
         services.AddExceptionHandler<SalesExceptionHandler>();
         return services;
     }

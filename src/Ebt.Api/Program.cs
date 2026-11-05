@@ -163,6 +163,7 @@ app.MapInventory();
 app.MapPurchasing();
 app.MapProduction();
 app.MapSales();
+app.MapPriceSuggestion();
 app.MapCertificates();
 app.MapFiscal();
 app.MapReceivables();
