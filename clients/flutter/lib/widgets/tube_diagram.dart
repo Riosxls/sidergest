@@ -2,11 +2,13 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// The measure of a tube a form field stands for.
+import '../entities.dart' show parseDecimal;
+
+/// The measure of a tube a form field stands for. For a rectangular tube [width] is side A (horizontal) and [height] side B (vertical).
 enum TubeMeasure { diameter, width, height, thickness, length }
 
-/// The section of the tube: a round one, or an oblong one (flat oval: two flat sides and half-round ends).
-enum TubeProfile { round, oblong }
+/// The section of the tube: a round one, an oblong one (flat oval: two flat sides and half-round ends) or a rectangular one (square when the sides are equal).
+enum TubeProfile { round, oblong, rectangular }
 
 /// Technical-style drawing of a tube (cross section and side view) with a dimension line for each measure, so a person can see what
 /// "diâmetro", "espessura" and "comprimento" refer to. The typed values show on the lines; the [highlight]ed measure (the field being edited) is drawn strong.
@@ -14,7 +16,16 @@ enum TubeProfile { round, oblong }
 /// The drawing moves: the section morphs between round and oblong, the wall and the proportions glide to the typed values, and the
 /// highlight fades from one measure to the next. With "remove animations" on in the system, it jumps instead.
 class TubeDiagram extends StatefulWidget {
-  const TubeDiagram({super.key, this.profile = TubeProfile.round, this.diameter = '', this.width = '', this.height = '', this.thickness = '', this.length = '', this.highlight});
+  const TubeDiagram({
+    super.key,
+    this.profile = TubeProfile.round,
+    this.diameter = '',
+    this.width = '',
+    this.height = '',
+    this.thickness = '',
+    this.length = '',
+    this.highlight,
+  });
 
   final TubeProfile profile;
 
@@ -24,23 +35,29 @@ class TubeDiagram extends StatefulWidget {
 
   static const size = Size(300, 214);
 
+  /// A typed measure read like the form fields read it ("1.500" is 1500, "1,5" is 1.5), so the drawing never contradicts what is sent.
+  @visibleForTesting
+  static double? parseMeasure(String s) => parseDecimal(s.trim())?.toDouble();
+
   @override
   State<TubeDiagram> createState() => _TubeDiagramState();
 }
 
-/// The proportions of the section on the sheet (all in sheet units): outer width and height, wall, and how oblong it is (0 round, 1 oblong).
+/// The proportions of the section on the sheet (all in sheet units): outer width and height, wall, how far from round it is (0 round, 1 not
+/// round) and the radius of the outer corners (half the height for round and oblong sections, small for a rectangular one).
 class _Geo {
-  const _Geo(this.morph, this.w, this.h, this.td);
+  const _Geo(this.morph, this.w, this.h, this.td, this.r);
 
-  final double morph, w, h, td;
+  final double morph, w, h, td, r;
 
-  static _Geo lerp(_Geo a, _Geo b, double t) => _Geo(a.morph + (b.morph - a.morph) * t, a.w + (b.w - a.w) * t, a.h + (b.h - a.h) * t, a.td + (b.td - a.td) * t);
-
-  @override
-  bool operator ==(Object other) => other is _Geo && other.morph == morph && other.w == w && other.h == h && other.td == td;
+  static _Geo lerp(_Geo a, _Geo b, double t) =>
+      _Geo(a.morph + (b.morph - a.morph) * t, a.w + (b.w - a.w) * t, a.h + (b.h - a.h) * t, a.td + (b.td - a.td) * t, a.r + (b.r - a.r) * t);
 
   @override
-  int get hashCode => Object.hash(morph, w, h, td);
+  bool operator ==(Object other) => other is _Geo && other.morph == morph && other.w == w && other.h == h && other.td == td && other.r == r;
+
+  @override
+  int get hashCode => Object.hash(morph, w, h, td, r);
 }
 
 class _TubeDiagramState extends State<TubeDiagram> with TickerProviderStateMixin {
@@ -51,7 +68,8 @@ class _TubeDiagramState extends State<TubeDiagram> with TickerProviderStateMixin
   late _Geo _from = _target(), _to = _from;
   TubeMeasure? _previous;
 
-  static double? _num(String s) => double.tryParse(s.trim().replaceAll(',', '.'));
+  /// Read like the form fields read them ("1.500" is 1500, "1,5" is 1.5), so the drawing never contradicts what is sent.
+  static double? _num(String s) => TubeDiagram.parseMeasure(s);
 
   _Geo _target() {
     final t = _num(widget.thickness);
@@ -61,12 +79,26 @@ class _TubeDiagramState extends State<TubeDiagram> with TickerProviderStateMixin
       if (w != null && h != null && w > 0 && h > 0 && w >= h) hd = (_wide * h / w).clamp(24.0, 72.0);
       var td = hd * 0.23;
       if (h != null && t != null && h > 0 && t > 0 && t * 2 < h) td = (hd * t / h).clamp(3.0, hd * 0.34);
-      return _Geo(1, _wide, hd, td);
+      return _Geo(1, _wide, hd, td, hd / 2);
+    }
+    if (widget.profile == TubeProfile.rectangular) {
+      // Side A is horizontal, side B vertical; the larger of the two takes the room, in the proportion typed.
+      final a = _num(widget.width), b = _num(widget.height);
+      var w = 100.0, h = 66.0;
+      if (a != null && b != null && a > 0 && b > 0) {
+        final k = math.min(_wide / a, 72 / b);
+        w = (a * k).clamp(24.0, _wide);
+        h = (b * k).clamp(24.0, 72.0);
+      }
+      final side = math.min(a ?? 1, b ?? 1) > 0 ? math.min(a ?? 1, b ?? 1) : 1.0;
+      var td = math.min(w, h) * 0.16;
+      if (a != null && b != null && t != null && t > 0 && t * 2 < side) td = (math.min(w, h) * t / side).clamp(3.0, math.min(w, h) * 0.34);
+      return _Geo(1, w, h, td, 5);
     }
     final d = _num(widget.diameter);
     var ratio = 0.16;
     if (d != null && t != null && d > 0 && t > 0 && t * 2 < d) ratio = (t / d).clamp(0.05, 0.34);
-    return _Geo(0, _round, _round, _round * ratio);
+    return _Geo(0, _round, _round, _round * ratio, _round / 2);
   }
 
   _Geo get _now => _Geo.lerp(_from, _to, Curves.easeOutCubic.transform(_shape.value));
@@ -103,9 +135,12 @@ class _TubeDiagramState extends State<TubeDiagram> with TickerProviderStateMixin
     String say(String v, String fallback) => v.trim().isEmpty ? fallback : '${v.trim()} mm';
     final rest = 'espessura ${say(widget.thickness, 'não informada')}, comprimento ${say(widget.length, 'não informado')}';
     return Semantics(
-      label: widget.profile == TubeProfile.oblong
-          ? 'Desenho do tubo oblongo: largura ${say(widget.width, 'não informada')}, altura ${say(widget.height, 'não informada')}, $rest'
-          : 'Desenho do tubo: diâmetro externo ${say(widget.diameter, 'não informado')}, $rest',
+      label: switch (widget.profile) {
+        TubeProfile.oblong => 'Desenho do tubo oblongo: largura ${say(widget.width, 'não informada')}, altura ${say(widget.height, 'não informada')}, $rest',
+        TubeProfile.rectangular =>
+          'Desenho do tubo retangular: lado A ${say(widget.width, 'não informado')}, lado B ${say(widget.height, 'não informado')}, $rest',
+        TubeProfile.round => 'Desenho do tubo: diâmetro externo ${say(widget.diameter, 'não informado')}, $rest',
+      },
       image: true,
       child: ExcludeSemantics(
         child: AspectRatio(
@@ -116,6 +151,7 @@ class _TubeDiagramState extends State<TubeDiagram> with TickerProviderStateMixin
               key: const ValueKey('tube-diagram'),
               painter: _TubePainter(
                 geo: _now,
+                rectangular: widget.profile == TubeProfile.rectangular,
                 diameter: widget.diameter.trim(),
                 width: widget.width.trim(),
                 height: widget.height.trim(),
@@ -140,6 +176,7 @@ class _TubeDiagramState extends State<TubeDiagram> with TickerProviderStateMixin
 class _TubePainter extends CustomPainter {
   _TubePainter({
     required this.geo,
+    required this.rectangular,
     required this.diameter,
     required this.width,
     required this.height,
@@ -155,6 +192,7 @@ class _TubePainter extends CustomPainter {
   });
 
   final _Geo geo;
+  final bool rectangular;
   final String diameter, width, height, thickness, length;
   final TubeMeasure? highlight, previous;
   final double focusT;
@@ -191,8 +229,10 @@ class _TubePainter extends CustomPainter {
     // A tall oblong section sinks a little so the wall label above it stays on the sheet.
     final c = Offset(100 - 6 * geo.morph, 58 + geo.morph * math.max(0.0, 40 + geo.h / 2 - 58));
     final w = geo.w, h = geo.h, td = geo.td;
-    RRect stadium(double ww, double hh) => RRect.fromRectAndRadius(Rect.fromCenter(center: c, width: ww, height: hh), Radius.circular(hh / 2));
-    final outer = stadium(w, h), inner = stadium(w - 2 * td, h - 2 * td);
+    // Outer corners of radius r (half the height when round or oblong, small when rectangular); the inner ones are a wall thinner.
+    RRect rounded(double ww, double hh, double r) =>
+        RRect.fromRectAndRadius(Rect.fromCenter(center: c, width: ww, height: hh), Radius.circular(math.max(0.0, math.min(r, math.min(ww, hh) / 2))));
+    final outer = rounded(w, h, geo.r), inner = rounded(w - 2 * td, h - 2 * td, math.max(geo.r - td, 1.5));
     final ring = Path()
       ..addRRect(outer)
       ..addRRect(inner)
@@ -217,8 +257,29 @@ class _TubePainter extends CustomPainter {
     _extension(canvas, Offset(left, bottom - 2), Offset(left, wy + 4), hzColor);
     _extension(canvas, Offset(right, bottom - 2), Offset(right, wy + 4), hzColor);
     _arrows(canvas, Offset(left, wy), Offset(right, wy), hzColor, hzStroke);
-    if (m < 1) _text(canvas, diameter.isEmpty ? 'Ø' : 'Ø $diameter', Offset(c.dx, wy + 5), _color(TubeMeasure.diameter, 1 - m), TubeMeasure.diameter, center: true, caption: 'diâmetro externo');
-    if (m > 0) _text(canvas, width.isEmpty ? 'L' : 'L $width', Offset(c.dx, wy + 5), _color(TubeMeasure.width, m), TubeMeasure.width, center: true, caption: 'largura (lado maior)');
+    if (m < 1) {
+      _text(
+        canvas,
+        diameter.isEmpty ? 'Ø' : 'Ø $diameter',
+        Offset(c.dx, wy + 5),
+        _color(TubeMeasure.diameter, 1 - m),
+        TubeMeasure.diameter,
+        center: true,
+        caption: 'diâmetro externo',
+      );
+    }
+    if (m > 0) {
+      final label = rectangular ? (width.isEmpty ? 'A' : 'A $width') : (width.isEmpty ? 'L' : 'L $width');
+      _text(
+        canvas,
+        label,
+        Offset(c.dx, wy + 5),
+        _color(TubeMeasure.width, m),
+        TubeMeasure.width,
+        center: true,
+        caption: rectangular ? 'lado A (por fora)' : 'largura (lado maior)',
+      );
+    }
 
     // The height of the oblong tube: a vertical line on the right, fading in as the section flattens.
     if (m > 0.02) {
@@ -227,7 +288,8 @@ class _TubePainter extends CustomPainter {
       _extension(canvas, Offset(right - 2, top), Offset(hx + 4, top), hc);
       _extension(canvas, Offset(right - 2, bottom), Offset(hx + 4, bottom), hc);
       _arrows(canvas, Offset(hx, top), Offset(hx, bottom), hc, _stroke(TubeMeasure.height));
-      _text(canvas, height.isEmpty ? 'A' : 'A $height', Offset(hx + 8, c.dy - 13), hc, TubeMeasure.height, caption: 'altura (lado menor)');
+      final label = rectangular ? (height.isEmpty ? 'B' : 'B $height') : (height.isEmpty ? 'A' : 'A $height');
+      _text(canvas, label, Offset(hx + 8, c.dy - 13), hc, TubeMeasure.height, caption: rectangular ? 'lado B (por fora)' : 'altura (lado menor)');
     }
 
     // The wall: a leader from the wall to a label; its place follows the shape.
@@ -325,6 +387,7 @@ class _TubePainter extends CustomPainter {
   @override
   bool shouldRepaint(_TubePainter old) =>
       old.geo != geo ||
+      old.rectangular != rectangular ||
       old.diameter != diameter ||
       old.width != width ||
       old.height != height ||

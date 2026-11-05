@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -19,12 +20,31 @@ Map<String, dynamic> suggestion({String basis = 'Neighbours', String confidence 
   'weight': {'netKg': 0.5625, 'grossKg': 0.5782, 'lossPercent': 2.8},
   'suggestion': basis == 'None'
       ? {'basis': 'None', 'confidence': 'Low', 'pricePerKg': null, 'low': null, 'high': null, 'pricePerPiece': null, 'totalForQuantity': null}
-      : {'basis': basis, 'confidence': confidence, 'pricePerKg': 20.25, 'low': 19.8, 'high': 21.0, 'pricePerPiece': 5.62, 'totalForQuantity': 2810},
+      : {
+          'basis': basis,
+          'confidence': confidence,
+          'pricePerKg': 20.25,
+          'low': 19.8,
+          'high': 21.0,
+          'pricePerPiece': 5.62,
+          'totalForQuantity': 2810,
+          'usedCount': 5,
+          'newestDate': '2026-03-10',
+          'oldestDate': '2026-01-05',
+        },
   'similar': [
     {'date': '2026-03-10', 'customer': 'Zeta', 'diameter': 25.4, 'thickness': 1.5, 'length': 3000, 'unit': 'KG', 'unitPrice': 21.0, 'pricePerKg': 21.0, 'distance': 2.0, 'source': 'Histórico', 'spec': 'NBR'},
     {'date': '2026-01-05', 'customer': 'BTS Tubos', 'diameter': 25.4, 'thickness': 1.5, 'length': 3000, 'unit': 'PC', 'unitPrice': 5.5, 'pricePerKg': 19.9, 'distance': 0.5, 'source': 'MetaGest', 'spec': null},
   ],
   'customerLast': withCustomerLast ? {'date': '2026-01-05', 'diameter': 25.4, 'thickness': 1.5, 'length': 3000, 'unit': 'PC', 'unitPrice': 5.5, 'pricePerKg': 19.9} : null,
+  'repeat': basis == 'CustomerRepeat'
+      ? {'date': '2026-01-05', 'customer': 'BTS Tubos', 'diameter': 25.4, 'thickness': 1.5, 'length': 3000, 'unit': 'PC', 'unitPrice': 5.5, 'pricePerKg': 19.9}
+      : null,
+  'customerHistory': [],
+  'bySpec': [],
+  'trend': [],
+  'customerTrend': [],
+  'customerFactor': null,
   'historyCount': 4817,
 };
 
@@ -34,13 +54,46 @@ class Rig {
   Map<String, dynamic> summary = {'count': 4817, 'firstDate': '2015-10-05', 'lastDate': '2026-11-02'};
   int summaryStatus = 200;
   int suggestStatus = 200;
-  Map<String, dynamic> importResult = {'read': 100, 'imported': 90, 'duplicates': 7, 'skipped': 3, 'firstDate': '2015-10-05', 'lastDate': '2026-11-02'};
+  Map<String, dynamic> importResult = {
+    'read': 100,
+    'imported': 90,
+    'updated': 4,
+    'duplicates': 7,
+    'skipped': 3,
+    'skippedReasons': {'unidade': 2, 'data': 1, 'medidas': 0, 'preço': 0},
+    'firstDate': '2015-10-05',
+    'lastDate': '2026-11-02',
+  };
+
+  /// Answers to the next suggestion requests wait for these (in order) before they come back: a slow server.
+  final holds = <Completer<void>>[];
+
+  /// Saved simulations the list returns, what was POSTed to price-simulations, and what was DELETEd.
+  List<Map<String, dynamic>> saved = [];
+  final posted = <Map<String, dynamic>>[];
+  final deleted = <String>[];
+  int saveStatus = 201;
 
   Future<http.Response> handle(http.Request r) async {
     log.add(r);
+    if (r.url.path.startsWith('/api/sales/price-simulations')) {
+      if (r.method == 'POST') {
+        posted.add(jsonDecode(r.body) as Map<String, dynamic>);
+        return saveStatus == 201 ? jsonResp({'id': 99}, 201) : jsonResp({'error': 'Falhou'}, saveStatus);
+      }
+      if (r.method == 'DELETE') {
+        deleted.add(r.url.path.split('/').last);
+        saved = [for (final e in saved) if ('${e['id']}' != r.url.path.split('/').last) e];
+        return http.Response('', 204);
+      }
+      return jsonResp(saved);
+    }
     switch (r.url.path) {
       case '/api/sales/price-suggestion':
-        return suggestStatus == 200 ? jsonResp(data) : jsonResp({'error': 'Sem permissão'}, suggestStatus);
+        if (suggestStatus != 200) return jsonResp({'error': 'Sem permissão'}, suggestStatus);
+        final answer = data; // what the server knew when the request arrived
+        if (holds.isNotEmpty) await holds.removeAt(0).future;
+        return jsonResp(answer);
       case '/api/sales/price-history/summary':
         return summaryStatus == 200 ? jsonResp(summary) : jsonResp({'error': 'Sem permissão'}, summaryStatus);
       case '/api/sales/price-history/import':
@@ -109,6 +162,10 @@ Future<List<String>> openDialog(WidgetTester tester, Rig rig, {bool unitIsKg = f
 }
 
 void main() {
+  // "Today" of the tests: the sales of the fake history are 8 to 10 months old.
+  setUp(() => priceSimulatorNow = () => DateTime(2026, 11, 5));
+  tearDown(() => priceSimulatorNow = DateTime.now);
+
   testWidgets('weight, suggestion, range, confidence and the similar sales are shown; the request carries the dimensions and the customer', (tester) async {
     final rig = Rig()..data = suggestion(withCustomerLast: true);
     await pumpApp(tester, PriceSimulatorScreen(session: sessionFor(rig, 'Sales')));
@@ -123,7 +180,8 @@ void main() {
     expect(find.text('500 peças: R\$ 2.810,00'), findsOneWidget);
     expect(find.text('Confiança Alta'), findsOneWidget);
     expect(find.bySemanticsLabel('Confiança da sugestão: Alta'), findsOneWidget);
-    expect(find.text('Baseado em 2 vendas parecidas dos últimos 24 meses'), findsOneWidget);
+    // The count comes from the server (5 sales used), not from the 2 rows of the table.
+    expect(find.text('Baseado em 5 vendas parecidas, a mais recente é de mar/2026 e a mais antiga de jan/2026 (vendas de 8 a 10 meses atrás)'), findsOneWidget);
     expect(find.textContaining('Último preço deste cliente: R\$ 5,50/peça (R\$ 19,90/kg)'), findsOneWidget);
     // Nearest first: BTS (distance 0.5) before Zeta (2.0).
     expect(tester.getTopLeft(find.text('BTS Tubos')).dy, lessThan(tester.getTopLeft(find.text('Zeta')).dy));
@@ -205,7 +263,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 450));
     await tester.pumpAndSettle();
-    expect(find.text('Mesmo preço cobrado de BTS Tubos em 05/01/2026 para esta medida'), findsOneWidget);
+    // From the sale the price came from (`repeat`): who, when, how much and for which measure, plus how old it is.
+    expect(find.text('Mesmo preço cobrado de BTS Tubos em 05/01/2026 (R\$ 19,90/kg) para esta medida (venda de 10 meses atrás)'), findsOneWidget);
     expect(rig.suggestions.last.url.queryParameters['customerId'], '2');
     expect(find.byKey(const ValueKey('price-sim-use')), findsNothing); // no onUse: the dialog only informs
   });
@@ -298,6 +357,8 @@ void main() {
       expect(find.text('Histórico importado'), findsOneWidget);
       expect(find.text('Linhas lidas: 100'), findsOneWidget);
       expect(find.text('Vendas importadas: 90'), findsOneWidget);
+      expect(find.text('Atualizadas: 4'), findsOneWidget);
+      expect(find.text('Ignoradas: 2 sem unidade válida, 1 com data inválida'), findsOneWidget);
       expect(find.text('Já existiam (repetidas): 7'), findsOneWidget);
       expect(find.text('Ignoradas (dados incompletos): 3'), findsOneWidget);
       await tester.tap(find.text('Fechar'));
@@ -357,6 +418,7 @@ void main() {
       expect(q['length'], '3000');
       expect(q['customerId'], '2');
       expect(q['spec'], 'NBK');
+      expect(q['productId'], '7'); // the server uses the product's own loss percent
       await tapKey(tester, 'price-sim-use');
       expect(tester.widget<TextField>(find.byKey(const ValueKey('field-unitPrice'))).controller!.text, '20,25'); // sold by the kg
     });

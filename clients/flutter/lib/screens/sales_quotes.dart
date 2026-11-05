@@ -26,6 +26,7 @@ import '../widgets/record_list.dart';
 import '../widgets/record_shortcuts.dart';
 import '../widgets/record_skeleton.dart';
 import '../widgets/responsive.dart';
+import '../widgets/tube_diagram.dart' show TubeProfile;
 import '../workdays.dart';
 import 'customers.dart';
 import 'price_simulator.dart';
@@ -400,6 +401,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
         'description': l['description'],
         ...?(l['spec'] as Map<String, dynamic>?),
         'feasibilityId': l['feasibilityId'],
+        '_unit': l['unit'], // local (never sent): the unit of this very line, for the price simulator
         '_labels': {'productId': '${l['productCode']} · ${l['description']}', if (l['feasibilityId'] != null) 'feasibilityId': '${l['feasibilityReference']}'},
       },
   ];
@@ -430,6 +432,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
 
   /// Products picked in the line form (their measures and sale unit feed the price simulator), and whether the server offers the simulator to this user.
   final Map<Object, Map<String, dynamic>> _productInfo = {};
+  final Set<Object> _productFetching = {};
   bool _suggestOk = true;
 
   String get _draftKey => 'quote-editor:${widget.asOrder ? 'order' : 'quote'}:${widget.quote?['id'] ?? 'new'}';
@@ -547,6 +550,11 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     }
     unawaited(_restoreDraft());
     if (widget.session.canSell) {
+      // The products of the lines already there: their measures tell whether "Sugerir preço" has anything to simulate when a line is edited.
+      for (final l in _lines) {
+        final id = l['productId'];
+        if (id != null) _fetchProduct(id);
+      }
       // A server that refuses (403) or does not know (404) the simulator gets no "Sugerir preço" button, without any message.
       api.get('/api/sales/price-history/summary').then<void>((_) {}, onError: (Object e) {
         if (e is ApiException && (e.status == 403 || e.status == 404) && mounted) setState(() => _suggestOk = false);
@@ -558,6 +566,14 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
   Widget? _priceAction(BuildContext context, String key, Map<String, dynamic> values, void Function(String key, String text) setText) {
     if (key != 'unitPrice' || !_suggestOk || !widget.session.canSell) return null;
     final id = values['productId'];
+    if (id == null) return null;
+    // Without the product's measures there is nothing to simulate: the button stays out instead of opening an empty form.
+    final info = _productInfo[id];
+    if (info == null) {
+      _fetchProduct(id);
+      return null;
+    }
+    if (_simulatorMeasures(info) == null) return null;
     final noTable = id != null && _priceInfo.containsKey(id) && _listPrice(id) == null;
     if (values['unitPrice'] != null && !noTable) return null;
     return TextButton.icon(
@@ -566,6 +582,29 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
       icon: const Icon(Icons.calculate_outlined, size: 18),
       label: const Text('Sugerir preço'),
     );
+  }
+
+  /// Loads a product of an existing line (one not picked in this session) once, so the button can tell whether it has measures.
+  void _fetchProduct(Object id) {
+    if (!_productFetching.add(id)) return;
+    api.get('/api/products/$id').then<void>(
+      (r) {
+        if (mounted && r is Map<String, dynamic>) setState(() => _productInfo[id] = r);
+      },
+      onError: (Object e) => debugPrint('sales_quotes: Without the product the simulator button stays out: $e'),
+    );
+  }
+
+  /// The measures the simulator can start from: a rectangular product with its two sides, or any other product with a diameter. Null when it has neither.
+  ({TubeProfile profile, num? diameter, num? width, num? height})? _simulatorMeasures(Map<String, dynamic>? product) {
+    num? n(Object? v) => v is num && v > 0 ? v : null;
+    if (product == null) return null;
+    if (product['shape'] == 'Rectangular') {
+      final w = n(product['widthMm']), h = n(product['heightMm']);
+      return w != null && h != null ? (profile: TubeProfile.rectangular, diameter: null, width: w, height: h) : null;
+    }
+    final d = n(product['diameterMm']);
+    return d == null ? null : (profile: TubeProfile.round, diameter: d, width: null, height: null);
   }
 
   Future<void> _suggestPrice(BuildContext context, Map<String, dynamic> values, void Function(String key, String text) setText) async {
@@ -581,13 +620,19 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     }
     if (!context.mounted) return;
     num? n(Object? v) => v is num ? v : null;
-    final byKg = '${product?['saleUnit'] ?? product?['stockUnit'] ?? ''}'.toUpperCase() == 'KG';
+    // The unit of this very line when it has one (an item being edited), else the product's sale unit.
+    final byKg = '${values['unit'] ?? product?['saleUnit'] ?? product?['stockUnit'] ?? ''}'.toUpperCase() == 'KG';
     final quantity = n(values['quantity']);
     final customer = _customerId;
+    final measures = _simulatorMeasures(product);
     await showPriceSimulator(
       context,
       widget.session,
-      diameter: n(product?['diameterMm']),
+      diameter: measures?.diameter,
+      width: measures?.width,
+      height: measures?.height,
+      profile: measures?.profile ?? TubeProfile.round,
+      productId: id is int ? id : (id is num ? id.toInt() : null),
       thickness: n(product?['thicknessMm']),
       length: n(product?['lengthMm']),
       spec: classifyMaterialSpec(values['standard'] ?? product?['standard']),

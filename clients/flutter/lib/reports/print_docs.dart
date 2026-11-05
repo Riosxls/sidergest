@@ -735,6 +735,73 @@ Future<Uint8List> buildProductionOrderPdf(ApiClient api, Map<String, dynamic> o)
   return _forms('Ordem de fabricação ${o['reference']}', [page]);
 }
 
+/// Simulação de preço: one A4 sheet with the measures, the suggested price and the similar sales it came from. It is an internal working paper,
+/// never a proposal. [s] is the plain data the simulator screen collects (see `PriceSimulatorPanel`): shape, measures, spec, customer, quantity,
+/// netKg, grossKg, lossPercent, pricePerKg, pricePerPiece, low, high, total, confidence, reason, warning, markupPercent, costPerKg, margin, note, date, similar.
+Future<Uint8List> buildSimulationPdf(ApiClient api, Map<String, dynamic> s) async {
+  final issuer = await _Issuer.load(api);
+  String money(Object? v, [String unit = '']) => v is num ? '${fmtMoney(v)}$unit' : '';
+  String weight(Object? kg) => kg is num ? (kg < 10 ? '${fmtNum(kg * 1000, 0)} g' : '${fmtNum(kg, 3)} kg') : '';
+  String measure(Map<String, dynamic> e) {
+    String p(Object? v) => v is num ? fmt(v) : '?';
+    return 'ø ${p(e['diameter'])} × ${p(e['thickness'])} × ${p(e['length'])}';
+  }
+
+  final similar = [for (final e in (s['similar'] as List? ?? const [])) (e as Map).cast<String, dynamic>()].take(10).toList();
+  final date = _s(s['date']).split('T').first;
+  final q = s['quantity'];
+  final markup = s['markupPercent'];
+  return _build('Simulação de preço', () => [
+    _box('Tubo', [
+      ('Formato', _s(s['shape'])),
+      ('Medidas', _s(s['measures'])),
+      ('Especificação', _s(s['spec'])),
+      ('Cliente', _s(s['customer'])),
+      ('Quantidade', q is num && q > 0 ? '${fmt(q)} ${q == 1 ? 'peça' : 'peças'}' : ''),
+    ]),
+    pw.SizedBox(height: 6),
+    _box('Peso', [('Líquido', weight(s['netKg'])), ('Bruto', weight(s['grossKg'])), ('Perda', s['lossPercent'] is num ? '${fmtNum(s['lossPercent'], 1)}%' : '')]),
+    pw.SizedBox(height: 6),
+    _box('Preço sugerido', [
+      ('Por kg', money(s['pricePerKg'], '/kg')),
+      ('Por peça', money(s['pricePerPiece'], '/peça')),
+      ('Faixa', s['low'] is num && s['high'] is num ? '${money(s['low'])} a ${money(s['high'])}/kg' : ''),
+      ('Total', money(s['total'])),
+      ('Confiança', _s(s['confidence'])),
+      ('Acréscimo', markup is num && markup > 0 ? '${fmt(markup)}%' : ''),
+      ('Custo do aço', money(s['costPerKg'], '/kg')),
+      ('Margem', _s(s['margin'])),
+    ]),
+    _text('Base da sugestão', [_s(s['reason']), _s(s['warning'])].where((e) => e.isNotEmpty).join('\n')),
+    if (_s(s['note']).isNotEmpty) _text('Observação', _s(s['note'])),
+    pw.SizedBox(height: 8),
+    pw.Text('Vendas parecidas', style: _b(9)),
+    pw.SizedBox(height: 2),
+    if (similar.isEmpty)
+      pw.Text('Nenhuma venda parecida encontrada.', style: _n(8))
+    else
+      _table(
+        ['Data', 'Cliente', 'Medida', 'Espec.', 'Un.', 'Preço unit.', 'R\$/kg'],
+        [
+          for (final e in similar)
+            [
+              fmtDay(e['date']),
+              _s(e['customer']),
+              measure(e),
+              _s(e['spec']).isEmpty ? '—' : _s(e['spec']),
+              _s(e['unit']),
+              e['unitPrice'] is num ? fmtMoney(e['unitPrice']) : '',
+              e['pricePerKg'] is num ? fmtMoney(e['pricePerKg']) : '',
+            ],
+        ],
+        flex: const [1, 2.6, 2.4, 1, 0.6, 1.2, 1.2],
+        right: const {5, 6},
+      ),
+    pw.SizedBox(height: 14),
+    pw.Text('Simulação interna${date.isEmpty ? '' : ' de ${fmtDay(date)}'}: não é proposta nem compromisso de preço.', style: _b(8)),
+  ], header: (_) => _header('Simulação de preço', date.isEmpty ? '' : fmtDay(date), issuer));
+}
+
 /// App bar print button shared by the detail screens. It is busy while the PDF is built, so a second click does not print twice.
 class PrintButton extends StatefulWidget {
   const PrintButton({super.key, required this.name, required this.builder, this.enabled = true, this.tooltip, this.doneKey, this.warning});
