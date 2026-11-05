@@ -517,14 +517,14 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
   /// [price] with the shape's markup on it, to cents.
   num _marked(num price) => _markup == 0 ? price : (price * (1 + _markup / 100) * 100).round() / 100;
 
-  Widget _numberField(String key, String label, TextEditingController c, String? error, {bool last = false, bool autofocus = false, FocusNode? focusNode}) => TextField(
+  Widget _numberField(String key, String label, TextEditingController c, String? error, {bool last = false, bool autofocus = false, FocusNode? focusNode, String? helper}) => TextField(
     key: ValueKey(key),
     controller: c,
     focusNode: focusNode,
     autofocus: autofocus,
     keyboardType: const TextInputType.numberWithOptions(decimal: true),
     textInputAction: last ? TextInputAction.done : TextInputAction.next,
-    decoration: InputDecoration(labelText: label, errorText: error, errorMaxLines: 3, isDense: true),
+    decoration: InputDecoration(labelText: label, errorText: error, errorMaxLines: 3, helperText: helper, helperMaxLines: 2, isDense: true),
     onChanged: (_) => _changed(),
   );
 
@@ -536,10 +536,12 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
       builder: (context, box) {
         final narrow = box.maxWidth < 520;
         // Wide: the drawing sits beside the four fields, like a dimensioned sketch; otherwise it comes first.
-        final sideBySide = box.maxWidth >= 720;
-        const drawingWidth = 300.0;
+        final sideBySide = box.maxWidth >= 860;
+        const drawingWidth = 420.0;
         final fieldsWidth = sideBySide ? box.maxWidth - drawingWidth - AppSpacing.lg : box.maxWidth;
-        final perRow = fieldsWidth < 520 ? (fieldsWidth < 340 ? 1 : 2) : 4;
+        // Every field gets room for its whole label (about 220 px); fewer per row rather than cut text.
+        final fit = ((fieldsWidth + AppSpacing.md) / (220 + AppSpacing.md)).floor();
+        final perRow = fit < 1 ? 1 : (fit > 4 ? 4 : fit);
         final w = perRow == 1 ? fieldsWidth : (fieldsWidth - (perRow - 1) * AppSpacing.md) / perRow;
         Widget sized(Widget child, [double? width]) => SizedBox(width: width ?? w, child: child);
         final oblong = _profile == TubeProfile.oblong;
@@ -549,8 +551,8 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
           runSpacing: AppSpacing.md,
           children: [
             if (oblong) ...[
-              sized(_numberField('price-sim-width', 'Largura, lado maior (mm)', _w, v.width, autofocus: true, focusNode: _fw)),
-              sized(_numberField('price-sim-height', 'Altura, lado menor (mm)', _h, v.height, focusNode: _fh)),
+              sized(_numberField('price-sim-width', 'Largura (mm)', _w, v.width, autofocus: true, focusNode: _fw, helper: 'lado maior, por fora')),
+              sized(_numberField('price-sim-height', 'Altura (mm)', _h, v.height, focusNode: _fh, helper: 'lado menor, por fora')),
             ] else
               sized(_numberField('price-sim-diameter', 'Diâmetro externo (mm)', _d, v.diameter, autofocus: widget.diameter == null, focusNode: _fd)),
             sized(_numberField('price-sim-thickness', 'Espessura (mm)', _t, v.thickness, focusNode: _ft)),
@@ -562,7 +564,7 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
                   key: const ValueKey('price-sim-markup'),
                   controller: _p,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Acréscimo pela forma (%)', helperText: 'Conformação do oblongo', helperMaxLines: 2, isDense: true),
+                  decoration: const InputDecoration(labelText: 'Acréscimo (%)', helperText: 'pela conformação do oblongo', helperMaxLines: 2, isDense: true),
                   onChanged: (_) {
                     setState(() {});
                     _report(_usablePrice());
@@ -603,7 +605,7 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
                 ],
               )
             else ...[
-              Center(child: ConstrainedBox(constraints: BoxConstraints(maxWidth: narrow ? 260 : drawingWidth), child: drawing)),
+              Center(child: ConstrainedBox(constraints: BoxConstraints(maxWidth: narrow ? 320 : drawingWidth), child: drawing)),
               const SizedBox(height: AppSpacing.md),
               fields,
             ],

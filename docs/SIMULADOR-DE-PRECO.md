@@ -37,7 +37,7 @@ Preencha:
 | Comprimento (mm) | Comprimento da peça |
 | Cliente (opcional) | Se informado, o simulador procura o que **esse cliente** já pagou |
 | Quantidade (opcional) | Em peças. Serve para calcular o total |
-| Acréscimo pela forma (%) | Só no oblongo. Percentual que você soma ao preço pela conformação (veja o item 4) |
+| Acréscimo (%) | Só no oblongo ("pela conformação do oblongo"). Percentual que você soma ao preço pela conformação (veja o item 4) |
 | Especificação (opcional) | BK, NBK, EN 10305, NBR ou SAE. Faz diferença no preço (veja o item 5) |
 
 Não existe botão de "calcular": o resultado se atualiza sozinho alguns instantes depois de você parar de digitar.
@@ -45,10 +45,10 @@ Não existe botão de "calcular": o resultado se atualiza sozinho alguns instant
 ## 4. O que o simulador mostra
 
 ### Desenho do tubo
-Ao lado dos campos há um **desenho do tubo** (o corte e a vista lateral) com uma linha de cota para cada medida: diâmetro (ou largura e altura, no oblongo), espessura da parede e comprimento. O valor digitado aparece em cada linha e **a medida do campo em que você está digitando fica destacada**, como no desenho de um cliente. No celular, o desenho aparece acima dos campos.
+Ao lado dos campos há um **desenho do tubo** (o corte e a vista lateral) com uma linha de cota para cada medida: diâmetro (ou largura e altura, no oblongo), espessura da parede e comprimento. O valor digitado aparece em cada linha e **a medida do campo em que você está digitando fica destacada**, como no desenho de um cliente. No celular, o desenho aparece acima dos campos. O desenho é **animado**: ao trocar entre redondo e oblongo o corte do tubo se transforma de um formato no outro, a espessura e as proporções acompanham o que você digita, e o destaque passa suavemente de um campo para o outro. Se o computador estiver com as animações desativadas, o desenho muda sem animação.
 
 ### Tubo oblongo
-O peso é calculado com a **seção real do oblongo** (um retângulo com as pontas em meia-circunferência). Como o histórico de preços só tem tubos redondos, o simulador procura o preço do **tubo redondo de mesmo perímetro** (a mesma volta por fora e a mesma parede) e avisa isso na tela. Esse preço **não inclui a conformação** do oblongo: some o percentual no campo **Acréscimo pela forma**, e a sugestão, a faixa e o total já aparecem com ele.
+O peso é calculado com a **seção real do oblongo** (um retângulo com as pontas em meia-circunferência). Como o histórico de preços só tem tubos redondos, o simulador procura o preço do **tubo redondo de mesmo perímetro** (a mesma volta por fora e a mesma parede) e avisa isso na tela. Esse preço **não inclui a conformação** do oblongo: some o percentual no campo **Acréscimo (%)**, e a sugestão, a faixa e o total já aparecem com ele.
 
 ### Peso
 - **Peso líquido:** o peso do tubo pronto.

@@ -123,4 +123,47 @@ void main() {
       expect(rig.suggestions, isEmpty);
     });
   });
+
+  group('layout and motion', () {
+    for (final width in [1300.0, 1000.0, 860.0, 700.0, 520.0, 380.0]) {
+      testWidgets('no overflow at ${width.toInt()} px, round and oblong', (tester) async {
+        final rig = Rig();
+        await pumpApp(tester, PriceSimulatorScreen(session: sessionFor(rig, 'Sales')), size: Size(width, 1400));
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.text('Oblongo'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.text('Redondo'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('the section morphs between round and oblong over time, and a typed wall glides', (tester) async {
+      await pumpApp(tester, const SizedBox(width: 400, child: TubeDiagram(diameter: '9,5', thickness: '1')), size: const Size(500, 500));
+      Future<void> swap(TubeDiagram d) async {
+        await tester.pumpWidget(MaterialApp(home: Scaffold(body: SizedBox(width: 400, child: d))));
+      }
+
+      await swap(const TubeDiagram(profile: TubeProfile.oblong, width: '17', height: '6,2', thickness: '1,4'));
+      await tester.pump(const Duration(milliseconds: 100)); // in the middle of the morph: still animating, nothing breaks
+      expect(tester.hasRunningAnimations, isTrue);
+      await tester.pumpAndSettle();
+      expect(tester.hasRunningAnimations, isFalse);
+      await swap(const TubeDiagram(profile: TubeProfile.oblong, width: '17', height: '6,2', thickness: '2', highlight: TubeMeasure.thickness));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(tester.hasRunningAnimations, isTrue);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('with animations turned off in the system the drawing does not animate', (tester) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+      await pumpApp(tester, const SizedBox(width: 400, child: TubeDiagram(diameter: '9,5', thickness: '1')), size: const Size(500, 500));
+      await tester.pumpWidget(const MaterialApp(home: Scaffold(body: SizedBox(width: 400, child: TubeDiagram(profile: TubeProfile.oblong, width: '17', height: '6,2', thickness: '1,4')))));
+      await tester.pump();
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+  });
 }
