@@ -131,6 +131,24 @@ public class ReceivablesTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Two_simultaneous_estornos_of_the_same_payment_only_succeed_once()
+    {
+        var admin = await api.AdminAsync();
+        try
+        {
+            var s = await ShippedWithNfAsync(admin);
+            var first = (await RowsAsync(admin, s.Customer.Id))[0];
+            var payment = await (await admin.Post($"/api/receivables/installments/{first.Id}/payments", new ReceivablePaymentIn(null, 50m, "PIX", null))).Read<ReceivablePaymentOut>();
+            var both = await Task.WhenAll(admin.DeleteAsync($"/api/receivables/payments/{payment.Id}?reason=primeiro"), admin.DeleteAsync($"/api/receivables/payments/{payment.Id}?reason=segundo"));
+            Assert.Single(both, r => r.StatusCode == HttpStatusCode.NoContent);
+            Assert.Single(both, r => r.StatusCode == HttpStatusCode.Conflict);
+            var listed = Assert.Single(await (await admin.GetAsync($"/api/receivables/installments/{first.Id}/payments")).Read<List<ReceivablePaymentOut>>());
+            Assert.Contains(listed.ReverseReason, new[] { "primeiro", "segundo" });
+        }
+        finally { await SetFiscal(admin, false); }
+    }
+
+    [Fact]
     public async Task Open_receivables_count_in_the_credit_exposure_until_they_are_paid()
     {
         var admin = await api.AdminAsync();

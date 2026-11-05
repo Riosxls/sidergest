@@ -11,16 +11,21 @@ public static class WorkDays
 
     public static bool IsWorkDay(DateOnly d) => d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday) && !IsHoliday(d);
 
-    /// <summary>The date <paramref name="days"/> working days after <paramref name="start"/> (day 0 is the start itself).</summary>
+    /// <summary>
+    /// The date <paramref name="days"/> working days after <paramref name="start"/>. Day 0 is the start itself when that is a working day; from a weekend or holiday it
+    /// rolls forward to the next working day, so the result is always a working day. Negative counts are treated as 0 and anything above <see cref="MaxDays"/> is
+    /// capped to it (the loop walks day by day, so a huge input must not become a CPU sink).
+    /// </summary>
     public static DateOnly Add(DateOnly start, int days)
     {
-        days = Math.Min(days, MaxDays); // the loop walks day by day, so a huge input must not become a CPU sink
+        days = Math.Clamp(days, 0, MaxDays);
         var d = start;
         while (days > 0)
         {
             d = d.AddDays(1);
             if (IsWorkDay(d)) days--;
         }
+        while (!IsWorkDay(d)) d = d.AddDays(1);
         return d;
     }
 

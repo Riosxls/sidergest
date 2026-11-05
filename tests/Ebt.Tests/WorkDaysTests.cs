@@ -14,11 +14,15 @@ public class WorkDaysTests
     }
 
     [Fact]
-    public void Zero_days_is_the_start_date_and_a_weekend_start_counts_from_the_next_working_day()
+    public void Zero_days_is_the_start_date_on_a_working_day_and_rolls_forward_from_a_weekend_or_holiday()
     {
         var saturday = new DateOnly(2026, 10, 24);
-        Assert.Equal(saturday, WorkDays.Add(saturday, 0));
-        Assert.Equal(new DateOnly(2026, 10, 26), WorkDays.Add(saturday, 1));
+        var monday = new DateOnly(2026, 10, 26);
+        Assert.Equal(monday, WorkDays.Add(saturday, 0)); // never a non-working day
+        Assert.Equal(monday, WorkDays.Add(monday, 0));
+        Assert.Equal(monday, WorkDays.Add(saturday, 1));
+        Assert.Equal(new DateOnly(2026, 11, 3), WorkDays.Add(new DateOnly(2026, 11, 2), 0)); // Finados (holiday) -> next working day
+        Assert.Equal(monday, WorkDays.Add(saturday, -5)); // negative counts as 0
     }
 
     [Fact]

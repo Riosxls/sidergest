@@ -10,6 +10,7 @@ public sealed class SalesException(int status, string message, string? field = n
     public static SalesException Invalid(string field, string message) => new(400, message, field);
     public static SalesException Conflict(string message) => new(409, message);
     public static SalesException NotFound(string what) => new(404, $"{what} not found");
+    public static SalesException Forbidden(string message) => new(403, message);
 }
 
 public sealed record LineSpec(decimal? OutsideDiameter = null, decimal? Thickness = null, decimal? Length = null, string? Standard = null, DeliveryCondition? Condition = null, string? SaleUnit = null,
@@ -50,8 +51,13 @@ public sealed record QuoteTotals(decimal Products, decimal Ipi, decimal Total, d
 
 public sealed record DuplicateInput(int? CustomerId = null);
 
-/// <summary>Exposure = Open (unshipped value of open orders) + Receivable (unpaid duplicatas of authorized NFs) + ThisOrder.</summary>
-public sealed record CreditCheck(decimal? Limit, decimal Open, decimal ThisOrder, bool Exceeded, string? LimitSource = null, decimal Receivable = 0m);
+/// <summary>Exposure = Open (unshipped value of open orders) + Receivable (unpaid duplicatas of authorized NFs) + ShippedNotInvoiced (goods that left but have no authorized NF yet; only counted while fiscal emission is on) + ThisOrder.</summary>
+public sealed record CreditCheck(decimal? Limit, decimal Open, decimal ThisOrder, bool Exceeded, string? LimitSource = null, decimal Receivable = 0m, decimal ShippedNotInvoiced = 0m)
+{
+    /// <summary>The exposure parts named in the block message; ShippedNotInvoiced only shows when there is something in it.</summary>
+    public string Breakdown(bool withThisOrder = false) =>
+        $"open orders {Open:0.00}, receivable {Receivable:0.00}{(ShippedNotInvoiced > 0 ? $", shipped not yet invoiced {ShippedNotInvoiced:0.00}" : "")}{(withThisOrder ? $", this order {ThisOrder:0.00}" : "")}";
+}
 
 public sealed record OrderLineProgress(int LineId, decimal Quantity, decimal FromStock, decimal Produced, decimal Shipped, decimal Planned, decimal Remaining, decimal Available, string? ProductionReference, ProductionOrderStatus? ProductionStatus, bool Ready);
 

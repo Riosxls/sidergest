@@ -15,7 +15,8 @@ public sealed partial class SalesService
     {
         var settings = await SettingsAsync(ct);
         await ValidateHeaderAsync(i.CustomerId, i.AddressId, i.PaymentTermId, ct);
-        if (i.ValidityDays is <= 0) throw SalesException.Invalid("validityDays", "Must be greater than zero");
+        EnsureValidityDays(i.ValidityDays);
+        EnsureFreight(i.Freight);
         var lines = await BuildLinesAsync(i.CustomerId, i.Lines, ct);
         return await InTransaction(async () =>
         {
@@ -40,7 +41,8 @@ public sealed partial class SalesService
     {
         var settings = await SettingsAsync(ct);
         await ValidateHeaderAsync(i.CustomerId, i.AddressId, i.PaymentTermId, ct);
-        if (i.ValidityDays is <= 0) throw SalesException.Invalid("validityDays", "Must be greater than zero");
+        EnsureValidityDays(i.ValidityDays);
+        EnsureFreight(i.Freight);
         var lines = await BuildLinesAsync(i.CustomerId, i.Lines, ct);
         return await InTransaction(async () =>
         {
@@ -107,27 +109,45 @@ public sealed partial class SalesService
     });
 
     /// <summary>
-    /// Mails a quote under the quote row lock. A Draft/Approved quote is registered as sent first and a Sent one only gets the "emailed" history entry; then
-    /// <paramref name="sendMail"/> runs, and if it throws the transaction rolls back so a failed mail leaves the quote untouched. Two simultaneous calls are serialized by the lock.
+    /// Mails a quote. Step 1 (own transaction, quote row lock): a Draft/Approved quote is registered as sent; a Draft that still needs the manager's approval is refused
+    /// with a clear 409 before anything is written. Step 2: the mail goes out with no transaction or lock open, so a slow SMTP server never holds the quote row.
+    /// If mailing fails after the registration was committed, the history gets a "falha no envio do e-mail" note and the error is rethrown (the quote stays Sent; mail it again).
+    /// A quote that was already Sent just gets the "emailed" entry once the mail left.
     /// </summary>
-    public Task<Quote> EmailAsync(int id, string sentTo, string list, string? user, Func<Task> sendMail, CancellationToken ct = default) =>
-        InTransaction(async () =>
+    public async Task<Quote> EmailAsync(int id, string sentTo, string list, string? user, Func<Task> sendMail, CancellationToken ct = default)
+    {
+        var registered = false;
+        var q = await InTransaction(async () =>
         {
-            var q = await LockQuoteAsync(id, ct);
-            if (q.Status is QuoteStatus.Draft or QuoteStatus.Approved)
+            var locked = await LockQuoteAsync(id, ct);
+            if (locked.Status is QuoteStatus.Draft or QuoteStatus.Approved)
             {
+                // Recomputed here, not read from the stored flag: prices and the approval limit may have moved since the quote was saved.
+                if (locked.Status == QuoteStatus.Draft && NeedsApprovalFor(Totals(locked), await SettingsAsync(ct)))
+                    throw SalesException.Conflict("Este orçamento precisa de autorização do gerente: envie para autorização antes de mandá-lo ao cliente");
                 await SendAsync(id, sentTo, $"Enviado por e-mail para {list}", user, ct);
-                if (q.Status != QuoteStatus.Sent) throw SalesException.Conflict("Este orçamento precisa da aprovação do desconto antes de ir ao cliente");
+                registered = true;
             }
-            else if (q.Status == QuoteStatus.Sent)
-            {
-                Log(SalesRecordKind.Quote, q.Id, "emailed", q.Status, q.Status, $"E-mail enviado para {list}", user);
-                await db.SaveChangesAsync(ct);
-            }
-            else throw SalesException.Conflict($"Orçamento {q.Status} não pode ser enviado");
-            await sendMail();
-            return q;
+            else if (locked.Status != QuoteStatus.Sent) throw SalesException.Conflict($"Orçamento {locked.Status} não pode ser enviado");
+            return locked;
         }, ct);
+        try
+        {
+            await sendMail();
+        }
+        catch
+        {
+            Log(SalesRecordKind.Quote, id, "email-failed", q.Status, q.Status, $"Falha no envio do e-mail para {list}", user);
+            await db.SaveChangesAsync(CancellationToken.None);
+            throw;
+        }
+        if (!registered)
+        {
+            Log(SalesRecordKind.Quote, id, "emailed", q.Status, q.Status, $"E-mail enviado para {list}", user);
+            await db.SaveChangesAsync(ct);
+        }
+        return q;
+    }
 
     public Task<Quote> ApproveAsync(int id, string? note, string? user, CancellationToken ct = default) => QuoteStep(id, "approved", note, user, ct, q =>
     {
@@ -264,7 +284,10 @@ public sealed partial class SalesService
 
     public Task<Quote> CancelQuoteAsync(int id, string? reason, string? user, CancellationToken ct = default) => QuoteStep(id, "cancelled", reason, user, ct, q =>
     {
-        if (!OpenQuote.Contains(q.Status) && q.Status is not (QuoteStatus.Rejected or QuoteStatus.Expired)) throw SalesException.Conflict($"Quote is {q.Status}");
+        // Only a quote that never reached the customer is "cancelled"; once it is Sent/Accepted/PurchaseOrder the outcome is a customer decision
+        // (recusou / desistiu / pediu alteração) and needs its own reason, so it goes through decline or revise instead.
+        if (q.Status is not (QuoteStatus.Draft or QuoteStatus.PendingApproval or QuoteStatus.Approved))
+            throw SalesException.Conflict($"Quote is {q.Status}; once it was sent to the customer, register the customer's decision (recusou, desistiu or pediu alteração) instead of cancelling");
         if (Clean(reason) is null) throw SalesException.Invalid("reason", "Required");
         q.Status = QuoteStatus.Cancelled;
         q.DecisionNote = Clean(reason);
