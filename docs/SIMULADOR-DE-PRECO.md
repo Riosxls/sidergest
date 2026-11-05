@@ -104,20 +104,66 @@ Antes de construir, os dados da empresa foram estudados. Estes foram os achados 
   pedido anterior. Nesses casos o simulador só precisa lembrar o último preço.
 - **O que não ajudou:** a quantidade comprada e o número de passadas de trefila não melhoraram a previsão e ficaram de fora.
 
-## 7. De onde vêm os dados
+## 7. Fontes e dados coletados
 
-O banco de dados do MetaGest hoje só tem registros de teste. Por isso o histórico real foi buscado nas planilhas da empresa, na pasta EBT:
+O banco de dados do MetaGest hoje só tem registros de teste (10 linhas de orçamento, todas a cerca de R$ 23,70 por kg). Por isso o
+histórico real foi buscado nas planilhas da empresa, todas dentro da pasta `EBT` (no computador do Italo:
+`C:\Users\italo\Desktop\EBT`). Os arquivos foram **apenas lidos**: nenhuma planilha foi alterada.
 
-1. **A planilha mestre de pedidos** (`PEDIDO DE VENDAS Anos 24 & 26 - EBT e BST.xlsx`): cerca de 150 abas mensais, de 2015 a 2026, com
-   diâmetro, espessura, comprimento, quantidade, unidade e valor unitário.
-2. **A pasta de Pedidos Internos de Venda** (`PEDIDOS DE VENDAS  BST 25 & 26`): cerca de 3.500 arquivos, um por pedido. Além do preço,
-   eles trazem a **especificação do material**, que a planilha mestre não tem. Só 1 em cada 3 desses pedidos aparece na planilha mestre,
-   então as duas fontes se complementam.
-3. **Os pedidos feitos no próprio MetaGest** (que não sejam de teste) entram sozinhos como fonte, sem precisar importar nada.
+### 7.1 Resumo
 
-No final, os dois conjuntos das planilhas viram cerca de **2.670 vendas únicas** (de outubro de 2015 a novembro de 2026), sendo cerca
-de 1.390 com a especificação conhecida. As repetições do mesmo cliente, mesma medida e mesmo preço são reunidas em uma única linha, ficando
-a data mais recente.
+| Fonte | Arquivos | Abas / registros lidos | Aproveitado |
+|---|---|---|---|
+| Planilha mestre de pedidos | 1 arquivo, com 200 abas | 147 abas mensais com o formato de controle de pedidos; 6.960 linhas com preço | 4.817 vendas válidas, sem repetições entre meses |
+| Pedidos Internos de Venda | 3.576 arquivos (um por pedido) | 3.576 pedidos lidos, cada um com a aba do pedido e a da ordem de fabricação | cerca de 3.400 pedidos válidos |
+| Plano Mestre | 1 arquivo, com 23 abas | só a aba de cálculo de peso | fórmula do peso (sem preços) |
+| Pedidos feitos no MetaGest | (banco de dados) | só os que não são de teste | entram sozinhos, sem importar |
+
+Juntando as duas fontes de planilhas, são cerca de **8.200 linhas**. Depois de reunir as repetições (mesmo cliente, mesma medida e mesmo
+preço, que aparecem em vários meses ou em vários pedidos), ficam **2.674 vendas únicas**, de **outubro de 2015 a novembro de 2026**,
+das quais **1.393 têm a especificação do material**.
+
+### 7.2 Planilha mestre de pedidos
+
+- **Arquivo:** `Pedidos de Vendas\PEDIDO DE VENDAS Anos 24 & 26 - EBT e BST.xlsx`.
+- **Conteúdo:** 200 abas. Uma aba por mês de controle de pedidos de clientes (de 2015 a 2026), mais abas de apoio (gráficos, compra de
+  matéria-prima, cesta básica e outras). Foram usadas as **147 abas mensais** que têm as colunas de diâmetro, espessura, comprimento,
+  unidade e valor unitário. A aba "Vendas Perdidas" foi examinada, mas **não** entrou no simulador.
+- **O que foi coletado de cada linha:** data do pedido, número do pedido, cliente, descrição do material, diâmetro, espessura,
+  comprimento, quantidade, unidade (kg ou peça) e valor unitário. Nas abas mais novas também existe o peso da peça e o preço por kg, que
+  serviram para conferir as contas.
+- **Limpeza:** foram descartadas linhas sem medida, sem preço, com espessura impossível (mais da metade do diâmetro) ou em unidades que
+  não são kg nem peça. O mesmo pedido aparece em meses seguidos (enquanto estava aberto), então essas repetições foram reunidas.
+- **Resultado:** 4.817 vendas válidas, de 2015 a 2026.
+
+### 7.3 Pedidos Internos de Venda
+
+- **Pasta:** `Pedidos de Vendas\PEDIDOS DE VENDAS  BST 25 & 26`, com **3.576 arquivos Excel**, um por pedido (por exemplo,
+  `PEDIDO 04679-26 Formigari 12,70 X 1,50 X 869.xlsx`). Os pedidos vão de 2016 a 2026.
+- **O que cada arquivo tem:** a aba "Pedido" (cliente, endereço, medidas do tubo, quantidade e unidade, especificação do material, data de
+  entrega, preço de venda, ICMS, IPI, prazo de pagamento, valor total, assinatura e data) e a aba "OP" (matéria-prima, tubo primário e
+  a lista de operações de fabricação).
+- **O que o simulador usa:** data, cliente, diâmetro, espessura, comprimento, quantidade, unidade, preço e **especificação do material**
+  (que a planilha mestre não tem).
+- **O que foi lido, mas não ajudou a prever o preço:** prazo de pagamento, IPI, quantidade e número de passadas de trefila (extraído da
+  lista de operações). Esses dados foram testados e **não** melhoraram a previsão, então ficaram de fora.
+- **Aproveitamento:** cerca de **3.400 pedidos válidos** dos 3.576 arquivos. Os demais foram descartados por falta de dados ou porque o
+  comprimento era "rolo" (bobina), sem medida em milímetros.
+- **Sobreposição:** só cerca de **1 em cada 3** desses pedidos também aparece na planilha mestre. Por isso as duas fontes foram usadas
+  juntas.
+
+### 7.4 Plano Mestre
+
+- **Arquivo:** `Plano Mestre.xls`, com 23 abas (máquinas, programação, necessidade de matéria-prima, ordens de fabricação, embalagem e
+  outras).
+- **O que foi usado:** apenas a aba **"Calculo peso Blank"**, para conferir a fórmula do peso (peso líquido e peso bruto com 2,8% de perda).
+  O sistema já fazia a mesma conta do peso líquido.
+- **O que foi descoberto:** o Plano Mestre **não tem nenhum preço**. É uma planilha de planejamento de produção.
+
+### 7.5 Pedidos feitos no próprio MetaGest
+
+Os pedidos de venda criados no sistema (que não sejam de teste) e que tenham tubo redondo com medidas e preço entram sozinhos como fonte
+do simulador, sem importar nada. Com o tempo, o histórico das planilhas perde importância e o do sistema passa a ser a principal base.
 
 ## 8. O quanto dá para confiar
 
