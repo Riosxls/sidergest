@@ -13,6 +13,7 @@ import '../widgets/page_column.dart';
 import '../widgets/pipeline.dart' show Tone, toneColors;
 import '../widgets/record_list.dart' show SimpleTable;
 import '../widgets/responsive.dart';
+import '../widgets/tube_diagram.dart';
 
 /// How the import button asks for the CSV; tests replace it (the system file dialog does not run there).
 Future<({String name, Uint8List bytes})?> Function() priceHistoryFilePicker = pickPriceHistoryFile;
@@ -349,11 +350,23 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
   Map<String, dynamic>? _data;
   String? _reportedPrice;
 
+  // The field being edited is the measure the drawing draws strong.
+  final _fd = FocusNode(), _ft = FocusNode(), _fl = FocusNode();
+  TubeMeasure? _focused;
+
   ApiClient get api => widget.session.api;
+
+  void _focusChanged() {
+    final m = _fd.hasFocus ? TubeMeasure.diameter : (_ft.hasFocus ? TubeMeasure.thickness : (_fl.hasFocus ? TubeMeasure.length : null));
+    if (m != _focused && mounted) setState(() => _focused = m);
+  }
 
   @override
   void initState() {
     super.initState();
+    for (final f in [_fd, _ft, _fl]) {
+      f.addListener(_focusChanged);
+    }
     if (_validation().ready) WidgetsBinding.instance.addPostFrameCallback((_) => _run());
   }
 
@@ -362,6 +375,9 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
     _timer?.cancel();
     for (final c in [_d, _t, _l, _q]) {
       c.dispose();
+    }
+    for (final f in [_fd, _ft, _fl]) {
+      f.dispose();
     }
     super.dispose();
   }
@@ -459,9 +475,10 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
     return v is num ? fmtDecimalInput(v) : null;
   }
 
-  Widget _numberField(String key, String label, TextEditingController c, String? error, {bool last = false, bool autofocus = false}) => TextField(
+  Widget _numberField(String key, String label, TextEditingController c, String? error, {bool last = false, bool autofocus = false, FocusNode? focusNode}) => TextField(
     key: ValueKey(key),
     controller: c,
+    focusNode: focusNode,
     autofocus: autofocus,
     keyboardType: const TextInputType.numberWithOptions(decimal: true),
     textInputAction: last ? TextInputAction.done : TextInputAction.next,
@@ -476,22 +493,42 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
     return LayoutBuilder(
       builder: (context, box) {
         final narrow = box.maxWidth < 520;
-        final w = narrow ? box.maxWidth : (box.maxWidth - 3 * AppSpacing.md) / 4;
+        // Wide: the drawing sits beside the four fields, like a dimensioned sketch; otherwise it comes first.
+        final sideBySide = box.maxWidth >= 720;
+        const drawingWidth = 300.0;
+        final fieldsWidth = sideBySide ? box.maxWidth - drawingWidth - AppSpacing.lg : box.maxWidth;
+        final perRow = fieldsWidth < 520 ? (fieldsWidth < 340 ? 1 : 2) : 4;
+        final w = perRow == 1 ? fieldsWidth : (fieldsWidth - (perRow - 1) * AppSpacing.md) / perRow;
         Widget sized(Widget child, [double? width]) => SizedBox(width: width ?? w, child: child);
+        final drawing = TubeDiagram(diameter: _d.text, thickness: _t.text, length: _l.text, highlight: _focused);
+        final fields = Wrap(
+          spacing: AppSpacing.md,
+          runSpacing: AppSpacing.md,
+          children: [
+            sized(_numberField('price-sim-diameter', 'Diâmetro externo (mm)', _d, v.diameter, autofocus: widget.diameter == null, focusNode: _fd)),
+            sized(_numberField('price-sim-thickness', 'Espessura (mm)', _t, v.thickness, focusNode: _ft)),
+            sized(_numberField('price-sim-length', 'Comprimento (mm)', _l, v.length, focusNode: _fl)),
+            sized(_numberField('price-sim-quantity', 'Quantidade (peças)', _q, v.quantity, last: true)),
+          ],
+        );
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Wrap(
-              spacing: AppSpacing.md,
-              runSpacing: AppSpacing.md,
-              children: [
-                sized(_numberField('price-sim-diameter', 'Diâmetro externo (mm)', _d, v.diameter, autofocus: widget.diameter == null)),
-                sized(_numberField('price-sim-thickness', 'Espessura (mm)', _t, v.thickness)),
-                sized(_numberField('price-sim-length', 'Comprimento (mm)', _l, v.length)),
-                sized(_numberField('price-sim-quantity', 'Quantidade (peças)', _q, v.quantity, last: true)),
-              ],
-            ),
+            if (sideBySide)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: fields),
+                  const SizedBox(width: AppSpacing.lg),
+                  SizedBox(width: drawingWidth, child: drawing),
+                ],
+              )
+            else ...[
+              Center(child: ConstrainedBox(constraints: BoxConstraints(maxWidth: narrow ? 260 : drawingWidth), child: drawing)),
+              const SizedBox(height: AppSpacing.md),
+              fields,
+            ],
             const SizedBox(height: AppSpacing.md),
             DropdownButtonFormField<String?>(
               key: const ValueKey('price-sim-spec'),
