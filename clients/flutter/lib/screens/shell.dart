@@ -68,7 +68,8 @@ const hiddenSection = '_module';
 
 /// Screens that share one sidebar entry. The first tab is the entry; every tab stays a screen of its own (links, alerts, pins and search still reach it).
 final tabGroups = <TabGroup>[
-  const TabGroup('Comercial', 'Expedição', Icons.local_shipping_outlined, [
+  // Shipping and the money that follows it (NF, contas a receber) share one entry.
+  const TabGroup('Comercial', 'Expedição e financeiro', Icons.local_shipping_outlined, [
     (id: 'deliveries', label: 'Entregas'),
     (id: 'certificates', label: 'Certificados'),
     (id: 'fiscal-documents', label: 'Notas fiscais'),
@@ -148,11 +149,11 @@ List<NavItem> _screens() => [
   NavItem('sales-pipeline', Icons.view_kanban_outlined, 'Funil de vendas', 'Comercial', (s, f, go) => SalesPipelineScreen(session: s)),
   NavItem('sales-quotes', Icons.request_quote_outlined, 'Orçamentos', 'Comercial', (s, f, go) => QuotesScreen(session: s)),
   NavItem('viability', Icons.fact_check_outlined, 'Análises de viabilidade', 'Comercial', (s, f, go) => ViabilityScreen(session: s, initialStatus: f)),
-  NavItem('sales-orders', Icons.receipt_long_outlined, 'Pedidos de venda', 'Comercial', (s, f, go) => SalesOrdersScreen(session: s)),
-  NavItem('deliveries', Icons.local_shipping_outlined, 'Entregas', 'Comercial', (s, f, go) => DeliveriesScreen(session: s)),
+  NavItem('sales-orders', Icons.receipt_long_outlined, 'Pedidos de venda', 'Comercial', (s, f, go) => SalesOrdersScreen(session: s, initialFilter: f)),
+  NavItem('deliveries', Icons.local_shipping_outlined, 'Entregas', 'Comercial', (s, f, go) => DeliveriesScreen(session: s, initialFilter: f)),
   NavItem('certificates', Icons.verified_outlined, 'Certificados de qualidade', 'Comercial', (s, f, go) => CertificatesScreen(session: s)),
   NavItem('fiscal-documents', Icons.description_outlined, 'Notas fiscais', 'Comercial', (s, f, go) => FiscalDocumentsScreen(session: s)),
-  NavItem('receivables', Icons.account_balance_wallet_outlined, 'Contas a receber', 'Comercial', (s, f, go) => ReceivablesScreen(session: s)),
+  NavItem('receivables', Icons.account_balance_wallet_outlined, 'Contas a receber', 'Comercial', (s, f, go) => ReceivablesScreen(session: s, initialFilter: f)),
   NavItem('report-material-consumption', Icons.scale_outlined, 'Consumo de material vendido', 'Comercial', (s, f, go) => MaterialConsumptionScreen(session: s)),
   NavItem('report-billing', Icons.bar_chart_outlined, 'Faturamento consolidado', 'Comercial', (s, f, go) => BillingSummaryScreen(session: s)),
   for (final spec in salesMasters) NavItem(spec.path, spec.icon, spec.title, 'Comercial', (s, f, go) => EntityListScreen(session: s, spec: spec)),

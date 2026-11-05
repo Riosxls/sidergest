@@ -11,6 +11,7 @@ import '../widgets/dash.dart';
 import 'dashboard.dart';
 import 'dashboard_data.dart';
 import 'quick_actions.dart';
+import 'sales_orders.dart' show SalesOrdersScreen;
 
 /// A navigation entry inside a [ModuleScreen].
 class ModuleLink {
@@ -138,9 +139,9 @@ class _ModuleScreenState extends State<ModuleScreen> {
 
   /// What needs action comes first; a count and the money behind it share one tile.
   List<GridItem> _commercial(CommercialDashboard d) => [
-    _tile(Icons.event_busy_outlined, 'Pedidos atrasados', '${d.k('lateOrders').toInt()}', _go('sales-orders'), true),
+    _tile(Icons.event_busy_outlined, 'Pedidos atrasados', '${d.k('lateOrders').toInt()}', _go('sales-orders', SalesOrdersScreen.lateFilter), true),
     _tile(Icons.gavel_outlined, 'Aprovações pendentes', '${d.k('pendingApprovals').toInt()}', _go('sales-quotes')),
-    _tile(Icons.local_shipping_outlined, 'Prontos para expedir', '${d.k('readyToShip').toInt()}', _go('deliveries')),
+    _tile(Icons.local_shipping_outlined, 'Prontos para expedir', '${d.k('readyToShip').toInt()}', _go('sales-orders', SalesOrdersScreen.readyFilter)),
     _tile(Icons.request_quote_outlined, 'Orçamentos abertos', '${d.k('openQuotes').toInt()}', _go('sales-quotes'), false, fmtMoney(d.k('openQuotesValue'))),
     _tile(Icons.receipt_long_outlined, 'Pedidos abertos', '${d.k('openOrders').toInt()}', _go('sales-orders'), false, fmtMoney(d.k('openOrdersValue'))),
     _tile(Icons.draw_outlined, 'Viabilidades em assinatura', '${d.feasibilityInReview}', _go('viability', 'InReview')),

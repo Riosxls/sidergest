@@ -102,10 +102,10 @@ void main() {
   testWidgets('the app bar names the module, the group and the tab', (tester) async {
     await pumpShell(tester, 'Admin');
     await openScreen(tester, 'Comercial', 'deliveries');
-    expect(find.text('Comercial › Expedição › Entregas'), findsOneWidget);
+    expect(find.text('Comercial › Expedição e financeiro › Entregas'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('tab-certificates')));
     await tester.pumpAndSettle();
-    expect(find.text('Comercial › Expedição › Certificados'), findsOneWidget);
+    expect(find.text('Comercial › Expedição e financeiro › Certificados'), findsOneWidget);
     await openScreen(tester, 'Estoque', 'balances');
     // A tab named like its group is not said twice.
     expect(find.text('Estoque › Saldos'), findsOneWidget);
@@ -229,7 +229,7 @@ void main() {
   testWidgets('a group is one card on the phone overview, naming its tabs', (tester) async {
     await pumpShell(tester, 'Admin', size: const Size(400, 800));
     await openModule(tester, 'Comercial');
-    expect(find.text('Expedição'), findsWidgets);
+    expect(find.text('Expedição e financeiro'), findsWidgets);
     expect(find.text('Entregas · Certificados · Notas fiscais · Contas a receber'), findsOneWidget);
   });
 
@@ -240,7 +240,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('pin-screen')));
     await tester.pumpAndSettle();
-    expect(find.text('Expedição · Certificados'), findsOneWidget);
+    expect(find.text('Expedição e financeiro · Certificados'), findsOneWidget);
     await tester.tap(find.byTooltip('Recolher menu'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('nav-pin-certificates-')), findsOneWidget);
