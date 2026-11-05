@@ -34,3 +34,4 @@ releases/
 
 # Real customer prices exported for the price suggestion
 price-history*.csv
+process-templates*.csv

@@ -221,6 +221,24 @@ The result says read / imported / updated / duplicates / skipped.
 - Saved simulations (table `price_simulations`, reference data like the history, never deleted by the data reset): `POST /api/sales/price-simulations` (201 `{id}`), `GET /api/sales/price-simulations?take=20`
   (newest first, max 100) and `DELETE /api/sales/price-simulations/{id}` (its author, Admin or SalesManager). Policy `sales`; creation is audited.
 - It is reference data, like the price list: the data reset never deletes it, and a restore brings it back with the rest of the database.
+## Process of the OF (requisitos / tolerância / máquina)
+
+The "PROCESSOS SECUNDÁRIOS" table of the OF paper needs a requirement (tolerância) and a machine on every operation. In the legacy OFs the tolerance depends on the customer and the tube, so the
+suggestion learns from them:
+
+1. **Export** (once, and again when old OFs are added): `powershell -File scripts\export-process-templates.ps1 [-PedidosFolder <folder>] [-Out process-templates.csv]`. It reads the "Pedido Interno de
+   Venda" workbooks as zip files (no Excel; about 30 s for 3,500 files), one CSV row per operation (`of;date;customer;diameter;thickness;length;spec;seq;description;tolerance;start;end;resource`).
+   The file holds customer data: `process-templates*.csv` is git-ignored, never commit it.
+2. **Import** (admin): `POST /api/production/process-templates/import` (multipart `file`, UTF-8 or Windows-1252, `;` `,` or tab). One template per customer and tube; the latest OF date wins, so the same
+   file can be imported again. The answer counts `read`, `templates`, `updated`, `operations` and the skipped rows by reason (`medidas`, `operação`, `data`). `GET /api/production/process-templates/summary` shows
+   what is loaded. Reference data: the data reset never deletes it and a restore brings it back.
+3. **What the suggester does** for a new OF (or `POST /api/production/orders/{id}/process/suggest`, which saves nothing): copies the process of the last OF of the same customer and product, else the legacy
+   process of the same customer and tube, else the most common legacy process of that tube, else the generic rules (Perfilar/Trefilar "± 0,10", Endireitar e Cortar "+30" from 2500 mm, "± 0,05" from 500 mm,
+   "± 0,50" below, Inspeção Final "-"). Machines come from the machine names (perfiladeira, trefila, endireitadeira/corte, inspeção, escova, politriz), not from codes.
+4. **Complete the OFs already created** (admin, Configurações > Administração): `POST /api/production/orders/bulk/complete-requirements` with `{"apply": false}` previews, `true` applies. Only OFs that are still
+   Created, standard, without shop-floor reports; only EMPTY tolerances/machines are filled (from the same suggestion), nothing written is overwritten, and the old "Visual/Dimensional" tolerance on the inspection
+   becomes "-" with the inspection machine. The run is audited.
+
 ## E-mail (quote sending)
 
 The API sends the quote PDF to the customer from one company mailbox (`Ebt.Core/Mail`, `POST /api/sales/quotes/{id}/email`). Set it in `.env`, then recreate the `api` container (see CLAUDE.md, "Rebuilding the API container"):
