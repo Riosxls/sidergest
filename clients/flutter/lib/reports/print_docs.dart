@@ -59,6 +59,19 @@ String? quotePrintWarning(Map<String, dynamic> q) {
   };
 }
 
+/// The quote as it will be once the e-mail registers the send: Sent, with the send time and the validity the server will set (today + validity
+/// days when none was set). The PDF that goes out with that e-mail is built from this copy, so it carries no draft banner and no "dias após o envio".
+Map<String, dynamic> quoteAsSent(Map<String, dynamic> q, {DateTime? now}) {
+  final at = now ?? DateTime.now();
+  final days = q['validityDays'];
+  return {
+    ...q,
+    'status': 'Sent',
+    'sentAt': at.toUtc().toIso8601String(),
+    'validUntil': q['validUntil'] ?? (days is int ? isoDate(DateTime(at.year, at.month, at.day + days)) : null),
+  };
+}
+
 const _generalConditions =
     'Preços sujeitos a confirmação na data do pedido. Impostos conforme legislação vigente. '
     'Prazo de entrega em dias úteis, contado a partir da aprovação do orçamento pelo cliente e da aprovação de desenhos, quando aplicável.';

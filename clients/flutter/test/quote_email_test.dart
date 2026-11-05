@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:ebt_engenharia/screens/sales_quotes.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'sales_more_support.dart';
@@ -95,5 +97,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('recusou o usuário ou a senha'), findsOneWidget);
     expect(find.textContaining('avise o suporte'), findsNothing);
+    // The dialog stays open with what was typed, so the send can be retried.
+    expect(find.byKey(const ValueKey('email-error')), findsOneWidget);
+    expect(tester.widget<TextFormField>(find.byKey(const ValueKey('email-to'))).controller!.text, 'compras@bts.com');
+    expect(find.byKey(const ValueKey('email-send')), findsOneWidget);
+  });
+
+  testWidgets('Esc cannot close the e-mail dialog while the send is in flight', (tester) async {
+    final f = await _open(tester);
+    final release = Completer<void>();
+    f.asyncOverrides['POST /api/sales/quotes/5/email'] = (_) async {
+      await release.future;
+      f.quote
+        ..['status'] = 'Sent'
+        ..['validUntil'] = '2099-01-01';
+      return jsonResp(f.quote);
+    };
+    await tester.tap(find.byKey(const ValueKey('quote-email')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('email-send')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text('Enviando…'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Enviar orçamento por e-mail'), findsOneWidget);
+    release.complete();
+    for (var i = 0; i < 30 && find.text('Enviar orçamento por e-mail').evaluate().isNotEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('Enviar orçamento por e-mail'), findsNothing);
+    expect(find.text('E-mail enviado e envio registrado'), findsOneWidget);
   });
 }

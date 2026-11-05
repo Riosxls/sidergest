@@ -60,6 +60,35 @@ void main() {
     });
   });
 
+  group('quoteAsSent (the PDF that goes out with the e-mail)', () {
+    final now = DateTime(2026, 11, 5, 10);
+
+    test('a draft or approved quote is printed as Sent: no draft banner, validity dated from today', () {
+      for (final status in ['Draft', 'Approved']) {
+        final q = {...defaultQuote(), 'status': status, 'validityDays': 15, 'validUntil': null};
+        expect(quotePrintWarning(q), startsWith('RASCUNHO'), reason: status);
+        final sent = quoteAsSent(q, now: now);
+        expect(quotePrintWarning(sent), isNull, reason: status);
+        expect(sent['status'], 'Sent');
+        expect(sent['validUntil'], '2026-11-20');
+        expect(sent['sentAt'], isNotNull);
+        expect(q['status'], status, reason: 'the original is left alone');
+      }
+    });
+
+    test('a validity that is already set is kept', () {
+      final sent = quoteAsSent({...defaultQuote(), 'validityDays': 15, 'validUntil': '2026-12-01'}, now: now);
+      expect(sent['validUntil'], '2026-12-01');
+    });
+
+    test('the sent copy builds without the banner (smaller than the draft)', () async {
+      final draft = {...defaultQuote(), 'status': 'Draft', 'validityDays': 15};
+      final asDraft = await buildQuotePdf(_api([]), draft);
+      final asSent = await buildQuotePdf(_api([]), quoteAsSent(draft, now: now));
+      expect(asSent.length, lessThan(asDraft.length));
+    });
+  });
+
   group('quote PDF', () {
     Map<String, dynamic> quote(String status) => {...defaultQuote(), 'status': status};
 

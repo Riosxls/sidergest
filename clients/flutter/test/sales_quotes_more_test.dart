@@ -63,8 +63,8 @@ void main() {
     });
 
     test('quoteAlert lists every alert, most urgent first', () {
-      expect(quoteAlert({'status': 'PendingApproval'}), 'Acima do limite');
-      expect(quoteAlert({'status': 'Draft', 'needsApproval': true}), 'Acima do limite');
+      expect(quoteAlert({'status': 'PendingApproval'}), 'Desconto acima do limite');
+      expect(quoteAlert({'status': 'Draft', 'needsApproval': true}), 'Desconto acima do limite');
       expect(quoteAlert({'status': 'Sent', 'followUp': true, 'expiring': true}), 'Cobrar resposta · Vence em breve');
       expect(quoteAlert({'status': 'Sent', 'expiring': true}), 'Vence em breve');
       expect(quoteAlert({'status': 'Sent'}), '');
@@ -87,7 +87,7 @@ void main() {
       final f = _fake('Draft');
       f.quote['needsApproval'] = true;
       await pumpMore(tester, f, (s) => QuotesScreen(session: s));
-      expect(find.text('Acima do limite'), findsOneWidget);
+      expect(find.text('Desconto acima do limite'), findsOneWidget);
       await tapKey(tester, 'filter-mine');
       expect(f.log.last.url.queryParameters['mine'], 'true');
       await tapKey(tester, 'filter-follow-up');
@@ -496,8 +496,9 @@ void main() {
       final f = _fake('Accepted');
       await _openQuote(tester, f);
       expect(find.byKey(const ValueKey('quote-po')), findsNothing);
-      expect(find.text('Nenhum pedido de compra anexado (PDF, imagem ou texto)'), findsNothing); // the step card carries the buttons
-      await tapKey(tester, 'quote-po-start-text');
+      expect(find.text('Nenhum pedido de compra anexado (PDF, imagem ou texto)'), findsOneWidget);
+      // The text button on the section (the staged way) still saves the text alone and leaves the registration for later.
+      await tapKey(tester, 'quote-po-text');
       expect(find.text('Texto do pedido de compra'), findsWidgets);
       await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Pedido 77 do cliente');
       await tapText(tester, 'Salvar');
@@ -670,7 +671,7 @@ void main() {
       await tester.pumpAndSettle();
       await menu(tester, 'Excluir');
       expect(find.text('Excluir PROP 31?'), findsOneWidget);
-      expect(find.text('O rascunho é apagado definitivamente.'), findsOneWidget);
+      expect(find.text('O orçamento e o histórico dele somem de vez. Não dá para desfazer.'), findsOneWidget);
       await tapKey(tester, 'confirm-step');
       expect(f.called('DELETE', '/api/sales/quotes/5'), isTrue);
       expect(find.text('Orçamento excluído'), findsOneWidget);

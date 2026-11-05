@@ -9,6 +9,7 @@ import 'package:ebt_engenharia/screens/sales_quotes.dart';
 import 'package:ebt_engenharia/screens/shell.dart';
 import 'package:ebt_engenharia/session.dart';
 import 'package:ebt_engenharia/widgets/pipeline.dart' show StatusBadge;
+import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -379,6 +380,7 @@ void main() {
     expect(quotePath('Sent'), (1, null));
     expect(quotePath('Accepted'), (3, null));
     expect(quotePath('PurchaseOrder'), (4, null));
+    expect(quotePath('Converted'), (5, null)); // the order exists: "Pedido de venda" is done
     expect(quotePath('Rejected'), (2, 'Perdida'));
     expect(quotePath('Cancelled'), (0, 'Cancelada'));
     expect(quotePath('Cancelled', superseded: true), (0, 'Substituída'));
@@ -400,7 +402,12 @@ void main() {
     expect(find.text('Vence em breve'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('advance-Quote-5')));
     await tester.pumpAndSettle();
-    expect(find.text('Cliente aprovou PROP 31?'), findsNothing); // no dialog: the approval is posted right away
+    // The approval starts the delivery-time clock: the card asks first, with the same confirmation as the quote screen.
+    expect(find.text('Cliente aprovou PROP 31?'), findsOneWidget);
+    expect(find.textContaining('passam a contar a partir de hoje'), findsOneWidget);
+    expect(fake.log.where((r) => r.url.path.endsWith('/accept')), isEmpty);
+    await tester.tap(find.byKey(const ValueKey('confirm-step')));
+    await tester.pumpAndSettle();
     expect(fake.body(fake.last('POST', '/api/sales/quotes/5/accept')).containsKey('customerPo'), isFalse);
   });
 
@@ -425,7 +432,7 @@ void main() {
     final fake = SalesFake()..quoteStatus = 'Accepted';
     await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
     expect(find.text('Aprovada pelo cliente · falta o pedido de compra'), findsOneWidget);
-    expect(find.textContaining('Passo 1 de 2'), findsOneWidget);
+    expect(find.textContaining('Registre o pedido de compra que o cliente enviou'), findsOneWidget);
     expect(find.byKey(const ValueKey('quote-po-start')), findsOneWidget);
     // the step card carries the buttons; the section only appears once something is attached
     expect(find.byKey(const ValueKey('quote-po-attach')), findsNothing);
@@ -471,7 +478,7 @@ void main() {
       ..requestFileName = 'pedido-4521.pdf';
     await pumpScreen(tester, withFile, (s) => QuoteScreen(session: s, id: 5));
     expect(find.textContaining('pedido-4521.pdf'), findsOneWidget);
-    expect(find.textContaining('Passo 2 de 2'), findsOneWidget);
+    expect(find.textContaining('Confira o anexo abaixo'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('quote-po')));
     await tester.pumpAndSettle();
     await skipGate(tester);
@@ -489,20 +496,47 @@ void main() {
   });
 
   testWidgets('dragging an order card onto production releases it', (tester) async {
-    final fake = SalesFake();
+    // A computer: the mouse grabs the card at once. (The tests run as Android by default, where a card is held first.)
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      final fake = SalesFake();
+      await pumpScreen(tester, fake, (s) => SalesPipelineScreen(session: s));
+      final card = find.byKey(const ValueKey('card-Order-9'));
+      final target = tester.getCenter(find.byKey(const ValueKey('stage-production')));
+      final gesture = await tester.startGesture(tester.getCenter(card));
+      await tester.pump(const Duration(milliseconds: 50));
+      await gesture.moveTo(target);
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.text('Liberar PV 9 para produção?'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('confirm-step')));
+      await tester.pumpAndSettle();
+      expect(fake.body(fake.last('POST', '/api/sales/orders/9/release'))['useStock'], isTrue);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('on a touch tablet a swipe does not grab a card: it has to be held first, however wide the screen', (tester) async {
+    final fake = SalesFake(); // the test platform is Android and the window is 1700 px wide
     await pumpScreen(tester, fake, (s) => SalesPipelineScreen(session: s));
     final card = find.byKey(const ValueKey('card-Order-9'));
     final target = tester.getCenter(find.byKey(const ValueKey('stage-production')));
-    final gesture = await tester.startGesture(tester.getCenter(card));
+    final swipe = await tester.startGesture(tester.getCenter(card));
     await tester.pump(const Duration(milliseconds: 50));
-    await gesture.moveTo(target);
+    await swipe.moveTo(target);
     await tester.pump();
-    await gesture.up();
+    await swipe.up();
+    await tester.pumpAndSettle();
+    expect(find.text('Liberar PV 9 para produção?'), findsNothing);
+    final held = await tester.startGesture(tester.getCenter(card));
+    await tester.pump(const Duration(milliseconds: 700));
+    await held.moveTo(target);
+    await tester.pump();
+    await held.up();
     await tester.pumpAndSettle();
     expect(find.text('Liberar PV 9 para produção?'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('confirm-step')));
-    await tester.pumpAndSettle();
-    expect(fake.body(fake.last('POST', '/api/sales/orders/9/release'))['useStock'], isTrue);
   });
 
   testWidgets('discounted draft goes to approval and a manager approves it', (tester) async {

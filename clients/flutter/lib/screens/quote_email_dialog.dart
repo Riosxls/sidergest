@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api.dart' show friendlyError;
 import '../theme_tokens.dart';
 import '../widgets/responsive.dart';
 
@@ -16,9 +17,9 @@ class QuoteEmailDialog extends StatefulWidget {
   /// The send also starts the quote's validity (a draft or approved quote); false when it was already sent.
   final bool registers;
 
-  /// Does the sending while the dialog stays open showing a busy state; true closes the dialog, false keeps it for another try.
+  /// Sends the mail while the dialog stays open showing a busy state (a failure is shown inside it and nothing typed is lost); the dialog closes with what it returns.
   /// Without it the dialog just returns the typed form.
-  final Future<bool> Function(Map<String, String> form)? onSend;
+  final Future<Object?> Function(Map<String, String> form)? onSend;
 
   @override
   State<QuoteEmailDialog> createState() => QuoteEmailDialogState();
@@ -31,6 +32,7 @@ class QuoteEmailDialogState extends State<QuoteEmailDialog> {
   late final _body = TextEditingController(text: widget.body);
   final _form = GlobalKey<FormState>();
   bool _busy = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -59,13 +61,20 @@ class QuoteEmailDialogState extends State<QuoteEmailDialog> {
       Navigator.pop(context, form);
       return;
     }
-    setState(() => _busy = true);
-    final ok = await send(form);
-    if (!mounted) return;
-    if (ok) {
-      Navigator.pop(context, form);
-    } else {
-      setState(() => _busy = false);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final r = await send(form);
+      if (mounted) Navigator.pop(context, r ?? form);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = friendlyError(e);
+        });
+      }
     }
   }
 
@@ -88,8 +97,11 @@ class QuoteEmailDialogState extends State<QuoteEmailDialog> {
     );
   }
 
+  // Esc, a tap outside or the back button must not close the dialog while the mail is on its way: the result would be lost.
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => PopScope(canPop: !_busy, child: _dialog(context));
+
+  Widget _dialog(BuildContext context) => AlertDialog(
     icon: const Icon(Icons.forward_to_inbox),
     title: const Text('Enviar orçamento por e-mail'),
     content: DialogBody(
@@ -140,6 +152,14 @@ class QuoteEmailDialogState extends State<QuoteEmailDialog> {
                   Expanded(child: Text('Anexo: ${widget.fileName}', style: Theme.of(context).textTheme.bodySmall)),
                 ],
               ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Semantics(
+                    liveRegion: true,
+                    child: Text(_error!, key: const ValueKey('email-error'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  ),
+                ),
             ],
           ),
         ),
@@ -153,7 +173,7 @@ class QuoteEmailDialogState extends State<QuoteEmailDialog> {
         key: const ValueKey('email-send'),
         onPressed: _busy ? null : _submit,
         icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send),
-        label: Text(_busy ? 'Enviando...' : 'Enviar'),
+        label: Text(_busy ? 'Enviando…' : 'Enviar'),
       ),
     ],
   );

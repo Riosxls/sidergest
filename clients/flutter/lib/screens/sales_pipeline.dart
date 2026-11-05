@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart' show GestureBinding, PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -10,7 +11,6 @@ import '../theme_tokens.dart';
 import '../widgets/actions.dart';
 import '../widgets/entity_form.dart';
 import '../widgets/pipeline.dart';
-import '../widgets/responsive.dart';
 import 'certificates.dart';
 import 'sales_common.dart';
 import 'sales_quotes.dart';
@@ -73,6 +73,37 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
     unawaited(_reload());
   }
 
+  /// Whether the server can send e-mail (SMTP set up): then "send to the customer" opens the quote screen and its e-mail dialog.
+  late final Future<bool> _mailOn = _fetchMailOn();
+
+  Future<bool> _fetchMailOn() async {
+    try {
+      final r = await api.get('/api/system/mail');
+      return r is Map<String, dynamic> && r['enabled'] == true;
+    } catch (e) {
+      debugPrint('sales_pipeline: mail status lookup failed, a send is only registered: $e');
+      return false;
+    }
+  }
+
+  static const _columnWidth = 272.0;
+  static const _columnGap = 10.0;
+
+  /// A mouse wheel only scrolls up and down; over the kanban (outside a column that has more cards to scroll) it moves the columns sideways.
+  void _wheelToHorizontal(PointerSignalEvent e) {
+    if (e is! PointerScrollEvent || e.scrollDelta.dy == 0 || !_kanbanScroll.hasClients) return;
+    GestureBinding.instance.pointerSignalResolver.register(e, (event) {
+      final p = _kanbanScroll.position;
+      _kanbanScroll.jumpTo((p.pixels + (event as PointerScrollEvent).scrollDelta.dy).clamp(p.minScrollExtent, p.maxScrollExtent));
+    });
+  }
+
+  void _jumpTo(int column) {
+    if (!_kanbanScroll.hasClients) return;
+    final p = _kanbanScroll.position;
+    unawaited(_kanbanScroll.animateTo((column * (_columnWidth + _columnGap)).clamp(p.minScrollExtent, p.maxScrollExtent), duration: const Duration(milliseconds: 250), curve: Curves.easeOut));
+  }
+
   @override
   void dispose() {
     _kanbanScroll.dispose();
@@ -81,6 +112,12 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
 
   ApiClient get api => widget.session.api;
   Session get s => widget.session;
+
+  /// "1 orçamento", "3 orçamentos".
+  static String _count(Object? n, String one, String many) => '$n ${n == 1 ? one : many}';
+
+  /// A phone or a touch tablet has no mouse: cards are held (long press) before they move, so a swipe still scrolls.
+  bool get _touch => const {TargetPlatform.android, TargetPlatform.iOS}.contains(Theme.of(context).platform);
 
   Future<void> _reload() async {
     if (!mounted) return;
@@ -130,14 +167,23 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
     }
   }
 
+  /// Whether this user may move a card out of [stage]; the arrow and the drag exist only for those who may, so a click is never silently ignored.
+  bool _canAdvance(String stage) => switch (stage) {
+    'quote' || 'sent' || 'accepted' || 'po' => s.canSell,
+    'order' => s.canReleaseSales,
+    'certificate' => s.canCertificate,
+    _ => false,
+  };
+
   Future<void> _advanceStep(Map<String, dynamic> c, String from) async {
     final ref = c['reference'];
     final id = c['id'];
     Future<dynamic>? call;
     String? success;
+    // A move that reaches this point without the permission (a stale card, a role change) is answered, not ignored.
+    if (!_canAdvance(from)) return showError(context, 'Sem permissão para esta etapa');
     switch (from) {
       case 'quote':
-        if (!s.canSell) return;
         if (c['status'] == 'PendingApproval') {
           if (!s.canApproveSales) return showError(context, '$ref aguarda autorização do gerente comercial');
           if (!await confirmStep(
@@ -153,45 +199,53 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
           break;
         }
         final q = await api.get('/api/sales/quotes/$id') as Map<String, dynamic>;
+        final mail = await _mailOn;
         if (!mounted) return;
         final approval = q['status'] == 'Draft' && q['needsApproval'] == true;
+        if (!approval && mail) {
+          // The system sends the e-mail with the PDF from the quote screen: opening it there keeps the e-mail dialog, instead of only registering a send.
+          await openQuote(context, s, id as int);
+          return _reload();
+        }
+        final to = q['contactEmail'] ?? q['contactName'] ?? 'o contato do cliente';
         if (!await confirmStep(
           context,
-          title: approval ? 'Enviar $ref para autorização?' : 'Enviar $ref ao cliente?',
+          title: approval ? 'Enviar $ref para autorização?' : 'Registrar envio de $ref?',
           message: approval
               ? 'O desconto passa do limite; o gerente comercial precisa autorizar antes.'
-              : 'Será registrada como enviada para ${q['contactEmail'] ?? q['contactName'] ?? 'o contato do cliente'} e a validade começa hoje.',
-          confirmLabel: 'Enviar',
+              : 'O sistema não envia e-mail: isto só registra que o orçamento foi enviado para $to e a validade começa hoje. Envie o PDF pelo seu programa de e-mail.',
+          confirmLabel: approval ? 'Enviar' : 'Registrar envio',
           icon: Icons.send,
         )) {
           return;
         }
         call = api.post('/api/sales/quotes/$id/send', {'sentTo': q['contactEmail'] ?? q['contactName']});
-        success = approval ? 'Enviada para autorização' : 'Orçamento enviado ao cliente';
+        success = approval ? 'Enviada para autorização' : 'Envio registrado (o sistema não envia e-mail)';
       case 'sent':
-        if (!s.canSell) return;
+        // The approval starts the delivery-time clock: same confirmation (with the date) as on the quote screen.
+        if (!await confirmCustomerApproval(context, '$ref')) return;
         call = api.post('/api/sales/quotes/$id/accept', {});
         success = 'Aprovação do cliente registrada';
       case 'accepted':
-        if (!s.canSell) return;
         // The purchase order file/text is attached on the quote itself.
         await openQuote(context, s, id as int);
         return _reload();
       case 'po':
-        if (!s.canSell) return;
         if (!await confirmStep(
           context,
           title: 'Gerar pedido de venda?',
-          message: 'Os itens de $ref viram um pedido de venda.',
+          message: 'Os itens de $ref viram um pedido de venda. O limite de crédito do cliente é verificado agora.',
           confirmLabel: 'Gerar pedido',
           icon: Icons.receipt_long,
         )) {
           return;
         }
-        call = api.post('/api/sales/quotes/$id/convert', {});
-        success = 'Pedido de venda criado';
+        if (!mounted) return;
+        // The credit limit may refuse it: a manager is offered the override, anyone else is told whom to ask.
+        final order = await convertQuote(context, s, id as int);
+        if (order != null && mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Pedido ${order['reference']} criado')));
+        return _reload();
       case 'order':
-        if (!s.canReleaseSales) return;
         if (!await confirmStep(
           context,
           title: 'Liberar $ref para produção?',
@@ -204,7 +258,6 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
         call = api.post('/api/sales/orders/$id/release', {'useStock': true});
         success = 'Pedido liberado para produção';
       case 'certificate':
-        if (!s.canCertificate) return;
         final drafts = await api.list('/api/sales/certificates', query: {'orderId': id, 'status': 'Draft'});
         if (!mounted) return;
         if (drafts.items.isNotEmpty) {
@@ -254,15 +307,40 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
               ),
             ),
           _kpis(data['kpis'] as Map<String, dynamic>),
+          // The columns run wider than the window: a chip per stage (with how many cards it holds) jumps to it.
+          SizedBox(
+            height: 40,
+            child: ListView(
+              key: const ValueKey('stage-chips'),
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                for (final (i, st) in (data['stages'] as List).cast<Map<String, dynamic>>().indexed)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ActionChip(
+                      key: ValueKey('stage-chip-${st['key']}'),
+                      visualDensity: VisualDensity.compact,
+                      avatar: Icon(_stageIcons[st['key']], size: 16),
+                      label: Text('${pipelineStages[st['key']] ?? st['key']} · ${st['count']}'),
+                      onPressed: () => _jumpTo(i),
+                    ),
+                  ),
+              ],
+            ),
+          ),
           Expanded(
-            child: Scrollbar(
-              controller: _kanbanScroll,
-              child: ListView(
-                key: const ValueKey('kanban'),
+            child: Listener(
+              onPointerSignal: _wheelToHorizontal,
+              child: Scrollbar(
                 controller: _kanbanScroll,
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.all(12),
-                children: [for (final st in (data['stages'] as List).cast<Map<String, dynamic>>()) _column(st)],
+                child: ListView(
+                  key: const ValueKey('kanban'),
+                  controller: _kanbanScroll,
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.all(12),
+                  children: [for (final st in (data['stages'] as List).cast<Map<String, dynamic>>()) _column(st)],
+                ),
               ),
             ),
           ),
@@ -273,7 +351,9 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
 
   /// Filters and actions stay mounted while the board reloads, so the customer field keeps its focus and text.
   Widget _filterBar(BuildContext context) {
-    final touch = isTouchPlatform;
+    final touch = _touch;
+    final data = _data;
+    final canMove = data != null && (data['stages'] as List).cast<Map<String, dynamic>>().any((st) => _canAdvance(st['key'] as String));
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
       child: Wrap(
@@ -295,14 +375,16 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
             ),
           ),
           IconButton(tooltip: 'Atualizar', onPressed: _loading ? null : _reload, icon: const Icon(Icons.refresh)),
-          Tooltip(
-            // A phone has no mouse to drag with: the card is held (long press) before it moves.
-            message: touch
-                ? 'Segure um cartão e arraste para a próxima etapa, ou use a seta do cartão.'
-                : 'Arraste um cartão para a próxima etapa ou use a seta do cartão.',
-            triggerMode: TooltipTriggerMode.tap,
-            child: const Padding(padding: EdgeInsets.all(AppSpacing.sm), child: Icon(Icons.info_outline, size: 20)),
-          ),
+          // Someone who cannot move cards (a reader) is not told to.
+          if (canMove || data == null)
+            Tooltip(
+              // A phone has no mouse to drag with: the card is held (long press) before it moves.
+              message: touch
+                  ? 'Segure um cartão e arraste para a próxima etapa, ou use a seta do cartão.'
+                  : 'Arraste um cartão para a próxima etapa ou use a seta do cartão.',
+              triggerMode: TooltipTriggerMode.tap,
+              child: const Padding(padding: EdgeInsets.all(AppSpacing.sm), child: Icon(Icons.info_outline, size: 20)),
+            ),
           if (s.canSell)
             FilledButton.icon(key: const ValueKey('pipeline-new'), onPressed: _new, icon: const Icon(Icons.add), label: const Text('Novo orçamento')),
         ],
@@ -324,13 +406,13 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
           KpiTile(
             label: 'Orçamentos em aberto',
             value: fmtMoney(k['openQuotesValue']),
-            caption: '${k['openQuotes']} orçamentos$conversion',
+            caption: '${_count(k['openQuotes'], 'orçamento', 'orçamentos')}$conversion',
             icon: Icons.request_quote_outlined,
           ),
           KpiTile(
             label: 'Pedidos em aberto',
             value: fmtMoney(k['openOrdersValue']),
-            caption: '${k['openOrders']} pedidos',
+            caption: _count(k['openOrders'], 'pedido', 'pedidos'),
             icon: Icons.receipt_long_outlined,
             tone: Tone.progress,
           ),
@@ -364,8 +446,8 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
         opacity: _dragFrom != null && _dragFrom != key && _moves[_dragFrom] != key ? 0.45 : 1,
         child: Container(
         key: ValueKey('stage-$key'),
-        width: 272,
-        margin: const EdgeInsets.only(right: 10),
+        width: _columnWidth,
+        margin: const EdgeInsets.only(right: _columnGap),
         decoration: BoxDecoration(
           color: _hover == key ? toneColors(context, tone).$1 : theme.colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(AppRadius.card),
@@ -405,14 +487,16 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
 
   Widget _draggable(Map<String, dynamic> c, String stage) {
     final card = _card(c, stage);
-    if (!_moves.containsKey(stage)) return card;
+    // No drag for a user who may not move the card out of this stage.
+    if (!_moves.containsKey(stage) || !_canAdvance(stage)) return card;
     final feedback = Material(
       elevation: 8,
       borderRadius: BorderRadius.circular(10),
       child: SizedBox(width: 256, child: card),
     );
     final ghost = Opacity(opacity: 0.35, child: card);
-    final wide = MediaQuery.sizeOf(context).width >= 900;
+    // A touch tablet is wide too, but a swipe on it must scroll the columns, not grab a card: touch always means long press.
+    final wide = MediaQuery.sizeOf(context).width >= 900 && !_touch;
     void start() => setState(() => _dragFrom = stage);
     void end() {
       if (mounted) setState(() => _dragFrom = null);
@@ -435,6 +519,20 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
             onDragEnd: (_) => end(),
             child: card,
           );
+  }
+
+  /// A card badge. The quote alerts (discount, expiring, follow-up) are the ones of the quote list ([quoteAlertSpecs]); the order ones are its own.
+  Widget _badge(String b) {
+    final alert = quoteAlertSpecs[b];
+    if (alert != null) return StatusBadge(alert.text, tone: alert.tone, icon: alert.icon);
+    return StatusBadge(
+      salesBadges[b] ?? b,
+      tone: switch (b) {
+        'late' => Tone.danger,
+        'ready' => Tone.success,
+        _ => Tone.info,
+      },
+    );
   }
 
   Widget _card(Map<String, dynamic> c, String stage) {
@@ -460,7 +558,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
                   Expanded(
                     child: Text('${c['reference']}', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
                   ),
-                  if (next != null)
+                  if (next != null && _canAdvance(stage))
                     IconButton(
                       key: ValueKey('advance-${c['kind']}-${c['id']}'),
                       constraints: const BoxConstraints(minWidth: kMinTouchTarget, minHeight: kMinTouchTarget),
@@ -509,16 +607,7 @@ class _SalesPipelineScreenState extends State<SalesPipelineScreen> {
                     spacing: 4,
                     runSpacing: 4,
                     children: [
-                      for (final b in badges)
-                        StatusBadge(
-                          salesBadges[b] ?? b,
-                          tone: switch (b) {
-                            'late' => Tone.danger,
-                            'discount' || 'expiring' || 'followup' => Tone.warning,
-                            'ready' => Tone.success,
-                            _ => Tone.info,
-                          },
-                        ),
+                      for (final b in badges) FittedBox(fit: BoxFit.scaleDown, child: _badge(b)), // a long name shrinks instead of overflowing the card
                     ],
                   ),
                 ),

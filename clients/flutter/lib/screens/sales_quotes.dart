@@ -29,6 +29,7 @@ import '../widgets/responsive.dart';
 import '../workdays.dart';
 import 'customers.dart';
 import 'quote_email_dialog.dart';
+import 'quote_po_dialog.dart';
 import 'quote_pricing.dart';
 import 'sales_common.dart';
 import 'viability.dart';
@@ -38,6 +39,9 @@ export 'quote_email_dialog.dart';
 export 'quote_pricing.dart';
 
 const _requestExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt'];
+
+/// How the purchase order dialog asks for the file; tests replace it (the system file dialog does not run there).
+Future<({String name, Uint8List bytes})?> Function() requestFilePicker = pickRequestFile;
 
 /// Lets the user choose the customer's request file (PDF, image or text).
 Future<({String name, Uint8List bytes})?> pickRequestFile() async {
@@ -144,9 +148,10 @@ Map<String, dynamic> packSpec(Map<String, dynamic> line) {
 final salesLineColumns = [
   ColumnSpec('Produto', (e) => lbl(e, 'productId')),
   ColumnSpec('Quantidade', (e) => fmt(e['quantity']), numeric: true),
-  ColumnSpec('Preço unitário', (e) => e['unitPrice'] == null ? 'tabela' : fmtMoney(e['unitPrice']), numeric: true),
+  ColumnSpec('Preço unitário', (e) => e['unitPrice'] == null ? 'tabela' : fmtUnitPrice(e['unitPrice']), numeric: true),
   ColumnSpec('IPI %', (e) => fmt(e['ipiPercent']), numeric: true),
-  ColumnSpec('Valor estimado', (e) => e['unitPrice'] == null ? '' : fmtMoney(lineEstimate(e)), numeric: true),
+  // Quantity × price plus IPI and ICMS; the quote's printed total is products + IPI only (the bottom bar and the detail page say so).
+  ColumnSpec('Valor c/ impostos (estim.)', (e) => e['unitPrice'] == null ? '' : fmtMoney(lineEstimate(e)), numeric: true),
   ColumnSpec('Entrega', (e) => e['deliveryDate'] != null ? fmtDay(e['deliveryDate']) : (e['leadTimeDays'] != null ? '${e['leadTimeDays']} dias úteis' : '')),
 ];
 
@@ -186,6 +191,9 @@ class _QuotesScreenState extends State<QuotesScreen> {
   // Only a quote that never reached the customer is "cancelled"; once sent, the outcome is a lost sale, a revision or a new validity.
   static const _cancellable = ['Draft', 'PendingApproval', 'Approved'];
 
+  /// Synthetic "Situação" choice: the API knows no such status; it is Cancelled quotes that a newer revision replaced.
+  static const _supersededChoice = 'Superseded';
+
   Future<void> _duplicate(Map<String, dynamic> e) async {
     final r = await runAction(
       context,
@@ -203,6 +211,7 @@ class _QuotesScreenState extends State<QuotesScreen> {
     final reason = await promptText(context, title: 'Cancelar ${e['reference']}', label: 'Motivo (ex.: emitido por engano)', required: true, confirmLabel: 'Cancelar orçamento', danger: true);
     if (reason == null || !mounted) return;
     await runAction(context, () => widget.session.api.post('/api/sales/quotes/${e['id']}/cancel', {'note': reason}), success: '${e['reference']} cancelado');
+    unawaited(_list.currentState?.reload());
   }
 
   Future<void> _new() => newQuote(context, widget.session, onSaved: () => _list.currentState?.reload());
@@ -262,8 +271,8 @@ class _QuotesScreenState extends State<QuotesScreen> {
   @override
   Widget build(BuildContext context) => RecordList(
     key: _list,
-    // "Somente abertas" is how the list starts, so it alone does not count as a filter the user set.
-    filtersActive: _status != null || _mine || _followUp || _expiring,
+    // "Somente abertas" is how the list starts: turning it off is a filter change like the others, and "Limpar filtros" turns it back on.
+    filtersActive: _status != null || !_open || _mine || _followUp || _expiring,
     emptyText: 'Nenhum orçamento aberto.',
     emptyAction: widget.session.canSell
         ? FilledButton.icon(
@@ -274,7 +283,7 @@ class _QuotesScreenState extends State<QuotesScreen> {
           )
         : null,
     onClearFilters: () => setState(() {
-      _open = false;
+      _open = true; // back to how the list starts
       _status = null;
       _mine = false;
       _followUp = false;
@@ -282,8 +291,15 @@ class _QuotesScreenState extends State<QuotesScreen> {
     }),
     api: widget.session.api,
     path: '/api/sales/quotes',
+    // The API has no "superseded" filter yet: a replaced quote is a Cancelled one with a successor, and the page is sorted out below.
+    enrich: (items) async {
+      if (_status == 'Cancelled') items.removeWhere(isSuperseded);
+      if (_status == _supersededChoice) items.removeWhere((e) => !isSuperseded(e));
+    },
     query: {
-      'status': _status,
+      'status': _status == _supersededChoice ? 'Cancelled' : _status,
+      // Not read by the API yet (the page is sorted out in `enrich`); it also tells the list that "Cancelada" and "Substituída" are different queries.
+      'superseded': _status == _supersededChoice ? true : (_status == 'Cancelled' ? false : null),
       'open': _open && _status == null ? true : null,
       'mine': _mine ? true : null,
       'followUp': _followUp ? true : null,
@@ -291,7 +307,12 @@ class _QuotesScreenState extends State<QuotesScreen> {
     },
     searchHint: 'Orçamento, cliente ou referência do cliente',
     filters: [
-      ChoiceFilter(label: 'Situação', value: _status, choices: quoteStatuses, onChanged: (v) => setState(() => _status = v)),
+      ChoiceFilter(
+        label: 'Situação',
+        value: _status,
+        choices: const {...quoteStatuses, _supersededChoice: 'Substituída'},
+        onChanged: (v) => setState(() => _status = v),
+      ),
       // A chosen situation decides what is listed, so "Somente abertas" has nothing left to say.
       FilterChip(
         label: const Text('Somente abertas'),
@@ -659,6 +680,9 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
 
   String? _termName;
 
+  /// Set when a customer change cleared the taxes of the lines, so the user is told once.
+  bool _taxesRefreshed = false;
+
   /// Pre-fills the prazo with the customer's default when the user has not picked one yet. [announce]: the customer was just changed, so say what happened to the prazo.
   Future<void> _applyDefaultTerm(int customerId, {bool announce = false}) async {
     if (_termId != null || _customTerm != null) return;
@@ -703,7 +727,8 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     try {
       final r = await api.get('/api/customers/$customerId/addresses');
       final list = (r is List ? r : (r as Map<String, dynamic>)['items'] as List).cast<Map<String, dynamic>>();
-      if (!mounted) return;
+      // The customer may have changed again while this answer was on its way: its addresses are not this customer's.
+      if (!mounted || _customerId != customerId) return;
       setState(() {
         _addresses = list;
         if (!keep || !list.any((a) => a['id'] == _addressId)) _addressId = list.isEmpty ? null : list.first['id'] as int;
@@ -786,7 +811,11 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
       _lockSaved = false;
       if (mounted) Navigator.pop(context, q);
     } on ApiException catch (e) {
-      setState(() => _message = describeError(e));
+      if (mounted) setState(() => _message = describeError(e));
+      _showFirstError();
+    } catch (e) {
+      // Anything else (a dropped connection, a malformed answer) is shown too, in readable words, instead of leaving the click without an answer.
+      if (mounted) setState(() => _message = friendlyError(e));
       _showFirstError();
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -879,8 +908,17 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
             _contactEdited = false;
             _contact.text = '';
             _email.text = '';
+            // IPI and ICMS of the lines came from the old customer's price table: they are refilled from the new one below.
+            if (!widget.asOrder && id != null && _lines.any((l) => l['ipiPercent'] != null || l['icmsPercent'] != null)) {
+              _lines = [for (final l in _lines) {...l, 'ipiPercent': null, 'icmsPercent': null}];
+              _taxesRefreshed = true;
+            }
           }
         });
+        if (_taxesRefreshed && mounted) {
+          _taxesRefreshed = false;
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Impostos (IPI e ICMS) dos itens atualizados pela tabela do novo cliente. Confira os preços.')));
+        }
         if (id != null) {
           _loadAddresses(id);
           if (changed) {
@@ -1200,6 +1238,64 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
   }
 }
 
+/// "Cliente aprovou PROP N?": the customer's approval starts the delivery-time clock (working days count from today), so it is confirmed with
+/// the date it will carry. Used by the quote screen and by the pipeline card.
+Future<bool> confirmCustomerApproval(BuildContext context, String reference) => confirmStep(
+  context,
+  title: 'Cliente aprovou $reference?',
+  message: 'Registra a aprovação do cliente em ${fmtDay(isoDate(DateTime.now()))}. Os prazos de entrega em dias úteis passam a contar a partir de hoje.',
+  confirmLabel: 'Registrar aprovação',
+  icon: Icons.thumb_up_alt_outlined,
+);
+
+/// Turns the quote into a sales order (the caller has already asked "Gerar pedido de venda?"); returns the order, or null when nothing was created.
+/// When the server answers 409 because of the customer's credit limit, a user who can approve sales is offered the override (logged on the order
+/// history) and anyone else is told to ask the commercial manager. Errors are shown here.
+Future<Map<String, dynamic>?> convertQuote(BuildContext context, Session s, int id) async {
+  final api = s.api;
+  final base = '/api/sales/quotes/$id';
+  try {
+    return await api.post('$base/convert', {}) as Map<String, dynamic>;
+  } on ApiException catch (e) {
+    if (!context.mounted) return null;
+    // A 409 is not always the credit limit: ask the server whether it is, instead of reading its message.
+    final credit = e.status == 409 && await _creditExceeded(api, base);
+    if (!context.mounted) return null;
+    if (!credit) {
+      showError(context, describeError(e));
+      return null;
+    }
+    if (!s.canApproveSales) {
+      showError(context, '${describeError(e)}\nPeça a liberação ao gerente comercial.');
+      return null;
+    }
+    final force = await confirmStep(
+      context,
+      title: 'Limite de crédito excedido',
+      message: '${e.message}\n\nLiberar mesmo assim? A liberação fica registrada no histórico.',
+      confirmLabel: 'Liberar e gerar',
+      danger: true,
+      icon: Icons.warning_amber,
+    );
+    if (!force || !context.mounted) return null;
+    return runAction(context, () async => await api.post('$base/convert', {'overrideCredit': true}) as Map<String, dynamic>);
+  } catch (e) {
+    if (context.mounted) showError(context, friendlyError(e));
+    return null;
+  }
+}
+
+/// Fresh answer to "does this quote pass the customer's credit limit?" (false when it cannot be asked).
+Future<bool> _creditExceeded(ApiClient api, String base) async {
+  try {
+    final c = await api.get('$base/credit');
+    return c is Map<String, dynamic> && c['exceeded'] == true;
+  } catch (e) {
+    debugPrint('sales_quotes: The override flow is offered only when the limit is confirmed: $e');
+    return false;
+  }
+}
+
 /// Quote detail: outcomes (approve, revise, decline), purchase order step, conversion to order and printing.
 class QuoteScreen extends StatefulWidget {
   const QuoteScreen({super.key, required this.session, required this.id});
@@ -1302,7 +1398,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
 
   Widget _creditBanner() {
     final c = _credit;
-    if (c == null || c['exceeded'] != true) return const SizedBox.shrink();
+    // Only while the quote can still become an order: a lost, expired, cancelled or converted quote has nothing left to warn about.
+    if (c == null || c['exceeded'] != true || !_openStatuses.contains(_q?['status'])) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: NextStepCard(
@@ -1318,7 +1415,13 @@ class _QuoteScreenState extends State<QuoteScreen> {
 
   Future<void> _act(String action, {Map<String, dynamic> body = const {}, String? success}) async {
     final r = await runAction(context, () => api.post('$base/$action', body), success: success);
-    if (r is Map<String, dynamic> && mounted) setState(() => _q = r);
+    if (r is Map<String, dynamic> && mounted) _adopt(r);
+  }
+
+  /// Takes the quote an action answered with and refreshes (or clears) the credit warning for its new situation.
+  void _adopt(Map<String, dynamic> r) {
+    setState(() => _q = r);
+    unawaited(_loadCredit(r));
   }
 
   Future<void> _send() async {
@@ -1400,9 +1503,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
     final q = _q;
     if (q == null) return;
     final registers = q['status'] != 'Sent';
-    Map<String, dynamic>? sent;
-    // The dialog stays open, with its button busy, while the PDF is built and posted; a failure leaves it open for another try.
-    final form = await showDialog<Map<String, String>>(
+    // The send is part of the dialog: it stays open (and cannot be closed by Esc) until the server answers, and a failure shows inside it.
+    final r = await showDialog<Object?>(
       context: context,
       barrierDismissible: false,
       builder: (c) => QuoteEmailDialog(
@@ -1413,23 +1515,17 @@ class _QuoteScreenState extends State<QuoteScreen> {
         fileName: 'Orçamento ${q['reference']}.pdf',
         registers: registers,
         onSend: (form) async {
-          final r = await runAction(
-            c,
-            () async {
-              final pdf = await buildQuotePdf(api, q);
-              return api.post('$base/email', {...form, 'pdfBase64': base64Encode(pdf), 'fileName': 'Orçamento ${q['reference']}.pdf'});
-            },
-            success: registers ? 'E-mail enviado e envio registrado' : 'E-mail enviado',
-          );
-          if (r is Map<String, dynamic>) sent = r;
-          return r is Map<String, dynamic>;
+          // A draft or approved quote is mailed as the Sent quote it is about to become: no draft banner, the validity dated.
+          final pdf = await buildQuotePdf(api, registers ? quoteAsSent(q) : q);
+          return api.post('$base/email', {...form, 'pdfBase64': base64Encode(pdf), 'fileName': 'Orçamento ${q['reference']}.pdf'});
         },
       ),
     );
-    final r = sent;
-    if (form == null || r == null || !mounted) return;
-    setState(() => _q = r);
-    unawaited(_load());
+    if (r is Map<String, dynamic> && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(registers ? 'E-mail enviado e envio registrado' : 'E-mail enviado')));
+      setState(() => _q = r);
+      unawaited(_load());
+    }
   }
 
   /// Opens the user's mail program with the recipient, subject and text filled in. The PDF still has to be attached (print/share button).
@@ -1513,7 +1609,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
     );
     if (!mounted) return;
     if (r != null && r['reference'] != null) {
-      setState(() => _q = r);
+      _adopt(r);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Validade até ${fmtDay(r['validUntil'])}')));
     }
   }
@@ -1551,17 +1647,20 @@ class _QuoteScreenState extends State<QuoteScreen> {
       onPrint: _printRequest,
       onDownload: q['requestFileName'] == null ? null : _saveRequest,
     );
-    if (!proceed || !mounted) return;
+    if (!mounted) return;
+    if (!proceed) return _poStillPending();
     await _submitPurchaseOrder(q);
+  }
+
+  /// The purchase order is attached but not registered: say so, so leaving a dialog does not look like the step was done or lost.
+  void _poStillPending() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Pedido de compra anexado. O registro ainda está pendente: use "Registrar pedido de compra".'), duration: Duration(seconds: 8)),
+    );
   }
 
   Future<void> _submitPurchaseOrder(Map<String, dynamic> q) async {
     final lines = (q['lines'] as List).cast<Map<String, dynamic>>();
-    final approved = DateTime.tryParse('${q['decidedAt'] ?? ''}')?.toLocal() ?? DateTime.now();
-    // Our delivery date: the lead time in working days counted from the day the customer approved the quote.
-    String ours(Map<String, dynamic> l) => l['leadTimeDays'] is! int ? '' : isoDate(addWorkDays(DateTime(approved.year, approved.month, approved.day), l['leadTimeDays'] as int));
-    // A date counts as the customer's when it differs from what the item has now (its saved date, else ours).
-    bool changed(Map<String, dynamic> l, Object? chosen) => '$chosen'.isNotEmpty && chosen != null && chosen != (l['deliveryDate'] ?? ours(l));
     final r = await submitForm(
       context,
       api: api,
@@ -1569,53 +1668,66 @@ class _QuoteScreenState extends State<QuoteScreen> {
       fields: [
         FieldSpec('customerPo', 'Nº do pedido de compra do cliente', defaultValue: q['customerPo']),
         for (final l in lines)
-          FieldSpec(
-            'line-${l['id']}',
-            'Item ${l['sequence']} · data de entrega',
-            type: FieldType.date,
-            defaultValue: l['deliveryDate'] ?? (ours(l).isEmpty ? null : ours(l)),
-            hint: ours(l).isEmpty
-                ? 'Sem prazo em dias úteis: informe a data'
-                : 'Nossa data: ${fmtDay(ours(l))} (${l['leadTimeDays']} dias úteis após a aprovação). Se o pedido do cliente traz outra data, use a dele.',
-          ),
+          FieldSpec('line-${l['id']}', 'Item ${l['sequence']} · data de entrega', type: FieldType.date, defaultValue: poDateDefault(q, l), hint: poDateHint(q, l)),
         const FieldSpec('note', 'Observação'),
       ],
-      submit: (b) => api.post('$base/purchase-order', {
-        'customerPo': b['customerPo'],
-        'note': b['note'],
-        // Only dates that differ from ours are sent: the customer's date wins, ours stays as working days.
-        'deliveryDates': [
-          for (final l in lines)
-            if (changed(l, b['line-${l['id']}'])) {'lineId': l['id'], 'deliveryDate': b['line-${l['id']}'] == ours(l) ? null : b['line-${l['id']}']},
-        ],
-      }),
+      submit: (b) => api.post(
+        '$base/purchase-order',
+        poBody(q, customerPo: b['customerPo'] as String?, note: b['note'] as String?, chosen: {for (final l in lines) l['id']: b['line-${l['id']}'] as String?}),
+      ),
     );
     if (!mounted) return;
     if (r != null && r['reference'] != null) {
-      setState(() => _q = r);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Pedido de compra registrado'),
-          duration: const Duration(seconds: 12),
-          persist: false,
-          action: s.canSell ? SnackBarAction(label: 'Gerar pedido de venda', onPressed: _convert) : null,
-        ),
-      );
+      _poRegistered(r);
+    } else {
+      _poStillPending();
     }
+  }
+
+  void _poRegistered(Map<String, dynamic> r) {
+    setState(() => _q = r);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Pedido de compra registrado'),
+        duration: const Duration(seconds: 12),
+        persist: false,
+        action: s.canSell ? SnackBarAction(label: 'Gerar pedido de venda', onPressed: _convert) : null,
+      ),
+    );
+  }
+
+  /// Nothing attached yet: one dialog attaches the file or text and registers the purchase order. The print offer comes after, for the saved paper.
+  Future<void> _registerPoWithAttachment({bool startWithText = false}) async {
+    final q = _q!;
+    final outcome = await showDialog<QuotePoOutcome>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => QuotePoDialog(api: api, quote: q, pickFile: requestFilePicker, startWithText: startWithText),
+    );
+    if (outcome == null || !mounted) return;
+    if (!outcome.registered) {
+      // Closed after the upload worked: the paper is saved, the registration is not.
+      setState(() => _q = outcome.quote);
+      _poStillPending();
+      return;
+    }
+    _poRegistered(outcome.quote);
+    await printGate(
+      context,
+      doneKey: 'quote:${q['id']}:po',
+      title: 'Imprimir o pedido de compra do cliente?',
+      message: 'O pedido de compra foi registrado. Imprima ou baixe uma cópia do que o cliente enviou. Você também encontra todos os documentos no pedido de venda.',
+      onPrint: _printRequest,
+      onDownload: outcome.quote['requestFileName'] == null ? null : _saveRequest,
+    );
   }
 
   /// The customer's approval starts the delivery-time clock (working days count from today), so it is confirmed with the date it will carry.
   Future<void> _accept() async {
-    final ok = await confirmStep(
-      context,
-      title: 'Cliente aprovou ${_q!['reference']}?',
-      message: 'Registra a aprovação do cliente em ${fmtDay(isoDate(DateTime.now()))}. Os prazos de entrega em dias úteis passam a contar a partir de hoje.',
-      confirmLabel: 'Registrar aprovação',
-      icon: Icons.thumb_up_alt_outlined,
-    );
+    final ok = await confirmCustomerApproval(context, '${_q!['reference']}');
     if (!ok || !mounted) return;
     final r = await runAction(context, () => api.post('$base/accept', {}), success: 'Aprovação do cliente registrada');
-    if (r is Map<String, dynamic> && mounted) setState(() => _q = r);
+    if (r is Map<String, dynamic> && mounted) _adopt(r);
   }
 
   Future<void> _setRequestText() async {
@@ -1708,17 +1820,6 @@ class _QuoteScreenState extends State<QuoteScreen> {
     if (mounted) unawaited(_load());
   }
 
-  /// Fresh answer to "does this quote pass the customer's credit limit?" (false when it cannot be asked).
-  Future<bool> _creditExceeded() async {
-    try {
-      final c = await api.get('$base/credit');
-      return c is Map<String, dynamic> && c['exceeded'] == true;
-    } catch (e) {
-      debugPrint('sales_quotes: The override flow is offered only when the limit is confirmed: $e');
-      return false;
-    }
-  }
-
   Future<void> _convert() async {
     final ok = await confirmStep(
       context,
@@ -1728,30 +1829,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       icon: Icons.receipt_long_outlined,
     );
     if (!ok || !mounted) return;
-    Map<String, dynamic>? order;
-    try {
-      order = await api.post('$base/convert', {}) as Map<String, dynamic>;
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      // A 409 is not always the credit limit: ask the server whether it is, instead of reading its message.
-      final credit = e.status == 409 && s.canApproveSales && await _creditExceeded();
-      if (!mounted) return;
-      if (credit) {
-        final force = await confirmStep(
-          context,
-          title: 'Limite de crédito excedido',
-          message: '${e.message}\n\nLiberar mesmo assim? A liberação fica registrada no histórico.',
-          confirmLabel: 'Liberar e gerar',
-          cancelLabel: 'Voltar',
-          danger: true,
-          icon: Icons.warning_amber,
-        );
-        if (!force || !mounted) return;
-        order = await runAction(context, () async => await api.post('$base/convert', {'overrideCredit': true}) as Map<String, dynamic>);
-      } else {
-        return showError(context, describeError(e));
-      }
-    }
+    final order = await convertQuote(context, s, widget.id);
     if (order == null || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Pedido ${order['reference']} criado')));
     await _load();
@@ -1776,7 +1854,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
     if (!await confirmStep(
           context,
           title: 'Excluir ${_q!['reference']}?',
-          message: 'O rascunho é apagado definitivamente.',
+          // Drafts, and (for an admin) cancelled, lost and expired quotes can be deleted: the wording fits all of them.
+          message: 'O orçamento e o histórico dele somem de vez. Não dá para desfazer.',
           confirmLabel: 'Excluir',
           cancelLabel: 'Voltar',
           danger: true,
@@ -1930,14 +2009,14 @@ class _QuoteScreenState extends State<QuoteScreen> {
     return NextStepCard(
       title: attached ? 'Pedido de compra anexado · registre-o' : 'Aprovada pelo cliente · falta o pedido de compra',
       message: attached
-          ? 'Passo 2 de 2: confira o anexo abaixo e registre o pedido de compra para poder gerar o pedido de venda.'
-          : 'Passo 1 de 2: anexe o pedido de compra que o cliente enviou (PDF, imagem ou texto). Depois, registre-o para gerar o pedido de venda.',
+          ? 'Confira o anexo abaixo e registre o pedido de compra para poder gerar o pedido de venda.'
+          : 'Registre o pedido de compra que o cliente enviou (arquivo PDF/imagem ou texto) para poder gerar o pedido de venda. Anexo, nº do pedido e datas de entrega ficam na mesma tela.',
       tone: attached ? Tone.success : Tone.warning,
       icon: attached ? Icons.check_circle_outline : Icons.warning_amber_rounded,
       // One main action; the ways out of the sale sit apart, on the right.
       actions: [
-        if (sell && !attached) _primary('quote-po-start', 'Anexar pedido de compra', Icons.attach_file, () => _provideRequest(_attachRequest)),
-        if (sell && !attached) _secondary('quote-po-start-text', 'Escrever texto do pedido', Icons.edit_note, () => _provideRequest(_setRequestText)),
+        if (sell && !attached) _primary('quote-po-start', 'Registrar pedido de compra', Icons.assignment_turned_in_outlined, _registerPoWithAttachment),
+        if (sell && !attached) _secondary('quote-po-start-text', 'Escrever texto do pedido', Icons.edit_note, () => _registerPoWithAttachment(startWithText: true)),
         if (sell && attached) _primary('quote-po', 'Registrar pedido de compra', Icons.assignment_turned_in_outlined, _receivePo),
       ],
       trailing: [
@@ -1949,14 +2028,6 @@ class _QuoteScreenState extends State<QuoteScreen> {
         if (sell) _negative('quote-gave-up', 'Cliente desistiu', Icons.thumb_down_alt_outlined, _gaveUp),
       ],
     );
-  }
-
-  /// First purchase order of the quote: once the file or text is saved, go straight on to registering it instead of waiting for another click.
-  Future<void> _provideRequest(Future<void> Function() provide) async {
-    await provide();
-    if (!mounted) return;
-    final q = _q;
-    if (q != null && q['status'] == 'Accepted' && (q['requestFileName'] != null || '${q['requestText'] ?? ''}'.trim().isNotEmpty)) await _receivePo();
   }
 
   void _gaveUp() => _decline(gaveUp: true);
@@ -2198,7 +2269,8 @@ class _QuoteScreenState extends State<QuoteScreen> {
           value: _duplicate,
           child: const ListTile(leading: Icon(Icons.copy), title: Text('Duplicar'), subtitle: Text('Cópia independente, com número novo')),
         ),
-      if (s.canSell && !['Cancelled', 'Converted'].contains(status))
+      // Only while the quote is still being worked: a lost, expired, cancelled, replaced or converted one has no use for it.
+      if (s.canSell && _working(q))
         PopupMenuItem(
           value: _newFeasibility,
           child: const ListTile(
@@ -2331,7 +2403,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
           ColumnSpec('Produto', (e) => '${e['productCode']}${e['customerPartNumber'] == null ? '' : ' (${e['customerPartNumber']})'}'),
           col('Descrição', 'description'),
           ColumnSpec('Qtd.', (e) => '${fmtQty(e['quantity'])} ${e['unit']}', numeric: true),
-          ColumnSpec('Preço Unitário', (e) => '${fmtMoney(e['unitPrice'])} /${e['unit']}', numeric: true),
+          ColumnSpec('Preço Unitário', (e) => '${fmtUnitPrice(e['unitPrice'])} /${e['unit']}', numeric: true),
           // A line above the limit is tinted, and tagged so the colour is not the only sign.
           ColumnSpec(
             'Desc. %',

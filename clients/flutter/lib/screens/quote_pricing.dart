@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../entities.dart';
 import '../session.dart';
 import '../widgets/pipeline.dart' show Tone;
+import 'sales_common.dart' show quoteAlertSpecs;
 
 // Pure helpers of the quote screens (pricing, discount, estimate, alerts, file size). No widgets, no API: unit tested in test/quote_pricing_test.dart.
 
@@ -12,6 +13,14 @@ num _n(Object? v) => v is num ? v : 0;
 String fmtFileSize(Object? v) {
   final n = v is num ? v : 0;
   return n >= 1048576 ? '${fmtDecimalInput(n / 1048576, 1)} MB' : '${(n / 1024).ceil()} KB';
+}
+
+/// A unit price as money: two decimals, or up to four when the price has more than two (R$ 12,3456 stays as typed), so quantity × price
+/// matches the line total. The printed quote and the text preview already show four.
+String fmtUnitPrice(Object? v) {
+  if (v is! num) return fmtMoney(v);
+  if (((v * 100).round() / 100 - v).abs() < 1e-9) return fmtMoney(v);
+  return 'R\$ ${fmtNum(v, 4).replaceFirst(RegExp(r'0{1,2}$'), '')}';
 }
 
 /// Quantity × unit price, plus IPI and ICMS amounts (both on the base value) when set.
@@ -72,8 +81,7 @@ String quoteAlert(Map<String, dynamic> e) => quoteAlerts(e).map((a) => a.text).j
 
 /// Every alert a quote row has (a quote can both need an answer and be about to expire), with the tone and icon that mark it.
 List<({String text, Tone tone, IconData icon})> quoteAlerts(Map<String, dynamic> e) => [
-  if (e['status'] == 'PendingApproval' || e['needsApproval'] == true && e['status'] == 'Draft')
-    (text: 'Acima do limite', tone: Tone.warning, icon: Icons.gavel_outlined),
-  if (e['followUp'] == true) (text: 'Cobrar resposta', tone: Tone.warning, icon: Icons.mark_email_unread_outlined),
-  if (e['expiring'] == true) (text: 'Vence em breve', tone: Tone.danger, icon: Icons.schedule),
+  if (e['status'] == 'PendingApproval' || e['needsApproval'] == true && e['status'] == 'Draft') quoteAlertSpecs['discount']!,
+  if (e['followUp'] == true) quoteAlertSpecs['followup']!,
+  if (e['expiring'] == true) quoteAlertSpecs['expiring']!,
 ];
