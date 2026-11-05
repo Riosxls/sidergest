@@ -351,20 +351,32 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
   String? _reportedPrice;
 
   // The field being edited is the measure the drawing draws strong.
-  final _fd = FocusNode(), _ft = FocusNode(), _fl = FocusNode();
+  final _fd = FocusNode(), _fw = FocusNode(), _fh = FocusNode(), _ft = FocusNode(), _fl = FocusNode();
   TubeMeasure? _focused;
+
+  // Round (diameter) or oblong (width x height). The oblong tube's price is the round one's, plus a markup for the shape that the person types.
+  TubeProfile _profile = TubeProfile.round;
+  final _w = TextEditingController(), _h = TextEditingController(), _p = TextEditingController();
 
   ApiClient get api => widget.session.api;
 
   void _focusChanged() {
-    final m = _fd.hasFocus ? TubeMeasure.diameter : (_ft.hasFocus ? TubeMeasure.thickness : (_fl.hasFocus ? TubeMeasure.length : null));
+    final m = _fd.hasFocus
+        ? TubeMeasure.diameter
+        : _fw.hasFocus
+        ? TubeMeasure.width
+        : _fh.hasFocus
+        ? TubeMeasure.height
+        : _ft.hasFocus
+        ? TubeMeasure.thickness
+        : (_fl.hasFocus ? TubeMeasure.length : null);
     if (m != _focused && mounted) setState(() => _focused = m);
   }
 
   @override
   void initState() {
     super.initState();
-    for (final f in [_fd, _ft, _fl]) {
+    for (final f in [_fd, _fw, _fh, _ft, _fl]) {
       f.addListener(_focusChanged);
     }
     if (_validation().ready) WidgetsBinding.instance.addPostFrameCallback((_) => _run());
@@ -373,10 +385,10 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
   @override
   void dispose() {
     _timer?.cancel();
-    for (final c in [_d, _t, _l, _q]) {
+    for (final c in [_d, _t, _l, _q, _w, _h, _p]) {
       c.dispose();
     }
-    for (final f in [_fd, _ft, _fl]) {
+    for (final f in [_fd, _fw, _fh, _ft, _fl]) {
       f.dispose();
     }
     super.dispose();
@@ -385,7 +397,7 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
   num? _n(TextEditingController c) => parseDecimal(c.text.trim());
 
   /// Messages for the fields that were typed wrong, and whether the three dimensions are good to send.
-  ({String? diameter, String? thickness, String? length, String? quantity, bool ready}) _validation() {
+  ({String? diameter, String? width, String? height, String? thickness, String? length, String? quantity, bool ready}) _validation() {
     String? check(TextEditingController c) {
       if (c.text.trim().isEmpty) return null;
       final v = _n(c);
@@ -394,14 +406,34 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
       return null;
     }
 
-    final d = check(_d), t = check(_t), l = check(_l), q = check(_q);
+    final oblong = _profile == TubeProfile.oblong;
+    final d = oblong ? null : check(_d), t = check(_t), l = check(_l), q = check(_q);
+    var w = oblong ? check(_w) : null;
+    final h = oblong ? check(_h) : null;
     String? thick = t;
-    final dv = _n(_d), tv = _n(_t);
-    if (thick == null && dv != null && tv != null && dv > 0 && tv > 0 && tv * 2 >= dv) {
-      thick = 'A espessura é grande demais: 2 × espessura precisa ser menor que o diâmetro.';
+    final tv = _n(_t);
+    if (oblong) {
+      final wv = _n(_w), hv = _n(_h);
+      if (w == null && wv != null && hv != null && wv > 0 && hv > 0 && wv < hv) w = 'A largura é o lado maior: não pode ser menor que a altura.';
+      if (thick == null && hv != null && tv != null && hv > 0 && tv > 0 && tv * 2 >= hv) {
+        thick = 'A espessura é grande demais: 2 × espessura precisa ser menor que a altura.';
+      }
+    } else {
+      final dv = _n(_d);
+      if (thick == null && dv != null && tv != null && dv > 0 && tv > 0 && tv * 2 >= dv) {
+        thick = 'A espessura é grande demais: 2 × espessura precisa ser menor que o diâmetro.';
+      }
     }
-    final all = [_d, _t, _l].every((c) => c.text.trim().isNotEmpty);
-    return (diameter: d, thickness: thick, length: l, quantity: q, ready: all && d == null && thick == null && l == null && q == null);
+    final all = (oblong ? [_w, _h, _t, _l] : [_d, _t, _l]).every((c) => c.text.trim().isNotEmpty);
+    return (
+      diameter: d,
+      width: w,
+      height: h,
+      thickness: thick,
+      length: l,
+      quantity: q,
+      ready: all && d == null && w == null && h == null && thick == null && l == null && q == null,
+    );
   }
 
   void _changed() {
@@ -435,7 +467,7 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
     final q = _n(_q);
     try {
       final r = await api.get('/api/sales/price-suggestion', {
-        'diameter': _n(_d),
+        if (_profile == TubeProfile.oblong) ...{'shape': 'oblong', 'width': _n(_w), 'height': _n(_h)} else 'diameter': _n(_d),
         'thickness': _n(_t),
         'length': _n(_l),
         'customerId': _customerId,
@@ -472,8 +504,18 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
     final s = _data?['suggestion'];
     if (s is! Map || s['basis'] == 'None') return null;
     final v = widget.unitIsKg ? s['pricePerKg'] : s['pricePerPiece'];
-    return v is num ? fmtDecimalInput(v) : null;
+    return v is num ? fmtDecimalInput(_marked(v)) : null;
   }
+
+  /// The markup typed for the oblong shape (percent, 0 when empty or not a number).
+  num get _markup {
+    if (_profile != TubeProfile.oblong) return 0;
+    final v = _n(_p);
+    return v != null && v > 0 ? v : 0;
+  }
+
+  /// [price] with the shape's markup on it, to cents.
+  num _marked(num price) => _markup == 0 ? price : (price * (1 + _markup / 100) * 100).round() / 100;
 
   Widget _numberField(String key, String label, TextEditingController c, String? error, {bool last = false, bool autofocus = false, FocusNode? focusNode}) => TextField(
     key: ValueKey(key),
@@ -500,21 +542,57 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
         final perRow = fieldsWidth < 520 ? (fieldsWidth < 340 ? 1 : 2) : 4;
         final w = perRow == 1 ? fieldsWidth : (fieldsWidth - (perRow - 1) * AppSpacing.md) / perRow;
         Widget sized(Widget child, [double? width]) => SizedBox(width: width ?? w, child: child);
-        final drawing = TubeDiagram(diameter: _d.text, thickness: _t.text, length: _l.text, highlight: _focused);
+        final oblong = _profile == TubeProfile.oblong;
+        final drawing = TubeDiagram(profile: _profile, diameter: _d.text, width: _w.text, height: _h.text, thickness: _t.text, length: _l.text, highlight: _focused);
         final fields = Wrap(
           spacing: AppSpacing.md,
           runSpacing: AppSpacing.md,
           children: [
-            sized(_numberField('price-sim-diameter', 'Diâmetro externo (mm)', _d, v.diameter, autofocus: widget.diameter == null, focusNode: _fd)),
+            if (oblong) ...[
+              sized(_numberField('price-sim-width', 'Largura, lado maior (mm)', _w, v.width, autofocus: true, focusNode: _fw)),
+              sized(_numberField('price-sim-height', 'Altura, lado menor (mm)', _h, v.height, focusNode: _fh)),
+            ] else
+              sized(_numberField('price-sim-diameter', 'Diâmetro externo (mm)', _d, v.diameter, autofocus: widget.diameter == null, focusNode: _fd)),
             sized(_numberField('price-sim-thickness', 'Espessura (mm)', _t, v.thickness, focusNode: _ft)),
             sized(_numberField('price-sim-length', 'Comprimento (mm)', _l, v.length, focusNode: _fl)),
-            sized(_numberField('price-sim-quantity', 'Quantidade (peças)', _q, v.quantity, last: true)),
+            sized(_numberField('price-sim-quantity', 'Quantidade (peças)', _q, v.quantity, last: !oblong)),
+            if (oblong)
+              sized(
+                TextField(
+                  key: const ValueKey('price-sim-markup'),
+                  controller: _p,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Acréscimo pela forma (%)', helperText: 'Conformação do oblongo', helperMaxLines: 2, isDense: true),
+                  onChanged: (_) {
+                    setState(() {});
+                    _report(_usablePrice());
+                  },
+                ),
+              ),
           ],
+        );
+        final shapePicker = Align(
+          alignment: Alignment.centerLeft,
+          child: SegmentedButton<TubeProfile>(
+            key: const ValueKey('price-sim-shape'),
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: TubeProfile.round, label: Text('Redondo')),
+              ButtonSegment(value: TubeProfile.oblong, label: Text('Oblongo')),
+            ],
+            selected: {_profile},
+            onSelectionChanged: (s) {
+              setState(() => _profile = s.first);
+              _changed();
+            },
+          ),
         );
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
+            shapePicker,
+            const SizedBox(height: AppSpacing.md),
             if (sideBySide)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -569,7 +647,7 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
               _result(context, _data!)
             else if (!v.ready)
               Text(
-                'Digite o diâmetro, a espessura e o comprimento para ver o peso e o preço sugerido.',
+                _profile == TubeProfile.oblong ? 'Digite a largura, a altura, a espessura e o comprimento para ver o peso e o preço sugerido.' : 'Digite o diâmetro, a espessura e o comprimento para ver o peso e o preço sugerido.',
                 key: const ValueKey('price-sim-hint'),
                 style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
@@ -590,6 +668,8 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
       ..sort((a, b) => ((a['distance'] as num?) ?? double.infinity).compareTo((b['distance'] as num?) ?? double.infinity));
     final q = _n(_q);
     final hasPrice = basis != 'None';
+    final profile = (r['profile'] as Map?)?.cast<String, dynamic>();
+    num? adj(Object? v) => v is num ? _marked(v) : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -607,7 +687,7 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
-                'Sugestão: ${_perUnit(s['pricePerKg'], true)}  ·  ${_perUnit(s['pricePerPiece'], false)}',
+                'Sugestão: ${_perUnit(adj(s['pricePerKg']), true)}  ·  ${_perUnit(adj(s['pricePerPiece']), false)}',
                 key: const ValueKey('price-sim-suggestion'),
                 style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
               ),
@@ -617,13 +697,13 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
           if (s['low'] is num && s['high'] is num)
             Padding(
               padding: const EdgeInsets.only(top: AppSpacing.xs),
-              child: Text('faixa ${fmtMoney(s['low'])} – ${fmtMoney(s['high'])}/kg', key: const ValueKey('price-sim-range'), style: theme.textTheme.bodyLarge),
+              child: Text('faixa ${fmtMoney(adj(s['low']))} – ${fmtMoney(adj(s['high']))}/kg', key: const ValueKey('price-sim-range'), style: theme.textTheme.bodyLarge),
             ),
           if (q != null && q > 0 && s['totalForQuantity'] is num)
             Padding(
               padding: const EdgeInsets.only(top: AppSpacing.xs),
               child: Text(
-                '${fmt(q)} ${q == 1 ? 'peça' : 'peças'}: ${fmtMoney(s['totalForQuantity'])}',
+                '${fmt(q)} ${q == 1 ? 'peça' : 'peças'}: ${fmtMoney(adj(s['totalForQuantity']))}',
                 key: const ValueKey('price-sim-total'),
                 style: theme.textTheme.titleMedium,
               ),
@@ -634,6 +714,16 @@ class _PriceSimulatorPanelState extends State<PriceSimulatorPanel> {
           padding: const EdgeInsets.only(top: AppSpacing.sm),
           child: Text(_reason(basis, rows.length, last), key: const ValueKey('price-sim-reason'), style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         ),
+        if (profile != null && profile['shape'] == 'Oblong')
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
+            child: Text(
+              'Preço do tubo redondo de mesmo perímetro (Ø ${fmt(profile['equivalentDiameter'])} mm), porque o histórico só tem tubos redondos.'
+              '${_markup > 0 ? ' Já inclui o acréscimo de ${fmt(_markup)}% pela forma.' : ' Some o acréscimo da conformação do oblongo no campo ao lado.'}',
+              key: const ValueKey('price-sim-oblong-note'),
+              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
         if (last != null)
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.xs),
