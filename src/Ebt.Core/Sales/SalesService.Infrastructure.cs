@@ -45,5 +45,20 @@ public sealed partial class SalesService
         return d;
     }
 
+    /// <summary>
+    /// Locks the order first, then the delivery. Every path that touches both (cancel order, close balance, ship, confirm, cancel delivery) takes the locks in this
+    /// same order, so two of them running at once wait for each other instead of deadlocking.
+    /// </summary>
+    private async Task<(Delivery Delivery, SalesOrder Order)> LockDeliveryAndOrderAsync(int deliveryId, CancellationToken ct)
+    {
+        var orderId = await db.Deliveries.AsNoTracking().Where(x => x.Id == deliveryId).Select(x => (int?)x.OrderId).FirstOrDefaultAsync(ct) ?? throw SalesException.NotFound("Delivery");
+        var o = await LockOrderAsync(orderId, ct);
+        var d = await LockDeliveryAsync(deliveryId, ct);
+        return (d, o);
+    }
+
+    /// <summary>How far back a typed shipping or planned date may reach before it is taken for a typo.</summary>
+    private const int MaxBackdateDays = 365;
+
     private Task<T> InTransaction<T>(Func<Task<T>> work, CancellationToken ct) => db.InTransactionAsync(work, ct);
 }

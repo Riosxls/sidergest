@@ -46,9 +46,12 @@ public record SalesOrderLineOut(int Id, int Sequence, int ProductId, string Prod
     LineSpec? Spec = null, int? FeasibilityId = null, string? FeasibilityReference = null, decimal BalanceValue = 0);
 public record SalesOrderSummaryOut(int Id, int Number, string Reference, int CustomerId, string CustomerName, string? CustomerPo, SalesOrderStatus Status, decimal Total, DateOnly? NextDue, decimal Progress, bool Ready, bool Late,
     DateTimeOffset CreatedAt, int? QuoteId,
-    decimal BalanceValue = 0, decimal? BalanceKg = null, BillTo BillTo = BillTo.Ebt, string? Salesperson = null);
+    decimal BalanceValue = 0, decimal? BalanceKg = null, BillTo BillTo = BillTo.Ebt, string? Salesperson = null,
+    decimal BalanceWithIpi = 0); // total/balanceWithIpi are comparable (both include IPI); balanceValue is the unshipped value without IPI
+/// <param name="InvoiceStatus">None (no NF yet), Pending (sent to SEFAZ, outcome unknown), Authorized (an authorized NF or a typed NF number), FiscalOff (emission disabled).</param>
+/// <param name="NeedsInvoice">Fiscal emission is on, the goods left and no NF exists or is pending: someone with the fiscal-emit right still has to emit it.</param>
 public record DeliverySummaryOut(int Id, int Number, string Reference, int OrderId, string OrderReference, int CustomerId, string CustomerName, DateOnly PlannedDate, DeliveryStatus Status, int Packages, decimal? GrossWeightKg,
-    string? InvoiceNumber, string? Carrier, DateTimeOffset? ShippedAt, DateTimeOffset? DeliveredAt);
+    string? InvoiceNumber, string? Carrier, DateTimeOffset? ShippedAt, DateTimeOffset? DeliveredAt, bool NeedsInvoice = false, string InvoiceStatus = "None");
 public record SalesOrderOut(int Id, int Number, string Reference, int CustomerId, string CustomerName, int AddressId, string AddressText, string? CustomerPo, int? PaymentTermId, string? PaymentTermName, string? CustomPaymentTerm, FreightTerms Freight,
     SalesOrderStatus Status, string? StatusReason, string? Notes, int? QuoteId, string? QuoteReference, string? CreatedBy, DateTimeOffset CreatedAt, string? ReleasedBy, DateTimeOffset? ReleasedAt,
     decimal Products, decimal Ipi, decimal Total, decimal Progress, bool Ready, bool Late, CreditCheck Credit, IReadOnlyList<SalesOrderLineOut> Lines, IReadOnlyList<DeliverySummaryOut> Deliveries, IReadOnlyList<SalesEventOut> History, bool CertificateWaived = false,
@@ -57,11 +60,12 @@ public record DeliveryLineOut(int Id, int OrderLineId, int Sequence, int Product
 public record DeliveryOut(int Id, int Number, string Reference, int OrderId, string OrderReference, int CustomerId, string CustomerName, int AddressId, string AddressText, DateOnly PlannedDate, DeliveryStatus Status,
     string? Carrier, string? VehiclePlate, string? InvoiceNumber, int Packages, decimal? GrossWeightKg, int? StockDocumentId, string? Notes, string? CreatedBy, DateTimeOffset CreatedAt, string? ShippedBy, DateTimeOffset? ShippedAt,
     DateTimeOffset? DeliveredAt, string? ReceivedBy, IReadOnlyList<DeliveryLineOut> Lines, IReadOnlyList<SalesEventOut> History,
-    string? LotNumber = null, decimal? InvoicedValue = null, decimal ValueExIpi = 0, decimal BalanceKg = 0, decimal BalanceValue = 0);
+    string? LotNumber = null, decimal? InvoicedValue = null, decimal ValueExIpi = 0, decimal BalanceKg = 0, decimal BalanceValue = 0, bool NeedsInvoice = false, string InvoiceStatus = "None");
 
 public record PipelineCard(SalesRecordKind Kind, int Id, string Reference, int CustomerId, string CustomerName, decimal Value, string Status, DateOnly? Date, decimal? Progress, IReadOnlyList<string> Badges);
 public record PipelineStage(string Key, int Count, decimal Value, IReadOnlyList<PipelineCard> Cards);
-public record PipelineKpis(decimal OpenQuotesValue, int OpenQuotes, decimal? WinRate, decimal OpenOrdersValue, int OpenOrders, int LateOrders, int ReadyToShip, int PendingApprovals);
+/// <param name="AwaitingInvoiceCount">Shipped/delivered deliveries with no NF yet while fiscal emission is on (0 when it is off).</param>
+public record PipelineKpis(decimal OpenQuotesValue, int OpenQuotes, decimal? WinRate, decimal OpenOrdersValue, int OpenOrders, int LateOrders, int ReadyToShip, int PendingApprovals, int AwaitingInvoiceCount = 0);
 public record PipelineOut(PipelineKpis Kpis, IReadOnlyList<PipelineStage> Stages);
 
 public static class SalesPolicies
@@ -118,7 +122,7 @@ public static class SalesEndpoints
         {
             var errors = Errors()
                 .Require(i.MaxDiscountPercent is >= 0 and <= 100, "maxDiscountPercent", "Between 0 and 100")
-                .Require(i.DefaultValidityDays > 0, "defaultValidityDays", "Must be greater than zero")
+                .Require(i.DefaultValidityDays is > 0 and <= 365, "defaultValidityDays", "Between 1 and 365 days")
                 .Require(i.MinimumOrderValue >= 0, "minimumOrderValue", "Cannot be negative")
                 .Require(i.FollowUpDays > 0, "followUpDays", "Must be greater than zero")
                 .Require(i.ApprovalValidityDays > 0, "approvalValidityDays", "Must be greater than zero");
@@ -216,7 +220,8 @@ public static class SalesEndpoints
         g.MapGet("/{id:int}/credit", async (int id, EbtDbContext db, SalesService svc, CancellationToken ct) =>
         {
             var q = await db.Quotes.AsNoTracking().Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id, ct);
-            return q is null ? Results.NotFound() : Results.Ok(await svc.CreditAsync(q.CustomerId, q.PaymentTermId, SalesService.Totals(q).Total, null, ct));
+            // Once the quote became an order, that order is already counted in "Open": adding the quote total again would count it twice.
+            return q is null ? Results.NotFound() : Results.Ok(await svc.CreditAsync(q.CustomerId, q.PaymentTermId, q.SalesOrderId is null ? SalesService.Totals(q).Total : 0m, null, ct));
         });
 
         g.MapPost("/{id:int}/duplicate", async (int id, DuplicateInput? i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
@@ -309,9 +314,9 @@ public static class SalesEndpoints
             if (!mail.Enabled) return Results.Conflict(new { message = "O envio de e-mail não está configurado no servidor. Peça ao administrador para configurar o SMTP." });
             var q = await db.Quotes.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
             if (q is null) return Results.NotFound();
-            var canRegister = q.Status == QuoteStatus.Approved || (q.Status == QuoteStatus.Draft && !q.NeedsApproval);
-            if (!canRegister && q.Status != QuoteStatus.Sent)
-                return Results.Conflict(new { message = q.Status is QuoteStatus.Draft or QuoteStatus.PendingApproval ? "Este orçamento precisa da aprovação do desconto antes de ir ao cliente" : $"Orçamento {q.Status} não pode ser enviado" });
+            // Whether a draft still needs the manager is decided by the service under the row lock (it recomputes it from the current prices); here only the status is screened.
+            if (q.Status is not (QuoteStatus.Draft or QuoteStatus.Approved or QuoteStatus.Sent))
+                return Results.Conflict(new { message = q.Status == QuoteStatus.PendingApproval ? "Este orçamento precisa de autorização do gerente antes de ir ao cliente" : $"Orçamento {q.Status} não pode ser enviado" });
 
             var to = ParseAddresses(i.To, out var badTo);
             var cc = ParseAddresses(i.Cc, out var badCc);
@@ -344,7 +349,7 @@ public static class SalesEndpoints
             var list = string.Join(", ", to) + (cc.Count > 0 ? $" (cópia: {string.Join(", ", cc)})" : "");
             try
             {
-                // Registers the send (or the history entry) under the quote row lock, then mails; a failed mail rolls the registration back.
+                // Registers the send under the quote row lock and commits, then mails with no lock held; a failed mail leaves a "falha no envio" note on the history.
                 await svc.EmailAsync(id, string.Join(", ", to), list, Who(user), () => mail.SendAsync(new OutgoingMail(to, cc, subject, body, new MailAttachment(fileName, pdf), replyTo), ct), ct);
             }
             catch (MailException e)
@@ -461,6 +466,9 @@ public static class SalesEndpoints
 
         g.MapPost("/{id:int}/cancel", async (int id, OrderCancelIn i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
+            // Force-cancelling OFs that already started is a production decision: only production planning or a sales manager may take it.
+            if (i.CancelProduction && !IsManager(user) && !Access.Matrix[ProductionPolicies.Plan].Any(r => user.IsInRole(r.ToString())))
+                return Results.Problem("Cancelar ordens de produção em andamento exige o PCP (planejamento da produção) ou um gerente de vendas. Cancele o pedido sem essa opção ou peça ao PCP para cancelar as OFs", statusCode: StatusCodes.Status403Forbidden);
             await svc.CancelOrderAsync(id, i.Reason, Who(user), ct, i.CancelProduction);
             return Results.Ok(await LoadOrder(db, svc, id, ct));
         }).RequireAuthorization(SalesPolicies.Sell);
@@ -488,9 +496,11 @@ public static class SalesEndpoints
     {
         var g = app.MapGroup("/api/sales/deliveries").WithTags("Sales").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<Delivery>());
 
-        g.MapGet("/", async (EbtDbContext db, DeliveryStatus? status, int? orderId, int? customerId, DateOnly? from, DateOnly? to, string? q, int? skip, int? take, CancellationToken ct) =>
+        g.MapGet("/", async (EbtDbContext db, DeliveryStatus? status, int? orderId, int? customerId, DateOnly? from, DateOnly? to, string? q, bool? pendingInvoice, int? skip, int? take, CancellationToken ct) =>
         {
             var x = db.Deliveries.AsNoTracking();
+            // pendingInvoice=true: only deliveries whose NF is still owed (nothing at all while fiscal emission is off).
+            if (pendingInvoice == true) x = await FiscalEnabled(db, ct) ? AwaitingInvoice(db, x) : x.Where(_ => false);
             if (status is { } st) x = x.Where(d => d.Status == st);
             if (orderId is { } o) x = x.Where(d => d.OrderId == o);
             if (customerId is { } c) x = x.Where(d => d.Order!.CustomerId == c);
@@ -499,7 +509,7 @@ public static class SalesEndpoints
             if (Has(q)) x = x.Where(d => EF.Functions.ILike(d.Reference, Like(q!)) || EF.Functions.ILike(d.Order!.Reference, Like(q)) || EF.Functions.ILike(d.Order.Customer!.Name, Like(q)) || EF.Functions.ILike(d.InvoiceNumber!, Like(q)));
             var total = await x.CountAsync(ct);
             var (s, n) = Paging(skip, take);
-            var items = await x.OrderBy(d => d.Status).ThenBy(d => d.PlannedDate).ThenBy(d => d.Number).Skip(s).Take(n).Select(DeliverySummary).ToListAsync(ct);
+            var items = await DeliverySummaries(db, x.OrderBy(d => d.Status).ThenBy(d => d.PlannedDate).ThenBy(d => d.Number).Skip(s).Take(n), ct);
             return Results.Ok(new Page<DeliverySummaryOut>(items, total, s, n));
         });
 
@@ -507,7 +517,8 @@ public static class SalesEndpoints
 
         g.MapPost("/{id:int}/ship", async (int id, ShipInput i, EbtDbContext db, SalesService svc, ClaimsPrincipal user, CancellationToken ct) =>
         {
-            await svc.ShipAsync(id, i, Who(user), ct, canEmitInvoice: Access.Matrix[FiscalPolicies.Emit].Any(r => user.IsInRole(r.ToString())), overrideCredit: i.OverrideCredit && IsManager(user));
+            await svc.ShipAsync(id, i, Who(user), ct, canEmitInvoice: Access.Matrix[FiscalPolicies.Emit].Any(r => user.IsInRole(r.ToString())), overrideCredit: i.OverrideCredit && IsManager(user),
+                canWaiveCertificate: IsManager(user) || Access.Matrix[CertificatePolicies.Issue].Any(r => user.IsInRole(r.ToString())));
             return Results.Ok(await LoadDelivery(db, id, ct));
         }).RequireAuthorization(SalesPolicies.Ship);
 
@@ -535,9 +546,11 @@ public static class SalesEndpoints
         app.MapGet("/api/sales/pipeline", async (EbtDbContext db, SalesService svc, int? customerId, bool? includeTest, CancellationToken ct) =>
         {
             var today = SalesService.Today();
+            var deliveredSince = DateTimeOffset.UtcNow.AddDays(-30);
             var quotes = db.Quotes.AsNoTracking().Where(q => SalesService.OpenQuote.Contains(q.Status));
             var orders = db.SalesOrders.AsNoTracking().Where(o => SalesService.OpenOrder.Contains(o.Status) || o.Status == SalesOrderStatus.Shipped
-                || o.Status == SalesOrderStatus.Delivered && o.CreatedAt >= DateTimeOffset.UtcNow.AddDays(-30));
+                // "Entregues": the order's last delivery landed in the last 30 days (not how old the order is)
+                || o.Status == SalesOrderStatus.Delivered && db.Deliveries.Any(d => d.OrderId == o.Id && d.Status == DeliveryStatus.Delivered && d.DeliveredAt >= deliveredSince));
             if (includeTest != true) { quotes = quotes.Where(q => q.Source != DataSource.Test); orders = orders.Where(o => o.Source != DataSource.Test); }
             if (customerId is { } c)
             {
@@ -570,11 +583,8 @@ public static class SalesEndpoints
             }
 
             var inProgress = orderRows.Where(o => o.Status is SalesOrderStatus.Released or SalesOrderStatus.PartiallyShipped).ToList();
-            // Finished production waits in "certificate" until a quality certificate exists for the order (or the customer does not need one).
-            var readyIds = inProgress.Where(o => o.Ready).Select(o => o.Id).ToList();
-            var certified = await db.QualityCertificates.Where(c => readyIds.Contains(c.OrderId) && c.Status == CertificateStatus.Issued).Select(c => c.OrderId).Distinct().ToListAsync(ct);
-            var waived = await db.SalesOrders.Where(o => readyIds.Contains(o.Id) && o.CertificateWaived).Select(o => o.Id).ToListAsync(ct);
-            var needsCertificate = readyIds.Except(certified).Except(waived).ToHashSet();
+            // Finished production waits in "certificate" until every item still to ship has an issued certificate (per order line, the same rule that blocks shipping), or the order is waived.
+            var needsCertificate = await svc.OrdersNeedingCertificateAsync(inProgress.Where(o => o.Ready).Select(o => o.Id).ToList(), ct);
             var stages = new List<PipelineStage>
             {
                 Stage("quote", quoteRows.Where(q => q.Status is QuoteStatus.Draft or QuoteStatus.PendingApproval or QuoteStatus.Approved).Select(QuoteCard)),
@@ -590,15 +600,25 @@ public static class SalesEndpoints
             };
 
             var since = DateTimeOffset.UtcNow.AddDays(-90);
+            // A quote replaced by a revision (cancelled while a newer revision of the same number exists) was not decided by the customer: it stays out of the denominator.
             var decided = await db.Quotes.AsNoTracking().Where(q => q.DecidedAt >= since || q.Status == QuoteStatus.Converted && q.CreatedAt >= since)
                 .Where(q => customerId == null || q.CustomerId == customerId)
+                .Where(q => !(q.Status == QuoteStatus.Cancelled && db.Quotes.Any(n => n.Number == q.Number && n.Revision > q.Revision)))
                 .GroupBy(q => q.Status == QuoteStatus.Accepted || q.Status == QuoteStatus.PurchaseOrder || q.Status == QuoteStatus.Converted).Select(x => new { Won = x.Key, N = x.Count() }).ToListAsync(ct);
             var won = decided.Where(d => d.Won).Sum(d => d.N);
             var all = decided.Sum(d => d.N);
             var openOrders = orderRows.Where(o => SalesService.OpenOrder.Contains(o.Status)).ToList();
+            var awaitingInvoice = 0;
+            if (await FiscalEnabled(db, ct))
+            {
+                var owed = AwaitingInvoice(db, db.Deliveries.AsNoTracking());
+                if (includeTest != true) owed = owed.Where(d => d.Order!.Source != DataSource.Test);
+                if (customerId is { } cid) owed = owed.Where(d => d.Order!.CustomerId == cid);
+                awaitingInvoice = await owed.CountAsync(ct);
+            }
             var kpis = new PipelineKpis(quoteRows.Where(q => q.Status is not (QuoteStatus.Accepted or QuoteStatus.PurchaseOrder)).Sum(q => q.Total), quoteRows.Count(q => q.Status is not (QuoteStatus.Accepted or QuoteStatus.PurchaseOrder)),
                 all == 0 ? null : Math.Round((decimal)won / all, 4), openOrders.Sum(o => o.Total), openOrders.Count, openOrders.Count(o => o.Late), inProgress.Count(o => o.Ready),
-                quoteRows.Count(q => q.Status == QuoteStatus.PendingApproval));
+                quoteRows.Count(q => q.Status == QuoteStatus.PendingApproval), awaitingInvoice);
             return Results.Ok(new PipelineOut(kpis, stages));
         }).WithTags("Sales").RequireAuthorization(Policies.Read);
     }
@@ -645,7 +665,8 @@ public static class SalesEndpoints
             return new SalesOrderSummaryOut(x.Id, x.Number, x.Reference, x.CustomerId, x.Customer, x.CustomerPo, x.Status,
                 SalesService.Totals(x.Lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, (decimal?)null))).Total, x.Lines.Count == 0 ? null : x.Lines.Min(l => l.DueDate),
                 p?.Progress ?? 0, p?.Ready ?? false, p?.Late ?? false, x.CreatedAt, x.QuoteId,
-                Math.Round(open.Sum(o => o.Left * o.Line.UnitPrice), 2), kgs.Any(k => k is null) ? null : Math.Round(kgs.Sum(k => k!.Value), 3), x.BillTo, x.Salesperson);
+                open.Sum(o => SalesService.Money(o.Left * o.Line.UnitPrice)), kgs.Any(k => k is null) ? null : Math.Round(kgs.Sum(k => k!.Value), 3), x.BillTo, x.Salesperson,
+                open.Sum(o => SalesService.Money(o.Left * o.Line.UnitPrice) + SalesService.Money(o.Left * o.Line.UnitPrice * o.Line.IpiPercent / 100m)));
         }).ToList();
     }
 
@@ -663,7 +684,7 @@ public static class SalesEndpoints
         var replaced = q.Status == QuoteStatus.Cancelled ? await LatestRevisions(db, [(q.Number, q.Revision)], ct) : [];
         var newer = replaced.TryGetValue(q.Number * 100 + q.Revision, out var n) ? n : default((int Id, string Reference)?);
         var lines = q.Lines.OrderBy(l => l.Sequence).Select(l => new QuoteLineOut(l.Id, l.Sequence, l.ProductId, l.Product!.Code, l.CustomerPartNumber, l.Description, l.Quantity, l.Unit, l.UnitPrice, l.ListPrice,
-            l.ListPrice is > 0 ? Math.Round((1 - l.UnitPrice / l.ListPrice.Value) * 100m, 2) : null, l.IpiPercent, l.IcmsPercent, l.LeadTimeDays, l.DeliveryDate, Math.Round(l.Quantity * l.UnitPrice, 2))).ToList();
+            l.ListPrice is > 0 ? SalesService.Money((1 - l.UnitPrice / l.ListPrice.Value) * 100m) : null, l.IpiPercent, l.IcmsPercent, l.LeadTimeDays, l.DeliveryDate, SalesService.Money(l.Quantity * l.UnitPrice))).ToList();
         return new QuoteOut(q.Id, q.Number, q.Revision, q.Reference, q.CustomerId, q.Customer!.Name, q.AddressId, q.Address is null ? null : AddressText(q.Address), q.ContactName, q.ContactEmail, q.CustomerReference,
             q.PaymentTermId, q.PaymentTerm?.Name, q.CustomPaymentTerm, q.Freight, q.ValidityDays, q.ValidUntil, q.Conditions, q.Notes, q.Status, q.NeedsApproval, q.ApprovedBy, q.ApprovedAt, q.SentAt, q.SentTo, q.DecidedAt, q.DecisionBy, q.DecisionNote,
             q.CustomerPo, q.SalesOrderId, order, q.CreatedBy, q.CreatedAt, SalesService.Totals(q), lines, await History(db, SalesRecordKind.Quote, id, ct), q.RequestText, q.RequestFileName, q.RequestFileType, q.RequestFileSize, q.LostReason,
@@ -678,12 +699,12 @@ public static class SalesEndpoints
         {
             var p = progress?.Lines.First(x => x.LineId == l.Id);
             return new SalesOrderLineOut(l.Id, l.Sequence, l.ProductId, l.Product!.Code, l.CustomerPartNumber, l.Description, l.Quantity, l.Unit, l.UnitPrice, l.IpiPercent, l.IcmsPercent, l.DueDate,
-                Math.Round(l.Quantity * l.UnitPrice, 2), l.FromStock, l.ProductionOrderId, p?.ProductionReference, p?.ProductionStatus, p?.Produced ?? 0, p?.Shipped ?? 0, p?.Planned ?? 0, p?.Remaining ?? l.Quantity, p?.Available ?? 0, p?.Ready ?? false,
-                l.ToSpec(), l.FeasibilityStudyId, l.FeasibilityStudy?.Reference, Math.Round((p?.Remaining ?? l.Quantity) * l.UnitPrice, 2));
+                SalesService.Money(l.Quantity * l.UnitPrice), l.FromStock, l.ProductionOrderId, p?.ProductionReference, p?.ProductionStatus, p?.Produced ?? 0, p?.Shipped ?? 0, p?.Planned ?? 0, p?.Remaining ?? l.Quantity, p?.Available ?? 0, p?.Ready ?? false,
+                l.ToSpec(), l.FeasibilityStudyId, l.FeasibilityStudy?.Reference, SalesService.Money((p?.Remaining ?? l.Quantity) * l.UnitPrice));
         }).ToList();
         var totals = SalesService.Totals(o.Lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, (decimal?)null)));
         var credit = await svc.CreditAsync(o.CustomerId, o.PaymentTermId, 0m, null, ct);
-        var deliveries = await db.Deliveries.AsNoTracking().Where(d => d.OrderId == id).OrderBy(d => d.Number).Select(DeliverySummary).ToListAsync(ct);
+        var deliveries = await DeliverySummaries(db, db.Deliveries.AsNoTracking().Where(d => d.OrderId == id).OrderBy(d => d.Number), ct);
         return new SalesOrderOut(o.Id, o.Number, o.Reference, o.CustomerId, o.Customer!.Name, o.AddressId, AddressText(o.Address), o.CustomerPo, o.PaymentTermId, o.PaymentTerm?.Name, o.CustomPaymentTerm, o.Freight, o.Status, o.StatusReason, o.Notes,
             o.QuoteId, o.Quote?.Reference, o.CreatedBy, o.CreatedAt, o.ReleasedBy, o.ReleasedAt, totals.Products, totals.Ipi, totals.Total, progress?.Progress ?? 0, progress?.Ready ?? false, progress?.Late ?? false,
             credit, lines, deliveries, await History(db, SalesRecordKind.Order, id, ct), o.CertificateWaived, o.BillTo, o.Origin, o.Salesperson);
@@ -696,19 +717,48 @@ public static class SalesEndpoints
         var orderLines = await db.SalesOrderLines.AsNoTracking().Include(l => l.Product).Where(l => l.OrderId == d.OrderId).ToListAsync(ct);
         var upTo = await db.DeliveryLines.AsNoTracking().Where(l => l.Delivery!.OrderId == d.OrderId && l.Delivery.Status != DeliveryStatus.Cancelled && l.Delivery.Number <= d.Number)
             .GroupBy(l => l.OrderLineId).Select(g => new { LineId = g.Key, Quantity = g.Sum(x => x.Quantity) }).ToDictionaryAsync(x => x.LineId, x => x.Quantity, ct);
-        static decimal KgPerUnit(SalesOrderLine l) => l.SaleUnit == "KG" || (l.SaleUnit is null && l.Unit.Equals("KG", StringComparison.OrdinalIgnoreCase)) ? 1m : l.PieceWeightKg ?? l.Product?.NetWeightKg ?? 0m;
-        var valueExIpi = Math.Round(d.Lines.Sum(l => l.Quantity * l.OrderLine!.UnitPrice), 2);
-        var balanceKg = Math.Round(orderLines.Sum(l => Math.Max(0, l.Quantity - upTo.GetValueOrDefault(l.Id)) * KgPerUnit(l)), 3);
-        var balanceValue = Math.Round(orderLines.Sum(l => Math.Max(0, l.Quantity - upTo.GetValueOrDefault(l.Id)) * l.UnitPrice), 2);
+        var valueExIpi = d.Lines.Sum(l => SalesService.Money(l.Quantity * l.OrderLine!.UnitPrice));
+        var balanceKg = Math.Round(orderLines.Sum(l => Math.Max(0, l.Quantity - upTo.GetValueOrDefault(l.Id)) * (SalesService.KgPerUnit(l, l.Product) ?? 0m)), 3);
+        var balanceValue = orderLines.Sum(l => SalesService.Money(Math.Max(0, l.Quantity - upTo.GetValueOrDefault(l.Id)) * l.UnitPrice));
+        var invoice = InvoiceState(await FiscalEnabled(db, ct), d.Status, d.InvoiceNumber,
+            await db.FiscalDocuments.AnyAsync(f => f.DeliveryId == id && f.Kind == FiscalKind.Sale && f.Status == FiscalStatus.Authorized, ct),
+            await db.FiscalDocuments.AnyAsync(f => f.DeliveryId == id && f.Kind == FiscalKind.Sale && f.Status == FiscalStatus.Pending, ct));
         var lines = d.Lines.OrderBy(l => l.OrderLine!.Sequence).Select(l => new DeliveryLineOut(l.Id, l.OrderLineId, l.OrderLine!.Sequence, l.OrderLine.ProductId, l.OrderLine.Product!.Code, l.OrderLine.Description,
             l.Quantity, l.OrderLine.Unit, l.Packages)).ToList();
         return new DeliveryOut(d.Id, d.Number, d.Reference, d.OrderId, d.Order!.Reference, d.Order.CustomerId, d.Order.Customer!.Name, d.AddressId, AddressText(d.Address), d.PlannedDate, d.Status, d.Carrier, d.VehiclePlate,
             d.InvoiceNumber, d.Packages, d.GrossWeightKg, d.StockDocumentId, d.Notes, d.CreatedBy, d.CreatedAt, d.ShippedBy, d.ShippedAt, d.DeliveredAt, d.ReceivedBy, lines, await History(db, SalesRecordKind.Delivery, id, ct),
-            d.LotNumber, d.InvoicedValue, valueExIpi, balanceKg, balanceValue);
+            d.LotNumber, d.InvoicedValue, valueExIpi, balanceKg, balanceValue, invoice.Needs, invoice.Status);
     }
 
-    private static readonly System.Linq.Expressions.Expression<Func<Delivery, DeliverySummaryOut>> DeliverySummary = d =>
-        new DeliverySummaryOut(d.Id, d.Number, d.Reference, d.OrderId, d.Order!.Reference, d.Order.CustomerId, d.Order.Customer!.Name, d.PlannedDate, d.Status, d.Packages, d.GrossWeightKg, d.InvoiceNumber, d.Carrier, d.ShippedAt, d.DeliveredAt);
+    private static Task<bool> FiscalEnabled(EbtDbContext db, CancellationToken ct) => db.FiscalSettings.AsNoTracking().Select(s => s.Enabled).FirstOrDefaultAsync(ct);
+
+    /// <summary>A delivery that left but has no NF at all (no authorized or pending sale NF, no typed NF number): the NF is still owed while emission is on.</summary>
+    private static IQueryable<Delivery> AwaitingInvoice(EbtDbContext db, IQueryable<Delivery> q) =>
+        q.Where(d => (d.Status == DeliveryStatus.Shipped || d.Status == DeliveryStatus.Delivered) && d.InvoiceNumber == null
+            && !db.FiscalDocuments.Any(f => f.DeliveryId == d.Id && f.Kind == FiscalKind.Sale && (f.Status == FiscalStatus.Authorized || f.Status == FiscalStatus.Pending)));
+
+    /// <summary>"Authorized" (authorized NF or typed number) / "Pending" (SEFAZ outcome unknown) / "None" / "FiscalOff"; needsInvoice is true only for None on a shipped delivery while emission is on.</summary>
+    private static (string Status, bool Needs) InvoiceState(bool fiscalOn, DeliveryStatus status, string? invoiceNumber, bool authorized, bool pending)
+    {
+        var s = authorized || invoiceNumber is not null ? "Authorized" : pending ? "Pending" : fiscalOn ? "None" : "FiscalOff";
+        return (s, fiscalOn && s == "None" && status is DeliveryStatus.Shipped or DeliveryStatus.Delivered);
+    }
+
+    private static async Task<List<DeliverySummaryOut>> DeliverySummaries(EbtDbContext db, IQueryable<Delivery> q, CancellationToken ct)
+    {
+        var fiscalOn = await FiscalEnabled(db, ct);
+        var rows = await q.Select(d => new
+        {
+            d.Id, d.Number, d.Reference, d.OrderId, OrderReference = d.Order!.Reference, d.Order.CustomerId, Customer = d.Order.Customer!.Name, d.PlannedDate, d.Status, d.Packages, d.GrossWeightKg, d.InvoiceNumber, d.Carrier, d.ShippedAt, d.DeliveredAt,
+            Authorized = db.FiscalDocuments.Any(f => f.DeliveryId == d.Id && f.Kind == FiscalKind.Sale && f.Status == FiscalStatus.Authorized),
+            Pending = db.FiscalDocuments.Any(f => f.DeliveryId == d.Id && f.Kind == FiscalKind.Sale && f.Status == FiscalStatus.Pending)
+        }).ToListAsync(ct);
+        return rows.Select(r =>
+        {
+            var (state, needs) = InvoiceState(fiscalOn, r.Status, r.InvoiceNumber, r.Authorized, r.Pending);
+            return new DeliverySummaryOut(r.Id, r.Number, r.Reference, r.OrderId, r.OrderReference, r.CustomerId, r.Customer, r.PlannedDate, r.Status, r.Packages, r.GrossWeightKg, r.InvoiceNumber, r.Carrier, r.ShippedAt, r.DeliveredAt, needs, state);
+        }).ToList();
+    }
 
     private static SalesSettingsDto ToDto(SalesSettings s) => new(s.MaxDiscountPercent, s.DefaultValidityDays, s.MinimumOrderValue, s.ShippingLocationId, s.DefaultConditions, s.OffListNeedsApproval, s.FollowUpDays, s.ApprovalValidityDays);
 }

@@ -114,5 +114,21 @@ public sealed partial class SalesService(EbtDbContext db, StockService stock, Pr
         }, ct);
 
     public static DateOnly Today() => Ebt.Core.Services.Clock.Today();
-    private static decimal Money(decimal d) => Math.Round(d, 2, MidpointRounding.AwayFromZero);
+    /// <summary>The one money rounding rule (cents, away from zero) used by line totals, order totals and every API projection, so lines always add up to the totals.</summary>
+    public static decimal Money(decimal d) => Math.Round(d, 2, MidpointRounding.AwayFromZero);
+
+    /// <summary>Kilograms in one unit of the line as sold: 1 for lines sold by KG, otherwise the piece weight (line first, then the product net weight); null when unknown.</summary>
+    public static decimal? KgPerUnit(SalesOrderLine l, Product? p) =>
+        l.SaleUnit == "KG" || (l.SaleUnit is null && l.Unit.Equals("KG", StringComparison.OrdinalIgnoreCase)) ? 1m : l.PieceWeightKg ?? p?.NetWeightKg;
+
+    private static void EnsureFreight(FreightTerms f)
+    {
+        if (!Enum.IsDefined(f)) throw SalesException.Invalid("freight", "Unknown freight term");
+    }
+
+    private static void EnsureValidityDays(int? days)
+    {
+        if (days is <= 0) throw SalesException.Invalid("validityDays", "Must be greater than zero");
+        if (days > 365) throw SalesException.Invalid("validityDays", "At most 365 days");
+    }
 }

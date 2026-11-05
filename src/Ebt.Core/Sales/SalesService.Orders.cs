@@ -43,11 +43,13 @@ public sealed partial class SalesService
     {
         await ValidateHeaderAsync(i.CustomerId, i.AddressId, i.PaymentTermId, ct);
         var lines = await BuildLinesAsync(i.CustomerId, i.Lines, ct);
-        if (quote is null) await EnsurePricesAllowedAsync(lines, mayApprovePrices, ct);
+        EnsureFreight(i.Freight);
+        if (quote is null) await EnsurePricesAllowedAsync(lines, mayApprovePrices, null, ct);
         await ViabilityRules.ValidateAsync(db, i.CustomerId, lines.Select(l => (l.ProductId, l.FeasibilityId)), null, ct);
+        await LockCustomerCreditAsync(i.CustomerId, ct);
         var credit = await CreditAsync(i.CustomerId, i.PaymentTermId, Totals(lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, (decimal?)null))).Total, null, ct);
         if (credit.Exceeded && !overrideCredit)
-            throw SalesException.Conflict($"Credit limit exceeded: limit {credit.Limit:0.00}, open orders {credit.Open:0.00}, receivable {credit.Receivable:0.00}, this order {credit.ThisOrder:0.00}");
+            throw SalesException.Conflict($"Credit limit exceeded: limit {credit.Limit:0.00}, {credit.Breakdown(withThisOrder: true)}");
         var number = await NextAsync(EbtDbContext.SalesOrderNumbers, ct);
         var today = Today();
         var order = new SalesOrder
@@ -79,7 +81,9 @@ public sealed partial class SalesService
             var o = await LockOrderAsync(id, ct);
             if (o.Status != SalesOrderStatus.Created) throw SalesException.Conflict("Only orders not yet released can be edited");
             if (o.CustomerId != i.CustomerId) throw SalesException.Invalid("customerId", "The customer cannot change");
-            if (o.QuoteId is null) await EnsurePricesAllowedAsync(lines, mayApprovePrices, ct);
+            EnsureFreight(i.Freight);
+            // Also for quote-born orders: their prices passed the approval already, so unchanged prices go through, but a re-priced or discounted line needs a manager.
+            await EnsurePricesAllowedAsync(lines, mayApprovePrices, o.QuoteId, ct);
             var today = Today();
             o.AddressId = i.AddressId;
             o.CustomerPo = Clean(i.CustomerPo);

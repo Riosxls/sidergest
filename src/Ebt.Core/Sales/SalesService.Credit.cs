@@ -19,12 +19,41 @@ public sealed partial class SalesService
     /// </summary>
     private async Task EnsureCreditAsync(SalesOrder o, string stage, bool overrideCredit, string? user, CancellationToken ct)
     {
+        await LockCustomerCreditAsync(o.CustomerId, ct);
         var credit = await CreditAsync(o.CustomerId, o.PaymentTermId, 0m, null, ct);
         if (!credit.Exceeded) return;
         if (await db.SalesEvents.AnyAsync(e => e.Kind == SalesRecordKind.Order && e.RecordId == o.Id && e.Action == "credit-override", ct)) return;
         if (!overrideCredit)
-            throw SalesException.Conflict($"Credit limit exceeded: limit {credit.Limit:0.00}, open orders {credit.Open:0.00}, receivable {credit.Receivable:0.00}; a manager must authorise the {stage}");
-        Log(SalesRecordKind.Order, o.Id, "credit-override", null, null, $"{stage}: limite {credit.Limit:0.00} excedido (pedidos em aberto {credit.Open:0.00}, a receber {credit.Receivable:0.00})", user);
+            throw SalesException.Conflict($"Credit limit exceeded: limit {credit.Limit:0.00}, {credit.Breakdown()}; a manager must authorise the {stage}");
+        Log(SalesRecordKind.Order, o.Id, "credit-override", null, null,
+            $"{stage}: limite {credit.Limit:0.00} excedido (pedidos em aberto {credit.Open:0.00}, a receber {credit.Receivable:0.00}{(credit.ShippedNotInvoiced > 0 ? $", expedido sem NF {credit.ShippedNotInvoiced:0.00}" : "")})", user);
+    }
+
+    /// <summary>
+    /// Serializes credit decisions per customer for the rest of the transaction (Postgres advisory lock), so two orders or shipments checked at the same moment cannot
+    /// both pass on the same headroom. Must be called inside the transaction that records the decision; other providers (none in production) skip it.
+    /// </summary>
+    private async Task LockCustomerCreditAsync(int customerId, CancellationToken ct)
+    {
+        if (!db.Database.IsNpgsql()) return;
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({CreditLockNamespace}, {customerId})", ct);
+    }
+
+    private const int CreditLockNamespace = 7301;
+
+    /// <summary>
+    /// Goods that already left (Shipped/Delivered deliveries) but have no authorized sale NF and no typed NF number: they are in neither the open orders nor the receivables,
+    /// so while fiscal emission is on they would silently drop out of the exposure. With emission off there is no NF to wait for and nothing is added.
+    /// </summary>
+    private async Task<decimal> ShippedNotInvoicedAsync(int customerId, int? excludeOrderId, CancellationToken ct)
+    {
+        if (!await fiscal.EnabledAsync(ct)) return 0m;
+        var rows = await db.DeliveryLines.AsNoTracking()
+            .Where(dl => dl.Delivery!.Order!.CustomerId == customerId && dl.Delivery.OrderId != excludeOrderId
+                && (dl.Delivery.Status == DeliveryStatus.Shipped || dl.Delivery.Status == DeliveryStatus.Delivered) && dl.Delivery.InvoiceNumber == null
+                && !db.FiscalDocuments.Any(f => f.DeliveryId == dl.DeliveryId && f.Kind == FiscalKind.Sale && f.Status == FiscalStatus.Authorized))
+            .Select(dl => new { dl.Quantity, dl.OrderLine!.UnitPrice, dl.OrderLine.IpiPercent }).ToListAsync(ct);
+        return rows.Sum(r => Money(r.Quantity * r.UnitPrice * (1 + r.IpiPercent / 100m)));
     }
 
     public async Task<CreditCheck> CreditAsync(int customerId, int? paymentTermId, decimal thisOrder, int? excludeOrderId, CancellationToken ct = default)
@@ -39,7 +68,8 @@ public sealed partial class SalesService
         var shipped = await ShippedAsync(ids, ct);
         var open = lines.Sum(l => Money(Math.Max(0, l.Quantity - shipped.GetValueOrDefault(l.Id)) * l.UnitPrice * (1 + l.IpiPercent / 100m)));
         var receivable = await new Ebt.Core.Receivables.ReceivablesService(db).OpenBalanceAsync(customerId, ct);
-        return new CreditCheck(limit, open, thisOrder, limit is { } lim && open + receivable + thisOrder > lim, customerLimit is not null ? "customer" : termLimit is not null ? "term" : null, receivable);
+        var notInvoiced = await ShippedNotInvoicedAsync(customerId, excludeOrderId, ct);
+        return new CreditCheck(limit, open, thisOrder, limit is { } lim && open + receivable + notInvoiced + thisOrder > lim, customerLimit is not null ? "customer" : termLimit is not null ? "term" : null, receivable, notInvoiced);
     }
 
     public async Task<Dictionary<int, decimal>> ShippedAsync(IReadOnlyCollection<int> orderLineIds, CancellationToken ct = default) =>

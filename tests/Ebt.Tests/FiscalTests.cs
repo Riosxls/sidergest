@@ -219,6 +219,7 @@ public class FiscalTests(ApiFixture api)
             await Enable(admin, true);
             (await admin.Post("/api/fiscal/monthly-prices", new MonthlyPriceIn(tube.Id, customer.Id, "5101", Today.Year, Today.Month, 110m))).EnsureSuccessStatusCode();
             var delivery = await (await admin.Post($"/api/sales/orders/{order.Id}/deliveries", new DeliveryInput(Today))).Read<DeliveryOut>();
+            (await admin.Post($"/api/sales/orders/{order.Id}/certificate-waiver", new CertificateWaiverIn(true))).EnsureSuccessStatusCode(); // the Stock role cannot ship without a certificate itself
 
             delivery = await (await stock.Post($"/api/sales/deliveries/{delivery.Id}/ship", new ShipInput(Today, WithoutCertificate: true))).Read<DeliveryOut>();
             Assert.Equal(DeliveryStatus.Shipped, delivery.Status);

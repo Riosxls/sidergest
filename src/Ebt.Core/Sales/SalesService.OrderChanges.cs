@@ -38,11 +38,30 @@ public sealed partial class SalesService
             if (o.Status is not (SalesOrderStatus.Released or SalesOrderStatus.PartiallyShipped)) throw SalesException.Conflict($"Order is {o.Status}");
             var shipped = await ShippedAsync(o.Lines.Select(l => l.Id).ToList(), ct);
             if (!shipped.Values.Any(v => v > 0)) throw SalesException.Conflict("Nothing shipped yet; cancel the order instead");
+            // An item that never shipped cannot shrink to zero (quantity must stay above zero): it is removed from the order instead, which is only possible
+            // while nothing else hangs on it (a live production order). Checked before any write so a refusal leaves everything untouched.
+            var drop = new List<SalesOrderLine>();
+            foreach (var line in o.Lines.OrderBy(l => l.Sequence))
+            {
+                if (shipped.GetValueOrDefault(line.Id) > 0) continue;
+                if (line.ProductionOrderId is { } pid && await db.ProductionOrders.AsNoTracking().FirstAsync(p => p.Id == pid, ct) is { } of && of.Status != ProductionOrderStatus.Cancelled)
+                    throw SalesException.Conflict($"Item {line.Sequence} nunca foi expedido e tem a ordem de produção {of.Reference}: cancele a OF ou expeda o item antes de encerrar o saldo");
+                drop.Add(line);
+            }
             var notes = new List<string>();
             foreach (var d in await db.Deliveries.Where(d => d.OrderId == id && d.Status == DeliveryStatus.Planned).ToListAsync(ct))
             {
                 d.Status = DeliveryStatus.Cancelled;
                 Log(SalesRecordKind.Delivery, d.Id, "cancelled", DeliveryStatus.Planned, d.Status, $"Saldo do pedido {o.Reference} encerrado", user);
+            }
+            foreach (var line in drop)
+            {
+                if (line.ReservationId is { } rid && await db.StockReservations.AnyAsync(r => r.Id == rid && r.Status == ReservationStatus.Open, ct)) await stock.ReleaseAsync(rid, ct);
+                // Only planned/cancelled deliveries can reference an unshipped line; their rows go with it (the delivery history keeps the story).
+                db.DeliveryLines.RemoveRange(await db.DeliveryLines.Where(dl => dl.OrderLineId == line.Id).ToListAsync(ct));
+                db.SalesOrderLines.Remove(line);
+                o.Lines.Remove(line);
+                notes.Add($"item {line.Sequence}: {line.Quantity:0.####} → removido (não expedido)");
             }
             foreach (var line in o.Lines.OrderBy(l => l.Sequence))
             {
@@ -73,6 +92,7 @@ public sealed partial class SalesService
             {
                 var line = o.Lines.FirstOrDefault(l => l.Id == r.LineId) ?? throw SalesException.Invalid($"lines[{n}].lineId", "Not a line of this order");
                 if (line.DueDate == r.DueDate) continue;
+                if (r.DueDate < Today()) throw SalesException.Invalid($"lines[{n}].dueDate", "Cannot move a due date into the past");
                 notes.Add($"item {line.Sequence}: {line.DueDate:dd/MM/yyyy} → {r.DueDate:dd/MM/yyyy}");
                 line.DueDate = r.DueDate;
                 if (line.ProductionOrderId is { } pid && await db.ProductionOrders.FirstAsync(p => p.Id == pid, ct) is { } of && ProductionService.Open.Contains(of.Status)) of.DueDate = r.DueDate;

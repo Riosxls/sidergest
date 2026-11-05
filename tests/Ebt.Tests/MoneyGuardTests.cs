@@ -85,6 +85,7 @@ public class MoneyGuardTests(ApiFixture api)
             // Emission off: any shipper may record the number of an NF issued elsewhere.
             await SetFiscal(admin, false);
             var o1 = await NewOrder(admin, s);
+            (await admin.Post($"/api/sales/orders/{o1.Id}/certificate-waiver", new CertificateWaiverIn(true))).EnsureSuccessStatusCode(); // the Stock role cannot ship without a certificate itself
             var d1 = await NewDelivery(admin, o1, 3m);
             var shipped = await (await stock.Post($"/api/sales/deliveries/{d1.Id}/ship", new ShipInput(Today, InvoiceNumber: "999", WithoutCertificate: true))).Read<DeliveryOut>();
             Assert.Equal("999", shipped.InvoiceNumber);
@@ -166,6 +167,8 @@ public class MoneyGuardTests(ApiFixture api)
             var d = await NewDelivery(admin, order, 4m);
             var shipped = await (await admin.Post($"/api/sales/deliveries/{d.Id}/ship", new ShipInput(Today, WithoutCertificate: true))).Read<DeliveryOut>();
             var nf = await NfOf(admin, d.Id);
+            // Every local write is saved before SEFAZ is called; the history still ends up naming the NF number.
+            Assert.Contains((await (await admin.GetAsync($"/api/sales/deliveries/{d.Id}")).Read<DeliveryOut>()).History, h => h.Action == "shipped" && h.Note!.Contains($"NF {nf.Number}"));
 
             // The stock document is already reversed, so undoing the delivery is refused: the NF must not be cancelled at SEFAZ.
             await using (var db = api.NewDb())

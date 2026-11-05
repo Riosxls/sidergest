@@ -38,7 +38,7 @@ public sealed partial class SalesService
         var products = list.Sum(l => Money(l.Qty * l.Price));
         var ipi = list.Sum(l => Money(l.Qty * l.Price * l.Ipi / 100m));
         var icms = list.Sum(l => Money(l.Qty * l.Price * l.Icms / 100m));
-        var discount = list.Where(l => l.List is > 0).Select(l => Math.Round((1 - l.Price / l.List!.Value) * 100m, 2)).DefaultIfEmpty(0).Max();
+        var discount = list.Where(l => l.List is > 0).Select(l => Money((1 - l.Price / l.List!.Value) * 100m)).DefaultIfEmpty(0).Max();
         return new QuoteTotals(products, ipi, products + ipi, discount, list.Count(l => l.List is not > 0), icms);
     }
 
@@ -46,11 +46,17 @@ public sealed partial class SalesService
 
     /// <summary>
     /// An order typed in directly (no approved quote behind it) skips the quote approval, so the same rule is applied here: a discount past the limit, an
-    /// off-list price (when the setting is on) or a free line needs a sales manager. Quote-born orders already went through that approval.
+    /// off-list price (when the setting is on) or a free line needs a sales manager. An order born from a quote keeps the quote's approved prices; editing it re-checks any price that no longer matches the quote.
     /// </summary>
-    private async Task EnsurePricesAllowedAsync(IReadOnlyList<ResolvedLine> lines, bool mayApprove, CancellationToken ct)
+    private async Task EnsurePricesAllowedAsync(IReadOnlyList<ResolvedLine> lines, bool mayApprove, int? quoteId, CancellationToken ct)
     {
         if (mayApprove) return;
+        // An order born from a quote keeps the prices the approved quote carried: when every line still has a quote line with the same product and price, nothing was re-priced.
+        if (quoteId is { } qid)
+        {
+            var quoted = (await db.QuoteLines.AsNoTracking().Where(l => l.QuoteId == qid).Select(l => new { l.ProductId, l.UnitPrice }).ToListAsync(ct)).Select(l => (l.ProductId, l.UnitPrice)).ToHashSet();
+            if (lines.All(l => quoted.Contains((l.ProductId, l.UnitPrice)))) return;
+        }
         var settings = await SettingsAsync(ct);
         var totals = Totals(lines.Select(l => (l.Quantity, l.UnitPrice, l.IpiPercent, l.ListPrice, l.IcmsPercent)));
         if (lines.Any(l => l.UnitPrice <= 0) || NeedsApprovalFor(totals, settings))
