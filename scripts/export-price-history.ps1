@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-  Builds price-history.csv (the file MetaGest imports under Comercial > Sugestao de preco) from the legacy sales files.
+  Builds price-history.csv (the file MetaGest imports under Comercial > Sugestão de preço) from the legacy sales files.
 
 .DESCRIPTION
   Two sources, merged and de-duplicated:

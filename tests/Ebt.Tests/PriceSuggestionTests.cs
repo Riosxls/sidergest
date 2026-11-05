@@ -72,6 +72,7 @@ public class PriceSuggestionTests(ApiFixture api)
         Assert.Equal(2, first.Imported);
         Assert.Equal(1, first.Duplicates);
         Assert.Equal(3, first.Skipped);
+        Assert.Equal(new Dictionary<string, int> { ["unidade"] = 1, ["data"] = 0, ["medidas"] = 1, ["preço"] = 1 }, first.SkippedReasons);
         Assert.Equal(new DateOnly(2026, 1, 10), first.FirstDate);
         Assert.Equal(new DateOnly(2026, 1, 10), first.LastDate);
 
@@ -182,8 +183,10 @@ public class PriceSuggestionTests(ApiFixture api)
         await ImportAsync("date;customer;diameter;thickness;length;unit;price\n" + string.Join("\n", lines) + "\n");
 
         decimal qd = 88.9m, qt = 4m, ql = 3100m;
-        var ranked = sales.Select(s => (Dist: PriceSuggestionService.Distance(s.D, s.T, s.L, qd, qt, ql), Pkg: s.Price / Net(s.D, s.T, s.L))).OrderBy(x => x.Dist).Take(7).ToList();
-        double sw = ranked.Sum(x => 1 / (0.02 + x.Dist)), swl = ranked.Sum(x => 1 / (0.02 + x.Dist) * Math.Log((double)x.Pkg));
+        // The newer a sale, the more it weighs (half the weight per 6 months): the rows are dated 20, 21, 22... days ago.
+        var ranked = sales.Select((s, i) => (Dist: PriceSuggestionService.Distance(s.D, s.T, s.L, qd, qt, ql), Pkg: s.Price / Net(s.D, s.T, s.L), Age: PriceSuggestionService.RecencyFactor(Today.AddDays(-(20 + i)), Today)))
+            .OrderBy(x => x.Dist).Take(7).ToList();
+        double sw = ranked.Sum(x => 1 / (0.02 + x.Dist) * x.Age), swl = ranked.Sum(x => 1 / (0.02 + x.Dist) * x.Age * Math.Log((double)x.Pkg));
         var expected = (decimal)Math.Exp(swl / sw);
 
         var r = await SuggestAsync(admin, $"diameter={N(qd)}&thickness={N(qt)}&length={N(ql)}");
@@ -297,7 +300,14 @@ public class PriceSuggestionTests(ApiFixture api)
     [InlineData("BK DIN 2393", "BK")]
     [InlineData("DIN EN 10305-3 E420 + CR2", "EN10305")]
     [InlineData("EN 10305-3 E355", "EN10305")]
-    [InlineData("NBK + EN 10305", "EN10305")]
+    [InlineData("NBK + EN 10305", "NBK")]
+    [InlineData("EN 10305-2 – BK", "BK")]
+    [InlineData("EN 10305-2 BK", "BK")]
+    [InlineData("DIN EN 10305-1 +NBK", "NBK")]
+    [InlineData("EN10305-4 NBK", "NBK")]
+    [InlineData("BKS 10305", "EN10305")]
+    [InlineData("ABK", "other")]
+    [InlineData("aço carbono 1010 nbk", "NBK")]
     [InlineData("NBR 5599", "NBR")]
     [InlineData("SAE 1010", "SAE")]
     [InlineData("aço 1020", "SAE")]
@@ -377,6 +387,7 @@ public class PriceSuggestionTests(ApiFixture api)
     {
         var tables = (Dictionary<ResetScope, string[]>)typeof(DataResetService).GetField("Tables", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
         Assert.DoesNotContain("price_history", tables.Values.SelectMany(t => t));
+        Assert.DoesNotContain("price_simulations", tables.Values.SelectMany(t => t));
     }
 
     [Fact]
@@ -410,6 +421,7 @@ public class PriceSuggestionTests(ApiFixture api)
         // round 13,1 x 1,4 x 680 sold at R$ 20/kg: the oblong 17 x 6,2 x 1,4 x 680 has an equivalent diameter of 13,08
         var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
         await ImportAsync($"date;customer;diameter;thickness;length;unit;price;quantity\n{today};Cli A;13,1;1,4;680;KG;20;100\n");
+        await using var hidden = await LiveOrdersHidden.HideAsync(api); // live orders of other tests would add faint neighbours to the 20/kg row
         var admin = await api.AdminAsync();
         var r = await SuggestAsync(admin, "shape=oblong&width=17&height=6.2&thickness=1.4&length=680&quantity=1000");
         Assert.Equal("Oblong", r.Profile!.Shape);
