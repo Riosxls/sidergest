@@ -189,6 +189,30 @@ Rotating secrets on the development machine does not carry over: production gets
 
 Set `EBT_BEHIND_PROXY=true` so the API trusts the forwarded client IP. Without it every user shares one login rate-limit bucket, and ten logins a minute lock everyone out. Set `EBT_ALLOWED_HOSTS` to the real host name (and `EBT_CORS_ORIGIN` to the public `https://` origin). The optional Caddy service above does the TLS part.
 
+## Price history (suggestion of price for a tube)
+
+The price suggestion (Comercial > orcamento) learns from what EBT charged before. Two legacy sources feed `price_history`, plus the live
+MetaGest order lines (test-source orders are ignored):
+
+1. the master sales workbook `PEDIDO DE VENDAS Anos 24 & 26 - EBT e BST.xlsx` (read through Excel COM, read-only);
+2. the folder of "Pedido Interno de Venda" workbooks (one xlsx per order; read as zip, no Excel). Only this source carries the material
+   specification, which moves the price a lot.
+
+Export both into one CSV, then import it:
+
+```
+powershell -File scripts\export-price-history.ps1 [-Workbook <xlsx>] [-PedidosFolder <folder>] [-Out price-history.csv]
+```
+
+The script prints the counts per source and writes `price-history.csv` (`date;customer;diameter;thickness;length;unit;price;quantity;spec`, UTF-8).
+The file holds real customer prices: `price-history*.csv` is git-ignored, never commit it. Import it in the app (price list screen, needs the
+`price-edit` role: Admin, SalesManager) or with `POST /api/sales/price-history/import` (multipart field `file`; UTF-8 or Windows-1252, `;` `,` or tab).
+The result says read / imported / updated / duplicates / skipped.
+
+- A sale is identified by the first 6 letters of the customer name, diameter, thickness, length, unit and price (2 decimals). Importing again is
+  safe: a known sale only gets the later date and, if it lacked one, the specification (upsert); nothing is duplicated.
+- `spec` is classified into EN10305 (E420, E355, 10305, CR2), NBK, BK, NBR (5599, NBR), SAE (SAE, 1010, 1008, 1020) or other (`PriceSpec.Classify`).
+- It is reference data, like the price list: the data reset never deletes it, and a restore brings it back with the rest of the database.
 ## E-mail (quote sending)
 
 The API sends the quote PDF to the customer from one company mailbox (`Ebt.Core/Mail`, `POST /api/sales/quotes/{id}/email`). Set it in `.env`, then recreate the `api` container (see CLAUDE.md, "Rebuilding the API container"):
