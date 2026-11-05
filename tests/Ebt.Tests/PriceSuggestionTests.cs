@@ -389,4 +389,46 @@ public class PriceSuggestionTests(ApiFixture api)
         Assert.False(PriceSuggestionService.NamesMatch("acme", "acmeron tubos"));
         Assert.False(PriceSuggestionService.NamesMatch("ab", "abc"));
     }
+
+    [Fact]
+    public void Oblong_weight_is_the_stadium_wall_and_the_equivalent_diameter_keeps_the_perimeter()
+    {
+        // 17 x 6,2 x 1,4 x 680 mm (Formigari's drawing): wall area 51,35 mm2 -> 0,274 kg
+        var kg = TubeWeight.OblongNetWeightKg(17m, 6.2m, 1.4m, 680m)!.Value;
+        Assert.InRange(kg, 0.2735m, 0.2745m);
+        Assert.InRange(TubeWeight.OblongEquivalentDiameterMm(17m, 6.2m), 13.07m, 13.09m);
+        // a "stadium" as wide as it is tall is a round tube
+        Assert.Equal(TubeWeight.NetWeightKg(TubeShape.Circular, 10m, null, null, 1m, 1000m)!.Value, TubeWeight.OblongNetWeightKg(10m, 10m, 1m, 1000m)!.Value, 3);
+        Assert.Null(TubeWeight.OblongNetWeightKg(5m, 10m, 1m, 1000m));   // width smaller than height
+        Assert.Null(TubeWeight.OblongNetWeightKg(17m, 6.2m, 3.1m, 680m)); // wall eats the short side
+    }
+
+    [Fact]
+    public async Task Oblong_price_is_looked_up_for_the_round_tube_of_the_same_perimeter_and_says_so()
+    {
+        await ClearHistoryAsync();
+        // round 13,1 x 1,4 x 680 sold at R$ 20/kg: the oblong 17 x 6,2 x 1,4 x 680 has an equivalent diameter of 13,08
+        var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
+        await ImportAsync($"date;customer;diameter;thickness;length;unit;price;quantity\n{today};Cli A;13,1;1,4;680;KG;20;100\n");
+        var admin = await api.AdminAsync();
+        var r = await SuggestAsync(admin, "shape=oblong&width=17&height=6.2&thickness=1.4&length=680&quantity=1000");
+        Assert.Equal("Oblong", r.Profile!.Shape);
+        Assert.InRange(r.Profile.EquivalentDiameter, 13.07m, 13.09m);
+        Assert.InRange(r.Weight.NetKg, 0.273m, 0.275m);
+        Assert.Equal(20m, r.Suggestion.PricePerKg);
+        Assert.Equal("Neighbours", r.Suggestion.Basis);
+        Assert.InRange(r.Suggestion.PricePerPiece!.Value, 5.47m, 5.49m);
+        Assert.InRange(r.Suggestion.TotalForQuantity!.Value, 5470m, 5490m);
+        // a round request carries no profile
+        Assert.Null((await SuggestAsync(admin, "diameter=13.1&thickness=1.4&length=680")).Profile);
+    }
+
+    [Fact]
+    public async Task Oblong_dimensions_are_validated()
+    {
+        var admin = await api.AdminAsync();
+        foreach (var q in new[] { "shape=oblong&height=6.2&thickness=1.4&length=680", "shape=oblong&width=17&thickness=1.4&length=680", "shape=oblong&width=5&height=6.2&thickness=1.4&length=680",
+                     "shape=oblong&width=17&height=6.2&thickness=3.1&length=680", "shape=oblong&width=17&height=6.2&length=680", "shape=triangle&diameter=50&thickness=2&length=1000" })
+            Assert.Equal(HttpStatusCode.BadRequest, (await admin.GetAsync("/api/sales/price-suggestion?" + q)).StatusCode);
+    }
 }

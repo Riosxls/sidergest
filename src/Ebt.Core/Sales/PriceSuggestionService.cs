@@ -12,7 +12,9 @@ public sealed record PriceWeight(decimal NetKg, decimal GrossKg, decimal LossPer
 public sealed record PriceSuggestionOut(string Basis, string Confidence, decimal? PricePerKg, decimal? Low, decimal? High, decimal? PricePerPiece, decimal? TotalForQuantity);
 public sealed record PriceSimilar(DateOnly Date, string Customer, decimal Diameter, decimal Thickness, decimal Length, string Unit, decimal UnitPrice, decimal PricePerKg, double Distance, string Source, string? Spec);
 public sealed record PriceCustomerLast(DateOnly Date, decimal Diameter, decimal Thickness, decimal Length, string Unit, decimal UnitPrice, decimal PricePerKg);
-public sealed record PriceSuggestionResult(PriceWeight Weight, PriceSuggestionOut Suggestion, IReadOnlyList<PriceSimilar> Similar, PriceCustomerLast? CustomerLast, int HistoryCount);
+/// <summary>How the dimensions were read: "Round", or "Oblong" with the round tube of the same outside perimeter the price was compared with.</summary>
+public sealed record PriceProfile(string Shape, decimal EquivalentDiameter);
+public sealed record PriceSuggestionResult(PriceWeight Weight, PriceSuggestionOut Suggestion, IReadOnlyList<PriceSimilar> Similar, PriceCustomerLast? CustomerLast, int HistoryCount, PriceProfile? Profile = null);
 public sealed record PriceHistorySummary(int Count, DateOnly? FirstDate, DateOnly? LastDate);
 
 /// <summary>
@@ -42,10 +44,21 @@ public sealed class PriceSuggestionService(EbtDbContext db)
     public async Task<PriceHistorySummary> SummaryAsync(CancellationToken ct = default) =>
         new(await db.PriceHistory.CountAsync(ct), await db.PriceHistory.MinAsync(h => (DateOnly?)h.Date, ct), await db.PriceHistory.MaxAsync(h => (DateOnly?)h.Date, ct));
 
-    public async Task<PriceSuggestionResult> SuggestAsync(decimal diameter, decimal thickness, decimal length, int? customerId, decimal? quantity, int? productId, string? spec = null, CancellationToken ct = default)
+    public Task<PriceSuggestionResult> SuggestAsync(decimal diameter, decimal thickness, decimal length, int? customerId, decimal? quantity, int? productId, string? spec = null, CancellationToken ct = default) =>
+        SuggestCoreAsync(diameter, thickness, length, null, null, customerId, quantity, productId, spec, ct);
+
+    /// <summary>Oblong tube: the weight is the real one of the oblong section; the price is looked up for the round tube with the same outside perimeter and wall
+    /// (the history holds round tubes only), so it is the price of the round tube without anything for the forming of the shape.</summary>
+    public Task<PriceSuggestionResult> SuggestOblongAsync(decimal width, decimal height, decimal thickness, decimal length, int? customerId, decimal? quantity, int? productId, string? spec = null, CancellationToken ct = default)
+    {
+        var net = TubeWeight.OblongNetWeightKg(width, height, thickness, length) ?? throw SalesException.Invalid("thickness", "Invalid dimensions");
+        return SuggestCoreAsync(TubeWeight.OblongEquivalentDiameterMm(width, height), thickness, length, net, new PriceProfile("Oblong", TubeWeight.OblongEquivalentDiameterMm(width, height)), customerId, quantity, productId, spec, ct);
+    }
+
+    private async Task<PriceSuggestionResult> SuggestCoreAsync(decimal diameter, decimal thickness, decimal length, decimal? netOverride, PriceProfile? profile, int? customerId, decimal? quantity, int? productId, string? spec, CancellationToken ct)
     {
         var wantSpec = PriceSpec.Classify(spec);
-        var net = TubeWeight.NetWeightKg(TubeShape.Circular, diameter, null, null, thickness, length) ?? throw SalesException.Invalid("diameter", "Invalid dimensions");
+        var net = netOverride ?? TubeWeight.NetWeightKg(TubeShape.Circular, diameter, null, null, thickness, length) ?? throw SalesException.Invalid("diameter", "Invalid dimensions");
         var loss = TubeWeight.DefaultLossPercent;
         if (productId is { } pid && await db.Products.AsNoTracking().Where(p => p.Id == pid).Select(p => p.LossPercent).FirstOrDefaultAsync(ct) is > 0 and var own) loss = own;
         var weight = new PriceWeight(Math.Round(net, 3), Math.Round(net * (1 + loss / 100m), 3), loss);
@@ -66,7 +79,7 @@ public sealed class PriceSuggestionService(EbtDbContext db)
         var similar = ranked.Take(SimilarShown).Select(x => new PriceSimilar(x.P.Date, x.P.Customer, x.P.D, x.P.T, x.P.L, x.P.Unit, Math.Round(x.P.UnitPrice, 2), Math.Round(x.P.PricePerKg, 2), Math.Round(x.Dist, 4), x.P.Source, x.P.Spec)).ToList();
 
         if (ranked.Count == 0)
-            return new(weight, new("None", "Low", null, null, null, null, null), similar, customerLast, 0);
+            return new(weight, new("None", "Low", null, null, null, null, null), similar, customerLast, 0, profile);
 
         string basis, confidence;
         decimal pricePerKg, low, high;
@@ -99,7 +112,7 @@ public sealed class PriceSuggestionService(EbtDbContext db)
         var perKg = SalesService.Money(pricePerKg);
         var suggestion = new PriceSuggestionOut(basis, confidence, perKg, SalesService.Money(low), SalesService.Money(high), SalesService.Money(perKg * net),
             quantity is > 0 ? SalesService.Money(perKg * net * quantity.Value) : null);
-        return new(weight, suggestion, similar, customerLast, window.Count);
+        return new(weight, suggestion, similar, customerLast, window.Count, profile);
     }
 
     /// <summary>History rows plus live order lines of circular products, every price converted to R$/kg.</summary>

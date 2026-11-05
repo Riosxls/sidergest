@@ -15,16 +15,32 @@ public static class PriceSuggestionEndpoints
     {
         var g = app.MapGroup("/api/sales").WithTags("Sales");
 
-        g.MapGet("/price-suggestion", async (PriceSuggestionService svc, decimal? diameter, decimal? thickness, decimal? length, int? customerId, decimal? quantity, int? productId, string? spec, CancellationToken ct) =>
+        // shape=round (default): diameter, thickness, length. shape=oblong: width (long outside side), height (short outside side), thickness, length.
+        g.MapGet("/price-suggestion", async (PriceSuggestionService svc, decimal? diameter, decimal? thickness, decimal? length, int? customerId, decimal? quantity, int? productId, string? spec,
+            string? shape, decimal? width, decimal? height, CancellationToken ct) =>
         {
+            var oblong = string.Equals(shape, "oblong", StringComparison.OrdinalIgnoreCase);
+            if (!oblong && !string.IsNullOrWhiteSpace(shape) && !string.Equals(shape, "round", StringComparison.OrdinalIgnoreCase))
+                return Results.ValidationProblem(Errors().Require(false, "shape", "Use round or oblong"));
             var errors = Errors()
-                .Require(diameter is > 0, "diameter", "Must be greater than zero")
                 .Require(thickness is > 0, "thickness", "Must be greater than zero")
                 .Require(length is > 0, "length", "Must be greater than zero");
-            if (errors.Count == 0) errors.Require(thickness!.Value * 2 < diameter!.Value, "thickness", "Wall must be less than half the diameter");
+            if (oblong)
+            {
+                errors.Require(width is > 0, "width", "Must be greater than zero").Require(height is > 0, "height", "Must be greater than zero");
+                if (errors.Count == 0) errors.Require(width!.Value >= height!.Value, "width", "The width is the long side: it cannot be smaller than the height");
+                if (errors.Count == 0) errors.Require(thickness!.Value * 2 < height!.Value, "thickness", "Wall must be less than half the short side");
+            }
+            else
+            {
+                errors.Require(diameter is > 0, "diameter", "Must be greater than zero");
+                if (errors.Count == 0) errors.Require(thickness!.Value * 2 < diameter!.Value, "thickness", "Wall must be less than half the diameter");
+            }
             if (quantity is < 0) errors.Require(false, "quantity", "Cannot be negative");
             if (errors.Count > 0) return Results.ValidationProblem(errors);
-            return Results.Ok(await svc.SuggestAsync(diameter!.Value, thickness!.Value, length!.Value, customerId, quantity, productId, spec, ct));
+            return Results.Ok(oblong
+                ? await svc.SuggestOblongAsync(width!.Value, height!.Value, thickness!.Value, length!.Value, customerId, quantity, productId, spec, ct)
+                : await svc.SuggestAsync(diameter!.Value, thickness!.Value, length!.Value, customerId, quantity, productId, spec, ct));
         }).RequireAuthorization(SalesPolicies.Sell);
 
         g.MapGet("/price-history/summary", async (PriceSuggestionService svc, CancellationToken ct) => Results.Ok(await svc.SummaryAsync(ct)))
