@@ -41,8 +41,8 @@ Map<String, dynamic> _cert({String status = 'Draft', bool found = false, int? de
   'createdAt': '2026-10-30T10:00:00Z',
   'measures': [
     {'kind': 'Chemical', 'name': 'C', 'sequence': 1, 'specified': 'Máx. 0,150', 'found': found ? '0,08' : null},
-    {'kind': 'Dimensional', 'name': 'Espessura', 'sequence': 1, 'specified': '0,65 a 0,75', 'found': null},
-    {'kind': 'Mechanical', 'name': 'LR', 'sequence': 1, 'specified': '290 Mpa mín.', 'found': null},
+    {'kind': 'Dimensional', 'name': 'Espessura', 'sequence': 1, 'specified': '0,65 a 0,75', 'found': found ? '0,70' : null},
+    {'kind': 'Mechanical', 'name': 'LR', 'sequence': 1, 'specified': '290 Mpa mín.', 'found': found ? '310' : null},
   ],
 };
 
@@ -73,6 +73,7 @@ class _Fake {
   int certStatus = 200;
   int deleteStatus = 204;
   int putStatus = 200;
+  int issueStatus = 200;
   int templatesStatus = 200;
   int templatePutStatus = 200;
   Map<String, dynamic> importResult = {'created': 0, 'noCustomer': 0, 'noProduct': 0};
@@ -111,7 +112,7 @@ class _Fake {
       if (deleteStatus == 204) return http.Response('', 204);
       return _err(deleteStatus, 'Certificado em uso');
     }
-    if (p == '/api/sales/certificates/7/issue') return _json(_cert(status: 'Issued', found: true));
+    if (p == '/api/sales/certificates/7/issue') return issueStatus == 200 ? _json(_cert(status: 'Issued', found: true)) : _err(issueStatus, 'Certificado em uso');
     if (p == '/api/sales/certificates/7/cancel') return _json(_cert(status: 'Cancelled', cancelReason: 'Erro de digitação'));
     if (p == '/api/sales/certificates/7/link-delivery') return _json(_cert(status: 'Issued', found: true, deliveryId: 2));
     if (p == '/api/sales/orders/3') return _json({'deliveries': deliveries});
@@ -204,12 +205,12 @@ void main() {
   });
 
   group('novo certificado', () {
-    Future<void> launch(WidgetTester tester, _Fake fake, Map<String, dynamic> order, {int? deliveryId}) => _pump(
+    Future<void> launch(WidgetTester tester, _Fake fake, Map<String, dynamic> order, {int? deliveryId, Set<int>? lineIds, Set<int> covered = const {}}) => _pump(
       tester,
       fake,
       (s) => Builder(
         builder: (c) => Scaffold(
-          body: TextButton(onPressed: () => newCertificate(c, s, order, deliveryId: deliveryId), child: const Text('novo')),
+          body: TextButton(onPressed: () => newCertificate(c, s, order, deliveryId: deliveryId, lineIds: lineIds, coveredLineIds: covered), child: const Text('novo')),
         ),
       ),
     );
@@ -244,6 +245,54 @@ void main() {
       await tester.pumpAndSettle();
       expect(fake.log.where((r) => r.method == 'DELETE' && r.url.path.startsWith('/api/sales/certificates/')), hasLength(1));
       expect(find.textContaining('descartado'), findsOneWidget);
+    });
+
+    testWidgets('a draft that was saved but could not be issued is kept when the editor is left', (tester) async {
+      final fake = _Fake()..issueStatus = 422;
+      await launch(tester, fake, {
+        'id': 3,
+        'lines': [
+          {'id': 11, 'sequence': 1, 'productCode': 'TB-1', 'description': 'Tubo'},
+        ],
+      });
+      await tester.tap(find.text('novo'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('found-Chemical-C')), '0,08');
+      await tester.enterText(find.byKey(const ValueKey('found-Dimensional-Espessura')), '0,70');
+      await tester.enterText(find.byKey(const ValueKey('found-Mechanical-LR')), '310');
+      await tester.tap(find.byKey(const ValueKey('cert-save-issue')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('confirm-step')));
+      await tester.pumpAndSettle();
+      expect(fake.has('PUT', '/api/sales/certificates/7'), isTrue);
+      expect(find.textContaining('Certificado em uso'), findsOneWidget); // the issue step was refused; the editor stays with the message
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(fake.log.where((r) => r.method == 'DELETE' && r.url.path.startsWith('/api/sales/certificates/')), isEmpty);
+    });
+
+    testWidgets('only the lines of the delivery are offered, with the covered ones flagged', (tester) async {
+      final fake = _Fake();
+      await launch(
+        tester,
+        fake,
+        {
+          'id': 3,
+          'lines': [
+            {'id': 11, 'sequence': 1, 'productCode': 'TB-1', 'description': 'Tubo'},
+            {'id': 12, 'sequence': 2, 'productCode': 'TB-2', 'description': 'Tubo B'},
+            {'id': 13, 'sequence': 3, 'productCode': 'TB-3', 'description': 'Tubo C'},
+          ],
+        },
+        lineIds: {11, 12},
+        covered: {11},
+      );
+      await tester.tap(find.text('novo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Certificado de qual item?'), findsOneWidget);
+      expect(find.textContaining('1 · TB-1 · Tubo  (já tem certificado)'), findsOneWidget);
+      expect(find.textContaining('TB-2'), findsOneWidget);
+      expect(find.textContaining('TB-3'), findsNothing);
     });
 
     testWidgets('an order with several lines asks which item first; dismissing creates nothing', (tester) async {
@@ -310,6 +359,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('certificate-issue')));
       await tester.pumpAndSettle();
       expect(find.text('Faltam os valores encontrados'), findsOneWidget);
+      expect(find.textContaining('Faltam: C, Espessura, LR'), findsOneWidget);
       await tester.tap(find.text('Preencher').last);
       await tester.pumpAndSettle();
       expect(find.text('Dados do certificado'), findsOneWidget);
@@ -333,6 +383,15 @@ void main() {
       expect(find.text('Emitido'), findsWidgets);
       expect(find.byKey(const ValueKey('certificate-link')), findsOneWidget);
       expect(find.text('0,08'), findsOneWidget);
+    });
+
+    testWidgets('a draft offers only "Excluir rascunho"; "Cancelar certificado" is for an issued one', (tester) async {
+      final fake = _Fake();
+      await _pump(tester, fake, (s) => CertificateScreen(session: s, id: 7));
+      await tester.tap(find.byType(PopupMenuButton<VoidCallback>));
+      await tester.pumpAndSettle();
+      expect(find.text('Excluir rascunho'), findsOneWidget);
+      expect(find.text('Cancelar certificado'), findsNothing);
     });
 
     testWidgets('an issued certificate without delivery warns when the order has none', (tester) async {
@@ -456,14 +515,21 @@ void main() {
       expect(fake.has('PUT', '/api/sales/certificates/7'), isFalse);
     });
 
-    testWidgets('Salvar e emitir needs a found value, confirms, then saves and issues in that order', (tester) async {
+    testWidgets('Salvar e emitir needs a found value on every row, naming the empty ones; confirms, then saves and issues in that order', (tester) async {
       final fake = _Fake();
       await _pump(tester, fake, (s) => CertificateEditorScreen(session: s, certificate: _cert()));
       await tester.tap(find.byKey(const ValueKey('cert-save-issue')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Preencha ao menos um valor'), findsOneWidget);
+      expect(find.textContaining('Faltam: C, Espessura, LR'), findsOneWidget);
       expect(fake.has('PUT', '/api/sales/certificates/7'), isFalse);
+      // One row filled is not enough: the server wants every row.
       await tester.enterText(find.byKey(const ValueKey('found-Chemical-C')), '0,08');
+      await tester.tap(find.byKey(const ValueKey('cert-save-issue')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Faltam: Espessura, LR'), findsOneWidget);
+      expect(fake.has('PUT', '/api/sales/certificates/7'), isFalse);
+      await tester.enterText(find.byKey(const ValueKey('found-Dimensional-Espessura')), '0,70');
+      await tester.enterText(find.byKey(const ValueKey('found-Mechanical-LR')), '-'); // "-" is a value for the server, so it is one here
       await tester.tap(find.byKey(const ValueKey('cert-save-issue')));
       await tester.pumpAndSettle();
       expect(find.text('Salvar e emitir 5176-26?'), findsOneWidget);
@@ -526,6 +592,9 @@ void main() {
       await tester.pump();
       expect(find.text('1 de 1 encontrados'), findsOneWidget);
       await tester.enterText(find.byKey(const ValueKey('found-Chemical-C')), '-');
+      await tester.pump();
+      expect(find.text('1 de 1 encontrados'), findsOneWidget); // "-" is a value, as for the server
+      await tester.enterText(find.byKey(const ValueKey('found-Chemical-C')), '  ');
       await tester.pump();
       expect(find.text('1 de 1 encontrados'), findsNothing);
     });
