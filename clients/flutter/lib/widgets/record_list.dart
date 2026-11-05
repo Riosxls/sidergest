@@ -46,6 +46,7 @@ class RecordList extends StatefulWidget {
     this.phoneTile,
     this.bottomPadding,
     this.rowChevron = false,
+    this.onSearchChanged,
   });
 
   /// Room left under the last row (and the pager) so the floating button never hides it; null is 88 with a [fab], 80 without.
@@ -53,6 +54,9 @@ class RecordList extends StatefulWidget {
 
   /// Shows a trailing chevron on tappable rows (cards and a last cell of the wide table).
   final bool rowChevron;
+
+  /// Called with the search text (trimmed) when it changes, so a screen can drop its default filters while the user is searching.
+  final ValueChanged<String>? onSearchChanged;
 
   /// Content of a row on a phone, in place of the title and the grey line of label/value pairs.
   final Widget Function(BuildContext context, Map<String, dynamic> e)? phoneTile;
@@ -350,6 +354,7 @@ class RecordListState extends State<RecordList> {
     _debounce = Timer(const Duration(milliseconds: 300), () {
       _q = q.trim();
       _skip = 0;
+      widget.onSearchChanged?.call(_q);
       reload();
     });
   }

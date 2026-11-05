@@ -132,11 +132,27 @@ class ProductionDashboard {
 
 /// Numbers the Painel shows for Vendas.
 class CommercialDashboard {
-  CommercialDashboard({required this.kpis, required this.stages, required this.feasibilityInReview});
+  CommercialDashboard({
+    required this.kpis,
+    required this.stages,
+    required this.feasibilityInReview,
+    this.pendingInvoice = 0,
+    this.shippedAwaiting = 0,
+    this.overdueReceivables = 0,
+  });
 
   final Map<String, dynamic> kpis;
   final Map<String, int> stages;
   final int feasibilityInReview;
+
+  /// Deliveries shipped whose NF is still owed ("NF pendente").
+  final int pendingInvoice;
+
+  /// Deliveries shipped and not yet confirmed as received.
+  final int shippedAwaiting;
+
+  /// Duplicatas past their due date with a balance.
+  final int overdueReceivables;
 
   num k(String key) => (kpis[key] as num?) ?? 0;
 }
@@ -247,9 +263,32 @@ Future<CommercialDashboard> fetchCommercial(ApiClient api) async {
     api.list('/api/viability', take: 1, query: {'status': 'InReview'}),
   ]);
   final p = r[0] as Map<String, dynamic>;
+  // The counts below are extra alerts: a failure leaves them at zero instead of hiding the numbers above.
+  Future<int> count(Future<int> Function() read) async {
+    try {
+      return await read();
+    } catch (e) {
+      debugPrint('dashboard_data: Optional context; the screen works without it: $e');
+      return 0;
+    }
+  }
+
+  final extra = await Future.wait([
+    count(() async {
+      final page = await api.list('/api/sales/deliveries', take: 200, query: {'pendingInvoice': true});
+      // Without the `needsInvoice` flag the answer cannot be trusted (an old server ignores the filter and sends every delivery).
+      if (page.items.isEmpty || !page.items.first.containsKey('needsInvoice')) return 0;
+      return page.items.every((e) => e['needsInvoice'] == true) ? page.total : page.items.where((e) => e['needsInvoice'] == true).length;
+    }),
+    count(() async => (await api.list('/api/sales/deliveries', take: 1, query: {'status': 'Shipped'})).total),
+    count(() async => (await api.list('/api/receivables', take: 1, query: {'overdue': true})).total),
+  ]);
   return CommercialDashboard(
     kpis: (p['kpis'] as Map?)?.cast<String, dynamic>() ?? const {},
     stages: {for (final s in ((p['stages'] as List?) ?? const []).cast<Map<String, dynamic>>()) '${s['key']}': (s['count'] as num).toInt()},
     feasibilityInReview: (r[1] as PageResult).total,
+    pendingInvoice: extra[0],
+    shippedAwaiting: extra[1],
+    overdueReceivables: extra[2],
   );
 }

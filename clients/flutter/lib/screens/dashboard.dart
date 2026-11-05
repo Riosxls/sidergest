@@ -13,11 +13,13 @@ import '../widgets/dash.dart';
 import '../widgets/responsive.dart';
 import 'backup_alert.dart';
 import 'dashboard_data.dart';
+import 'deliveries.dart' show DeliveriesScreen;
 import 'orders.dart';
 import 'product_detail.dart';
 import 'production_orders.dart';
 import 'quick_actions.dart';
 import 'quick_actions_editor.dart';
+import 'sales_orders.dart' show SalesOrdersScreen;
 import 'settings/settings_dialog.dart';
 
 typedef Navigate = void Function(String id, [String? filter]);
@@ -176,9 +178,20 @@ List<DashAlert> buildAlerts(
         'Pedidos atrasados',
         commercial.k('lateOrders').toInt(),
         'sales-orders',
-        null,
-        to('sales-orders'),
+        SalesOrdersScreen.lateFilter,
+        to('sales-orders', SalesOrdersScreen.lateFilter),
       ),
+      DashAlert(
+        'Comercial',
+        Icons.receipt_long_outlined,
+        'Entregas sem NF',
+        commercial.pendingInvoice,
+        'deliveries',
+        DeliveriesScreen.pendingInvoiceFilter,
+        to('deliveries', DeliveriesScreen.pendingInvoiceFilter),
+      ),
+      DashAlert('Comercial', Icons.task_alt, 'Entregas expedidas aguardando confirmação', commercial.shippedAwaiting, 'deliveries', 'Shipped', to('deliveries', 'Shipped')),
+      DashAlert('Comercial', Icons.account_balance_wallet_outlined, 'Duplicatas vencidas', commercial.overdueReceivables, 'receivables', 'overdue', to('receivables', 'overdue')),
       DashAlert('Comercial', Icons.gavel_outlined, 'Orçamentos a autorizar', commercial.k('pendingApprovals').toInt(), 'sales-quotes', null, to('sales-quotes')),
       DashAlert(
         'Comercial',

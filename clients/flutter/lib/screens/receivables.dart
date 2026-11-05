@@ -24,9 +24,12 @@ String? _statusQuery(String? v) => v?.toLowerCase();
 
 /// Contas a receber: the duplicatas of the authorized sale NFs, with the aging summary on top and the baixa / estorno actions per row.
 class ReceivablesScreen extends StatefulWidget {
-  const ReceivablesScreen({super.key, required this.session, this.customerId});
+  const ReceivablesScreen({super.key, required this.session, this.customerId, this.initialFilter});
 
   final Session session;
+
+  /// 'overdue' (from the Painel alert): only the late duplicatas.
+  final String? initialFilter;
 
   /// Limits the list to one customer (opened from the customer page).
   final int? customerId;
@@ -39,8 +42,8 @@ class _ReceivablesScreenState extends State<ReceivablesScreen> {
   final _list = GlobalKey<RecordListState>();
   final _aging = GlobalKey<ReceivablesAgingCardState>();
   static const _defaultStatus = 'pending';
-  String? _status = _defaultStatus;
-  bool _overdue = false;
+  late String? _status = widget.initialFilter == 'overdue' ? null : _defaultStatus;
+  late bool _overdue = widget.initialFilter == 'overdue';
 
   ApiClient get api => widget.session.api;
 
@@ -78,11 +81,12 @@ class _ReceivablesScreenState extends State<ReceivablesScreen> {
 
   /// Opens the read-only payment list of a duplicata; Dar baixa / Estornar are explicit buttons there.
   Future<void> _reverse(Map<String, dynamic> e) async {
-    final changed = await showDialog<bool>(
+    await showDialog<bool>(
       context: context,
       builder: (_) => _PaymentsDialog(session: widget.session, row: e, onPost: () => _post(e)),
     );
-    if (changed == true && mounted) _changed();
+    // Always reloaded: closing by a tap outside answers null, and the row's balance (and so its "Dar baixa" / "Estornar" actions) may have moved.
+    if (mounted) _changed();
   }
 
   @override
@@ -276,11 +280,21 @@ class _PaymentsDialogState extends State<_PaymentsDialog> {
     if (mounted) await _load();
   }
 
+  /// Paid and balance of the duplicata from its live payments (the row the list passed in is a snapshot that an estorno makes stale).
+  ({num paid, num balance})? get _figures {
+    final p = _payments;
+    final amount = widget.row['amount'];
+    if (p == null || amount is! num) return null;
+    final paid = p.where((x) => x['reversedAt'] == null).fold<num>(0, (a, x) => a + ((x['amount'] as num?) ?? 0));
+    return (paid: paid, balance: ((amount - paid) * 100).round() / 100);
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = widget.row;
     final canPost = widget.session.canPostReceivables;
-    final balance = r['balance'] as num;
+    final f = _figures;
+    final balance = f?.balance ?? r['balance'] as num;
     return AlertDialog(
       title: Text('Pagamentos · NF ${r['number']} (${r['sequence']}/${r['count']})'),
       content: DialogBody(
@@ -295,6 +309,15 @@ class _PaymentsDialogState extends State<_PaymentsDialog> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (f != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          'Valor ${fmtMoney(r['amount'])} · pago ${fmtMoney(f.paid)} · saldo ${fmtMoney(f.balance)}',
+                          key: const ValueKey('payments-balance'),
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
                     for (final p in _payments!)
                       ListTile(
                         key: ValueKey('payment-${p['id']}'),

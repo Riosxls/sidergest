@@ -34,11 +34,35 @@ Tone certificateTone(Object? s) => switch (s) {
 Future<Map<String, dynamic>?> openCertificate(BuildContext context, Session session, int id) =>
     pushRecord<Map<String, dynamic>>(context, 'certificate', id, (_) => CertificateScreen(session: session, id: id));
 
+/// Names of the rows whose "Encontrado" is blank. The server (`CertificateService.IssueAsync`) refuses a certificate when any row is blank
+/// (whitespace only); a typed "-" is a value for it, so it is one here too.
+List<String> emptyFoundRows(Iterable<String> names, Iterable<String> found) => [
+  for (final (i, f) in found.indexed)
+    if (f.trim().isEmpty) names.elementAt(i),
+];
+
+String foundRowsMessage(List<String> empty) =>
+    'Preencha o "Encontrado" de todas as linhas antes de emitir. Faltam: ${empty.join(', ')}. Se uma linha não se aplica, remova-a (ou digite "-").';
+
 /// Creates a draft certificate for an order line (prefilled by the server) and opens the editor on it.
 /// Returns true when a certificate was created.
-Future<bool> newCertificate(BuildContext context, Session session, Map<String, dynamic> order, {int? deliveryId}) async {
+///
+/// For a delivery pass [lineIds] (the order lines it carries): the picker lists only those, and [coveredLineIds] marks the ones that already have a
+/// certificate. With one candidate line the picker is skipped.
+Future<bool> newCertificate(
+  BuildContext context,
+  Session session,
+  Map<String, dynamic> order, {
+  int? deliveryId,
+  Set<int>? lineIds,
+  Set<int> coveredLineIds = const {},
+}) async {
   final api = session.api;
-  final lines = (order['lines'] as List).cast<Map<String, dynamic>>();
+  final lines = [for (final l in (order['lines'] as List).cast<Map<String, dynamic>>()) if (lineIds == null || lineIds.contains(l['id'])) l];
+  if (lines.isEmpty) {
+    showError(context, 'Esta entrega não tem itens para certificar.');
+    return false;
+  }
   var lineId = lines.length == 1 ? lines.first['id'] as int : null;
   if (lineId == null) {
     lineId = await showDialog<int>(
@@ -47,7 +71,11 @@ Future<bool> newCertificate(BuildContext context, Session session, Map<String, d
         title: const Text('Certificado de qual item?'),
         children: [
           for (final l in lines)
-            SimpleDialogOption(onPressed: () => Navigator.pop(c, l['id'] as int), child: Text('${l['sequence']} · ${l['productCode']} · ${l['description']}')),
+            SimpleDialogOption(
+              key: ValueKey('cert-pick-${l['id']}'),
+              onPressed: () => Navigator.pop(c, l['id'] as int),
+              child: Text('${l['sequence']} · ${l['productCode']} · ${l['description']}${coveredLineIds.contains(l['id']) ? '  (já tem certificado)' : ''}'),
+            ),
         ],
       ),
     );
@@ -55,12 +83,14 @@ Future<bool> newCertificate(BuildContext context, Session session, Map<String, d
   }
   final c = await runAction(context, () => api.post('/api/sales/certificates', {'orderId': order['id'], 'orderLineId': lineId, 'deliveryId': deliveryId}));
   if (c is! Map<String, dynamic> || !context.mounted) return false;
+  var persisted = false;
   final saved = await Navigator.of(context).push<Map<String, dynamic>>(
     MaterialPageRoute(
-      builder: (_) => CertificateEditorScreen(session: session, certificate: c),
+      builder: (_) => CertificateEditorScreen(session: session, certificate: c, onPersisted: () => persisted = true),
     ),
   );
-  if (saved != null) return true;
+  // A draft whose edits reached the server (the issue step failed after the save) is kept: it holds what the user typed.
+  if (saved != null || persisted) return true;
   // Backed out without saving: the draft only exists because the server numbered it, so it goes away (and frees the number when it is the last).
   try {
     await api.delete('/api/sales/certificates/${c['id']}');
@@ -181,13 +211,14 @@ class _CertificateScreenState extends State<CertificateScreen> {
 
   Future<void> _issue() async {
     final measures = (_c!['measures'] as List).cast<Map<String, dynamic>>();
-    if (measures.every((m) => m['found'] == null || '${m['found']}'.trim().isEmpty)) {
+    final empty = emptyFoundRows(measures.map((m) => '${m['name']}'), measures.map((m) => '${m['found'] ?? ''}'));
+    if (measures.isEmpty || empty.isNotEmpty) {
       await showDialog<void>(
         context: context,
         builder: (d) => AlertDialog(
           icon: const Icon(Icons.edit_note),
           title: const Text('Faltam os valores encontrados'),
-          content: const Text('Preencha ao menos um valor em "Encontrado" (química, dimensional ou ensaios) antes de emitir.'),
+          content: Text(measures.isEmpty ? 'O certificado não tem linhas. Adicione as linhas de química, dimensional ou ensaios e preencha o "Encontrado".' : foundRowsMessage(empty)),
           actions: [FilledButton(onPressed: () => Navigator.pop(d), child: const Text('Preencher'))],
         ),
       );
@@ -331,7 +362,8 @@ class _CertificateScreenState extends State<CertificateScreen> {
           value: _delete,
           child: const ListTile(leading: Icon(Icons.delete_outline), title: Text('Excluir rascunho')),
         ),
-      if (s.canIssueCertificate && c != null && c['status'] != 'Cancelled')
+      // A draft is deleted, not cancelled: "Excluir rascunho" above is its only way out.
+      if (s.canIssueCertificate && c != null && c['status'] == 'Issued')
         PopupMenuItem(
           value: _cancel,
           child: ListTile(leading: const Icon(Icons.block), iconColor: danger, textColor: danger, title: const Text('Cancelar certificado')),
@@ -439,10 +471,13 @@ class _CertificateScreenState extends State<CertificateScreen> {
 
 /// Editor for a draft certificate: header, specification table, found values and observations.
 class CertificateEditorScreen extends StatefulWidget {
-  const CertificateEditorScreen({super.key, required this.session, required this.certificate});
+  const CertificateEditorScreen({super.key, required this.session, required this.certificate, this.onPersisted});
 
   final Session session;
   final Map<String, dynamic> certificate;
+
+  /// Called once the server has the edits (the save worked), even if the page is left without a result afterwards.
+  final VoidCallback? onPersisted;
 
   @override
   State<CertificateEditorScreen> createState() => _CertificateEditorScreenState();
@@ -557,7 +592,10 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
     if (qty == null || qty <= 0) return _fail('Quantidade deve ser maior que zero');
     if (_v('description') == null) return _fail('Informe a descrição do produto');
     if (issue) {
-      if (!_found.any((f) => _hasValue(f.text))) return _fail('Preencha ao menos um valor em "Encontrado" (química, dimensional ou ensaios) antes de emitir.');
+      if (_measures.isEmpty) return _fail('O certificado não tem linhas. Adicione as linhas de química, dimensional ou ensaios e preencha o "Encontrado".');
+      final empty = emptyFoundRows(_measures.map((m) => '${m['name']}'), _found.map((f) => f.text));
+      // Nothing is saved before this check: a refused "Salvar e emitir" leaves the draft as it was.
+      if (empty.isNotEmpty) return _fail(foundRowsMessage(empty));
       final ok = await confirmStep(
         context,
         title: 'Salvar e emitir ${c['reference']}?',
@@ -597,6 +635,7 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
       var r = await api.put('/api/sales/certificates/${c['id']}', body) as Map<String, dynamic>;
       // What was typed is saved: a failure of the issue step below must not ask to discard it.
       _initial = _signature();
+      widget.onPersisted?.call();
       if (issue) r = await api.post('/api/sales/certificates/${c['id']}/issue', {}) as Map<String, dynamic>;
       if (mounted) Navigator.of(context).pop(r);
     } catch (e) {
@@ -652,7 +691,8 @@ class _CertificateEditorScreenState extends State<CertificateEditorScreen> {
 
   static const _kindIcons = {'Chemical': Icons.science_outlined, 'Dimensional': Icons.straighten, 'Mechanical': Icons.fitness_center};
 
-  bool _hasValue(String t) => t.trim().isNotEmpty && t.trim() != '-';
+  /// Same as the server: a row counts once it is not blank ("-" is a value).
+  bool _hasValue(String t) => t.trim().isNotEmpty;
 
   InputDecoration _cell(ColorScheme scheme, {required bool found}) {
     final edge = found ? scheme.primary.withValues(alpha: 0.35) : Colors.transparent;
