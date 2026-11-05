@@ -144,7 +144,11 @@ class LinesEditor extends StatelessWidget {
     this.onPick,
     this.hintFor,
     this.rowColor,
+    this.hideWhenEmpty = const {},
   });
+
+  /// Labels of columns left out while no line has a value for them.
+  final Set<String> hideWhenEmpty;
 
   final LinesEditorController? controller;
   final ApiClient api;
@@ -274,6 +278,7 @@ class LinesEditor extends StatelessWidget {
             SimpleTable(
               columns: [ColumnSpec('#', (e) => '${e['_n']}'), ...columns],
               rows: rows,
+              hideWhenEmpty: hideWhenEmpty,
               rowColor: rowColor == null ? null : (e) => rowColor!(lines[(e['_n'] as int) - 1]),
               actions: enabled
                   ? (e) => [

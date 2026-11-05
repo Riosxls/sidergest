@@ -100,27 +100,9 @@ const specKeys = [
   'toleranceLengthPlus',
 ];
 
-final orderLineFields = [
-  ...salesLineFields,
-  const FieldSpec('outsideDiameter', 'Ø externo (mm)', type: FieldType.decimal),
-  const FieldSpec('thickness', 'Espessura (mm)', type: FieldType.decimal),
-  const FieldSpec('length', 'Comprimento (mm)', type: FieldType.decimal),
-  const FieldSpec('standard', 'Norma', hint: 'NBR 5599, DIN 2393…'),
-  const FieldSpec('condition', 'Estado de entrega', type: FieldType.choice, choices: deliveryConditions),
-  const FieldSpec('saleUnit', 'Unidade de venda', type: FieldType.choice, choices: saleUnits),
-  const FieldSpec('pieceWeightKg', 'Peso da peça (kg)', type: FieldType.decimal),
-  const FieldSpec('materialNeedKg', 'Necessidade de MP (kg)', type: FieldType.decimal, hint: 'Vazio = calculada pela quantidade'),
-  const FieldSpec('toleranceDiameter', 'Tolerância Ø (± mm)', type: FieldType.decimal),
-  const FieldSpec('toleranceThickness', 'Tolerância espessura (± mm)', type: FieldType.decimal),
-  const FieldSpec('toleranceLengthPlus', 'Tolerância comprimento (+ mm)', type: FieldType.decimal),
-  const FieldSpec(
-    'feasibilityId',
-    'Análise de viabilidade',
-    type: FieldType.lookup,
-    lookup: LookupSpec('/api/viability', query: {'usable': true}),
-    hint: 'Cobre até 3 pedidos do mesmo item',
-  ),
-];
+/// Item of a sales order: the same short form as a quote item. The measures, standard, tolerances and weights come from the product,
+/// so they are not asked again; lines that already carry them (imported or typed before) keep them on edit (the editor keeps values the form does not show).
+const orderLineFields = salesLineFields;
 
 final orderLineColumns = <ColumnSpec>[
   ...salesLineColumns,
@@ -532,7 +514,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
       _recovered = true;
     });
     if (_customerId != null) unawaited(_loadAddresses(_customerId!, keep: true));
-    if (!widget.asOrder) unawaited(_refreshListPrices());
+    unawaited(_refreshListPrices());
   }
 
   @override
@@ -926,7 +908,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
           } else {
             _applyDefaultTerm(id);
           }
-          if (!widget.asOrder) _refreshListPrices();
+          _refreshListPrices();
         }
       },
     ),
@@ -1210,17 +1192,18 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
                     disabledHint: 'Escolha o cliente e o prazo de pagamento para adicionar itens',
                     editTitle: widget.asOrder ? null : 'Editar item',
                     lines: _lines,
-                    onPick: widget.asOrder ? null : _onPick,
-                    hintFor: widget.asOrder ? null : _priceHint,
+                    onPick: _onPick,
+                    hintFor: _priceHint,
                     rowColor: widget.asOrder ? null : _lineColor,
                     onChanged: (l) {
                       setState(() {
                         _lines = l;
                         _errLines = null;
                       });
-                      if (!widget.asOrder) _refreshListPrices();
+                      _refreshListPrices();
                     },
                     columns: widget.asOrder ? orderLineColumns : _quoteColumns,
+                    hideWhenEmpty: widget.asOrder ? const {'Medidas', 'Norma', 'IPI %'} : const {},
                   ),
                 ),
                 if (_errLines != null)

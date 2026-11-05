@@ -209,4 +209,18 @@ void main() {
     expect(find.byKey(const ValueKey('empty-new-quote')), findsOneWidget);
     expect(find.text('Limpar filtros'), findsNothing);
   });
+  testWidgets('a sales order item is as short as a quote item: the measures come from the product', (tester) async {
+    final f = _fake();
+    await pumpMore(tester, f, (s) => QuoteEditorScreen(session: s, asOrder: true));
+    await _pickCustomer(tester);
+    await _startItem(tester);
+    for (final key in ['quantity', 'unitPrice', 'leadTimeDays', 'deliveryDate', 'description']) {
+      expect(find.byKey(ValueKey('field-$key')), findsOneWidget, reason: key);
+    }
+    for (final key in ['outsideDiameter', 'thickness', 'length', 'standard', 'condition', 'saleUnit', 'pieceWeightKg', 'materialNeedKg', 'toleranceDiameter', 'feasibilityId']) {
+      expect(find.byKey(ValueKey('field-$key')), findsNothing, reason: key);
+    }
+    expect(find.text('Nova linha'), findsOneWidget);
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('field-unitPrice'))).controller!.text, '100,00'); // price from the customer's table, like the quote
+  });
 }
