@@ -30,15 +30,15 @@ Preencha:
 
 | Campo | O que é |
 |---|---|
-| Forma | **Redondo** ou **Oblongo** (achatado, com as pontas arredondadas). Troca os campos de medida |
+| Forma | **Redondo**, **Oblongo** (achatado, com as pontas arredondadas) ou **Retangular** (para quadrado, use lados iguais). Troca os campos de medida |
 | Diâmetro externo (mm) | Tubo redondo: medida de fora do tubo |
-| Largura e altura (mm) | Tubo oblongo: o lado maior e o lado menor, medidos por fora |
+| Largura e altura (mm) | Oblongo: o lado maior e o lado menor. Retangular: os lados A e B. Sempre medidos por fora |
 | Espessura (mm) | Espessura da parede |
 | Comprimento (mm) | Comprimento da peça |
 | Cliente (opcional) | Se informado, o simulador procura o que **esse cliente** já pagou |
 | Quantidade (opcional) | Em peças. Serve para calcular o total |
-| Acréscimo (%) | Só no oblongo ("pela conformação do oblongo"). Percentual que você soma ao preço pela conformação (veja o item 4) |
-| Especificação (opcional) | BK, NBK, EN 10305, NBR ou SAE. Faz diferença no preço (veja o item 5) |
+| Acréscimo (%) | No oblongo e no retangular ("pela conformação"). Percentual que você soma ao preço pela conformação (veja o item 4) |
+| Especificação (opcional) | BK, GBK (recozido em forno), NBK, EN 10305, NBR, SAE ou STKM13A (aço japonês, norma JIS G3445). Faz diferença no preço (veja o item 6) |
 
 Não existe botão de "calcular": o resultado se atualiza sozinho alguns instantes depois de você parar de digitar.
 
@@ -49,6 +49,12 @@ Ao lado dos campos há um **desenho do tubo** (o corte e a vista lateral) com um
 
 ### Tubo oblongo
 O peso é calculado com a **seção real do oblongo** (um retângulo com as pontas em meia-circunferência). Como o histórico de preços só tem tubos redondos, o simulador procura o preço do **tubo redondo de mesmo perímetro** (a mesma volta por fora e a mesma parede) e avisa isso na tela. Esse preço **não inclui a conformação** do oblongo: some o percentual no campo **Acréscimo (%)**, e a sugestão, a faixa e o total já aparecem com ele.
+
+### Tubo retangular ou quadrado
+Funciona como o oblongo: o peso é o da seção real (lados A e B e a parede) e o preço é o do tubo redondo de mesmo perímetro, com o campo de acréscimo para a conformação. Para um tubo quadrado, use os dois lados iguais.
+
+### Especificações GBK e STKM13A
+**GBK** é a condição DIN 2393 recozida: o tubo passa pelo forno depois da última trefilação, então custa mais que o BK. **STKM13A** é outro aço (norma japonesa JIS G3445, usada em estruturas de máquinas). Ainda não existem vendas dessas duas no histórico: ao escolhê-las o simulador usa tubos de outra especificação e avisa na tela. Some o acréscimo no campo de acréscimo, por conta do forno ou do aço. Nas próximas importações do histórico, os dois textos já são reconhecidos.
 
 ### Peso
 - **Peso líquido:** o peso do tubo pronto.
@@ -67,6 +73,27 @@ O peso é calculado com a **seção real do oblongo** (um retângulo com as pont
   "Baseado em 7 vendas parecidas dos últimos 24 meses". Se não houver nada parecido, o simulador avisa e pede para você digitar o preço.
 - **Último preço do cliente:** se o cliente já comprou qualquer tubo, mostra o último preço que ele pagou, mesmo de outra medida.
 
+### Aviso de base fraca
+Quando a sugestão se apoia em poucas vendas (menos de 3), ou a venda mais recente tem mais de 12 meses, aparece um aviso em destaque, por exemplo "Baseado em 2 vendas, a mais recente de mar/2024. Confira antes de usar." A linha do motivo sempre diz a idade das vendas usadas.
+
+### Este cliente pagou
+Quando você informa o cliente, uma lista mostra os últimos preços que ele pagou por essa medida, com a variação em relação à compra anterior (por exemplo "+5%" ou "igual"). Uma frase diz se ele costuma pagar acima ou abaixo de tubos parecidos. É só informação: não muda a sugestão, porque os testes mostraram que aplicar esse ajuste piora a previsão para medidas novas.
+
+### Preço por especificação
+Quando nenhuma especificação é escolhida, uma tabela mostra a mediana de R$/kg de cada especificação para a medida pedida e o quanto o preço varia entre elas (a especificação muda o preço em até cerca de 50%).
+
+### Gráfico do preço
+Um gráfico mostra o R$/kg ao longo do tempo das vendas parecidas, e a linha do cliente quando ele é informado. Passe o mouse (ou toque) em um ponto para ver o mês, o preço e quantas vendas ele reúne. Só aparece quando há pelo menos 3 meses com vendas.
+
+### Margem
+Digite o custo do aço (R$/kg) para ver a margem da sugestão. A margem fica em aviso quando é menor que 10% ou negativa. O custo não é guardado: vale só para a tela aberta.
+
+### Copiar e imprimir
+**Copiar resumo** copia para a área de transferência as medidas, o peso, os preços, a faixa, a confiança e o motivo, pronto para colar num e-mail. **Imprimir / PDF** gera uma folha A4 com a simulação e as 10 vendas mais parecidas, marcada como simulação (não é proposta).
+
+### Simulações salvas
+**Salvar simulação** guarda a medida, o preço, a confiança e uma observação sua. Quando você usa **Usar este preço** num orçamento, o sistema também registra a simulação, marcada como "usada no orçamento", sem atrapalhar o orçamento. Na tela do simulador, a lista **Simulações salvas** mostra as últimas 20 (data, quem fez, medida, preço); ao tocar numa, os campos voltam preenchidos. Só quem criou (ou um gerente) pode apagar. A simulação não fica ligada a uma linha específica do orçamento.
+
 ### Vendas parecidas
 Uma tabela com as vendas que serviram de base: data, cliente, medida, unidade, preço, preço por kg, especificação e de onde veio a
 informação ("Histórico" ou "MetaGest"). As mais parecidas ficam em cima. Linhas do cliente escolhido e da mesma especificação aparecem
@@ -82,7 +109,7 @@ delas. Os passos:
 2. **Mede o quanto cada venda se parece com o que você digitou.** A "distância" leva em conta o diâmetro (peso maior), a espessura e o
    comprimento (peso menor). Se as duas especificações são conhecidas e diferentes, a venda fica mais "longe".
 3. **Pega as 7 vendas mais parecidas** dos últimos 24 meses.
-4. **Tira uma média dando mais peso às mais parecidas.** Uma venda quase igual pesa muito mais que uma venda distante.
+4. **Tira uma média dando mais peso às mais parecidas.** Uma venda quase igual pesa muito mais que uma venda distante. As vendas mais recentes também pesam mais: a cada 6 meses de idade, o peso da venda cai pela metade.
 5. **Regra do cliente:** se o cliente informado já comprou uma medida muito próxima, vale o preço mais recente dele, porque na prática
    cada cliente tem o seu preço.
 
@@ -180,7 +207,7 @@ Foi feito um teste "para o passado": para cada pedido de 2025 e 2026, o simulado
 pedido**, e a previsão foi comparada com o preço realmente cobrado.
 
 - Para **clientes que repetem a mesma medida**, o preço é praticamente o último cobrado. É a grande maioria dos casos.
-- Para **medidas que o cliente nunca comprou**, o erro típico ficou em cerca de **6%**. Em 9 de cada 10 casos, o erro ficou abaixo de
+- Para **medidas que o cliente nunca comprou**, o erro típico ficou em cerca de **5,5%** (era 6,3% antes de as vendas recentes pesarem mais). Em 9 de cada 10 casos, o erro ficou abaixo de
   cerca de 18% a 20%.
 - Para comparar: usar a média geral dos preços erraria cerca de 12% de forma típica, e uma fórmula matemática simples cerca de 9%.
 
@@ -192,8 +219,8 @@ conhece o cliente e o momento do mercado.
 - **Reflete o que foi cobrado, não o que seria o ideal.** O simulador aprende com o passado. Se um preço antigo estava baixo, a
   sugestão herda isso. Ele não sabe de margem nem de custo.
 - **Não sabe o preço atual da matéria-prima.** Se o aço subir ou cair de repente, o simulador só percebe depois que novos pedidos entrarem.
-- **Só tubos redondos e oblongos.** Perfis retangulares e quadrados não entram por enquanto.
-- **O preço do oblongo é uma aproximação.** Não existe histórico de oblongos: o preço é o do redondo equivalente e o acréscimo pela forma é decisão sua.
+- **Redondos, oblongos e retangulares.** Outros perfis não entram.
+- **O preço do oblongo e do retangular é uma aproximação.** Não existe histórico desses formatos: o preço é o do redondo equivalente e o acréscimo pela forma é decisão sua. O mesmo vale para GBK e STKM13A, ainda sem vendas.
 - **Não considera quantidade, prazo de pagamento, frete ou impostos.** O preço sugerido é o preço de venda por kg ou por peça, como nas
   planilhas.
 - **Nome de cliente escrito de formas diferentes** (por exemplo "IKS" e "IKS - Indústria...") pode ser tratado como clientes diferentes. A
@@ -215,7 +242,7 @@ que ainda estão só nelas (por exemplo, pedidos novos feitos nas planilhas de p
    Ele cria o arquivo `price-history.csv` na pasta do projeto.
 2. No MetaGest: **Comercial > Simulador de preço > "Importar histórico (CSV)"** e escolher esse arquivo. É preciso ser Admin ou Gerente
    Comercial.
-3. O sistema mostra quantas vendas foram lidas, importadas, atualizadas e ignoradas.
+3. O sistema mostra quantas vendas foram lidas, importadas, atualizadas e ignoradas, e o motivo de cada linha ignorada (unidade, data, medidas ou preço).
 
 Pode importar quantas vezes quiser: uma venda que já existe não é duplicada, apenas recebe a data mais nova e a especificação, se ela
 ainda não tinha. O histórico importado **não é apagado** pela limpeza de dados do sistema (ele é dado de referência, como a tabela de
@@ -223,9 +250,7 @@ preços) e volta junto com o backup do banco.
 
 ## 11. Ideias para o futuro
 
-- Incluir perfis retangulares e quadrados.
 - Guardar no histórico as vendas de tubos oblongos, para o simulador aprender o acréscimo pela forma.
-- Mostrar a evolução do preço por kg ao longo do tempo para uma medida ou cliente.
 - Unir nomes de cliente escritos de formas diferentes.
 - Considerar o preço da matéria-prima do dia e a margem desejada.
 - Guardar a quantidade de cada compra, para estudar descontos por volume.
@@ -242,6 +267,8 @@ preços) e volta junto com o backup do banco.
 | Endpoints (`/api/sales/price-suggestion`, `/api/sales/price-history/...`) | `src/Ebt.Api/Endpoints/PriceSuggestionEndpoints.cs` |
 | Script que lê as planilhas | `scripts/export-price-history.ps1` |
 | Tela | `clients/flutter/lib/screens/price_simulator.dart` |
+| Gráfico, desenho e PDF | `clients/flutter/lib/widgets/price_trend_chart.dart`, `tube_diagram.dart`, `clients/flutter/lib/reports/print_docs.dart` |
+| Simulações salvas | `src/Ebt.Core/Entities/PriceSimulation.cs` (tabela `price_simulations`) |
 | Testes | `tests/Ebt.Tests/PriceSuggestionTests.cs`, `clients/flutter/test/price_simulator_test.dart` |
 
 Detalhes de operação (formato do CSV, regras de deduplicação) estão em `docs/OPERATIONS.md`.
