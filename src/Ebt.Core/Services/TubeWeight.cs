@@ -6,6 +6,9 @@ public static class TubeWeight
 {
     public const decimal SteelDensityKgPerMm3 = 0.00000785m;
 
+    /// <summary>Loss (perda) added to the net weight when the product has none: the "Peso Bruto" of the legacy spreadsheet.</summary>
+    public const decimal DefaultLossPercent = 2.8m;
+
     public static decimal? NetWeightKg(TubeShape? shape, decimal? diameterMm, decimal? widthMm, decimal? heightMm, decimal? thicknessMm, decimal? lengthMm)
     {
         if (shape is null || thicknessMm is not > 0 || lengthMm is not > 0) return null;

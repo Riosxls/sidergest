@@ -20,6 +20,7 @@ public sealed class DataResetException(string message) : Exception(message);
 /// </summary>
 public sealed class DataResetService(EbtDbContext db, ICurrentUser user)
 {
+    // price_history (imported sales prices for the price suggestion) is reference data like the price list: it is deliberately in no scope.
     private static readonly Dictionary<ResetScope, string[]> Tables = new()
     {
         [ResetScope.Sales] =

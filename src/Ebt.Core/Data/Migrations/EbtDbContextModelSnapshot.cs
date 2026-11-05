@@ -2854,6 +2854,90 @@ namespace Ebt.Core.Data.Migrations
                     b.ToTable("payment_terms", (string)null);
                 });
 
+            modelBuilder.Entity("Ebt.Core.Entities.PriceHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CustomerName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("customer_name");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<decimal>("DiameterMm")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("diameter_mm");
+
+                    b.Property<string>("ImportKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("import_key");
+
+                    b.Property<decimal>("LengthMm")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("length_mm");
+
+                    b.Property<decimal>("PricePerKg")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("price_per_kg");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("source");
+
+                    b.Property<string>("Spec")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("spec");
+
+                    b.Property<decimal>("ThicknessMm")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("thickness_mm");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("unit");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("unit_price");
+
+                    b.Property<decimal>("WeightKg")
+                        .HasPrecision(18, 5)
+                        .HasColumnType("numeric(18,5)")
+                        .HasColumnName("weight_kg");
+
+                    b.HasKey("Id")
+                        .HasName("pk_price_history");
+
+                    b.HasIndex("Date")
+                        .HasDatabaseName("ix_price_history_date");
+
+                    b.HasIndex("ImportKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_price_history_import_key");
+
+                    b.ToTable("price_history", (string)null);
+                });
+
             modelBuilder.Entity("Ebt.Core.Entities.PriceListEntry", b =>
                 {
                     b.Property<int>("Id")

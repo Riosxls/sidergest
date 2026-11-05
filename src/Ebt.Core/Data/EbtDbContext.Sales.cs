@@ -20,12 +20,31 @@ public partial class EbtDbContext
     public DbSet<Delivery> Deliveries => Set<Delivery>();
     public DbSet<DeliveryLine> DeliveryLines => Set<DeliveryLine>();
     public DbSet<SalesEvent> SalesEvents => Set<SalesEvent>();
+    public DbSet<PriceHistory> PriceHistory => Set<PriceHistory>();
 
     partial void ConfigureSales(ModelBuilder b)
     {
         b.HasSequence<int>(SalesQuoteNumbers);
         b.HasSequence<int>(SalesOrderNumbers);
         b.HasSequence<int>(DeliveryNumbers);
+
+        // Reference data from the legacy sales workbook; not part of the data reset.
+        b.Entity<PriceHistory>(e =>
+        {
+            e.ToTable("price_history");
+            e.HasIndex(x => x.ImportKey).IsUnique();
+            e.HasIndex(x => x.Date);
+            e.Property(x => x.CustomerName).HasMaxLength(200);
+            e.Property(x => x.Unit).HasMaxLength(2);
+            e.Property(x => x.Source).HasMaxLength(20);
+            e.Property(x => x.Spec).HasMaxLength(10);
+            e.Property(x => x.DiameterMm).HasPrecision(12, 4);
+            e.Property(x => x.ThicknessMm).HasPrecision(12, 4);
+            e.Property(x => x.LengthMm).HasPrecision(12, 4);
+            e.Property(x => x.UnitPrice).HasPrecision(18, 6);
+            e.Property(x => x.WeightKg).HasPrecision(18, 5);
+            e.Property(x => x.PricePerKg).HasPrecision(18, 6);
+        });
 
         b.Entity<SalesSettings>(e =>
         {
