@@ -24,6 +24,9 @@ public static class TubeWeight
     /// <summary>Diameter of the round tube whose outside perimeter equals that of the oblong one: the round tube a price history of round tubes can be compared with.</summary>
     public static decimal OblongEquivalentDiameterMm(decimal widthMm, decimal heightMm) => Math.Round((2 * (widthMm - heightMm) + (decimal)Math.PI * heightMm) / (decimal)Math.PI, 3);
 
+    /// <summary>Diameter of the round tube whose outside perimeter equals that of the rectangular (or square) one: 2 x (width + height) / pi.</summary>
+    public static decimal RectEquivalentDiameterMm(decimal widthMm, decimal heightMm) => Math.Round(2 * (widthMm + heightMm) / (decimal)Math.PI, 3);
+
     public static decimal? NetWeightKg(TubeShape? shape, decimal? diameterMm, decimal? widthMm, decimal? heightMm, decimal? thicknessMm, decimal? lengthMm)
     {
         if (shape is null || thicknessMm is not > 0 || lengthMm is not > 0) return null;

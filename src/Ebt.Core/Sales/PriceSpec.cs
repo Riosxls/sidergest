@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Ebt.Core.Sales;
 
@@ -8,16 +9,20 @@ public static class PriceSpec
 {
     public static readonly string[] Classes = ["EN10305", "NBK", "BK", "NBR", "SAE", "other"];
 
-    /// <summary>Class of a raw specification text ("NBK DIN 2393", "DIN EN 10305-3 E420 + CR2"...) or of an already normalized class; null for empty text.</summary>
+    private static readonly Regex NbkWord = new(@"\bNBK\b", RegexOptions.Compiled);
+    private static readonly Regex BkWord = new(@"\bBK\b", RegexOptions.Compiled);
+
+    /// <summary>Class of a raw specification text ("NBK DIN 2393", "EN 10305-2 - BK", "DIN EN 10305-3 E420 + CR2"...) or of an already normalized class; null for empty text.
+    /// The delivery condition wins: when the text has the word BK or NBK the class is BK or NBK (EN 10305-2 BK is a BK tube). Without them: EN 10305, NBR, SAE, else "other".</summary>
     public static string? Classify(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;
         var t = Fold(text).ToUpperInvariant().Trim();
         var known = Classes.FirstOrDefault(c => c.Equals(t, StringComparison.OrdinalIgnoreCase));
         if (known is not null) return known;
+        if (NbkWord.IsMatch(t)) return "NBK";
+        if (BkWord.IsMatch(t)) return "BK";
         if (Has(t, "E420", "E355", "10305", "CR2")) return "EN10305";
-        if (Has(t, "NBK")) return "NBK";
-        if (Has(t, "BK")) return "BK";
         if (Has(t, "5599", "NBR")) return "NBR";
         if (Has(t, "SAE", "1010", "1008", "1020")) return "SAE";
         return "other";

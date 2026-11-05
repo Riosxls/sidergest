@@ -99,6 +99,8 @@ public static class SalesEndpoints
     public static IServiceCollection AddSales(this IServiceCollection services)
     {
         services.AddScoped<SalesService>();
+        services.AddMemoryCache();
+        services.AddSingleton(sp => new PriceDataCache(sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(), sp.GetRequiredService<IConfiguration>().GetValue("PriceSuggestion:CacheSeconds", 60)));
         services.AddScoped<PriceSuggestionService>();
         services.AddScoped<PriceHistoryImporter>();
         services.AddExceptionHandler<SalesExceptionHandler>();
