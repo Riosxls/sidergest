@@ -30,16 +30,25 @@ Preencha:
 
 | Campo | O que é |
 |---|---|
-| Diâmetro externo (mm) | Medida de fora do tubo |
+| Forma | **Redondo** ou **Oblongo** (achatado, com as pontas arredondadas). Troca os campos de medida |
+| Diâmetro externo (mm) | Tubo redondo: medida de fora do tubo |
+| Largura e altura (mm) | Tubo oblongo: o lado maior e o lado menor, medidos por fora |
 | Espessura (mm) | Espessura da parede |
 | Comprimento (mm) | Comprimento da peça |
 | Cliente (opcional) | Se informado, o simulador procura o que **esse cliente** já pagou |
 | Quantidade (opcional) | Em peças. Serve para calcular o total |
+| Acréscimo pela forma (%) | Só no oblongo. Percentual que você soma ao preço pela conformação (veja o item 4) |
 | Especificação (opcional) | BK, NBK, EN 10305, NBR ou SAE. Faz diferença no preço (veja o item 5) |
 
 Não existe botão de "calcular": o resultado se atualiza sozinho alguns instantes depois de você parar de digitar.
 
 ## 4. O que o simulador mostra
+
+### Desenho do tubo
+Ao lado dos campos há um **desenho do tubo** (o corte e a vista lateral) com uma linha de cota para cada medida: diâmetro (ou largura e altura, no oblongo), espessura da parede e comprimento. O valor digitado aparece em cada linha e **a medida do campo em que você está digitando fica destacada**, como no desenho de um cliente. No celular, o desenho aparece acima dos campos.
+
+### Tubo oblongo
+O peso é calculado com a **seção real do oblongo** (um retângulo com as pontas em meia-circunferência). Como o histórico de preços só tem tubos redondos, o simulador procura o preço do **tubo redondo de mesmo perímetro** (a mesma volta por fora e a mesma parede) e avisa isso na tela. Esse preço **não inclui a conformação** do oblongo: some o percentual no campo **Acréscimo pela forma**, e a sugestão, a faixa e o total já aparecem com ele.
 
 ### Peso
 - **Peso líquido:** o peso do tubo pronto.
@@ -183,7 +192,8 @@ conhece o cliente e o momento do mercado.
 - **Reflete o que foi cobrado, não o que seria o ideal.** O simulador aprende com o passado. Se um preço antigo estava baixo, a
   sugestão herda isso. Ele não sabe de margem nem de custo.
 - **Não sabe o preço atual da matéria-prima.** Se o aço subir ou cair de repente, o simulador só percebe depois que novos pedidos entrarem.
-- **Só tubos redondos.** Perfis retangulares e quadrados não entram por enquanto.
+- **Só tubos redondos e oblongos.** Perfis retangulares e quadrados não entram por enquanto.
+- **O preço do oblongo é uma aproximação.** Não existe histórico de oblongos: o preço é o do redondo equivalente e o acréscimo pela forma é decisão sua.
 - **Não considera quantidade, prazo de pagamento, frete ou impostos.** O preço sugerido é o preço de venda por kg ou por peça, como nas
   planilhas.
 - **Nome de cliente escrito de formas diferentes** (por exemplo "IKS" e "IKS - Indústria...") pode ser tratado como clientes diferentes. A
@@ -214,6 +224,7 @@ preços) e volta junto com o backup do banco.
 ## 11. Ideias para o futuro
 
 - Incluir perfis retangulares e quadrados.
+- Guardar no histórico as vendas de tubos oblongos, para o simulador aprender o acréscimo pela forma.
 - Mostrar a evolução do preço por kg ao longo do tempo para uma medida ou cliente.
 - Unir nomes de cliente escritos de formas diferentes.
 - Considerar o preço da matéria-prima do dia e a margem desejada.
