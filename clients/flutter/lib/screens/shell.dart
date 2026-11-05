@@ -28,6 +28,7 @@ import 'low_stock.dart';
 import 'modules.dart';
 import 'orders.dart';
 import 'permissions.dart';
+import 'price_simulator.dart';
 import 'product_detail.dart';
 import 'production_floor.dart';
 import 'production_orders.dart';
@@ -54,7 +55,7 @@ import 'viability.dart';
 
 /// An entry of the sidebar navigation of the [Shell].
 class NavItem {
-  const NavItem(this.id, this.icon, this.title, this.section, this.build, {this.admin = false});
+  const NavItem(this.id, this.icon, this.title, this.section, this.build, {this.admin = false, this.visible});
 
   final String id;
   final IconData icon;
@@ -64,6 +65,12 @@ class NavItem {
 
   /// Listed only for sessions with the 'admin' permission.
   final bool admin;
+
+  /// When set, the entry is listed only for sessions it accepts (a screen that needs a capability other than admin).
+  final bool Function(Session s)? visible;
+
+  /// Whether [s] gets this entry.
+  bool shownTo(Session s) => (!admin || s.isAdmin) && (visible?.call(s) ?? true);
 }
 
 const hiddenSection = '_module';
@@ -150,6 +157,14 @@ List<NavItem> _screens() => [
   NavItem('customers', Icons.people_outline, 'Clientes', 'Comercial', (s, f, go) => CustomersScreen(session: s)),
   NavItem('sales-pipeline', Icons.view_kanban_outlined, 'Funil de vendas', 'Comercial', (s, f, go) => SalesPipelineScreen(session: s)),
   NavItem('sales-quotes', Icons.request_quote_outlined, 'Orçamentos', 'Comercial', (s, f, go) => QuotesScreen(session: s)),
+  NavItem(
+    'price-simulator',
+    Icons.calculate_outlined,
+    'Simulador de preço',
+    'Comercial',
+    (s, f, go) => PriceSimulatorScreen(session: s),
+    visible: (s) => s.canSell,
+  ),
   NavItem('viability', Icons.fact_check_outlined, 'Análises de viabilidade', 'Comercial', (s, f, go) => ViabilityScreen(session: s, initialStatus: f)),
   NavItem('sales-orders', Icons.receipt_long_outlined, 'Pedidos de venda', 'Comercial', (s, f, go) => SalesOrdersScreen(session: s, initialFilter: f)),
   NavItem('deliveries', Icons.local_shipping_outlined, 'Entregas', 'Comercial', (s, f, go) => DeliveriesScreen(session: s, initialFilter: f)),
@@ -195,7 +210,7 @@ List<NavItem> _screens() => [
 /// Screens a user may pick as the one that opens after sign-in, with the label shown in the setting.
 List<({String id, String label})> homeScreenChoices(Session s) => [
   for (final i in navItems())
-    if (!i.admin || s.isAdmin)
+    if (i.shownTo(s))
       (id: i.id, label: i.section.isEmpty ? i.title : (i.section == hiddenSection ? 'Visão geral de ${i.title}' : '${i.section}: ${i.title}')),
 ];
 
@@ -216,7 +231,7 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> {
   late final _items = [
     for (final i in navItems())
-      if (!i.admin || widget.session.isAdmin) i,
+      if (i.shownTo(widget.session)) i,
   ];
   String _current = 'dashboard';
   String? _filter;
@@ -793,7 +808,7 @@ class _ShellState extends State<Shell> {
 
   /// Comercial has too many screens for one flat list; the rest of the modules are short enough to stay ungrouped.
   static const _comercialGroups = {
-    'Vendas': ['customers', 'sales-pipeline', 'sales-quotes', 'viability', 'sales-orders', 'deliveries', 'certificates', 'fiscal-documents', 'receivables'],
+    'Vendas': ['customers', 'sales-pipeline', 'sales-quotes', 'price-simulator', 'viability', 'sales-orders', 'deliveries', 'certificates', 'fiscal-documents', 'receivables'],
     'Relatórios': ['report-material-consumption', 'report-billing'],
   };
 

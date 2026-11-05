@@ -28,6 +28,7 @@ Future<Map<String, dynamic>?> showEntityForm(
   bool openFirstLookup = false,
   PickHook? onPick,
   HintHook? hintFor,
+  FieldActionHook? fieldActions,
 }) => showDialog<Map<String, dynamic>>(
   context: context,
   barrierDismissible: true, // backdrop click and Esc ask before discarding edits (DiscardGuard)
@@ -46,6 +47,7 @@ Future<Map<String, dynamic>?> showEntityForm(
     openFirstLookup: openFirstLookup,
     onPick: onPick,
     hintFor: hintFor,
+    fieldActions: fieldActions,
   ),
 );
 
@@ -54,6 +56,9 @@ typedef PickHook = Future<Map<String, Object?>?> Function(String key, int? id, M
 
 /// Helper text of a field that depends on what is typed elsewhere in the form ("Tabela R$ 10,00 · desconto 5%"); null keeps the field's own hint.
 typedef HintHook = String? Function(String key, Map<String, dynamic> values);
+
+/// Widget shown under the field [key] (null for none), built from the values typed so far. [setText] puts text in another text field of the form.
+typedef FieldActionHook = Widget? Function(BuildContext context, String key, Map<String, dynamic> values, void Function(String key, String text) setText);
 
 /// Yes/no question. Pass [confirmLabel] with the verb of the action ("Excluir", "Reprogramar") instead of the generic "Confirmar", [danger] for a
 /// destructive one (red button) and [cancelLabel] "Voltar" when the action itself is a "Cancelar ...". The defaults stay "Confirmar"/"Cancelar".
@@ -99,6 +104,7 @@ class EntityFormDialog extends StatefulWidget {
     this.openFirstLookup = false,
     this.onPick,
     this.hintFor,
+    this.fieldActions,
   });
 
   final ApiClient api;
@@ -125,6 +131,9 @@ class EntityFormDialog extends StatefulWidget {
   final bool openFirstLookup;
   final PickHook? onPick;
   final HintHook? hintFor;
+
+  /// A small widget under a field (a "Sugerir preço" button under the price), or null for none; see [FieldActionHook].
+  final FieldActionHook? fieldActions;
 
   @override
   State<EntityFormDialog> createState() => _EntityFormDialogState();
@@ -439,6 +448,30 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
     });
   }
 
+  /// The field with the small action the caller put under it ([EntityFormDialog.fieldActions]), if any.
+  Widget _withAction(FieldSpec f, Widget field) {
+    final hook = widget.fieldActions;
+    if (hook == null || widget.readOnly) return field;
+    final extra = hook(context, f.key, _currentValues(), (key, text) {
+      final c = _text[key];
+      if (c == null) return;
+      setState(() {
+        c.text = text;
+        _serverErrors.remove(key);
+        _clientErrors.remove(key);
+      });
+    });
+    if (extra == null) return field;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        field,
+        Align(alignment: Alignment.centerRight, child: extra),
+      ],
+    );
+  }
+
   Widget _field(FieldSpec f) {
     final error = _errorFor(f.key);
     final label = f.required ? '${f.label} *' : f.label;
@@ -475,7 +508,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
           ),
           onSubmitted: (_) => _onEnter(f),
           onChanged: (_) {
-            if (widget.hintFor != null) setState(() {});
+            if (widget.hintFor != null || widget.fieldActions != null) setState(() {});
             if (f.daysFor != null || f.dateFor != null) {
               _syncLinked(f);
               _serverErrors.remove(f.daysFor ?? f.dateFor);
@@ -573,7 +606,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
             runSpacing: 14,
             children: [
               for (final f in widget.fields)
-                if (!folded(f)) SizedBox(key: _boxKeys.putIfAbsent(f.key, GlobalKey.new), width: w, child: _field(f)),
+                if (!folded(f)) SizedBox(key: _boxKeys.putIfAbsent(f.key, GlobalKey.new), width: w, child: _withAction(f, _field(f))),
               if (extra.isNotEmpty)
                 TextButton.icon(
                   key: const ValueKey('form-more'),

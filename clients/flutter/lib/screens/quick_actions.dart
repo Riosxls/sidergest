@@ -52,6 +52,7 @@ List<QuickAction> quickActionCatalog(Session s, {void Function(String id)? go}) 
   if (s.canStock) QuickAction(Icons.swap_vert, 'Novo lançamento', (c) => newStockPosting(c, s), id: 'new-stock-posting'),
   if (s.canStock) QuickAction(Icons.lock_clock_outlined, 'Nova reserva', (c) => newReservation(c, s), id: 'new-reservation'),
   if (go != null) QuickAction(Icons.trending_down, 'Estoque mínimo', (c) async => go('low-stock'), id: 'low-stock'),
+  if (s.canSell && go != null) QuickAction(Icons.calculate_outlined, 'Simulador de preço', (c) async => go('price-simulator'), id: 'price-simulator'),
 ];
 
 /// The shortcuts on the Painel: the user's pick (at most [Session.maxQuickActions]) or the default set. Picks the role cannot use are skipped.
@@ -88,6 +89,7 @@ List<QuickAction> moduleQuickActions(Session s, String section, {void Function(S
     if (s.canSell) QuickAction(Icons.request_quote_outlined, 'Novo orçamento', (c) => newQuote(c, s)),
     if (s.canSell) QuickAction(Icons.receipt_long_outlined, 'Novo pedido de venda', (c) => newSalesOrder(c, s)),
     if (s.canSell) QuickAction(Icons.fact_check_outlined, 'Nova análise de viabilidade', (c) async => await newFeasibility(c, s)),
+    if (s.canSell && go != null) QuickAction(Icons.calculate_outlined, 'Simulador de preço', (c) async => go('price-simulator')),
   ],
   'Engenharia' => [
     if (s.canWrite) QuickAction(Icons.add_box_outlined, 'Novo produto', (c) => newProduct(c, s)),

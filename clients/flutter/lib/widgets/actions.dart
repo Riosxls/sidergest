@@ -143,6 +143,7 @@ class LinesEditor extends StatelessWidget {
     this.staleOnChange = const {},
     this.onPick,
     this.hintFor,
+    this.fieldActions,
     this.rowColor,
     this.hideWhenEmpty = const {},
   });
@@ -180,6 +181,7 @@ class LinesEditor extends StatelessWidget {
   final Map<String, List<String>> staleOnChange;
   final PickHook? onPick;
   final HintHook? hintFor;
+  final FieldActionHook? fieldActions;
   final Color? Function(Map<String, dynamic> line)? rowColor;
 
   /// [current] is the list the screen has now when this runs again after "add and new": this widget still holds the list it was built with.
@@ -198,6 +200,7 @@ class LinesEditor extends StatelessWidget {
       openFirstLookup: adding && addAnotherLabel != null && fields.isNotEmpty && fields.first.type == FieldType.lookup,
       onPick: onPick,
       hintFor: hintFor,
+      fieldActions: fieldActions,
       onSubmit: (_) async => null,
     );
     if (r == null) return;

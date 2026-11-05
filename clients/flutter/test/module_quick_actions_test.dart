@@ -29,7 +29,7 @@ Future<void> _open(WidgetTester tester, String module, String role, {List<String
 }
 
 const _all = {
-  'Comercial': ['Novo orçamento', 'Novo pedido de venda', 'Nova análise de viabilidade'],
+  'Comercial': ['Novo orçamento', 'Novo pedido de venda', 'Nova análise de viabilidade', 'Simulador de preço'],
   'Engenharia': ['Novo produto', 'Nova matéria-prima'],
   'PCP': ['Nova ordem de fabricação', 'Novo apontamento'],
   'Suprimentos': ['Nova requisição', 'Novo pedido de compra', 'Estoque mínimo'],
