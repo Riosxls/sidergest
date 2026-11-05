@@ -15,6 +15,14 @@ String fmtFileSize(Object? v) {
   return n >= 1048576 ? '${fmtDecimalInput(n / 1048576, 1)} MB' : '${(n / 1024).ceil()} KB';
 }
 
+/// A unit price as money: two decimals, or up to four when the price has more than two (R$ 12,3456 stays as typed), so quantity × price
+/// matches the line total. The printed quote and the text preview already show four.
+String fmtUnitPrice(Object? v) {
+  if (v is! num) return fmtMoney(v);
+  if (((v * 100).round() / 100 - v).abs() < 1e-9) return fmtMoney(v);
+  return 'R\$ ${fmtNum(v, 4).replaceFirst(RegExp(r'0{1,2}$'), '')}';
+}
+
 /// Quantity × unit price, plus IPI and ICMS amounts (both on the base value) when set.
 num lineEstimate(Map<String, dynamic> l) {
   final base = _n(l['quantity']) * _n(l['unitPrice']);

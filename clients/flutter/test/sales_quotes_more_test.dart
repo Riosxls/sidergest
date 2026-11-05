@@ -494,7 +494,8 @@ void main() {
       await _openQuote(tester, f);
       expect(find.byKey(const ValueKey('quote-po')), findsNothing);
       expect(find.text('Nenhum pedido de compra anexado (PDF, imagem ou texto)'), findsOneWidget);
-      await tapKey(tester, 'quote-po-start-text');
+      // The text button on the section (the staged way) still saves the text alone and leaves the registration for later.
+      await tapKey(tester, 'quote-po-text');
       expect(find.text('Texto do pedido de compra'), findsWidgets);
       await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Pedido 77 do cliente');
       await tapText(tester, 'Salvar');

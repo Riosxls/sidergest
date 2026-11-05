@@ -425,7 +425,7 @@ void main() {
     final fake = SalesFake()..quoteStatus = 'Accepted';
     await pumpScreen(tester, fake, (s) => QuoteScreen(session: s, id: 5));
     expect(find.text('Aprovada pelo cliente · falta o pedido de compra'), findsOneWidget);
-    expect(find.textContaining('Passo 1 de 2'), findsOneWidget);
+    expect(find.textContaining('Registre o pedido de compra que o cliente enviou'), findsOneWidget);
     expect(find.byKey(const ValueKey('quote-po-start')), findsOneWidget);
     expect(find.byKey(const ValueKey('quote-po-attach')), findsOneWidget);
     expect(find.byKey(const ValueKey('quote-po')), findsNothing); // nothing to register until the order is attached
@@ -472,7 +472,7 @@ void main() {
       ..requestFileName = 'pedido-4521.pdf';
     await pumpScreen(tester, withFile, (s) => QuoteScreen(session: s, id: 5));
     expect(find.textContaining('pedido-4521.pdf'), findsOneWidget);
-    expect(find.textContaining('Passo 2 de 2'), findsOneWidget);
+    expect(find.textContaining('Confira o anexo abaixo'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('quote-po')));
     await tester.pumpAndSettle();
     await skipGate(tester);
