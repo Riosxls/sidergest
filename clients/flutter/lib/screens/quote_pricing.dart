@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../entities.dart';
 import '../session.dart';
 import '../widgets/pipeline.dart' show Tone;
+import 'sales_common.dart' show quoteAlertSpecs;
 
 // Pure helpers of the quote screens (pricing, discount, estimate, alerts, file size). No widgets, no API: unit tested in test/quote_pricing_test.dart.
 
@@ -72,8 +73,7 @@ String quoteAlert(Map<String, dynamic> e) => quoteAlerts(e).map((a) => a.text).j
 
 /// Every alert a quote row has (a quote can both need an answer and be about to expire), with the tone and icon that mark it.
 List<({String text, Tone tone, IconData icon})> quoteAlerts(Map<String, dynamic> e) => [
-  if (e['status'] == 'PendingApproval' || e['needsApproval'] == true && e['status'] == 'Draft')
-    (text: 'Acima do limite', tone: Tone.warning, icon: Icons.gavel_outlined),
-  if (e['followUp'] == true) (text: 'Cobrar resposta', tone: Tone.warning, icon: Icons.mark_email_unread_outlined),
-  if (e['expiring'] == true) (text: 'Vence em breve', tone: Tone.danger, icon: Icons.schedule),
+  if (e['status'] == 'PendingApproval' || e['needsApproval'] == true && e['status'] == 'Draft') quoteAlertSpecs['discount']!,
+  if (e['followUp'] == true) quoteAlertSpecs['followup']!,
+  if (e['expiring'] == true) quoteAlertSpecs['expiring']!,
 ];

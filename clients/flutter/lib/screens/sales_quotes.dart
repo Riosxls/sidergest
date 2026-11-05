@@ -1393,8 +1393,10 @@ class _QuoteScreenState extends State<QuoteScreen> {
     final q = _q;
     if (q == null) return;
     final registers = q['status'] != 'Sent';
-    final form = await showDialog<Map<String, String>>(
+    // The send is part of the dialog: it stays open (and cannot be closed by Esc) until the server answers, and a failure shows inside it.
+    final r = await showDialog<Object?>(
       context: context,
+      barrierDismissible: false,
       builder: (c) => QuoteEmailDialog(
         to: '${q['sentTo'] ?? q['contactEmail'] ?? ''}'.trim(),
         subject: _mailSubject(q),
@@ -1402,18 +1404,15 @@ class _QuoteScreenState extends State<QuoteScreen> {
         from: _mailFrom,
         fileName: 'Orçamento ${q['reference']}.pdf',
         registers: registers,
+        onSend: (form) async {
+          // A draft or approved quote is mailed as the Sent quote it is about to become: no draft banner, the validity dated.
+          final pdf = await buildQuotePdf(api, registers ? quoteAsSent(q) : q);
+          return api.post('$base/email', {...form, 'pdfBase64': base64Encode(pdf), 'fileName': 'Orçamento ${q['reference']}.pdf'});
+        },
       ),
     );
-    if (form == null || !mounted) return;
-    final r = await runAction(
-      context,
-      () async {
-        final pdf = await buildQuotePdf(api, q);
-        return api.post('$base/email', {...form, 'pdfBase64': base64Encode(pdf), 'fileName': 'Orçamento ${q['reference']}.pdf'});
-      },
-      success: registers ? 'E-mail enviado e envio registrado' : 'E-mail enviado',
-    );
     if (r is Map<String, dynamic> && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(registers ? 'E-mail enviado e envio registrado' : 'E-mail enviado')));
       setState(() => _q = r);
       unawaited(_load());
     }

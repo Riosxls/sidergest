@@ -76,10 +76,10 @@ void main() {
 
   test('quoteAlerts lists every alert in order, quoteAlert joins them', () {
     final e = {'status': 'PendingApproval', 'followUp': true, 'expiring': true};
-    expect(quoteAlerts(e).map((a) => a.text), ['Acima do limite', 'Cobrar resposta', 'Vence em breve']);
-    expect(quoteAlerts(e).last.tone, Tone.danger);
-    expect(quoteAlert(e), 'Acima do limite · Cobrar resposta · Vence em breve');
-    expect(quoteAlerts({'status': 'Draft', 'needsApproval': true}).single.text, 'Acima do limite');
+    expect(quoteAlerts(e).map((a) => a.text), ['Desconto acima do limite', 'Cobrar resposta', 'Vence em breve']);
+    expect(quoteAlerts(e).last.tone, Tone.warning);
+    expect(quoteAlert(e), 'Desconto acima do limite · Cobrar resposta · Vence em breve');
+    expect(quoteAlerts({'status': 'Draft', 'needsApproval': true}).single.text, 'Desconto acima do limite');
     expect(quoteAlerts({'status': 'Sent'}), isEmpty);
   });
 }

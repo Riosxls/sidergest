@@ -1,9 +1,23 @@
 import 'package:flutter/material.dart';
 
+import '../api.dart' show friendlyError;
 
 /// Form of "Enviar por e-mail": recipients, subject and text; the PDF is built and attached when the dialog returns.
 class QuoteEmailDialog extends StatefulWidget {
-  const QuoteEmailDialog({super.key, required this.to, required this.subject, required this.body, required this.from, required this.fileName, required this.registers});
+  const QuoteEmailDialog({
+    super.key,
+    required this.to,
+    required this.subject,
+    required this.body,
+    required this.from,
+    required this.fileName,
+    required this.registers,
+    this.onSend,
+  });
+
+  /// Sends the mail while the dialog stays open (a failure is shown inside it and nothing typed is lost); the dialog closes with what it returns.
+  /// Without it the dialog just returns the typed form.
+  final Future<Object?> Function(Map<String, String> form)? onSend;
 
   final String to;
   final String subject;
@@ -44,13 +58,39 @@ class QuoteEmailDialogState extends State<QuoteEmailDialog> {
     return bad.isEmpty ? null : 'E-mail inválido: ${bad.first}';
   }
 
-  void _submit() {
-    if (!(_form.currentState?.validate() ?? false)) return;
-    Navigator.pop(context, {'to': _to.text.trim(), 'cc': _cc.text.trim(), 'subject': _subject.text.trim(), 'body': _body.text});
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _submit() async {
+    if (_busy || !(_form.currentState?.validate() ?? false)) return;
+    final form = {'to': _to.text.trim(), 'cc': _cc.text.trim(), 'subject': _subject.text.trim(), 'body': _body.text};
+    final send = widget.onSend;
+    if (send == null) {
+      Navigator.pop(context, form);
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final r = await send(form);
+      if (mounted) Navigator.pop(context, r ?? form);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = friendlyError(e);
+        });
+      }
+    }
   }
 
+  // Esc, a tap outside or the back button must not close the dialog while the mail is on its way: the result would be lost.
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => PopScope(canPop: !_busy, child: _dialog(context));
+
+  Widget _dialog(BuildContext context) => AlertDialog(
     icon: const Icon(Icons.forward_to_inbox),
     title: const Text('Enviar orçamento por e-mail'),
     content: ConstrainedBox(
@@ -106,14 +146,27 @@ class QuoteEmailDialogState extends State<QuoteEmailDialog> {
                 '${widget.from == null ? '' : 'Sai de ${widget.from}. '}${widget.registers ? 'O envio fica registrado e a validade começa a contar hoje.' : 'O orçamento já foi enviado: este é um reenvio.'}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Semantics(
+                    liveRegion: true,
+                    child: Text(_error!, key: const ValueKey('email-error'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  ),
+                ),
             ],
           ),
         ),
       ),
     ),
     actions: [
-      TextButton(key: const ValueKey('email-cancel'), onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-      FilledButton.icon(key: const ValueKey('email-send'), onPressed: _submit, icon: const Icon(Icons.send), label: const Text('Enviar')),
+      TextButton(key: const ValueKey('email-cancel'), onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancelar')),
+      FilledButton.icon(
+        key: const ValueKey('email-send'),
+        onPressed: _busy ? null : _submit,
+        icon: _busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send),
+        label: Text(_busy ? 'Enviando…' : 'Enviar'),
+      ),
     ],
   );
 }

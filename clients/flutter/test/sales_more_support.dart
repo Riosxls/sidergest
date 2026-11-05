@@ -181,7 +181,17 @@ class MoreFake {
 
   bool called(String method, String path) => where(method, path).isNotEmpty;
 
-  MockClient get client => MockClient((r) async => answer(r));
+  /// Same as [overrides] for a route that must answer later (a test holds the request in flight).
+  final Map<String, Future<http.Response> Function(http.Request r)> asyncOverrides = {};
+
+  MockClient get client => MockClient((r) async {
+    final later = asyncOverrides['${r.method} ${r.url.path}'];
+    if (later != null) {
+      log.add(r);
+      return later(r);
+    }
+    return answer(r);
+  });
 
   http.Response answer(http.Request r) {
     log.add(r);

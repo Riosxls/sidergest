@@ -56,7 +56,8 @@ Tone productionTone(Object? s) => switch (s) {
   'Sent' => (1, null),
   'Accepted' => (2, null),
   'PurchaseOrder' => (3, null),
-  'Converted' => (4, null),
+  // The order exists (the "Pedido de venda" step is done): what is left is producing it.
+  'Converted' => (5, null),
   'Rejected' => (2, 'Perdida'),
   'Expired' => (1, 'Expirada'),
   _ => (0, superseded ? 'Substituída' : 'Cancelada'),
@@ -72,6 +73,14 @@ String quoteSituation(Map<String, dynamic> q, {bool short = false}) {
   if (status == 'Rejected' && q['lostReason'] != null) return 'Perdida · ${lostReasons['${q['lostReason']}'] ?? q['lostReason']}';
   return quoteStatuses[status] ?? '$status';
 }
+
+/// The alert chips of a quote (list row, pipeline card): one wording, tone and icon per alert key, so the screens say the same thing.
+/// Keys follow the pipeline card badges ('discount', 'followup', 'expiring').
+const quoteAlertSpecs = <String, ({String text, Tone tone, IconData icon})>{
+  'discount': (text: 'Desconto acima do limite', tone: Tone.warning, icon: Icons.gavel_outlined),
+  'followup': (text: 'Cobrar resposta', tone: Tone.warning, icon: Icons.mark_email_unread_outlined),
+  'expiring': (text: 'Vence em breve', tone: Tone.warning, icon: Icons.schedule),
+};
 
 Tone quoteToneOf(Map<String, dynamic> q) => isSuperseded(q) ? Tone.neutral : quoteTone(q['status']);
 

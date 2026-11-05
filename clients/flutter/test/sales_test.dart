@@ -378,6 +378,7 @@ void main() {
     expect(quotePath('Sent'), (1, null));
     expect(quotePath('Accepted'), (2, null));
     expect(quotePath('PurchaseOrder'), (3, null));
+    expect(quotePath('Converted'), (5, null)); // the order exists: "Pedido de venda" is done
     expect(quotePath('Rejected'), (2, 'Perdida'));
     expect(quotePath('Cancelled'), (0, 'Cancelada'));
     expect(quotePath('Cancelled', superseded: true), (0, 'Substituída'));

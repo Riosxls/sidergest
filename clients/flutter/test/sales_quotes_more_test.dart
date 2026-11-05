@@ -63,8 +63,8 @@ void main() {
     });
 
     test('quoteAlert lists every alert, most urgent first', () {
-      expect(quoteAlert({'status': 'PendingApproval'}), 'Acima do limite');
-      expect(quoteAlert({'status': 'Draft', 'needsApproval': true}), 'Acima do limite');
+      expect(quoteAlert({'status': 'PendingApproval'}), 'Desconto acima do limite');
+      expect(quoteAlert({'status': 'Draft', 'needsApproval': true}), 'Desconto acima do limite');
       expect(quoteAlert({'status': 'Sent', 'followUp': true, 'expiring': true}), 'Cobrar resposta · Vence em breve');
       expect(quoteAlert({'status': 'Sent', 'expiring': true}), 'Vence em breve');
       expect(quoteAlert({'status': 'Sent'}), '');
@@ -87,7 +87,7 @@ void main() {
       final f = _fake('Draft');
       f.quote['needsApproval'] = true;
       await pumpMore(tester, f, (s) => QuotesScreen(session: s));
-      expect(find.text('Acima do limite'), findsOneWidget);
+      expect(find.text('Desconto acima do limite'), findsOneWidget);
       await tapKey(tester, 'filter-mine');
       expect(f.log.last.url.queryParameters['mine'], 'true');
       await tapKey(tester, 'filter-follow-up');
