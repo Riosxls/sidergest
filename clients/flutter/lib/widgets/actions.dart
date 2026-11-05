@@ -200,7 +200,15 @@ class LinesEditor extends StatelessWidget {
       openFirstLookup: adding && addAnotherLabel != null && fields.isNotEmpty && fields.first.type == FieldType.lookup,
       onPick: onPick,
       hintFor: hintFor,
-      fieldActions: fieldActions,
+      // An item being edited tells the hook its own unit (the form has no unit field) as long as the product is still the same.
+      fieldActions: fieldActions == null || index == null
+          ? fieldActions
+          : (c, key, values, setText) {
+              final own = lines[index];
+              final same = own['productId'] != null && '${own['productId']}' == '${values['productId']}';
+              final unit = own['unit'] ?? own['_unit'];
+              return fieldActions!(c, key, {...values, if (same && unit != null) 'unit': unit}, setText);
+            },
       onSubmit: (_) async => null,
     );
     if (r == null) return;
