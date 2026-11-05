@@ -216,5 +216,45 @@ void main() {
       ];
       _expectPdf(await buildProductionOrderPdf(_api(), _productionOrder(ops: ops)));
     });
+
+    test('prints tolerance and machine names, including long texts, without exceptions', () async {
+      final ops = [
+        {'sequence': 10, 'description': 'Perfilar', 'tolerance': '± 0,10', 'machineName': 'Perfiladeira', 'machineCode': 'PF-01'},
+        {'sequence': 20, 'description': 'Trefilar para Ø12,7', 'tolerance': '(- 0,00 ) + 0,10', 'machineName': 'Trefiladeira', 'machineCode': 'TF-01'},
+        {'sequence': 30, 'description': 'Endireitar e Cortar 6000', 'tolerance': '+30', 'machineCode': 'EN-01'},
+        {'sequence': 40, 'description': 'Inspeção Final', 'tolerance': '-', 'machineName': 'Visual/Dimensional'},
+        {'sequence': 50, 'description': 'Galvanizar', 'tolerance': 'Visual/Dimensional', 'external': true, 'machineName': 'Não aparece'},
+        {'sequence': 60, 'description': 'Operação com um nome muito longo que precisa quebrar em duas linhas na descrição', 'tolerance': 'Espessura de parede conforme norma NBR 5590 e desenho do cliente', 'machineName': 'Máquina com nome extremamente comprido'},
+      ];
+      _expectPdf(await buildProductionOrderPdf(_api(), _productionOrder(ops: ops)));
+    });
+  });
+
+  group('opCellFit', () {
+    test('short text stays on one line at the normal size', () {
+      final f = opCellFit('± 0,10', 80);
+      expect(f.lines, ['± 0,10']);
+      expect(f.size, 8.5);
+    });
+
+    test('breaks after the slash, never inside a word', () {
+      final f = opCellFit('Visual/Dimensional', 50);
+      expect(f.lines, ['Visual/', 'Dimensional']);
+      expect(f.size, lessThan(8.5));
+    });
+
+    test('Visual/Dimensional fits the resource column on a single line', () {
+      expect(opCellFit('Visual/Dimensional', 114).lines, ['Visual/Dimensional']);
+    });
+
+    test('a long tolerance fits in two lines at a readable size', () {
+      final f = opCellFit('(- 0,00 ) + 0,10', 60);
+      expect(f.lines.length, lessThanOrEqualTo(2));
+      expect(f.lines.join(' ').replaceAll(' ', ''), '(-0,00)+0,10');
+    });
+
+    test('empty text has no lines', () {
+      expect(opCellFit('  ', 80).lines, isEmpty);
+    });
   });
 }
