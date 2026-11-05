@@ -134,9 +134,12 @@ class StatusBadge extends StatelessWidget {
 
 /// A step of a [StagePath].
 class PathStep {
-  const PathStep(this.label, {this.icon});
+  const PathStep(this.label, {this.icon, this.short});
 
   final String label;
+
+  /// Shorter text for when the steps would wrap to two lines; the full [label] stays in the tooltip and for screen readers.
+  final String? short;
   final IconData? icon;
 }
 
@@ -164,6 +167,8 @@ class StagePath extends StatelessWidget {
       builder: (context, box) {
         final compact = box.maxWidth < 640;
         final roomy = box.maxWidth / steps.length >= 150;
+        // Chevrons also lose ~40px to their points: below this width a long label would wrap, so the short one is used.
+        final useShort = box.maxWidth / steps.length < 185;
         final bar = Row(
           children: [
             for (final (i, s) in steps.indexed)
@@ -200,7 +205,7 @@ class StagePath extends StatelessWidget {
                               const SizedBox(width: 4),
                               Flexible(
                                 child: Text(
-                                  i == current && failed ? failedLabel! : s.label,
+                                  i == current && failed ? failedLabel! : (useShort ? (s.short ?? s.label) : s.label),
                                   maxLines: 2,
                                   textAlign: TextAlign.center,
                                   overflow: TextOverflow.ellipsis,
@@ -413,9 +418,22 @@ class TimelineEntry {
 
 /// Vertical history of [TimelineEntry] items.
 class TimelineView extends StatelessWidget {
-  const TimelineView({super.key, required this.entries});
+  const TimelineView({super.key, required this.entries, this.groupByDay = false, this.hideUser});
 
   final List<TimelineEntry> entries;
+
+  /// One heading per day, and only the time on each entry (the date is said once).
+  final bool groupByDay;
+
+  /// User name left out of the entries (the one signed in): it only matters when someone else did it.
+  final String? hideUser;
+
+  String _meta(TimelineEntry e) {
+    final stamp = fmtDate(e.at);
+    final when = groupByDay && stamp.length > 10 ? stamp.substring(11) : stamp;
+    final who = e.user != null && e.user != hideUser ? e.user : null;
+    return [when, ?who].join(' · ');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -423,7 +441,15 @@ class TimelineView extends StatelessWidget {
     final theme = Theme.of(context);
     return Column(
       children: [
-        for (final (i, e) in entries.indexed)
+        for (final (i, e) in entries.indexed) ...[
+          if (groupByDay && (i == 0 || fmtDay(entries[i - 1].at) != fmtDay(e.at)))
+            Padding(
+              padding: EdgeInsets.only(bottom: 8, top: i == 0 ? 0 : 2),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(fmtDay(e.at), style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
+              ),
+            ),
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -452,7 +478,7 @@ class TimelineView extends StatelessWidget {
                         Text(e.title, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                         if (e.subtitle != null && e.subtitle!.isNotEmpty) Text(e.subtitle!, style: theme.textTheme.bodySmall),
                         Text(
-                          [fmtDate(e.at), if (e.user != null) e.user!].join(' · '),
+                          _meta(e),
                           style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                         ),
                       ],
@@ -462,6 +488,7 @@ class TimelineView extends StatelessWidget {
               ],
             ),
           ),
+        ],
       ],
     );
   }
@@ -552,7 +579,11 @@ class RecordHeader extends StatelessWidget {
     this.amount,
     this.amountLabel,
     this.fieldLinks = const {},
+    this.inlineFields = false,
   });
+
+  /// Lays the fields out as "label value" pairs side by side (muted label, bold value) instead of a label over its value: about half the height.
+  final bool inlineFields;
 
   final IconData icon;
   final String kind;
@@ -624,35 +655,13 @@ class RecordHeader extends StatelessWidget {
               ],
             ),
             if (fields.isNotEmpty) ...[
-              const Divider(height: 24),
+              Divider(height: inlineFields ? 16 : 24),
               Wrap(
-                spacing: 28,
-                runSpacing: 8,
+                spacing: inlineFields ? 24 : 28,
+                runSpacing: inlineFields ? 4 : 8,
                 children: [
                   for (final (k, v) in fields.where((f) => f.$2.isNotEmpty))
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(k, style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                        if (fieldLinks[k] case final open?)
-                          InkWell(
-                            key: ValueKey('header-link-$k'),
-                            borderRadius: BorderRadius.circular(4),
-                            onTap: open,
-                            child: Text(
-                              v,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: theme.colorScheme.primary,
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
-                          )
-                        else
-                          Text(v, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                      ],
-                    ),
+                    _field(theme, k, v),
                 ],
               ),
             ],
@@ -661,7 +670,35 @@ class RecordHeader extends StatelessWidget {
       ),
     );
   }
+
+  Widget _field(ThemeData theme, String k, String v) {
+    final label = Text(k, style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant));
+    return inlineFields
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [label, const SizedBox(width: 6), Flexible(child: _value(theme, k, v))],
+          )
+        : Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [label, _value(theme, k, v)]);
+  }
+
+  Widget _value(ThemeData theme, String k, String v) {
+    final open = fieldLinks[k];
+    return open != null
+        ? InkWell(
+            key: ValueKey('header-link-$k'),
+            borderRadius: BorderRadius.circular(4),
+            onTap: open,
+            child: Text(
+              v,
+              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.primary, decoration: TextDecoration.underline),
+            ),
+          )
+        : Text(v, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600));
+  }
 }
+
 
 /// Asks before a step that is hard to undo. The way out is [cancelLabel] ("Cancelar"; pass "Voltar" when the action itself is a "Cancelar ...", so the two words do not clash): "Voltar" is otherwise kept for navigation, and a dialog whose own
 /// action is about going back (e.g. "Voltar para rascunho") reads better with "Manter como está".

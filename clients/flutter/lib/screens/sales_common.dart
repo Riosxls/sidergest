@@ -13,11 +13,11 @@ import 'sales_quotes.dart';
 
 const flowSteps = [
   PathStep('Orçamento', icon: Icons.edit_note),
-  PathStep('Enviada ao cliente', icon: Icons.send_outlined),
-  PathStep('Aprovada pelo cliente', icon: Icons.thumb_up_alt_outlined),
-  PathStep('Pedido de compra', icon: Icons.assignment_turned_in_outlined),
-  PathStep('Pedido de venda', icon: Icons.receipt_long_outlined),
-  PathStep('Ordem de Fabricação', icon: Icons.precision_manufacturing_outlined),
+  PathStep('Enviada ao cliente', icon: Icons.send_outlined, short: 'Enviada'),
+  PathStep('Aprovada pelo cliente', icon: Icons.thumb_up_alt_outlined, short: 'Aprovada'),
+  PathStep('Pedido de compra', icon: Icons.assignment_turned_in_outlined, short: 'Ped. compra'),
+  PathStep('Pedido de venda', icon: Icons.receipt_long_outlined, short: 'Ped. venda'),
+  PathStep('Ordem de Fabricação', icon: Icons.precision_manufacturing_outlined, short: 'OF'),
   PathStep('Certificado', icon: Icons.verified_outlined),
   PathStep('Entrega', icon: Icons.local_shipping_outlined),
 ];

@@ -2282,6 +2282,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
   amount: fmtMoney(t['total']),
   amountLabel: 'Total do orçamento',
   fieldLinks: {'Cliente': () => openCustomer(context, s, q['customerId'] as int)},
+  inlineFields: true,
   fields: [
     ('Cliente', '${q['customerName']}'),
     // Contact, validity and freight matter while the quote is being worked; afterwards they sit in Detalhes.
@@ -2307,6 +2308,17 @@ class _QuoteScreenState extends State<QuoteScreen> {
 
   String _freight(Map<String, dynamic> q) => freightTerms[q['freight']] ?? fmt(q['freight']);
 
+  /// "9 dias úteis" while the customer has not approved; once approved the calendar date it lands on is added ("9 dias úteis → 17/11/2026").
+  String _deliveryText(Map<String, dynamic> q, Map<String, dynamic> e) {
+    if (e['deliveryDate'] != null) return fmtDay(e['deliveryDate']);
+    final days = e['leadTimeDays'];
+    if (days is! int) return '';
+    final text = '$days dias úteis';
+    final approved = DateTime.tryParse('${q['decidedAt'] ?? ''}')?.toLocal();
+    if (approved == null || !const ['Accepted', 'PurchaseOrder', 'Converted'].contains(q['status'])) return text;
+    return '$text → ${fmtDay(isoDate(addWorkDays(DateTime(approved.year, approved.month, approved.day), days)))}';
+  }
+
   Widget _itemsSection(Map<String, dynamic> q, Map<String, dynamic> t, List<Map<String, dynamic>> lines) {
     return Section(
   title: 'Itens (${lines.length})',
@@ -2319,7 +2331,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
           ColumnSpec('Produto', (e) => '${e['productCode']}${e['customerPartNumber'] == null ? '' : ' (${e['customerPartNumber']})'}'),
           col('Descrição', 'description'),
           ColumnSpec('Qtd.', (e) => '${fmtQty(e['quantity'])} ${e['unit']}', numeric: true),
-          ColumnSpec('Preço Unitário', (e) => fmtMoney(e['unitPrice']), numeric: true),
+          ColumnSpec('Preço Unitário', (e) => '${fmtMoney(e['unitPrice'])} /${e['unit']}', numeric: true),
           // A line above the limit is tinted, and tagged so the colour is not the only sign.
           ColumnSpec(
             'Desc. %',
@@ -2329,11 +2341,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
             numeric: true,
           ),
           col('IPI %', 'ipiPercent', numeric: true),
-          ColumnSpec(
-            'Entrega',
-            (e) => e['deliveryDate'] != null ? fmtDay(e['deliveryDate']) : (e['leadTimeDays'] != null ? '${e['leadTimeDays']} dias úteis' : ''),
-            numeric: true,
-          ),
+          ColumnSpec('Entrega', (e) => _deliveryText(q, e), numeric: true),
           moneyCol('Total', 'total'),
         ],
         rows: lines,
@@ -2415,16 +2423,11 @@ class _QuoteScreenState extends State<QuoteScreen> {
         gap,
         _creditBanner(),
         _nextStep(q),
-        // While nothing is attached the step card above carries the buttons; the section appears once there is something to show.
-        if (const ['Accepted', 'PurchaseOrder'].contains(q['status']) && (q['requestFileName'] != null || '${q['requestText'] ?? ''}'.trim().isNotEmpty)) ...[
-          gap,
-          _requestSection(q),
-        ],
         gap,
         _itemsSection(q, t, lines),
         gap,
-        if (!const ['Accepted', 'PurchaseOrder'].contains(q['status']) &&
-            (q['status'] == 'Converted' || q['requestFileName'] != null || '${q['requestText'] ?? ''}'.isNotEmpty)) ...[
+        // The purchase order shows once there is one to show; while it is missing the step card above carries the buttons.
+        if (q['status'] == 'Converted' || q['requestFileName'] != null || '${q['requestText'] ?? ''}'.trim().isNotEmpty) ...[
           _requestSection(q),
           gap,
         ],
@@ -2433,7 +2436,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
       side: [
         Section(
           title: 'Histórico',
-          child: TimelineView(entries: timeline(q['history'] as List, kind: 'quote')),
+          child: TimelineView(entries: timeline(q['history'] as List, kind: 'quote'), groupByDay: true, hideUser: s.username),
         ),
       ],
     );

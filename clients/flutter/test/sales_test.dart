@@ -8,6 +8,7 @@ import 'package:ebt_engenharia/screens/sales_pipeline.dart';
 import 'package:ebt_engenharia/screens/sales_quotes.dart';
 import 'package:ebt_engenharia/screens/shell.dart';
 import 'package:ebt_engenharia/session.dart';
+import 'package:ebt_engenharia/widgets/pipeline.dart' show StatusBadge;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -982,7 +983,8 @@ void main() {
 
     testWidgets('the status is not repeated in a badge when the stage path already says it', (tester) async {
       await open(tester, 'Sent');
-      expect(find.text('Enviada ao cliente'), findsOneWidget);
+      expect(find.byKey(const ValueKey('path-1')), findsOneWidget); // the path names the step (short label when the width is tight)
+      expect(find.widgetWithText(StatusBadge, 'Enviada ao cliente'), findsNothing);
     });
 
     testWidgets('a draft keeps its badge, the path cannot tell draft from approval', (tester) async {
