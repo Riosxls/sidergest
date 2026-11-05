@@ -28,6 +28,7 @@ import '../widgets/record_skeleton.dart';
 import '../widgets/responsive.dart';
 import '../workdays.dart';
 import 'customers.dart';
+import 'price_simulator.dart';
 import 'quote_email_dialog.dart';
 import 'quote_po_dialog.dart';
 import 'quote_pricing.dart';
@@ -427,6 +428,10 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
   /// What the price table says for each product of the chosen customer (`null` = no entry): its price and taxes.
   final Map<Object, Map<String, dynamic>?> _priceInfo = {};
 
+  /// Products picked in the line form (their measures and sale unit feed the price simulator), and whether the server offers the simulator to this user.
+  final Map<Object, Map<String, dynamic>> _productInfo = {};
+  bool _suggestOk = true;
+
   String get _draftKey => 'quote-editor:${widget.asOrder ? 'order' : 'quote'}:${widget.quote?['id'] ?? 'new'}';
 
   num? _listPrice(Object id) {
@@ -541,6 +546,57 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
       _refreshListPrices();
     }
     unawaited(_restoreDraft());
+    if (widget.session.canSell) {
+      // A server that refuses (403) or does not know (404) the simulator gets no "Sugerir preço" button, without any message.
+      api.get('/api/sales/price-history/summary').then<void>((_) {}, onError: (Object e) {
+        if (e is ApiException && (e.status == 403 || e.status == 404) && mounted) setState(() => _suggestOk = false);
+      });
+    }
+  }
+
+  /// "Sugerir preço" under the price of an item whose price is still empty or has no price table entry; opens the simulator with the product's measures.
+  Widget? _priceAction(BuildContext context, String key, Map<String, dynamic> values, void Function(String key, String text) setText) {
+    if (key != 'unitPrice' || !_suggestOk || !widget.session.canSell) return null;
+    final id = values['productId'];
+    final noTable = id != null && _priceInfo.containsKey(id) && _listPrice(id) == null;
+    if (values['unitPrice'] != null && !noTable) return null;
+    return TextButton.icon(
+      key: const ValueKey('suggest-price'),
+      onPressed: () => _suggestPrice(context, values, setText),
+      icon: const Icon(Icons.calculate_outlined, size: 18),
+      label: const Text('Sugerir preço'),
+    );
+  }
+
+  Future<void> _suggestPrice(BuildContext context, Map<String, dynamic> values, void Function(String key, String text) setText) async {
+    final id = values['productId'];
+    var product = id == null ? null : _productInfo[id];
+    if (id != null && product == null) {
+      try {
+        final r = await api.get('/api/products/$id');
+        if (r is Map<String, dynamic>) product = _productInfo[id] = r;
+      } catch (e) {
+        debugPrint('sales_quotes: Without the product the simulator simply opens empty: $e');
+      }
+    }
+    if (!context.mounted) return;
+    num? n(Object? v) => v is num ? v : null;
+    final byKg = '${product?['saleUnit'] ?? product?['stockUnit'] ?? ''}'.toUpperCase() == 'KG';
+    final quantity = n(values['quantity']);
+    final customer = _customerId;
+    await showPriceSimulator(
+      context,
+      widget.session,
+      diameter: n(product?['diameterMm']),
+      thickness: n(product?['thicknessMm']),
+      length: n(product?['lengthMm']),
+      spec: classifyMaterialSpec(values['standard'] ?? product?['standard']),
+      customer: customer == null ? null : (id: customer, name: _customerLabel ?? ''),
+      // The line quantity counts kilograms when the item is sold by the kg; the simulator asks for pieces.
+      quantity: byKg || quantity == null || quantity <= 0 ? null : quantity,
+      unitIsKg: byKg,
+      onUse: (price) => setText('unitPrice', price),
+    );
   }
 
   /// Typing again takes the old error message away.
@@ -595,6 +651,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
   /// Price offered when a product is picked in the line form, from the customer's price table.
   Future<Map<String, Object?>?> _onPick(String key, int? id, Map<String, dynamic>? entity) async {
     final customer = _customerId;
+    if (key == 'productId' && id != null && entity != null) _productInfo[id] = entity;
     if (key != 'productId' || id == null || customer == null) return null;
     await _lookupPrice(id, customer);
     final price = _listPrice(id);
@@ -1194,6 +1251,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
                     lines: _lines,
                     onPick: _onPick,
                     hintFor: _priceHint,
+                    fieldActions: _priceAction,
                     rowColor: widget.asOrder ? null : _lineColor,
                     onChanged: (l) {
                       setState(() {
