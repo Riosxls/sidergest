@@ -1230,6 +1230,16 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
   }
 }
 
+/// "Cliente aprovou PROP N?": the customer's approval starts the delivery-time clock (working days count from today), so it is confirmed with
+/// the date it will carry. Used by the quote screen and by the pipeline card.
+Future<bool> confirmCustomerApproval(BuildContext context, String reference) => confirmStep(
+  context,
+  title: 'Cliente aprovou $reference?',
+  message: 'Registra a aprovação do cliente em ${fmtDay(isoDate(DateTime.now()))}. Os prazos de entrega em dias úteis passam a contar a partir de hoje.',
+  confirmLabel: 'Registrar aprovação',
+  icon: Icons.thumb_up_alt_outlined,
+);
+
 /// Turns the quote into a sales order (the caller has already asked "Gerar pedido de venda?"); returns the order, or null when nothing was created.
 /// When the server answers 409 because of the customer's credit limit, a user who can approve sales is offered the override (logged on the order
 /// history) and anyone else is told to ask the commercial manager. Errors are shown here.
@@ -1706,13 +1716,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
 
   /// The customer's approval starts the delivery-time clock (working days count from today), so it is confirmed with the date it will carry.
   Future<void> _accept() async {
-    final ok = await confirmStep(
-      context,
-      title: 'Cliente aprovou ${_q!['reference']}?',
-      message: 'Registra a aprovação do cliente em ${fmtDay(isoDate(DateTime.now()))}. Os prazos de entrega em dias úteis passam a contar a partir de hoje.',
-      confirmLabel: 'Registrar aprovação',
-      icon: Icons.thumb_up_alt_outlined,
-    );
+    final ok = await confirmCustomerApproval(context, '${_q!['reference']}');
     if (!ok || !mounted) return;
     final r = await runAction(context, () => api.post('$base/accept', {}), success: 'Aprovação do cliente registrada');
     if (r is Map<String, dynamic> && mounted) _adopt(r);

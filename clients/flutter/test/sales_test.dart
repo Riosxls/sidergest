@@ -8,6 +8,7 @@ import 'package:ebt_engenharia/screens/sales_pipeline.dart';
 import 'package:ebt_engenharia/screens/sales_quotes.dart';
 import 'package:ebt_engenharia/screens/shell.dart';
 import 'package:ebt_engenharia/session.dart';
+import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -400,7 +401,12 @@ void main() {
     expect(find.text('Vence em breve'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('advance-Quote-5')));
     await tester.pumpAndSettle();
-    expect(find.text('Cliente aprovou PROP 31?'), findsNothing); // no dialog: the approval is posted right away
+    // The approval starts the delivery-time clock: the card asks first, with the same confirmation as the quote screen.
+    expect(find.text('Cliente aprovou PROP 31?'), findsOneWidget);
+    expect(find.textContaining('passam a contar a partir de hoje'), findsOneWidget);
+    expect(fake.log.where((r) => r.url.path.endsWith('/accept')), isEmpty);
+    await tester.tap(find.byKey(const ValueKey('confirm-step')));
+    await tester.pumpAndSettle();
     expect(fake.body(fake.last('POST', '/api/sales/quotes/5/accept')).containsKey('customerPo'), isFalse);
   });
 
@@ -490,20 +496,47 @@ void main() {
   });
 
   testWidgets('dragging an order card onto production releases it', (tester) async {
-    final fake = SalesFake();
+    // A computer: the mouse grabs the card at once. (The tests run as Android by default, where a card is held first.)
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      final fake = SalesFake();
+      await pumpScreen(tester, fake, (s) => SalesPipelineScreen(session: s));
+      final card = find.byKey(const ValueKey('card-Order-9'));
+      final target = tester.getCenter(find.byKey(const ValueKey('stage-production')));
+      final gesture = await tester.startGesture(tester.getCenter(card));
+      await tester.pump(const Duration(milliseconds: 50));
+      await gesture.moveTo(target);
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.text('Liberar PV 9 para produção?'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('confirm-step')));
+      await tester.pumpAndSettle();
+      expect(fake.body(fake.last('POST', '/api/sales/orders/9/release'))['useStock'], isTrue);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('on a touch tablet a swipe does not grab a card: it has to be held first, however wide the screen', (tester) async {
+    final fake = SalesFake(); // the test platform is Android and the window is 1700 px wide
     await pumpScreen(tester, fake, (s) => SalesPipelineScreen(session: s));
     final card = find.byKey(const ValueKey('card-Order-9'));
     final target = tester.getCenter(find.byKey(const ValueKey('stage-production')));
-    final gesture = await tester.startGesture(tester.getCenter(card));
+    final swipe = await tester.startGesture(tester.getCenter(card));
     await tester.pump(const Duration(milliseconds: 50));
-    await gesture.moveTo(target);
+    await swipe.moveTo(target);
     await tester.pump();
-    await gesture.up();
+    await swipe.up();
+    await tester.pumpAndSettle();
+    expect(find.text('Liberar PV 9 para produção?'), findsNothing);
+    final held = await tester.startGesture(tester.getCenter(card));
+    await tester.pump(const Duration(milliseconds: 700));
+    await held.moveTo(target);
+    await tester.pump();
+    await held.up();
     await tester.pumpAndSettle();
     expect(find.text('Liberar PV 9 para produção?'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('confirm-step')));
-    await tester.pumpAndSettle();
-    expect(fake.body(fake.last('POST', '/api/sales/orders/9/release'))['useStock'], isTrue);
   });
 
   testWidgets('discounted draft goes to approval and a manager approves it', (tester) async {
