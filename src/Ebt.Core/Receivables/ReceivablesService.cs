@@ -141,12 +141,17 @@ public sealed class ReceivablesService(EbtDbContext db)
     public async Task ReverseAsync(int paymentId, string? reason, string? user, CancellationToken ct = default)
     {
         if (Clean(reason) is not { } why) throw FiscalException.Invalid("reason", "Required");
+        // The payment row is locked for the read-check-write, so two simultaneous estornos cannot both see it as not yet reversed: the second waits, then gets the 409.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlInterpolatedAsync($"select 1 from receivable_payments where id = {paymentId} for update", ct);
         var p = await db.ReceivablePayments.FirstOrDefaultAsync(x => x.Id == paymentId, ct) ?? throw FiscalException.NotFound("Pagamento");
+        await db.Entry(p).ReloadAsync(ct);
         if (p.ReversedAt is not null) throw FiscalException.Conflict("This payment was already reversed");
         p.ReversedAt = DateTimeOffset.UtcNow;
         p.ReversedBy = user;
         p.ReverseReason = why;
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
