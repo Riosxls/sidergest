@@ -247,7 +247,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('quote-term-1')));
       await tester.pumpAndSettle();
       await tapKey(tester, 'picker-create');
-      await tester.enterText(find.byKey(const ValueKey('prazo-custom')), '45 dias');
+      await tester.enterText(find.byKey(const ValueKey('prazo-custom')), '45');
       await tapText(tester, 'Usar neste orçamento');
       expect(find.byKey(const ValueKey('quote-custom-term')), findsOneWidget);
       expect(find.text('45 dias'), findsOneWidget);
@@ -256,6 +256,28 @@ void main() {
       final b = f.body(f.last('POST', '/api/sales/quotes'));
       expect(b['paymentTermId'], isNull);
       expect(b['customPaymentTerm'], '45 dias');
+    });
+
+    testWidgets('a custom prazo asks for one installment at a time', (tester) async {
+      final f = _fake('Draft');
+      await openNew(tester, f);
+      await tapKey(tester, 'quote-customer');
+      await tester.tap(find.text('BTS Tubos').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('quote-term-1')));
+      await tester.pumpAndSettle();
+      await tapKey(tester, 'picker-create');
+      expect(find.byKey(const ValueKey('prazo-custom-1')), findsNothing);
+      await tester.enterText(find.byKey(const ValueKey('prazo-custom')), '30');
+      await tester.pump();
+      expect(find.byKey(const ValueKey('prazo-custom-1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('prazo-custom-2')), findsNothing);
+      await tester.enterText(find.byKey(const ValueKey('prazo-custom-1')), '37');
+      await tester.pump();
+      await tester.enterText(find.byKey(const ValueKey('prazo-custom-2')), '44');
+      await tester.pump();
+      await tapText(tester, 'Usar neste orçamento');
+      expect(find.text('30 / 37 / 44 dias'), findsOneWidget);
     });
 
     testWidgets('a discount above the limit and an unlisted price warn before sending', (tester) async {

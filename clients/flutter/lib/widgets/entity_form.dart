@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show FilteringTextInputFormatter, LogicalKeyboardKey, TextEditingValue, TextInputFormatter;
+import 'package:flutter/services.dart' show FilteringTextInputFormatter, LengthLimitingTextInputFormatter, LogicalKeyboardKey, TextEditingValue, TextInputFormatter;
 
 import '../api.dart';
 import '../entities.dart';
@@ -1017,39 +1017,72 @@ class _CustomPrazoDialog extends StatefulWidget {
 }
 
 class _CustomPrazoDialogState extends State<_CustomPrazoDialog> {
-  final _text = TextEditingController();
+  static const _max = 12;
+
+  /// One field per installment: the next one only appears once the last one has a number.
+  final _days = [TextEditingController()];
   String? _error;
 
   @override
   void dispose() {
-    _text.dispose();
+    for (final c in _days) {
+      c.dispose();
+    }
     super.dispose();
   }
 
+  void _changed() {
+    setState(() {
+      _error = null;
+      // Trailing blank fields are dropped, then one empty field is offered for the next installment.
+      while (_days.length > 1 && _days[_days.length - 1].text.trim().isEmpty && _days[_days.length - 2].text.trim().isEmpty) {
+        _days.removeLast().dispose();
+      }
+      if (_days.length < _max && _days.last.text.trim().isNotEmpty) _days.add(TextEditingController());
+    });
+  }
+
   void _ok() {
-    final t = _text.text.trim();
-    if (t.isEmpty) return setState(() => _error = 'Informe o prazo');
-    Navigator.pop(context, t);
+    final filled = [for (final c in _days) c.text.trim()].where((t) => t.isNotEmpty).toList();
+    if (filled.isEmpty) return setState(() => _error = 'Informe o prazo');
+    Navigator.pop(context, '${filled.join(' / ')} dias');
   }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: const Text('Prazo personalizado'),
     content: SizedBox(
-      width: 380,
-      child: TextField(
-        key: const ValueKey('prazo-custom'),
-        controller: _text,
-        autofocus: true,
-        decoration: InputDecoration(
-          labelText: 'Prazo *',
-          hintText: 'ex.: 45 dias, 20% entrada + 30/60',
-          helperText: 'Vale só para este orçamento; não entra na lista de prazos.',
-          helperMaxLines: 3,
-          errorText: _error,
-          isDense: true,
-        ),
-        onSubmitted: (_) => _ok(),
+      width: 420,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Dias de cada parcela. Digite a primeira; o campo da próxima aparece em seguida. Deixe em branco o que não usar.'),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 12,
+            children: [
+              for (final (i, c) in _days.indexed)
+                SizedBox(
+                  width: 110,
+                  child: TextField(
+                    key: ValueKey(i == 0 ? 'prazo-custom' : 'prazo-custom-$i'),
+                    controller: c,
+                    autofocus: i == _days.length - 1,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(labelText: i == 0 ? 'Parcela 1 *' : 'Parcela ${i + 1}', suffixText: 'dias', errorText: i == 0 ? _error : null, isDense: true),
+                    onChanged: (_) => _changed(),
+                    onSubmitted: (_) => _ok(),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('Vale só para este orçamento; não entra na lista de prazos.', style: Theme.of(context).textTheme.bodySmall),
+        ],
       ),
     ),
     actions: [
