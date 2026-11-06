@@ -53,11 +53,11 @@ public sealed class LegacySpecImporter(EbtDbContext db)
                     if (!have.Add((p.Id, c.Id)))
                     {
                         existing++;
-                        if (excel.TryGetValue((p.Id, c.Id), out var old) && old.Measures.All(m => m.Found is null))
+                        if (excel.TryGetValue((p.Id, c.Id), out var old))
                         {
                             foreach (var (kind, rows) in new[] { (CertificateMeasureKind.Chemical, s.Chemical), (CertificateMeasureKind.Dimensional, s.Dimensional), (CertificateMeasureKind.Mechanical, s.Mechanical) })
-                                foreach (var row in rows.Where(x => x.Found is not null))
-                                    if (old.Measures.FirstOrDefault(m => m.Kind == kind && m.Name == row.Name) is { } m) { m.Found = row.Found; foundFilled++; }
+                                foreach (var row in rows)
+                                    if (old.Measures.FirstOrDefault(m => m.Kind == kind && m.Name == row.Name && m.Found is null) is { } m) { m.Found = FoundOf(row); foundFilled++; }
                         }
                         continue;
                     }
@@ -78,9 +78,12 @@ public sealed class LegacySpecImporter(EbtDbContext db)
         return new(created, existing, noCustomer, noProduct, parts, foundFilled);
     }
 
+    /// <summary>A result left blank on the Excel sheet (a test not run) is printed as "-" on the certificate, so it is kept that way instead of blocking the issue.</summary>
+    private static string FoundOf(LegacySpecRow r) => string.IsNullOrWhiteSpace(r.Found) ? "-" : r.Found;
+
     private static void AddRows(CertificateTemplate t, CertificateMeasureKind kind, List<LegacySpecRow> rows)
     {
         foreach (var (r, n) in rows.Select((r, n) => (r, n)))
-            t.Measures.Add(new CertificateTemplateMeasure { Kind = kind, Sequence = n + 1, Name = r.Name, Specified = r.Specified, Found = r.Found });
+            t.Measures.Add(new CertificateTemplateMeasure { Kind = kind, Sequence = n + 1, Name = r.Name, Specified = r.Specified, Found = FoundOf(r) });
     }
 }
