@@ -78,6 +78,12 @@ public class CertificateTemplate
     public string? Finish { get; set; }
     public string? Notes { get; set; }
     public string? Hardness { get; set; }
+    /// <summary>"N° do Produto" as the customer certificate prints it (Excel style, e.g. T120016006000); null falls back to the rule from the dimensions.</summary>
+    public string? ProductCode { get; set; }
+    /// <summary>"Descrição" of the product on the certificate (e.g. "Tubo 12,00 X 1,60 X 6000").</summary>
+    public string? Description { get; set; }
+    /// <summary>Raw-material lot of the last certificate: the same steel lot is usually reused, so it prefills the next draft (editable).</summary>
+    public string? RawMaterialLot { get; set; }
     public string? UpdatedBy { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     /// <summary>Reference of the certificate this template was last learned from.</summary>

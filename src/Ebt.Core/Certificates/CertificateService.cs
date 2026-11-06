@@ -37,6 +37,24 @@ public sealed class CertificateService(EbtDbContext db)
         return list;
     }
 
+    /// <summary>"N° do Produto" the way the Excel certificates print it: T + diameter x100 (4 digits) + thickness x1000 (4 digits) + length (4 digits, 0 for a coil). Older sheets of some customers drop a zero; those keep their own code through the template.</summary>
+    public static string? ExcelProductCode(Product? p)
+    {
+        if ((p?.DiameterMm ?? p?.WidthMm) is not { } d || p?.ThicknessMm is not { } t) return null;
+        var length = IsCoil(p) || p.LengthMm is not { } l ? "0" : decimal.Round(l).ToString("0000", CultureInfo.InvariantCulture);
+        return $"T{decimal.Round(d * 100):0000}{decimal.Round(t * 1000):0000}{length}";
+    }
+
+    /// <summary>"Descrição" the way the Excel certificates print it: "Tubo 12,00 X 1,60 X 6000" ("ROLO" for a coil).</summary>
+    public static string? ExcelDescription(Product? p)
+    {
+        if ((p?.DiameterMm ?? p?.WidthMm) is not { } d || p?.ThicknessMm is not { } t) return null;
+        var length = IsCoil(p) || p.LengthMm is not { } l ? "ROLO" : l.ToString("0.##", Pt);
+        return $"Tubo {d.ToString("00.00", Pt)} X {t.ToString("0.00", Pt)} X {length}";
+    }
+
+    private static bool IsCoil(Product p) => p.Name.Contains("ROLO", StringComparison.OrdinalIgnoreCase);
+
     public async Task<QualityCertificate> CreateAsync(CertificateInput i, string? user, CancellationToken ct = default)
     {
         var order = await db.SalesOrders.AsNoTracking().Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == i.OrderId, ct) ?? throw SalesException.NotFound("Order");
@@ -64,8 +82,9 @@ public sealed class CertificateService(EbtDbContext db)
             {
                 Company = company, Number = number, Year = date.Year, Reference = ReferenceOf(number, date.Year), OrderId = order.Id, OrderLineId = line.Id, DeliveryId = delivery?.Id, ProductId = line.ProductId,
                 CustomerPo = Clean(i.CustomerPo) ?? order.CustomerPo, IssueDate = date, InvoiceNumber = Clean(i.InvoiceNumber), Quantity = quantity, Unit = (Clean(i.Unit) ?? line.Unit).ToUpperInvariant(),
-                ProductCode = product?.Code, Description = Clean(i.Description) ?? line.Description, CustomerPartNumber = Clean(i.CustomerPartNumber) ?? line.CustomerPartNumber ?? link?.CustomerPartNumber,
-                CustomerPartDescription = Clean(i.CustomerPartDescription) ?? link?.CustomerDescription, RawMaterialLot = Clean(i.RawMaterialLot), Hardness = Clean(i.Hardness) ?? template?.Hardness, Finish = Clean(i.Finish) ?? template?.Finish ?? DefaultFinish, Title = Clean(i.Title) ?? template?.Title,
+                ProductCode = template?.ProductCode ?? ExcelProductCode(product) ?? product?.Code, Description = Clean(i.Description) ?? template?.Description ?? ExcelDescription(product) ?? line.Description,
+                CustomerPartNumber = Clean(i.CustomerPartNumber) ?? Clean(link?.CustomerPartNumber) ?? line.CustomerPartNumber,
+                CustomerPartDescription = Clean(i.CustomerPartDescription) ?? link?.CustomerDescription, RawMaterialLot = Clean(i.RawMaterialLot) ?? template?.RawMaterialLot, Hardness = Clean(i.Hardness) ?? template?.Hardness, Finish = Clean(i.Finish) ?? template?.Finish ?? DefaultFinish, Title = Clean(i.Title) ?? template?.Title,
                 Notes = Clean(i.Notes) ?? template?.Notes, ApprovedBy = Clean(i.ApprovedBy), Status = CertificateStatus.Draft, CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow
             };
             SetMeasures(c, i.Measures ?? template?.Measures.OrderBy(m => m.Kind).ThenBy(m => m.Sequence).Select(m => new CertificateMeasureInput(m.Kind, m.Name, m.Specified, m.Found)).ToList() ?? TemplateMeasures(product));
@@ -185,7 +204,7 @@ public sealed class CertificateService(EbtDbContext db)
         await db.SaveChangesAsync(ct);
     }
 
-    /// <summary>Remembers the specification of an issued certificate for the next one of the same product and customer. The found values are kept too (same product, same results); the raw-material lot and the mill-certificate line (they change with the steel lot) are left out.</summary>
+    /// <summary>Remembers the specification of an issued certificate for the next one of the same product and customer. The found values, the raw-material lot and the notes (including the "certificado de origem do material" line) are kept too: on the 2025-26 Excel sheets the same customer and product reuse the lot in 86% of the repeats and the origin note in 92%, and the draft stays editable when the steel lot changes.</summary>
     private async Task LearnAsync(QualityCertificate c, string? user, CancellationToken ct)
     {
         if (c.ProductId is not { } productId) return;
@@ -199,7 +218,10 @@ public sealed class CertificateService(EbtDbContext db)
         t.Title = Clean(c.Title);
         t.Finish = Clean(c.Finish);
         t.Hardness = Clean(c.Hardness);
-        t.Notes = StandingNotes(c.Notes);
+        t.ProductCode = Clean(c.ProductCode);
+        t.Description = Clean(c.Description);
+        t.RawMaterialLot = Clean(c.RawMaterialLot);
+        t.Notes = Clean(c.Notes);
         t.UpdatedBy = user;
         t.UpdatedAt = DateTimeOffset.UtcNow;
         t.LearnedFrom = c.Reference;
@@ -208,13 +230,6 @@ public sealed class CertificateService(EbtDbContext db)
         foreach (var g in c.Measures.GroupBy(m => m.Kind))
             foreach (var (m, n) in g.OrderBy(m => m.Sequence).Select((m, n) => (m, n)))
                 t.Measures.Add(new CertificateTemplateMeasure { Kind = g.Key, Sequence = n + 1, Name = m.Name, Specified = m.Specified, Found = m.Found });
-    }
-
-    /// <summary>Observation lines worth repeating: everything except the "certificado de origem do material nº …" line, which belongs to one steel lot.</summary>
-    public static string? StandingNotes(string? notes)
-    {
-        var keep = (notes ?? "").Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0 && !l.Contains("origem do material", StringComparison.OrdinalIgnoreCase));
-        return Clean(string.Join("\n", keep));
     }
 
     public async Task<QualityCertificate> CancelAsync(int id, string? reason, CancellationToken ct = default)

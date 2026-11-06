@@ -49,6 +49,9 @@ public partial class EbtDbContext
             e.HasIndex(x => new { x.ProductId, x.CustomerId }).IsUnique();
             e.Property(x => x.Title).HasMaxLength(120);
             e.Property(x => x.LearnedFrom).HasMaxLength(20);
+            e.Property(x => x.ProductCode).HasMaxLength(40);
+            e.Property(x => x.Description).HasMaxLength(200);
+            e.Property(x => x.RawMaterialLot).HasMaxLength(60);
             e.HasOne(x => x.Product).WithMany().OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Customer).WithMany().OnDelete(DeleteBehavior.Cascade);
         });

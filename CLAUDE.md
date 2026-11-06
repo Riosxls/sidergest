@@ -169,6 +169,7 @@ scripts/             start.ps1, stop.ps1
 - Source files: 826 files in `C:\Users\italo\Desktop\EBT\Certificados` (2025+).
 - Numbering: **EBT starts at 2146**, **BST starts at 5176**.
 - Two templates (EBT, BST) rendered by `certificate_doc.dart`; test in `clients/flutter/test/certificate_doc_test.dart`.
+- **Identity fields on the certificate** come from the customer+product template, not from the order line: `CertificateTemplate.ProductCode` ("N° do Produto", Excel style `T`+diameter×100+thickness×1000+length, 4 digits each; rule in `CertificateService.ExcelProductCode`, some customers' old sheets drop a zero so the template keeps the sheet's own text), `Description` ("Tubo 12,00 X 1,60 X 6000"), `RawMaterialLot` and the notes with the "certificado de origem do material" line (the same lot repeats in 86% and the origin note in 92% of consecutive certificates of a customer+product on 2025-26 sheets; the draft stays editable). Customer code/description come from `ProductCustomer`; the legacy DBF import filled it with cross-reference text (`TUB12,00X1,60X6000MM20MF020082`), and `LegacySpecImporter` replaces values that are blank or start with "TUB" by the Excel ones and corrects non-cancelled certificates of the same customer+product (identity text only). `legacy-specs.json` carries `productCode`, `description`, `rawMaterialLot`, `originNote` read from the latest Excel certificate of each combination.
 
 ## Gotchas
 

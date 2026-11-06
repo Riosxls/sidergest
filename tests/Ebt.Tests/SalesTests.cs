@@ -399,14 +399,14 @@ public class SalesTests(ApiFixture api)
         var template = Assert.Single(templates);
         Assert.Equal(s.Tube.Id, template.ProductId);
         Assert.Equal(one.Reference, template.LearnedFrom);
-        Assert.Equal("MATERIAL RECOZIDO", template.Notes);
+        Assert.Equal("Certificado de origem do material nº 1127693\nMATERIAL RECOZIDO", template.Notes); // the steel lot is usually reused: the origin line and the lot are carried (editable)
         Assert.Equal("0,070", template.Measures.First(m => m.Name == "C").Found); // same product, same results: the next certificate repeats them
 
         var second = await ReleasedOrder(admin, s, 5m);
         var next = await (await admin.Post("/api/sales/certificates", new CertificateInput(second.Id))).Read<CertificateOut>();
         Assert.Equal(title, next.Title);
-        Assert.Equal("MATERIAL RECOZIDO", next.Notes);
-        Assert.Null(next.RawMaterialLot);
+        Assert.Equal("Certificado de origem do material nº 1127693\nMATERIAL RECOZIDO", next.Notes);
+        Assert.Equal("700090", next.RawMaterialLot);
         Assert.Equal(["C", "Mn", "Diâmetro", "LR", "Alongamento longitudinal"], next.Measures.Select(m => m.Name));
         Assert.Equal("Máx. 0,150", next.Measures.First(m => m.Name == "C").Specified);
         Assert.Equal("25,40± 0,15", next.Measures.First(m => m.Name == "Diâmetro").Specified);
