@@ -40,16 +40,11 @@ Future<void> _open(WidgetTester tester, {required bool wide}) async {
       supportedLocales: const [Locale('pt', 'BR')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       home: Builder(
-        builder: (c) => Scaffold(body: TextButton(onPressed: () => showUserSettings(c, session, section: 'admin'), child: const Text('abrir'))),
+        builder: (c) => Scaffold(body: TextButton(onPressed: () => showUserSettings(c, session, section: 'backup'), child: const Text('abrir'))),
       ),
     ),
   );
   await tester.tap(find.text('abrir'));
-  await tester.pumpAndSettle();
-  final open = find.byKey(const ValueKey('settings-open-backup'));
-  await tester.ensureVisible(open);
-  await tester.pumpAndSettle();
-  await tester.tap(open);
   await tester.pumpAndSettle();
 }
 
@@ -68,20 +63,6 @@ void main() {
     expect(find.text(prompt), findsNothing);
     expect(find.byKey(const ValueKey('backup-keep')), findsOneWidget, reason: 'still editing');
   }
-
-  testWidgets('sub-view back arrow asks when the backup form is dirty, then leaves on Descartar', (tester) async {
-    await _open(tester, wide: true);
-    await _dirty(tester);
-    await tester.tap(find.byKey(const ValueKey('settings-sub-back')));
-    await tester.pumpAndSettle();
-    await expectPromptThenStay(tester);
-    await tester.tap(find.byKey(const ValueKey('settings-sub-back')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Descartar'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('backup-keep')), findsNothing);
-    expect(find.byKey(const ValueKey('settings-open-backup')), findsOneWidget);
-  });
 
   testWidgets('section switch and the close X ask when dirty', (tester) async {
     await _open(tester, wide: true);
@@ -104,13 +85,12 @@ void main() {
     expect(find.byType(SettingsDialog), findsOneWidget);
   });
 
-  testWidgets('Esc on a clean form leaves the sub-view silently, then closes the window', (tester) async {
+  testWidgets('Esc on a clean form closes the window without asking', (tester) async {
     await _open(tester, wide: true);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.text(prompt), findsNothing);
-    expect(find.byKey(const ValueKey('backup-keep')), findsNothing);
-    expect(find.byType(SettingsDialog), findsOneWidget);
+    expect(find.byType(SettingsDialog), findsNothing);
   });
 
   testWidgets('clean form: back, section switch and close do not ask', (tester) async {
@@ -126,8 +106,7 @@ void main() {
   testWidgets('narrow window: Voltar às configurações asks when dirty', (tester) async {
     await _open(tester, wide: false);
     await _dirty(tester);
-    expect(find.byKey(const ValueKey('settings-back-to-menu')), findsNothing, reason: 'a sub-view is open: only the sub-view arrow shows');
-    await tester.tap(find.byKey(const ValueKey('settings-sub-back')));
+    await tester.tap(find.byKey(const ValueKey('settings-back-to-menu')));
     await tester.pumpAndSettle();
     await expectPromptThenStay(tester);
   });

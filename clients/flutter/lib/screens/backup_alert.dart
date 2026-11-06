@@ -71,7 +71,7 @@ class BackupAlertCard extends StatelessWidget {
       ),
       color: theme.colorScheme.surfaceContainerHigh,
       child: InkWell(
-        onTap: () => showUserSettings(context, session, section: 'admin'),
+        onTap: () => showUserSettings(context, session, section: 'backup'),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(

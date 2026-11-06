@@ -121,6 +121,7 @@ Future<void> _unmount(WidgetTester tester) async {
 }
 
 void main() {
+  drillTests();
   testWidgets('loads the schedule and the status', (tester) async {
     await _pump(tester, _settings(destination: r'D:\backups'));
     expect(find.text('Backup automático'), findsOneWidget);
@@ -702,20 +703,20 @@ void main() {
     });
   });
 
-  testWidgets('Administração links to the view', (tester) async {
-    await _pump(
-      tester,
-      _settings(),
-      home: (s) => AdminSection(
-        session: s,
-        open: (title, builder) => Navigator.of(tester.element(find.byType(Scaffold).first)).push(
-          MaterialPageRoute<void>(
-            builder: (c) => Scaffold(body: SingleChildScrollView(child: builder(c))),
-          ),
-        ),
-      ),
-    );
-    await _tap(tester, find.byKey(const ValueKey('settings-open-backup')));
+  testWidgets('Backup section shows the status and the form', (tester) async {
+    await _pump(tester, _settings(), home: (s) => BackupSection(session: s));
+    expect(find.byKey(const ValueKey('settings-backup')), findsOneWidget);
     expect(find.byType(BackupSettingsView), findsOneWidget);
+  });
+}
+
+void drillTests() {
+  test('DrillInfo reads the last restore drill from /health/ready', () {
+    expect(DrillInfo.from({'backup': {}}), isNull);
+    expect(DrillInfo.from('x'), isNull);
+    final ok = DrillInfo.from({'backup': {'drill': {'ok': true, 'at': '2026-11-01T10:00:00Z'}}})!;
+    expect(ok.ok, isTrue);
+    expect(ok.at, isNotNull);
+    expect(DrillInfo.from({'backup': {'drill': {'ok': false}}})!.ok, isFalse);
   });
 }

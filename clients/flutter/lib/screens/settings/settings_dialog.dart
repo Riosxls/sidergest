@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../session.dart';
 import '../../widgets/discard_guard.dart';
+import '../backup_alert.dart';
 import 'settings_activity.dart';
 import 'settings_admin.dart';
 import 'settings_notifications.dart';
@@ -24,6 +25,12 @@ class _Section {
   final Widget Function(BuildContext context, Session session, OpenSubView open, VoidCallback signOut) build;
 }
 
+/// Sections only administrators see.
+const _adminOnly = {'backup', 'admin'};
+
+/// Reachable by link (section: 'activity') but not listed in the menu: it is already under Conta e acesso.
+const _hiddenFromMenu = {'activity'};
+
 final _sections = <_Section>[
   _Section('appearance', Icons.palette_outlined, 'Aparência', (c, s, open, out) => AppearanceSection(session: s)),
   _Section('general', Icons.tune, 'Geral', (c, s, open, out) => GeneralSection(session: s, open: open)),
@@ -31,9 +38,10 @@ final _sections = <_Section>[
   _Section('notifications', Icons.notifications_outlined, 'Notificações', (c, s, open, out) => NotificationsSection(session: s)),
   _Section('account', Icons.person_outline, 'Conta e acesso', (c, s, open, out) => AccountSection(session: s, open: open, onSignOut: out)),
   _Section('activity', Icons.history, 'Minha atividade', (c, s, open, out) => ActivityView(session: s)),
-  _Section('data', Icons.storage_outlined, 'Dados e servidor', (c, s, open, out) => DataSection(session: s)),
+  _Section('data', Icons.devices_other_outlined, 'Dispositivo', (c, s, open, out) => DataSection(session: s)),
   _Section('about', Icons.info_outline, 'Sobre', (c, s, open, out) => AboutSection(session: s)),
-  _Section('admin', Icons.admin_panel_settings_outlined, 'Administração', (c, s, open, out) => AdminSection(session: s, open: open)),
+  _Section('backup', Icons.backup_outlined, 'Backup', (c, s, open, out) => BackupSection(session: s)),
+  _Section('admin', Icons.storage_outlined, 'Dados do sistema', (c, s, open, out) => AdminSection(session: s, open: open)),
 ];
 
 class _SubView {
@@ -61,18 +69,26 @@ class _SettingsDialogState extends State<SettingsDialog> {
   String? _selected;
   final _subs = <_SubView>[];
 
+  /// Backup problem found when the window opened; marks the Backup item in the menu.
+  BackupAlert? _backupAlert;
+
   /// Views inside the window (the backup form) register their unsaved-edit check here; every way out goes through [_guard].
   final _dirty = DirtyRegistry();
 
   List<_Section> get _visible => [
     for (final s in _sections)
-      if (s.id != 'admin' || widget.session.isAdmin) s,
+      if (!_adminOnly.contains(s.id) || widget.session.isAdmin) s,
   ];
 
   @override
   void initState() {
     super.initState();
     _selected = _visible.any((s) => s.id == widget.section) ? widget.section : null;
+    if (widget.session.isAdmin) {
+      fetchBackupAlert(widget.session).then((a) {
+        if (mounted && a != null) setState(() => _backupAlert = a);
+      });
+    }
   }
 
   Future<void> _guard(VoidCallback action) => _dirty.guard(context, () {
@@ -176,7 +192,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   Widget _nav(String? selected) => ListView(
     padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
     children: [
-      for (final s in _visible)
+      for (final s in _visible.where((s) => !_hiddenFromMenu.contains(s.id)))
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 1),
           child: ListTile(
@@ -187,6 +203,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
             selectedColor: Theme.of(context).colorScheme.onSecondaryContainer,
             leading: Icon(s.icon),
             title: Text(s.label),
+            trailing: s.id == 'backup' && _backupAlert != null
+                ? Tooltip(
+                    message: _backupAlert!.title,
+                    child: Icon(Icons.error, key: const ValueKey('settings-backup-badge'), size: 18, color: Theme.of(context).colorScheme.error),
+                  )
+                : null,
             onTap: () => _select(s.id),
           ),
         ),

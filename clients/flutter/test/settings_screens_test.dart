@@ -336,7 +336,7 @@ void main() {
 
     testWidgets('backup: recent, old, missing and unconfigured', (tester) async {
       final recent = DateTime.now().toUtc().subtract(const Duration(hours: 3)).toIso8601String();
-      await open(tester, 'Admin', (r) => backup({'configured': true, 'count': 14, 'lastBackupAt': recent, 'lastBackupFile': 'ebt-nightly-1.dump', 'lastBackupSizeBytes': 5242880}), section: 'admin');
+      await open(tester, 'Admin', (r) => backup({'configured': true, 'count': 14, 'lastBackupAt': recent, 'lastBackupFile': 'ebt-nightly-1.dump', 'lastBackupSizeBytes': 5242880}), section: 'backup');
       expect(find.text('Backup em dia'), findsOneWidget);
       expect(find.text('ebt-nightly-1.dump'), findsOneWidget);
       expect(find.textContaining('14 arquivos'), findsOneWidget);
@@ -344,16 +344,16 @@ void main() {
 
     testWidgets('backup older than 36 hours is flagged', (tester) async {
       final old = DateTime.now().toUtc().subtract(const Duration(hours: 50)).toIso8601String();
-      await open(tester, 'Admin', (r) => backup({'configured': true, 'count': 3, 'lastBackupAt': old, 'lastBackupFile': 'a.dump', 'lastBackupSizeBytes': 2048}), section: 'admin');
+      await open(tester, 'Admin', (r) => backup({'configured': true, 'count': 3, 'lastBackupAt': old, 'lastBackupFile': 'a.dump', 'lastBackupSizeBytes': 2048}), section: 'backup');
       expect(find.text('Último backup está velho'), findsOneWidget);
     });
 
     testWidgets('no backup found and unconfigured folder have their own messages', (tester) async {
-      await open(tester, 'Admin', (r) => backup({'configured': true, 'count': 0}), section: 'admin');
+      await open(tester, 'Admin', (r) => backup({'configured': true, 'count': 0}), section: 'backup');
       expect(find.text('Nenhum backup encontrado'), findsOneWidget);
       await tapV(tester, find.byKey(const ValueKey('settings-close')));
       await tester.pumpAndSettle();
-      await open(tester, 'Admin', (r) => backup({'configured': false, 'count': 0}), section: 'admin');
+      await open(tester, 'Admin', (r) => backup({'configured': false, 'count': 0}), section: 'backup');
       expect(find.text('Pasta de backups não ligada ao servidor'), findsOneWidget);
     });
 

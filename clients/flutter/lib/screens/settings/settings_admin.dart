@@ -28,12 +28,27 @@ class BackupStatus {
   bool get stale => lastBackupAt == null || DateTime.now().difference(lastBackupAt!) > staleBackupAfter;
 }
 
-/// Administration section of the settings dialog (admin only).
-class AdminSection extends StatelessWidget {
-  const AdminSection({super.key, required this.session, required this.open});
+/// Last restore drill, as the anonymous `/health/ready` reports it (null when none ran or the call fails).
+class DrillInfo {
+  DrillInfo({required this.ok, this.at});
+
+  final bool ok;
+  final DateTime? at;
+
+  static DrillInfo? from(Object? ready) {
+    final backup = ready is Map ? ready['backup'] : null;
+    final drill = backup is Map ? backup['drill'] : null;
+    if (drill is! Map) return null;
+    final raw = drill['at'] ?? drill['ranAt'] ?? drill['finishedAt'];
+    return DrillInfo(ok: drill['ok'] == true, at: raw == null ? null : DateTime.tryParse('$raw')?.toLocal());
+  }
+}
+
+/// Backup section of the settings dialog (admin only): state, schedule, run now and restore.
+class BackupSection extends StatelessWidget {
+  const BackupSection({super.key, required this.session});
 
   final Session session;
-  final OpenSubView open;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +57,7 @@ class AdminSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SettingsGroup(
-          title: 'Cópia de segurança',
+          title: 'Estado',
           children: [
             LoadView<BackupStatus?>(
               load: () async {
@@ -93,17 +108,52 @@ class AdminSection extends StatelessWidget {
               },
             ),
             const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                key: const ValueKey('settings-open-backup'),
-                onPressed: () => open('Cópia de segurança', (_) => BackupSettingsView(session: session)),
-                icon: const Icon(Icons.settings_backup_restore),
-                label: const Text('Configurar backup…'),
-              ),
+            LoadView<DrillInfo?>(
+              load: () async {
+                try {
+                  return DrillInfo.from(await session.api.get('/health/ready'));
+                } catch (e) {
+                  debugPrint('settings_admin: drill lookup failed: $e');
+                  return null;
+                }
+              },
+              builder: (context, d, reload) => d == null
+                  ? Text('Teste de restauração: ainda não rodou.', key: const ValueKey('settings-drill'), style: theme.textTheme.bodySmall)
+                  : Row(
+                      key: const ValueKey('settings-drill'),
+                      children: [
+                        Icon(d.ok ? Icons.check_circle_outline : Icons.warning_amber_rounded, size: 18, color: d.ok ? theme.colorScheme.primary : theme.colorScheme.error),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${d.ok ? 'Último teste de restauração passou' : 'Último teste de restauração falhou'}${d.at == null ? '' : ' em ${formatMoment(d.at!)}'}',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),
+        BackupSettingsView(session: session),
+      ],
+    );
+  }
+}
+
+/// Dados do sistema section of the settings dialog (admin only): data source, legacy cleanup and reset.
+class AdminSection extends StatelessWidget {
+  const AdminSection({super.key, required this.session, required this.open});
+
+  final Session session;
+  final OpenSubView open;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         SettingsGroup(
           title: 'Origem dos dados',
           children: [
@@ -132,9 +182,9 @@ class AdminSection extends StatelessWidget {
           ],
         ),
         SettingsGroup(
-          title: 'Recomeçar do zero',
+          title: 'Zona de perigo: recomeçar do zero',
           note:
-              'Apaga orçamentos, pedidos, entregas, ordens de fabricação e outros registros do dia a dia. Produtos, materiais, clientes, fornecedores, ferramentas e preços ficam como estão.',
+              'Apaga orçamentos, pedidos, entregas, ordens de fabricação e outros registros do dia a dia. Produtos, materiais, clientes, fornecedores, ferramentas e preços ficam como estão. Faça um backup antes.',
           children: [
             Align(
               alignment: Alignment.centerLeft,
