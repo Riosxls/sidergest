@@ -144,9 +144,21 @@ class LinesEditor extends StatelessWidget {
     this.onPick,
     this.hintFor,
     this.fieldActions,
+    this.suffixFor,
+    this.suggestFor,
+    this.emptyText = 'Nenhum registro cadastrado',
     this.rowColor,
     this.hideWhenEmpty = const {},
   });
+
+  /// Unit written inside a field of the line form ("kg" next to the quantity); see [SuffixHook].
+  final SuffixHook? suffixFor;
+
+  /// Records the picker of a lookup field lists first (the products this customer already bought); see [SuggestHook].
+  final SuggestHook? suggestFor;
+
+  /// What the table says while there are no lines: tell the user what to do next.
+  final String emptyText;
 
   /// Labels of columns left out while no line has a value for them.
   final Set<String> hideWhenEmpty;
@@ -201,6 +213,15 @@ class LinesEditor extends StatelessWidget {
       onPick: onPick,
       hintFor: hintFor,
       // An item being edited tells the hook its own unit (the form has no unit field) as long as the product is still the same.
+      suggestFor: suggestFor,
+      suffixFor: suffixFor == null || index == null
+          ? suffixFor
+          : (key, values) {
+              final own = lines[index];
+              final same = own['productId'] != null && '${own['productId']}' == '${values['productId']}';
+              final unit = own['unit'] ?? own['_unit'];
+              return suffixFor!(key, {...values, if (same && unit != null) 'unit': unit});
+            },
       fieldActions: fieldActions == null || index == null
           ? fieldActions
           : (c, key, values, setText) {
@@ -276,8 +297,9 @@ class LinesEditor extends StatelessWidget {
                 Expanded(child: Text('$title (${lines.length})', style: Theme.of(context).textTheme.titleMedium)),
                 if (enabled && !addEnabled && disabledHint != null)
                   Flexible(child: Padding(padding: const EdgeInsets.only(right: 8), child: Text(disabledHint!, textAlign: TextAlign.end, style: Theme.of(context).textTheme.bodySmall))),
+                // With nothing listed yet this is the next step, so it is the filled button.
                 if (enabled)
-                  FilledButton.tonalIcon(
+                  (lines.isEmpty ? FilledButton.icon : FilledButton.tonalIcon)(
                     key: const ValueKey('add-line'),
                     onPressed: addEnabled ? () => _edit(context) : null,
                     icon: const Icon(Icons.add),
@@ -290,6 +312,7 @@ class LinesEditor extends StatelessWidget {
               columns: [ColumnSpec('#', (e) => '${e['_n']}'), ...columns],
               rows: rows,
               hideWhenEmpty: hideWhenEmpty,
+              emptyText: emptyText,
               rowColor: rowColor == null ? null : (e) => rowColor!(lines[(e['_n'] as int) - 1]),
               actions: enabled
                   ? (e) => [

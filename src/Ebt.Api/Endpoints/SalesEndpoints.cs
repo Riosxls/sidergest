@@ -425,6 +425,22 @@ public static class SalesEndpoints
     {
         var g = app.MapGroup("/api/sales/orders").WithTags("Sales").RequireAuthorization(Policies.Read).AddEndpointFilter(new RowVersionFilter<SalesOrder>());
 
+        // Shortcut of the product picker: what this customer already bought or was quoted (newest first), then the products linked to it.
+        app.MapGet("/api/sales/customers/{customerId:int}/products", async (int customerId, EbtDbContext db, int? take, CancellationToken ct) =>
+        {
+            var n = Math.Clamp(take ?? 15, 1, 50);
+            var ordered = await db.SalesOrderLines.AsNoTracking().Where(l => l.Order!.CustomerId == customerId && l.Order.Source != DataSource.Test)
+                .GroupBy(l => l.ProductId).Select(x => new { Id = x.Key, At = x.Max(l => l.Order!.CreatedAt) }).ToListAsync(ct);
+            var quoted = await db.QuoteLines.AsNoTracking().Where(l => l.Quote!.CustomerId == customerId && l.Quote.Source != DataSource.Test)
+                .GroupBy(l => l.ProductId).Select(x => new { Id = x.Key, At = x.Max(l => l.Quote!.CreatedAt) }).ToListAsync(ct);
+            var linked = await db.ProductCustomers.AsNoTracking().Where(c => c.CustomerId == customerId && c.Active).Select(c => c.ProductId).ToListAsync(ct);
+            var ids = ordered.Concat(quoted).GroupBy(x => x.Id).Select(x => (x.Key, At: x.Max(y => y.At))).OrderByDescending(x => x.At).Select(x => x.Key)
+                .Concat(linked).Distinct().Take(n).ToList();
+            var items = await db.Products.AsNoTracking().Where(p => ids.Contains(p.Id) && !p.Blocked)
+                .Select(p => new ProductOut(p.Id, p.Code, p.Name, p.Kind, p.Shape, p.DiameterMm, p.WidthMm, p.HeightMm, p.ThicknessMm, p.LengthMm, p.NetWeightKg, p.LossPercent, p.Ncm, p.StockUnit, p.PiecesPerPackage, p.Blocked, p.DrawingRevision, p.ProcessRevision, p.Routing.Count)).ToListAsync(ct);
+            return Results.Ok(ids.Select(id => items.FirstOrDefault(p => p.Id == id)).Where(p => p is not null));
+        });
+
         g.MapGet("/", async (EbtDbContext db, SalesService svc, SalesOrderStatus? status, int? customerId, bool? open, string? month, bool? late, BillTo? billTo, string? q, int? skip, int? take, CancellationToken ct) =>
         {
             var x = db.SalesOrders.AsNoTracking();

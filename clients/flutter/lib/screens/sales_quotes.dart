@@ -703,6 +703,43 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     return price == null ? null : {'unitPrice': fmtDecimalInput(price)};
   }
 
+  /// Unit of the item being typed: its own (a line being edited) or the product's, so the quantity and the price say "kg" or "pç" instead of a bare number.
+  String? _lineUnit(Map<String, dynamic> values) {
+    final id = values['productId'];
+    final product = id == null ? null : _productInfo[id];
+    final unit = values['unit'] ?? product?['saleUnit'] ?? product?['stockUnit'];
+    final text = '$unit'.trim();
+    return unit == null || text.isEmpty ? null : text;
+  }
+
+  /// "kg" inside the quantity and "/kg" inside the price.
+  String? _unitSuffix(String key, Map<String, dynamic> values) {
+    if (key != 'quantity' && key != 'unitPrice') return null;
+    final unit = _lineUnit(values);
+    if (unit == null) return null;
+    return key == 'quantity' ? unit : '/$unit';
+  }
+
+  final _boughtBefore = <int, List<Map<String, dynamic>>>{};
+
+  /// Products this customer already bought or was quoted, newest first, offered at the top of the product picker.
+  Future<List<Map<String, dynamic>>> _customerProducts(String key) async {
+    final customer = _customerId;
+    if (key != 'productId' || customer == null) return const [];
+    final cached = _boughtBefore[customer];
+    if (cached != null) return cached;
+    final r = await api.get('/api/sales/customers/$customer/products');
+    final list = r is List ? [for (final e in r) if (e is Map<String, dynamic>) e] : <Map<String, dynamic>>[];
+    return _boughtBefore[customer] = list;
+  }
+
+  /// What still blocks saving, in words ("cliente, prazo de pagamento, ao menos 1 item").
+  List<String> _missing() => [
+    if (_customerId == null) 'cliente',
+    if (_termId == null && _customTerm == null) 'prazo de pagamento',
+    if (_lines.isEmpty) 'ao menos 1 item',
+  ];
+
   /// Helper text of the price field: the table price and the discount the typed price makes.
   String? _priceHint(String key, Map<String, dynamic> values) {
     final id = values['productId'];
@@ -1162,7 +1199,7 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
       Text(
         value,
         key: key,
-        style: (strong ? Theme.of(context).textTheme.titleMedium : Theme.of(context).textTheme.bodyMedium)?.copyWith(
+        style: (strong ? Theme.of(context).textTheme.titleLarge : Theme.of(context).textTheme.bodyMedium)?.copyWith(
           fontWeight: strong ? FontWeight.w700 : null,
         ),
       ),
@@ -1177,6 +1214,14 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
       icon: const Icon(Icons.check),
       label: Text(widget.asOrder ? 'Salvar pedido' : 'Salvar orçamento'),
     );
+    final missing = _missing();
+    final pending = missing.isEmpty
+        ? null
+        : Text(
+            'Falta: ${missing.join(', ')}',
+            key: const ValueKey('quote-missing'),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.w600),
+          );
     final totals = Wrap(
       spacing: 24,
       runSpacing: 4,
@@ -1197,11 +1242,11 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
               ? Row(
                   children: [
                     Expanded(child: totals),
-                    const SizedBox(width: 12),
+                    if (pending != null) ...[Flexible(child: pending), const SizedBox(width: 16)],
                     save,
                   ],
                 )
-              : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [totals, const SizedBox(height: 8), save]),
+              : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [totals, if (pending != null) ...[const SizedBox(height: 4), pending], const SizedBox(height: 8), save]),
         ),
       ),
     );
@@ -1281,9 +1326,12 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
                     api: api,
                     title: 'Itens',
                     fields: widget.asOrder ? orderLineFields : quoteLineFields,
-                    newTitle: widget.asOrder ? 'Nova linha' : 'Novo item',
-                    addLabel: widget.asOrder ? 'Adicionar linha' : 'Adicionar item',
-                    submitLabel: widget.asOrder ? 'Adicionar linha' : 'Adicionar item',
+                    newTitle: 'Novo item',
+                    addLabel: 'Adicionar item',
+                    submitLabel: 'Adicionar item',
+                    emptyText: 'Nenhum item ainda. Toque em "Adicionar item" para começar.',
+                    suffixFor: _unitSuffix,
+                    suggestFor: _customerProducts,
                     addAnotherLabel: 'Adicionar e novo',
                     carryKeys: const ['leadTimeDays'],
                     duplicateKey: 'productId',

@@ -363,6 +363,19 @@ public class SalesTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Product_picker_shortcut_lists_what_the_customer_already_bought()
+    {
+        var admin = await api.AdminAsync();
+        var s = await Arrange(admin, stock: 100m);
+        var none = await (await admin.GetAsync($"/api/sales/customers/{s.Customer.Id}/products")).Read<List<ProductOut>>();
+        Assert.Empty(none);
+        await ReleasedOrder(admin, s, 10m);
+        var bought = await (await admin.GetAsync($"/api/sales/customers/{s.Customer.Id}/products")).Read<List<ProductOut>>();
+        Assert.Equal(s.Tube.Id, Assert.Single(bought).Id);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/sales/customers/999999/products")).StatusCode);
+    }
+
+    [Fact]
     public async Task Issued_certificate_teaches_the_next_one_of_the_same_customer_and_product()
     {
         var admin = await api.AdminAsync();

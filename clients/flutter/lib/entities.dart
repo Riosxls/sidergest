@@ -20,6 +20,21 @@ class LookupSpec {
     final shownCode = e['days'] != null ? null : code;
     return [shownCode, name, extra].whereType<Object>().join(' · ');
   }
+
+  /// Second line of a picker row: a customer's document and city, so namesakes can be told apart. Null for records without it.
+  static String? subtitle(Map<String, dynamic> e) {
+    final a = e['defaultAddress'];
+    if (a is! Map) return null;
+    final doc = '${a['document'] ?? ''}'.replaceAll(RegExp(r'\D'), '');
+    String? fmtDoc() {
+      if (doc.length == 14) return '${doc.substring(0, 2)}.${doc.substring(2, 5)}.${doc.substring(5, 8)}/${doc.substring(8, 12)}-${doc.substring(12)}';
+      if (doc.length == 11) return '${doc.substring(0, 3)}.${doc.substring(3, 6)}.${doc.substring(6, 9)}-${doc.substring(9)}';
+      return doc.isEmpty ? null : doc;
+    }
+    final place = [a['city'], a['uf']].where((x) => x != null && '$x'.isNotEmpty).join('/');
+    final text = [fmtDoc(), if (place.isNotEmpty) place].whereType<String>().join(' · ');
+    return text.isEmpty ? null : text;
+  }
 }
 
 /// One editable field of an [EntitySpec] form: key, label, type and validation hints.

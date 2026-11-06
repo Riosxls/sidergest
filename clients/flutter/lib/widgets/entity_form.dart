@@ -29,6 +29,8 @@ Future<Map<String, dynamic>?> showEntityForm(
   PickHook? onPick,
   HintHook? hintFor,
   FieldActionHook? fieldActions,
+  SuffixHook? suffixFor,
+  SuggestHook? suggestFor,
 }) => showDialog<Map<String, dynamic>>(
   context: context,
   barrierDismissible: true, // backdrop click and Esc ask before discarding edits (DiscardGuard)
@@ -48,6 +50,8 @@ Future<Map<String, dynamic>?> showEntityForm(
     onPick: onPick,
     hintFor: hintFor,
     fieldActions: fieldActions,
+    suffixFor: suffixFor,
+    suggestFor: suggestFor,
   ),
 );
 
@@ -56,6 +60,12 @@ typedef PickHook = Future<Map<String, Object?>?> Function(String key, int? id, M
 
 /// Helper text of a field that depends on what is typed elsewhere in the form ("Tabela R$ 10,00 · desconto 5%"); null keeps the field's own hint.
 typedef HintHook = String? Function(String key, Map<String, dynamic> values);
+
+/// Unit written inside a text field ("kg", "R$/kg"), from what is typed elsewhere in the form; null for none.
+typedef SuffixHook = String? Function(String key, Map<String, dynamic> values);
+
+/// Records offered first in the picker of the lookup field [key] ("products this customer already bought"); empty for none.
+typedef SuggestHook = Future<List<Map<String, dynamic>>> Function(String key);
 
 /// Widget shown under the field [key] (null for none), built from the values typed so far. [setText] puts text in another text field of the form.
 typedef FieldActionHook = Widget? Function(BuildContext context, String key, Map<String, dynamic> values, void Function(String key, String text) setText);
@@ -105,7 +115,12 @@ class EntityFormDialog extends StatefulWidget {
     this.onPick,
     this.hintFor,
     this.fieldActions,
+    this.suffixFor,
+    this.suggestFor,
   });
+
+  final SuffixHook? suffixFor;
+  final SuggestHook? suggestFor;
 
   final ApiClient api;
   final String title;
@@ -501,6 +516,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
             helperMaxLines: 4,
             errorText: error,
             isDense: true,
+            suffixText: widget.suffixFor?.call(f.key, _currentValues()),
             hintText: f.type == FieldType.date ? 'dd/mm/aaaa' : (f.type == FieldType.time ? 'hh:mm' : null),
             suffixIcon: f.type == FieldType.date && !widget.readOnly
                 ? IconButton(tooltip: 'Calendário', icon: const Icon(Icons.calendar_today, size: 18), onPressed: () => _pickDate(f))
@@ -508,7 +524,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
           ),
           onSubmitted: (_) => _onEnter(f),
           onChanged: (_) {
-            if (widget.hintFor != null || widget.fieldActions != null) setState(() {});
+            if (widget.hintFor != null || widget.fieldActions != null || widget.suffixFor != null) setState(() {});
             if (f.daysFor != null || f.dateFor != null) {
               _syncLinked(f);
               _serverErrors.remove(f.daysFor ?? f.dateFor);
@@ -561,6 +577,7 @@ class _EntityFormDialogState extends State<EntityFormDialog> {
           spec: f.lookup!,
           label: label,
           hint: widget.hintFor?.call(f.key, _currentValues()) ?? f.hint,
+          suggest: widget.suggestFor == null ? null : () => widget.suggestFor!(f.key),
           error: error,
           value: _values[f.key] as int?,
           enabled: !widget.readOnly,
@@ -714,7 +731,11 @@ class LookupField extends StatefulWidget {
     this.initialDisplay,
     this.onCustom,
     this.autoOpen = false,
+    this.suggest,
   });
+
+  /// Records the picker lists first, above the rest.
+  final Future<List<Map<String, dynamic>>> Function()? suggest;
 
   /// Opens the picker as soon as the field appears (a new line starts by choosing its product).
   final bool autoOpen;
@@ -777,6 +798,7 @@ class _LookupFieldState extends State<LookupField> {
         title: widget.label,
         query: widget.spec.query,
         selectedId: widget.value,
+        suggest: widget.suggest,
         create: widget.onCustom == null ? null : askCustomPrazo,
         createLabel: 'Prazo personalizado',
       ),
@@ -814,7 +836,8 @@ class _LookupFieldState extends State<LookupField> {
                 )
               : const Icon(Icons.search),
         ),
-        child: Text(widget.value == null ? '' : (_display ?? '…'), overflow: TextOverflow.ellipsis),
+        // Two lines: the measures at the end of a product name are what tells one tube from another, so they are not cut off.
+        child: Text(widget.value == null ? '' : (_display ?? '…'), maxLines: 2, overflow: TextOverflow.ellipsis),
         ),
       ),
     );
@@ -832,7 +855,11 @@ class LookupPicker extends StatefulWidget {
     this.selectedId,
     this.create,
     this.createLabel = 'Novo',
+    this.suggest,
   });
+
+  /// Records listed first while nothing is typed (under "Deste cliente"); loaded when the picker opens.
+  final Future<List<Map<String, dynamic>>> Function()? suggest;
 
   final ApiClient api;
   final Map<String, dynamic> query;
@@ -853,6 +880,7 @@ class _LookupPickerState extends State<LookupPicker> {
   static final _recent = <String, List<Map<String, dynamic>>>{};
 
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _suggested = [];
   String? _error;
   bool _loading = true;
   bool _typing = false;
@@ -863,6 +891,12 @@ class _LookupPickerState extends State<LookupPicker> {
   void initState() {
     super.initState();
     _search('');
+    widget.suggest?.call().then<void>(
+      (r) {
+        if (mounted) setState(() => _suggested = r);
+      },
+      onError: (Object e) => debugPrint('LookupPicker: the suggestions are only a shortcut, the full list still works: $e'),
+    );
   }
 
   @override
@@ -907,6 +941,10 @@ class _LookupPickerState extends State<LookupPicker> {
 
   /// The list shown: the recently picked records above the rest while nothing is typed, otherwise the search result. Strings are headings.
   List<Object> _rows() {
+    if (!_typing && _suggested.isNotEmpty) {
+      final ids = {for (final r in _suggested) r['id']};
+      return ['Deste cliente', ..._suggested, 'Todos', ..._items.where((e) => !ids.contains(e['id']))];
+    }
     final recent = _typing ? const <Map<String, dynamic>>[] : (_recent[widget.path] ?? const <Map<String, dynamic>>[]);
     if (recent.isEmpty) return [..._items];
     final recentIds = {for (final r in recent) r['id']};
@@ -966,14 +1004,17 @@ class _LookupPickerState extends State<LookupPicker> {
                         }
                         final item = row as Map<String, dynamic>;
                         final selected = widget.selectedId != null && item['id'] == widget.selectedId;
+                        final subtitle = LookupSpec.subtitle(item);
                         return ListTile(
+                          dense: subtitle != null,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
                           selected: selected,
                           selectedTileColor: cs.secondaryContainer,
                           selectedColor: cs.onSecondaryContainer,
                           hoverColor: cs.onSurface.withValues(alpha: 0.06),
                           title: Text(LookupSpec.display(item), style: theme.textTheme.bodyLarge, maxLines: 2, overflow: TextOverflow.ellipsis),
+                          subtitle: subtitle == null ? null : Text(subtitle, style: theme.textTheme.bodySmall?.copyWith(color: selected ? null : cs.onSurfaceVariant)),
                           trailing: selected ? const Icon(Icons.check) : null,
                           onTap: () => _pickItem(item),
                         );

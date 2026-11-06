@@ -220,7 +220,25 @@ void main() {
     for (final key in ['outsideDiameter', 'thickness', 'length', 'standard', 'condition', 'saleUnit', 'pieceWeightKg', 'materialNeedKg', 'toleranceDiameter', 'feasibilityId']) {
       expect(find.byKey(ValueKey('field-$key')), findsNothing, reason: key);
     }
-    expect(find.text('Nova linha'), findsOneWidget);
+    expect(find.text('Novo item'), findsOneWidget);
     expect(tester.widget<TextField>(find.byKey(const ValueKey('field-unitPrice'))).controller!.text, '100,00'); // price from the customer's table, like the quote
+  });
+
+  testWidgets('a new order says what is missing, offers the products of the customer first and writes the unit in the item form', (tester) async {
+    final f = _fake();
+    f.overrides['GET /api/sales/customers/2/products'] = (r) => jsonResp([
+      {'id': 7, 'code': 'TB-25', 'name': 'Tubo 25,4 x 1,5', 'stockUnit': 'KG'},
+    ]);
+    await pumpMore(tester, f, (s) => QuoteEditorScreen(session: s, asOrder: true));
+    expect(find.text('Falta: cliente, prazo de pagamento, ao menos 1 item'), findsOneWidget);
+    await _pickCustomer(tester);
+    expect(find.text('Falta: ao menos 1 item'), findsOneWidget);
+    expect(find.textContaining('Nenhum item ainda'), findsOneWidget);
+    await tapKey(tester, 'add-line');
+    expect(find.text('Deste cliente'), findsOneWidget);
+    await tester.tap(find.text('TB-25 · Tubo 25,4 x 1,5').first);
+    await tester.pumpAndSettle();
+    expect(find.text('KG'), findsOneWidget); // beside the quantity
+    expect(find.text('/KG'), findsOneWidget); // beside the price
   });
 }
