@@ -1241,8 +1241,10 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
           child: wide
               ? Row(
                   children: [
-                    Expanded(child: totals),
-                    if (pending != null) ...[Flexible(child: pending), const SizedBox(width: 16)],
+                    // Totals on the left, save pinned to the right edge (a second Expanded here used to split the room and leave save mid-screen).
+                    totals,
+                    const Spacer(),
+                    if (pending != null) ...[Flexible(flex: 3, child: pending), const SizedBox(width: 16)],
                     save,
                   ],
                 )
