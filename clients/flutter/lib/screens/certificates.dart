@@ -1223,7 +1223,7 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
               padding: const EdgeInsets.all(16),
               children: [
                 const Text(
-                  'Cada certificado emitido ensina o próximo do mesmo cliente e produto: limites especificados, valores encontrados, título, acabamento e observações fixas. O lote da matéria-prima não é copiado.',
+                  'Cada certificado emitido ensina o próximo do mesmo cliente e produto: limites especificados, valores encontrados, título, acabamento, lote da matéria-prima e observações fixas. Confira o lote e os valores encontrados de cada corrida antes de emitir.',
                 ),
                 const SizedBox(height: 12),
                 TextField(

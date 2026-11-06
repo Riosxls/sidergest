@@ -37,7 +37,7 @@ public sealed class LegacySpecImporter(EbtDbContext db)
     {
         var customers = await db.Customers.AsNoTracking().Select(c => new { c.Id, c.Name }).ToListAsync(ct);
         var products = await db.Products.AsNoTracking().Where(p => !p.Blocked).ToListAsync(ct);
-        var certs = await db.QualityCertificates.Where(c => c.Status != CertificateStatus.Cancelled && c.ProductId != null)
+        var certs = await db.QualityCertificates.Where(c => c.Status == CertificateStatus.Draft && c.ProductId != null)
             .Join(db.SalesOrders, c => c.OrderId, o => o.Id, (c, o) => new { Certificate = c, o.CustomerId }).ToListAsync(ct);
         var have = (await db.CertificateTemplates.AsNoTracking().Select(t => new { t.ProductId, t.CustomerId }).ToListAsync(ct)).Select(t => (t.ProductId, t.CustomerId)).ToHashSet();
         var excel = (await db.CertificateTemplates.Include(t => t.Measures).Where(t => t.LearnedFrom != null && t.LearnedFrom.EndsWith("(Excel)")).ToListAsync(ct)).ToDictionary(t => (t.ProductId, t.CustomerId));
@@ -81,7 +81,7 @@ public sealed class LegacySpecImporter(EbtDbContext db)
                         if (s.CustomerPartNumber is not null && LooksLegacy(oldNumber) && link.CustomerPartNumber != s.CustomerPartNumber) { link.CustomerPartNumber = s.CustomerPartNumber; if (string.IsNullOrWhiteSpace(oldNumber)) parts++; else partsFixed++; }
                         if (s.CustomerPartDescription is not null && (LooksLegacy(link.CustomerDescription) || link.CustomerDescription == oldNumber) && link.CustomerDescription != s.CustomerPartDescription) link.CustomerDescription = s.CustomerPartDescription;
                     }
-                    // Certificates already drafted or issued from the wrong data get the Excel values (identity text only; measures and found values stay).
+                    // Drafts made from the wrong data get the Excel values (identity text only; measures and found values stay). Issued certificates are quality records and are never touched.
                     foreach (var x in certs.Where(x => x.Certificate.ProductId == p.Id && x.CustomerId == c.Id))
                         if (CorrectCertificate(x.Certificate, s, p)) certsFixed++;
                 }
@@ -91,7 +91,7 @@ public sealed class LegacySpecImporter(EbtDbContext db)
     }
 
     /// <summary>A customer code or description that is blank or is the legacy cross-reference text ("TUB12,00X1,60X6000MM20MF020082", "TUBO-C 12,70 X ...") rather than what the customer certificate prints.</summary>
-    private static bool LooksLegacy(string? v) => string.IsNullOrWhiteSpace(v) || v.TrimStart().StartsWith("TUB", StringComparison.OrdinalIgnoreCase);
+    private static bool LooksLegacy(string? v) => string.IsNullOrWhiteSpace(v) || System.Text.RegularExpressions.Regex.IsMatch(v.TrimStart(), @"^TUBO?[-\s]*C?\s*\d", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     private static string? JoinNotes(string? notes, string? origin)
     {

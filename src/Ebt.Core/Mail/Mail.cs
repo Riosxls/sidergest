@@ -58,7 +58,7 @@ public sealed class SmtpMailSender(MailOptions options) : IMailSender
     {
         if (!Enabled) throw new MailException("O envio de e-mail não está configurado no servidor");
         var msg = new MimeMessage();
-        msg.From.Add(new MailboxAddress(options.FromName, options.From));
+        msg.From.Add(new MailboxAddress(options.FromName, options.From!));
         foreach (var a in mail.To) msg.To.Add(MailboxAddress.Parse(a));
         foreach (var a in mail.Cc) msg.Cc.Add(MailboxAddress.Parse(a));
         if (!string.IsNullOrWhiteSpace(mail.ReplyTo)) msg.ReplyTo.Add(MailboxAddress.Parse(mail.ReplyTo));
@@ -70,7 +70,7 @@ public sealed class SmtpMailSender(MailOptions options) : IMailSender
         using var smtp = new SmtpClient { Timeout = 30_000 };
         try
         {
-            await smtp.ConnectAsync(options.Host, options.Port, options.SocketOptions, ct);
+            await smtp.ConnectAsync(options.Host!, options.Port, options.SocketOptions, ct);
             if (!string.IsNullOrWhiteSpace(options.User)) await smtp.AuthenticateAsync(options.User, options.Password ?? "", ct);
             await smtp.SendAsync(msg, ct);
             await smtp.DisconnectAsync(true, ct);

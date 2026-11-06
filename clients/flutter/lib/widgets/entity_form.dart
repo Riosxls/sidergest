@@ -1084,8 +1084,11 @@ class _CustomPrazoDialogState extends State<_CustomPrazoDialog> {
   }
 
   void _ok() {
-    final filled = [for (final c in _days) c.text.trim()].where((t) => t.isNotEmpty).toList();
+    final all = [for (final c in _days) c.text.trim()];
+    final filled = all.where((t) => t.isNotEmpty).toList();
     if (filled.isEmpty) return setState(() => _error = 'Informe o prazo');
+    // "37" typed under a blank first installment would read as a single 37-day payment.
+    if (all.take(filled.length).any((t) => t.isEmpty)) return setState(() => _error = 'Preencha as parcelas em ordem');
     Navigator.pop(context, '${filled.join(' / ')} dias');
   }
 

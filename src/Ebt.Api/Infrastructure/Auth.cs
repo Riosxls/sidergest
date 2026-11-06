@@ -542,7 +542,7 @@ public static class AuthEndpoints
                 .Require((req.Password ?? "").Length >= MinPasswordLength, "password", $"At least {MinPasswordLength} characters")
                 .Require(!TooEasy(req.Password, req.Username?.Trim()), "password", TooEasyMessage);
             if (errors.Count > 0) return Results.ValidationProblem(errors);
-            var user = new AppUser { Username = req.Username.Trim().ToLower(), PasswordHash = "", Role = req.Role };
+            var user = new AppUser { Username = req.Username!.Trim().ToLower(), PasswordHash = "", Role = req.Role };
             user.PasswordHash = hasher.HashPassword(user, req.Password!);
             db.Users.Add(user);
             await db.SaveChangesAsync(ct);

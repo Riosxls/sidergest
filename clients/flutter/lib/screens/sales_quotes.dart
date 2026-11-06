@@ -730,7 +730,9 @@ class _QuoteEditorScreenState extends State<QuoteEditorScreen> {
     if (cached != null) return cached;
     final r = await api.get('/api/sales/customers/$customer/products');
     final list = r is List ? [for (final e in r) if (e is Map<String, dynamic>) e] : <Map<String, dynamic>>[];
-    return _boughtBefore[customer] = list;
+    // An empty answer is not kept: the customer may get a first quote while this editor is open.
+    if (list.isNotEmpty) _boughtBefore[customer] = list;
+    return list;
   }
 
   /// What still blocks saving, in words ("cliente, prazo de pagamento, ao menos 1 item").

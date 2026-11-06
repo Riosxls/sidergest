@@ -439,7 +439,7 @@ public static class SalesEndpoints
             var items = await db.Products.AsNoTracking().Where(p => ids.Contains(p.Id) && !p.Blocked)
                 .Select(p => new ProductOut(p.Id, p.Code, p.Name, p.Kind, p.Shape, p.DiameterMm, p.WidthMm, p.HeightMm, p.ThicknessMm, p.LengthMm, p.NetWeightKg, p.LossPercent, p.Ncm, p.StockUnit, p.PiecesPerPackage, p.Blocked, p.DrawingRevision, p.ProcessRevision, p.Routing.Count)).ToListAsync(ct);
             return Results.Ok(ids.Select(id => items.FirstOrDefault(p => p.Id == id)).Where(p => p is not null));
-        });
+        }).RequireAuthorization(Policies.Read).WithTags("Sales");
 
         g.MapGet("/", async (EbtDbContext db, SalesService svc, SalesOrderStatus? status, int? customerId, bool? open, string? month, bool? late, BillTo? billTo, string? q, int? skip, int? take, CancellationToken ct) =>
         {
