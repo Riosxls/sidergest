@@ -64,7 +64,8 @@ public class CertificateMeasure
 
 /// <summary>
 /// What repeats from one certificate to the next for the same product and customer: the specified limits, the title, the finish line and the standing
-/// observation. Learned when a certificate is issued, so the next one starts filled in; the found values never come from here.
+/// observation, plus the found values: the product is the same, so Italo reissues the previous certificate changing only number, date, NF, customer PO and quantity.
+/// Learned when a certificate is issued (or loaded from the old Excel ones), so the next one starts filled in and editable.
 /// </summary>
 public class CertificateTemplate
 {
@@ -76,6 +77,7 @@ public class CertificateTemplate
     public string? Title { get; set; }
     public string? Finish { get; set; }
     public string? Notes { get; set; }
+    public string? Hardness { get; set; }
     public string? UpdatedBy { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     /// <summary>Reference of the certificate this template was last learned from.</summary>
@@ -92,4 +94,5 @@ public class CertificateTemplateMeasure
     public int Sequence { get; set; }
     public required string Name { get; set; }
     public string? Specified { get; set; }
+    public string? Found { get; set; }
 }

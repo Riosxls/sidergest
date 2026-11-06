@@ -65,10 +65,10 @@ public sealed class CertificateService(EbtDbContext db)
                 Company = company, Number = number, Year = date.Year, Reference = ReferenceOf(number, date.Year), OrderId = order.Id, OrderLineId = line.Id, DeliveryId = delivery?.Id, ProductId = line.ProductId,
                 CustomerPo = Clean(i.CustomerPo) ?? order.CustomerPo, IssueDate = date, InvoiceNumber = Clean(i.InvoiceNumber), Quantity = quantity, Unit = (Clean(i.Unit) ?? line.Unit).ToUpperInvariant(),
                 ProductCode = product?.Code, Description = Clean(i.Description) ?? line.Description, CustomerPartNumber = Clean(i.CustomerPartNumber) ?? line.CustomerPartNumber ?? link?.CustomerPartNumber,
-                CustomerPartDescription = Clean(i.CustomerPartDescription) ?? link?.CustomerDescription, RawMaterialLot = Clean(i.RawMaterialLot), Hardness = Clean(i.Hardness), Finish = Clean(i.Finish) ?? template?.Finish ?? DefaultFinish, Title = Clean(i.Title) ?? template?.Title,
+                CustomerPartDescription = Clean(i.CustomerPartDescription) ?? link?.CustomerDescription, RawMaterialLot = Clean(i.RawMaterialLot), Hardness = Clean(i.Hardness) ?? template?.Hardness, Finish = Clean(i.Finish) ?? template?.Finish ?? DefaultFinish, Title = Clean(i.Title) ?? template?.Title,
                 Notes = Clean(i.Notes) ?? template?.Notes, ApprovedBy = Clean(i.ApprovedBy), Status = CertificateStatus.Draft, CreatedBy = user, CreatedAt = DateTimeOffset.UtcNow
             };
-            SetMeasures(c, i.Measures ?? template?.Measures.OrderBy(m => m.Kind).ThenBy(m => m.Sequence).Select(m => new CertificateMeasureInput(m.Kind, m.Name, m.Specified)).ToList() ?? TemplateMeasures(product));
+            SetMeasures(c, i.Measures ?? template?.Measures.OrderBy(m => m.Kind).ThenBy(m => m.Sequence).Select(m => new CertificateMeasureInput(m.Kind, m.Name, m.Specified, m.Found)).ToList() ?? TemplateMeasures(product));
             db.QualityCertificates.Add(c);
             try
             {
@@ -173,7 +173,7 @@ public sealed class CertificateService(EbtDbContext db)
         t.UpdatedBy = u.User;
         t.UpdatedAt = DateTimeOffset.UtcNow;
         db.CertificateTemplateMeasures.RemoveRange(t.Measures);
-        t.Measures = u.Measures.GroupBy(m => m.Kind).SelectMany(g => g.Select((m, i) => new CertificateTemplateMeasure { Kind = g.Key, Sequence = i + 1, Name = m.Name!.Trim(), Specified = Clean(m.Specified) })).ToList();
+        t.Measures = u.Measures.GroupBy(m => m.Kind).SelectMany(g => g.Select((m, i) => new CertificateTemplateMeasure { Kind = g.Key, Sequence = i + 1, Name = m.Name!.Trim(), Specified = Clean(m.Specified), Found = Clean(m.Found) })).ToList();
         await db.SaveChangesAsync(ct);
         return t;
     }
@@ -185,7 +185,7 @@ public sealed class CertificateService(EbtDbContext db)
         await db.SaveChangesAsync(ct);
     }
 
-    /// <summary>Remembers the specification of an issued certificate for the next one of the same product and customer. Found values and the mill-certificate line (it changes with the steel lot) are left out.</summary>
+    /// <summary>Remembers the specification of an issued certificate for the next one of the same product and customer. The found values are kept too (same product, same results); the raw-material lot and the mill-certificate line (they change with the steel lot) are left out.</summary>
     private async Task LearnAsync(QualityCertificate c, string? user, CancellationToken ct)
     {
         if (c.ProductId is not { } productId) return;
@@ -198,6 +198,7 @@ public sealed class CertificateService(EbtDbContext db)
         }
         t.Title = Clean(c.Title);
         t.Finish = Clean(c.Finish);
+        t.Hardness = Clean(c.Hardness);
         t.Notes = StandingNotes(c.Notes);
         t.UpdatedBy = user;
         t.UpdatedAt = DateTimeOffset.UtcNow;
@@ -206,7 +207,7 @@ public sealed class CertificateService(EbtDbContext db)
         t.Measures = new();
         foreach (var g in c.Measures.GroupBy(m => m.Kind))
             foreach (var (m, n) in g.OrderBy(m => m.Sequence).Select((m, n) => (m, n)))
-                t.Measures.Add(new CertificateTemplateMeasure { Kind = g.Key, Sequence = n + 1, Name = m.Name, Specified = m.Specified });
+                t.Measures.Add(new CertificateTemplateMeasure { Kind = g.Key, Sequence = n + 1, Name = m.Name, Specified = m.Specified, Found = m.Found });
     }
 
     /// <summary>Observation lines worth repeating: everything except the "certificado de origem do material nº …" line, which belongs to one steel lot.</summary>

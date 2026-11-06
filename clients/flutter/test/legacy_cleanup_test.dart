@@ -100,7 +100,7 @@ void main() {
     final log = await open(tester, (r) {
       if (r.method == 'GET') return _json({'templates': 0, 'operations': 0, 'customers': 0, 'firstDate': null, 'lastDate': null});
       final apply = (jsonDecode(r.body) as Map)['apply'] == true;
-      return _json({'candidates': 120, 'changed': apply ? 118 : 0, 'skipped': apply ? 2 : 0, 'sample': ['OF 1', 'OF 2'], 'operationsFilled': 300});
+      return _json({'matched': 120, 'done': apply ? 118 : 0, 'skipped': apply ? 2 : 0, 'sample': ['OF 1', 'OF 2'], 'operationsFilled': 300});
     });
     await tester.tap(find.byKey(const ValueKey('legacy-complete-preview')));
     await tester.pumpAndSettle();

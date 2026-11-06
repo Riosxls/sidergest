@@ -14,71 +14,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,21"
+    "specified": "Máx. 0,21",
+    "found": "0,003"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,60"
+    "specified": "Máx. 1,60",
+    "found": "0,130"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,008"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,550"
+    "specified": "Máx. 0,550",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "14,00± 0,15"
+    "specified": "14,00± 0,15",
+    "found": "14,00 à 14,03"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,13"
+    "specified": "1,50 ± 0,13",
+    "found": "1,50 à 1,54"
    },
    {
     "name": "Comprimento",
-    "specified": "1012 ± 0,5"
+    "specified": "1012 ± 0,5",
+    "found": "1012 à 1012,5"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "410 Mpa mín."
+    "specified": "410 Mpa mín.",
+    "found": "465Mpa"
    },
    {
     "name": "LE",
-    "specified": "320 Mpa mín."
+    "specified": "320 Mpa mín.",
+    "found": "400Mpa"
    },
    {
     "name": "LA",
-    "specified": "19% Minimo"
+    "specified": "19% Minimo",
+    "found": "20%"
    }
   ]
  },
@@ -97,71 +113,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,039"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,198"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,011"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,009"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,008"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": null
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,00 ± 0,05"
+    "specified": "12,00 ± 0,05",
+    "found": "12,00 à 12,04"
    },
    {
     "name": "Espessura",
-    "specified": "1,60 ± 0,13"
+    "specified": "1,60 ± 0,13",
+    "found": "1,60 à 1,60"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 + 30"
+    "specified": "6000 + 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290Mpa min."
+    "specified": "290Mpa min.",
+    "found": "443 Mpa"
    },
    {
     "name": "LE",
-    "specified": "N/A"
+    "specified": "N/A",
+    "found": "N/A"
    },
    {
     "name": "LA",
-    "specified": "20% min."
+    "specified": "20% min.",
+    "found": "34%"
    }
   ]
  },
@@ -180,75 +212,92 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,003"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,560"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,009"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,00 ± 0,12"
+    "specified": "12,00 ± 0,12",
+    "found": "12,00 à 12,00"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,15"
+    "specified": "1,20 ± 0,15",
+    "found": "1,20 à 1,21"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 + 20"
+    "specified": "6000 + 20",
+    "found": "6000 à 6020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290 Mpa/min"
+    "specified": "290 Mpa/min",
+    "found": "295 Mpa/min"
    },
    {
     "name": "LE",
-    "specified": "207 Mpa/min"
+    "specified": "207 Mpa/min",
+    "found": "250 Mpa/min"
    },
    {
     "name": "Longamento long",
-    "specified": "35% Minimo"
+    "specified": "35% Minimo",
+    "found": "45%"
    },
    {
     "name": "Longamento lateral",
-    "specified": "30% Minimo"
+    "specified": "30% Minimo",
+    "found": "40%"
    }
   ]
  },
@@ -267,71 +316,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,120"
+    "specified": "Máx. 0,120",
+    "found": "0,072"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,378"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,013"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,013"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "10,00 ± 0,12"
+    "specified": "10,00 ± 0,12",
+    "found": "10,00 à 10,04"
    },
    {
     "name": "Espessura",
-    "specified": "1,60 ± 0,16"
+    "specified": "1,60 ± 0,16",
+    "found": "1,57 à 1,60"
    },
    {
     "name": "Comprimento",
-    "specified": "5935+ 0,10"
+    "specified": "5935+ 0,10",
+    "found": "5935 à 5942"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "391Mpa"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "303Mpa"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "35%"
    }
   ]
  },
@@ -350,71 +415,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,16"
+    "specified": "Máx. 0,16",
+    "found": "0,070"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,70"
+    "specified": "Máx. 1,70",
+    "found": "0,950"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,010"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,50"
+    "specified": "Máx. 0,50",
+    "found": "0,020"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,70± 0,12"
+    "specified": "12,70± 0,12",
+    "found": "12,70 à 12,72"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,15"
+    "specified": "1,50 ± 0,15",
+    "found": "1,50 à 1,51"
    },
    {
     "name": "Comprimento",
-    "specified": "869 -1,0"
+    "specified": "869 -1,0",
+    "found": "869"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "490 Mpa mín."
+    "specified": "490 Mpa mín.",
+    "found": "531 Mpa"
    },
    {
     "name": "LE",
-    "specified": "420 Mpa mín."
+    "specified": "420 Mpa mín.",
+    "found": "437 Mpa"
    },
    {
     "name": "LA",
-    "specified": "12% Minimo"
+    "specified": "12% Minimo",
+    "found": "17%"
    }
   ]
  },
@@ -433,71 +514,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,16"
+    "specified": "Máx. 0,16",
+    "found": "0,070"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,70"
+    "specified": "Máx. 1,70",
+    "found": "0,950"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,010"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,50"
+    "specified": "Máx. 0,50",
+    "found": "0,020"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,70± 0,12"
+    "specified": "12,70± 0,12",
+    "found": "12,70 à 12,72"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,15"
+    "specified": "1,50 ± 0,15",
+    "found": "1,50 à 1,51"
    },
    {
     "name": "Comprimento",
-    "specified": "700 - 1,0"
+    "specified": "700 - 1,0",
+    "found": "700"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "490 Mpa mín."
+    "specified": "490 Mpa mín.",
+    "found": "552 Mpa"
    },
    {
     "name": "LE",
-    "specified": "420 Mpa mín."
+    "specified": "420 Mpa mín.",
+    "found": "460 Mpa"
    },
    {
     "name": "LA",
-    "specified": "12% Minimo"
+    "specified": "12% Minimo",
+    "found": "17%"
    }
   ]
  },
@@ -516,71 +613,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,070"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,950"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,010"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,020"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "13,98 ± 0,08"
+    "specified": "13,98 ± 0,08",
+    "found": "13,98 à 14,00"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,10"
+    "specified": "1,50 ± 0,10",
+    "found": "1,50 à 1,51"
    },
    {
     "name": "Comprimento",
-    "specified": "1095 - 1,0"
+    "specified": "1095 - 1,0",
+    "found": "1095"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "410 Mpa mín."
+    "specified": "410 Mpa mín.",
+    "found": "549 Mpa"
    },
    {
     "name": "LE",
-    "specified": "320 Mpa mín."
+    "specified": "320 Mpa mín.",
+    "found": "459 Mpa"
    },
    {
     "name": "LA",
-    "specified": "19% Minimo"
+    "specified": "19% Minimo",
+    "found": "25%"
    }
   ]
  },
@@ -599,71 +712,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,070"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,950"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,010"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,020"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,70- 0,10+0,20"
+    "specified": "12,70- 0,10+0,20",
+    "found": "12,70 à 12,72"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,10"
+    "specified": "1,50 ± 0,10",
+    "found": "1,50 à 1,51"
    },
    {
     "name": "Comprimento",
-    "specified": "977 - 1,0"
+    "specified": "977 - 1,0",
+    "found": "977"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "410 Mpa mín."
+    "specified": "410 Mpa mín.",
+    "found": "549 Mpa"
    },
    {
     "name": "LE",
-    "specified": "320 Mpa mín."
+    "specified": "320 Mpa mín.",
+    "found": "459 Mpa"
    },
    {
     "name": "LA",
-    "specified": "19% Minimo"
+    "specified": "19% Minimo",
+    "found": "25%"
    }
   ]
  },
@@ -682,67 +811,82 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "0,08 à 0,13"
+    "specified": "0,08 à 0,13",
+    "found": "0,081"
    },
    {
     "name": "Mn",
-    "specified": "0,30 à 0,60"
+    "specified": "0,30 à 0,60",
+    "found": "0,350"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,030"
+    "specified": "Máx. 0,030",
+    "found": "0,020"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,050"
+    "specified": "Máx. 0,050",
+    "found": "0,010"
    },
    {
     "name": "Si",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,00± 0,12"
+    "specified": "12,00± 0,12",
+    "found": "11,99 à 12,02"
    },
    {
     "name": "Espessura",
-    "specified": "1,00 ± 0,12"
+    "specified": "1,00 ± 0,12",
+    "found": "1,00 à 1,00"
    },
    {
     "name": "Comprimento",
-    "specified": "Rolo"
+    "specified": "Rolo",
+    "found": "Não Aplicado"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 Mpa Min"
+    "specified": "300 Mpa Min",
+    "found": "440 Mpa"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "12%"
    }
   ]
  },
@@ -761,71 +905,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,120"
+    "specified": "Máx. 0,120",
+    "found": "0,072"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,378"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,013"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,013"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "10,00 ± 0,12"
+    "specified": "10,00 ± 0,12",
+    "found": "10,00 à 10,04"
    },
    {
     "name": "Espessura",
-    "specified": "1,60 ± 0,16"
+    "specified": "1,60 ± 0,16",
+    "found": "1,57 à 1,60"
    },
    {
     "name": "Comprimento",
-    "specified": "604 ± 0,30"
+    "specified": "604 ± 0,30",
+    "found": "604,02 à 604,03"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "391Mpa"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "303Mpa"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "35%"
    }
   ]
  },
@@ -844,71 +1004,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,120"
+    "specified": "Máx. 0,120",
+    "found": "0,064"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,600"
+    "specified": "Máx. 0,600",
+    "found": "0,362"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,040"
+    "specified": "Máx. 0,040",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,040"
+    "specified": "Máx. 0,040",
+    "found": "0,006"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,011"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,70 ± 0,10"
+    "specified": "12,70 ± 0,10",
+    "found": "12,70 à 12,73"
    },
    {
     "name": "Espessura",
-    "specified": "2,00 ± 0,10"
+    "specified": "2,00 ± 0,10",
+    "found": "1,98 à 1,99"
    },
    {
     "name": "Comprimento",
-    "specified": "648 ± 0,50"
+    "specified": "648 ± 0,50",
+    "found": "648 à 648,5"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "295 Mpa mín."
+    "specified": "295 Mpa mín.",
+    "found": "350 Mpa"
    },
    {
     "name": "LE",
-    "specified": "n/a"
+    "specified": "n/a",
+    "found": "n/a"
    },
    {
     "name": "AL",
-    "specified": "35 % mín."
+    "specified": "35 % mín.",
+    "found": "38%"
    }
   ]
  },
@@ -927,71 +1103,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,070"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,950"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,010"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,020"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "14,00 +0,2- 0,1"
+    "specified": "14,00 +0,2- 0,1",
+    "found": "13,99 à 14,00"
    },
    {
     "name": "Espessura",
-    "specified": "150 ± 0,10"
+    "specified": "150 ± 0,10",
+    "found": "1,50 à 1,54"
    },
    {
     "name": "Comprimento",
-    "specified": "614 - 1,0"
+    "specified": "614 - 1,0",
+    "found": "613,5 à 614"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "410 Mpa mín."
+    "specified": "410 Mpa mín.",
+    "found": "465Mpa"
    },
    {
     "name": "LE",
-    "specified": "320 Mpa mín."
+    "specified": "320 Mpa mín.",
+    "found": "400Mpa"
    },
    {
     "name": "LA",
-    "specified": "19% Minimo"
+    "specified": "19% Minimo",
+    "found": "20%"
    }
   ]
  },
@@ -1010,75 +1202,92 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,038"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,228"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,008"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,013"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,00 ± 0,12"
+    "specified": "12,00 ± 0,12",
+    "found": "12,00 à 12,00"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,15"
+    "specified": "1,20 ± 0,15",
+    "found": "1,20 à 1,21"
    },
    {
     "name": "Comprimento",
-    "specified": "342,50 + 1,00"
+    "specified": "342,50 + 1,00",
+    "found": "342,5 à 343,5"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290 Mpa/min"
+    "specified": "290 Mpa/min",
+    "found": "304 Mpa/min"
    },
    {
     "name": "LE",
-    "specified": "207 Mpa/min"
+    "specified": "207 Mpa/min",
+    "found": "248 Mpa/min"
    },
    {
     "name": "Longamento long",
-    "specified": "35% Minimo"
+    "specified": "35% Minimo",
+    "found": "45%"
    },
    {
     "name": "Longamento lateral",
-    "specified": "30% Minimo"
+    "specified": "30% Minimo",
+    "found": "40%"
    }
   ]
  },
@@ -1097,75 +1306,92 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,120"
+    "specified": "Máx. 0,120",
+    "found": "0,039"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,600"
+    "specified": "Máx. 0,600",
+    "found": "0,198"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,400"
+    "specified": "Máx. 0,400",
+    "found": "0,011"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,410"
+    "specified": "Máx. 0,410",
+    "found": "0,009"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,008"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": null
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,00 ± 0,05"
+    "specified": "12,00 ± 0,05",
+    "found": "12,00 à 12,04"
    },
    {
     "name": "Espessura",
-    "specified": "1,60 ± 0,13"
+    "specified": "1,60 ± 0,13",
+    "found": "1,60 à 1,60"
    },
    {
     "name": "Comprimento",
-    "specified": "121,50 + 0,50"
+    "specified": "121,50 + 0,50",
+    "found": "121,5 à 122"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290Mpa min."
+    "specified": "290Mpa min.",
+    "found": "433 Mpa"
    },
    {
     "name": "LE",
-    "specified": "175 Mpa/min"
+    "specified": "175 Mpa/min",
+    "found": "237 Mpa"
    },
    {
     "name": "Longamento long",
-    "specified": "35% Minimo"
+    "specified": "35% Minimo",
+    "found": "45%"
    },
    {
     "name": "Longamento lateral",
-    "specified": "30% Minimo"
+    "specified": "30% Minimo",
+    "found": "43%"
    }
   ]
  },
@@ -1184,71 +1410,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,12"
+    "specified": "Máx. 0,12",
+    "found": "0,050"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,60"
+    "specified": "Máx. 0,60",
+    "found": "0,240"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,040"
+    "specified": "Máx. 0,040",
+    "found": "0,018"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,040"
+    "specified": "Máx. 0,040",
+    "found": "0,019"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,035"
+    "specified": "Máx. 0,035",
+    "found": "0,019"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,00 ± 0,12"
+    "specified": "12,00 ± 0,12",
+    "found": "12,00 à 12,00"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,15"
+    "specified": "1,20 ± 0,15",
+    "found": "1,20 à 1,21"
    },
    {
     "name": "Comprimento",
-    "specified": "Rolo"
+    "specified": "Rolo",
+    "found": "Rolo"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290 Mpa/min"
+    "specified": "290 Mpa/min",
+    "found": "295 Mpa/min"
    },
    {
     "name": "Longamento long",
-    "specified": "35% Minimo"
+    "specified": "35% Minimo",
+    "found": "45%"
    },
    {
     "name": "Longamento lateral",
-    "specified": "30% Minimo"
+    "specified": "30% Minimo",
+    "found": "40%"
    }
   ]
  },
@@ -1267,71 +1509,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,10"
+    "specified": "Máx. 0,10",
+    "found": "0,070"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,60"
+    "specified": "Máx. 1,60",
+    "found": "0,950"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,010"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,50"
+    "specified": "Máx. 0,50",
+    "found": "0,020"
    },
    {
     "name": "Al",
-    "specified": "Min. 0,015"
+    "specified": "Min. 0,015",
+    "found": "0,043"
    },
    {
     "name": "Ti",
-    "specified": "Máx. 0,15"
+    "specified": "Máx. 0,15",
+    "found": "0,001"
    },
    {
     "name": "Nb",
-    "specified": "Máx. 0,09"
+    "specified": "Máx. 0,09",
+    "found": "0,033"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,70 ± 0,12"
+    "specified": "12,70 ± 0,12",
+    "found": "12,70 à 12,72"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,15"
+    "specified": "1,50 ± 0,15",
+    "found": "1,50 à 1,51"
    },
    {
     "name": "Comprimento",
-    "specified": "1030 ±1,00"
+    "specified": "1030 ±1,00",
+    "found": "1029,á1030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "490 Mpa mín."
+    "specified": "490 Mpa mín.",
+    "found": "531 Mpa"
    },
    {
     "name": "LE",
-    "specified": "420 Mpa mín."
+    "specified": "420 Mpa mín.",
+    "found": "437 Mpa"
    },
    {
     "name": "LA",
-    "specified": "17% Minimo"
+    "specified": "17% Minimo",
+    "found": "17%"
    }
   ]
  },
@@ -1350,71 +1608,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,010"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,215"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,003"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,016"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "06,00 ± 0,10"
+    "specified": "06,00 ± 0,10",
+    "found": "06,00 à 06,05"
    },
    {
     "name": "Espessura",
-    "specified": "0,80 ± 0,10"
+    "specified": "0,80 ± 0,10",
+    "found": "0,75 à 0,80"
    },
    {
     "name": "Comprimento",
-    "specified": "5000 ± 30"
+    "specified": "5000 ± 30",
+    "found": "5000 à 5020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": null
    }
   ]
  },
@@ -1433,71 +1707,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,10"
+    "specified": "Máx. 0,10",
+    "found": "0,070"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,60"
+    "specified": "Máx. 1,60",
+    "found": "0,950"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,010"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,50"
+    "specified": "Máx. 0,50",
+    "found": "0,020"
    },
    {
     "name": "Al",
-    "specified": "Min. 0,015"
+    "specified": "Min. 0,015",
+    "found": "0,043"
    },
    {
     "name": "Ti",
-    "specified": "Máx. 0,15"
+    "specified": "Máx. 0,15",
+    "found": "0,001"
    },
    {
     "name": "Nb",
-    "specified": "Máx. 0,09"
+    "specified": "Máx. 0,09",
+    "found": "0,033"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,70 ± 0,12"
+    "specified": "12,70 ± 0,12",
+    "found": "12,70 à 12,72"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,15"
+    "specified": "1,50 ± 0,15",
+    "found": "1,50 à 1,51"
    },
    {
     "name": "Comprimento",
-    "specified": "930 ±1,00"
+    "specified": "930 ±1,00",
+    "found": "930,á 930"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "490 Mpa mín."
+    "specified": "490 Mpa mín.",
+    "found": "531 Mpa"
    },
    {
     "name": "LE",
-    "specified": "420 Mpa mín."
+    "specified": "420 Mpa mín.",
+    "found": "437 Mpa"
    },
    {
     "name": "LA",
-    "specified": "17% Minimo"
+    "specified": "17% Minimo",
+    "found": "17%"
    }
   ]
  },
@@ -1516,71 +1806,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,003"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,560"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,009"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "16,00 ± 0,12"
+    "specified": "16,00 ± 0,12",
+    "found": "16,00 à 16,00"
    },
    {
     "name": "Espessura",
-    "specified": "120 ± 0,10"
+    "specified": "120 ± 0,10",
+    "found": "1,20 à 1,22"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 + 20"
+    "specified": "6000 + 20",
+    "found": "6000 à 6020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "410 Mpa mín."
+    "specified": "410 Mpa mín.",
+    "found": "420Mpa"
    },
    {
     "name": "LE",
-    "specified": "320 Mpa mín."
+    "specified": "320 Mpa mín.",
+    "found": "335Mpa"
    },
    {
     "name": "LA",
-    "specified": "19% Minimo"
+    "specified": "19% Minimo",
+    "found": "20%"
    }
   ]
  },
@@ -1599,75 +1905,92 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,072"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,377"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,017"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,006"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,00 ± 0,05"
+    "specified": "12,00 ± 0,05",
+    "found": "12,00 à 12,04"
    },
    {
     "name": "Espessura",
-    "specified": "1,60 ± 0,13"
+    "specified": "1,60 ± 0,13",
+    "found": "1,60 à 1,60"
    },
    {
     "name": "Comprimento",
-    "specified": "Rolo"
+    "specified": "Rolo",
+    "found": "Não Aplicado"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290Mpa min."
+    "specified": "290Mpa min.",
+    "found": "440 Mpa"
    },
    {
     "name": "LE",
-    "specified": "175 Mpa/min"
+    "specified": "175 Mpa/min",
+    "found": "258 Mpa"
    },
    {
     "name": "Longamento long",
-    "specified": "35% Minimo"
+    "specified": "35% Minimo",
+    "found": "45%"
    },
    {
     "name": "Longamento lateral",
-    "specified": "30% Minimo"
+    "specified": "30% Minimo",
+    "found": "43%"
    }
   ]
  },
@@ -1686,71 +2009,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,003"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,560"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,009"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "6,40 ± 0,10"
+    "specified": "6,40 ± 0,10",
+    "found": "6,40 - 6,43"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,10"
+    "specified": "1,20 ± 0,10",
+    "found": "1,20 à 1,40"
    },
    {
     "name": "Comprimento",
-    "specified": "3100 ± 30"
+    "specified": "3100 ± 30",
+    "found": "3100 à 3130"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": null
    }
   ]
  },
@@ -1769,67 +2108,82 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,002"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,540"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "08,00 ± 0,10"
+    "specified": "08,00 ± 0,10",
+    "found": "8,00 à 8,05"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,94 à 0,95"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 0,10"
+    "specified": "3000 ± 0,10",
+    "found": "3000 à 3010"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "340 Mpa min"
+    "specified": "340 Mpa min",
+    "found": "480 Mpa"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "30%"
    }
   ]
  },
@@ -1848,71 +2202,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,052"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,020"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,001"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,016"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "05,90 ± 0,10"
+    "specified": "05,90 ± 0,10",
+    "found": "05,90 à 06,00"
    },
    {
     "name": "Espessura",
-    "specified": "0,75 ± 0,10"
+    "specified": "0,75 ± 0,10",
+    "found": "0,80 à 0,81"
    },
    {
     "name": "Comprimento",
-    "specified": "2900 ± 20"
+    "specified": "2900 ± 20",
+    "found": "2900 à 2920"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "-"
    }
   ]
  },
@@ -1931,71 +2301,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,064"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,362"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,0055"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,011"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "06,00 ± 0,10"
+    "specified": "06,00 ± 0,10",
+    "found": "06,00 à 06,05"
    },
    {
     "name": "Espessura",
-    "specified": "2,00 ± 0,10"
+    "specified": "2,00 ± 0,10",
+    "found": "2,20 à 2,30"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": null
    }
   ]
  },
@@ -2014,71 +2400,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,005"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,633"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,017"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "08,00 ± 0,10"
+    "specified": "08,00 ± 0,10",
+    "found": "8,00 à 8,05"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,94 à 0,95"
    },
    {
     "name": "Comprimento",
-    "specified": "719 ± 30"
+    "specified": "719 ± 30",
+    "found": "719 à 739"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": "194 Mpa/min"
+    "specified": "194 Mpa/min",
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "-"
    }
   ]
  },
@@ -2097,71 +2499,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,051"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,241"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,018"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,019"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,014"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "9,52 ± 0,10"
+    "specified": "9,52 ± 0,10",
+    "found": "9,50 à 9,53"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,10"
+    "specified": "1,50 ± 0,10",
+    "found": "1,48 à 1,49"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ]
  },
@@ -2180,71 +2598,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,002"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,540"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "8,00 ± 0,10"
+    "specified": "8,00 ± 0,10",
+    "found": "8,00 à 8,05"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,90 à 0,91"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3020 à 3030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195Mpa/min"
+    "specified": "195Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "28%Min"
+    "specified": "28%Min",
+    "found": null
    }
   ]
  },
@@ -2263,71 +2697,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,002"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,540"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "08,00 ± 0,05"
+    "specified": "08,00 ± 0,05",
+    "found": "08,00 à 08,04"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,88 à 0,89"
    },
    {
     "name": "Comprimento",
-    "specified": "2910 ± 20"
+    "specified": "2910 ± 20",
+    "found": "2910 à 2915"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "-"
    }
   ]
  },
@@ -2346,71 +2796,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,002"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,540"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "08,00 ± 0,05"
+    "specified": "08,00 ± 0,05",
+    "found": "08,00 à 08,04"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,88 à 0,89"
    },
    {
     "name": "Comprimento",
-    "specified": "2930 ± 20"
+    "specified": "2930 ± 20",
+    "found": "2930 à 2935"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "-"
    }
   ]
  },
@@ -2429,71 +2895,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,003"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,560"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,009"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "8,00 ± 0,10"
+    "specified": "8,00 ± 0,10",
+    "found": "8,00 à 8,05"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,10"
+    "specified": "1,20 ± 0,10",
+    "found": "1,20 à 1,21"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3020 à 3030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": null
+    "specified": null,
+    "found": null
    },
    {
     "name": "LE",
-    "specified": null
+    "specified": null,
+    "found": null
    },
    {
     "name": "LA",
-    "specified": null
+    "specified": null,
+    "found": null
    }
   ]
  },
@@ -2512,71 +2994,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,120"
+    "specified": "Máx. 0,120",
+    "found": "0,072"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,377"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,017"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,006"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "8,00 ± 0,10"
+    "specified": "8,00 ± 0,10",
+    "found": "8,00 à 8,05"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,10"
+    "specified": "1,50 ± 0,10",
+    "found": "1,50 à 1,51"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3020 à 3030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195Mpa/min"
+    "specified": "195Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "28%Min"
+    "specified": "28%Min",
+    "found": null
    }
   ]
  },
@@ -2595,71 +3093,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,010"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,215"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,003"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,016"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "4,75 ± 0,10"
+    "specified": "4,75 ± 0,10",
+    "found": "4,73 - 4,85"
    },
    {
     "name": "Espessura",
-    "specified": "0,75 ± 0,10"
+    "specified": "0,75 ± 0,10",
+    "found": "0,74 à 0,75"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ]
  },
@@ -2678,71 +3192,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,052"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,215"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,001"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,016"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "06,00 ± 0,10"
+    "specified": "06,00 ± 0,10",
+    "found": "06,00 à 06,04"
    },
    {
     "name": "Espessura",
-    "specified": "0,75 ± 0,10"
+    "specified": "0,75 ± 0,10",
+    "found": "0,75 à 0,78"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 20"
+    "specified": "6000 ± 20",
+    "found": "6000 à 6020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "400Mpa"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "240Mpa"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "22%"
    }
   ]
  },
@@ -2761,67 +3291,82 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,002"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,540"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,039"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "6,00 ± 0,10"
+    "specified": "6,00 ± 0,10",
+    "found": "6,03 - 6,07"
    },
    {
     "name": "Espessura",
-    "specified": "1,00 ± 0,10"
+    "specified": "1,00 ± 0,10",
+    "found": "1,01 à 1,06"
    },
    {
     "name": "Comprimento",
-    "specified": "3100 ± 30"
+    "specified": "3100 ± 30",
+    "found": "3100à 3130"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290 MPa mín."
+    "specified": "290 MPa mín.",
+    "found": "410Mpa"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "31%"
    }
   ]
  },
@@ -2840,71 +3385,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,002"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,540"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,039"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "08,00 ± 0,10"
+    "specified": "08,00 ± 0,10",
+    "found": "8,00 à 8,05"
    },
    {
     "name": "Espessura",
-    "specified": "1,00 ± 0,10"
+    "specified": "1,00 ± 0,10",
+    "found": "0,90 à 0,91"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3000 à 3020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "361"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "270"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "33%"
    }
   ]
  },
@@ -2923,79 +3484,97 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,140"
+    "specified": "Máx. 0,140",
+    "found": "0,074"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,348"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,0066"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,01"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "9,52 ± 0,10"
+    "specified": "9,52 ± 0,10",
+    "found": "9,52 à 9,54"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,10"
+    "specified": "1,20 ± 0,10",
+    "found": "1,23 à 1,24"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "330 à 440 Mpa"
+    "specified": "330 à 440 Mpa",
+    "found": "320 Mpa"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa"
+    "specified": "195 Mpa",
+    "found": "210 Mpa"
    },
    {
     "name": "LA",
-    "specified": "6% min."
+    "specified": "6% min.",
+    "found": "8%"
    },
    {
     "name": "TESTE DESTRUTIVO",
-    "specified": "ACHATAMENTO"
+    "specified": "ACHATAMENTO",
+    "found": "OK"
    },
    {
     "name": "TESTE INDESTRUTIVO",
-    "specified": "EDDY CURRENT"
+    "specified": "EDDY CURRENT",
+    "found": "OK"
    }
   ]
  },
@@ -3014,71 +3593,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,010"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,215"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,003"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,016"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "4,75 ± 0,10"
+    "specified": "4,75 ± 0,10",
+    "found": "4,73 - 4,85"
    },
    {
     "name": "Espessura",
-    "specified": "0,75 ± 0,10"
+    "specified": "0,75 ± 0,10",
+    "found": "0,74 à 0,75"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ]
  },
@@ -3097,57 +3692,70 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,002"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,540"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,039"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "07,00 ± 0,10"
+    "specified": "07,00 ± 0,10",
+    "found": "7,00 à 7,05"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,94 à 0,95"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3000 à 3010"
    }
   ],
   "mechanical": []
@@ -3167,71 +3775,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,052"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,215"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,001"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,016"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "08,00 ± 0,10"
+    "specified": "08,00 ± 0,10",
+    "found": "08,00 à 08,05"
    },
    {
     "name": "Espessura",
-    "specified": "0,75 ± 0,10"
+    "specified": "0,75 ± 0,10",
+    "found": "0,74 à 0,77"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3000 à 3020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": null
    }
   ]
  },
@@ -3250,71 +3874,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,010"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,215"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,003"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,016"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "4,75 ± 0,10"
+    "specified": "4,75 ± 0,10",
+    "found": "4,73 - 4,85"
    },
    {
     "name": "Espessura",
-    "specified": "0,75 ± 0,10"
+    "specified": "0,75 ± 0,10",
+    "found": "0,74 à 0,75"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ]
  },
@@ -3333,71 +3973,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,064"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,362"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,0055"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,320"
+    "specified": "Máx. 0,320",
+    "found": "0,011"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "6,00 ± 0,10"
+    "specified": "6,00 ± 0,10",
+    "found": "6,00 - 6,03"
    },
    {
     "name": "Espessura",
-    "specified": "2,00 ± 0,10"
+    "specified": "2,00 ± 0,10",
+    "found": "2,20 à 2,30"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": null
    }
   ]
  },
@@ -3416,71 +4072,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,003"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,560"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,009"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "8,00 ± 0,10"
+    "specified": "8,00 ± 0,10",
+    "found": "8,00 à 8,05"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,10"
+    "specified": "1,20 ± 0,10",
+    "found": "1,20 à 1,21"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3020 à 3030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195Mpa/min"
+    "specified": "195Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "28%Min"
+    "specified": "28%Min",
+    "found": null
    }
   ]
  },
@@ -3499,71 +4171,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,052"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,215"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,001"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,016"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "09,52 ± 0,10"
+    "specified": "09,52 ± 0,10",
+    "found": "09,52 à 09,57"
    },
    {
     "name": "Espessura",
-    "specified": "0,75 ± 0,10"
+    "specified": "0,75 ± 0,10",
+    "found": "0,74 à 0,77"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3000 à 3020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": null
    }
   ]
  },
@@ -3582,71 +4270,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,002"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,540"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "08,00 ± 0,05"
+    "specified": "08,00 ± 0,05",
+    "found": "08,00 à 08,04"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,88 à 0,89"
    },
    {
     "name": "Comprimento",
-    "specified": "2800 ± 20"
+    "specified": "2800 ± 20",
+    "found": "2800 à 2820"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "-"
    }
   ]
  },
@@ -3665,71 +4369,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,064"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,362"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,006"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,035"
+    "specified": "Máx. 0,035",
+    "found": "0,011"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "06,0 ± 0,10"
+    "specified": "06,0 ± 0,10",
+    "found": "06,00 à 06,04"
    },
    {
     "name": "Espessura",
-    "specified": "2,00 ± 0,10"
+    "specified": "2,00 ± 0,10",
+    "found": "2,02 à 2,03"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 20"
+    "specified": "6000 ± 20",
+    "found": "6000 à 6020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "400Mpa"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "240Mpa"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "22%"
    }
   ]
  },
@@ -3748,71 +4468,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,003"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,560"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,009"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "9,52 ± 0,10"
+    "specified": "9,52 ± 0,10",
+    "found": "9,52 à 9,54"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,10"
+    "specified": "1,20 ± 0,10",
+    "found": "1,23 à 1,28"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3000 à 3030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ]
  },
@@ -3831,71 +4567,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,005"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,633"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,017"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "08,00 ± 0,10"
+    "specified": "08,00 ± 0,10",
+    "found": "8,00 à 8,05"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,94 à 0,95"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6010"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": "194 Mpa/min"
+    "specified": "194 Mpa/min",
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "-"
    }
   ]
  },
@@ -3914,67 +4666,82 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,004"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,630"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,017"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "6,00 ± 0,10"
+    "specified": "6,00 ± 0,10",
+    "found": "6,03 - 6,07"
    },
    {
     "name": "Espessura",
-    "specified": "1,00 ± 0,10"
+    "specified": "1,00 ± 0,10",
+    "found": "1,01 à 1,06"
    },
    {
     "name": "Comprimento",
-    "specified": "2000 ± 30"
+    "specified": "2000 ± 30",
+    "found": "2000à 2030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290 MPa mín."
+    "specified": "290 MPa mín.",
+    "found": "410Mpa"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "31%"
    }
   ]
  },
@@ -3993,71 +4760,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,064"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,362"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,0055"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,011"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "08,00 ± 0,10"
+    "specified": "08,00 ± 0,10",
+    "found": "08,00 à 08,04"
    },
    {
     "name": "Espessura",
-    "specified": "2,00 ± 0,10"
+    "specified": "2,00 ± 0,10",
+    "found": "2,02 à 2,03"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 20"
+    "specified": "3000 ± 20",
+    "found": "3000 à 3020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "400Mpa"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "240Mpa"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "22%"
    }
   ]
  },
@@ -4076,67 +4859,82 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,004"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,630"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,017"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "6,35 ± 0,10"
+    "specified": "6,35 ± 0,10",
+    "found": "6,33 - 6,37"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,91 à 0,92"
    },
    {
     "name": "Comprimento",
-    "specified": "3100 ± 30"
+    "specified": "3100 ± 30",
+    "found": "3100à 3130"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290 MPa mín."
+    "specified": "290 MPa mín.",
+    "found": "410Mpa"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "31%"
    }
   ]
  },
@@ -4155,71 +4953,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,003"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,560"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,009"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "9,52 ± 0,10"
+    "specified": "9,52 ± 0,10",
+    "found": "9,50 à 9,55"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,10"
+    "specified": "1,20 ± 0,10",
+    "found": "1,19 à 1,20"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "-"
    }
   ]
  },
@@ -4238,71 +5052,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,003"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,560"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,009"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "9,52 ± 0,10"
+    "specified": "9,52 ± 0,10",
+    "found": "9,52 à 9,54"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,10"
+    "specified": "1,20 ± 0,10",
+    "found": "1,23 à 1,24"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ]
  },
@@ -4321,71 +5151,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,002"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,540"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "9,52 ± 0,10"
+    "specified": "9,52 ± 0,10",
+    "found": "9,50 à 9,53"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,91 à 0,92"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "-"
    }
   ]
  },
@@ -4404,79 +5250,97 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,004"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,630"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": "Máx. 0,370"
+    "specified": "Máx. 0,370",
+    "found": "0,015"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "10,00 ± 0,05"
+    "specified": "10,00 ± 0,05",
+    "found": "10,00 à 10,04"
    },
    {
     "name": "Espessura",
-    "specified": "1,00 ± 0,10"
+    "specified": "1,00 ± 0,10",
+    "found": "0,98 à 0,99"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 20"
+    "specified": "6000 ± 20",
+    "found": "6020 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "353"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "205"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "20%"
    },
    {
     "name": "TESTE DESTRUTIVO",
-    "specified": "ACHATAMENTO"
+    "specified": "ACHATAMENTO",
+    "found": "OK"
    },
    {
     "name": "TESTE INDESTRUTIVO",
-    "specified": "EDDY CURRENT"
+    "specified": "EDDY CURRENT",
+    "found": "OK"
    }
   ]
  },
@@ -4495,71 +5359,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,074"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,348"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,320"
+    "specified": "Máx. 0,320",
+    "found": "0,011"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "6,35 ± 0,10"
+    "specified": "6,35 ± 0,10",
+    "found": "6,35 ± 6,40"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,10"
+    "specified": "1,20 ± 0,10",
+    "found": "1,20 à 1,40"
    },
    {
     "name": "Comprimento",
-    "specified": "3100 ± 30"
+    "specified": "3100 ± 30",
+    "found": "3100 à 3130"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": null
    }
   ]
  },
@@ -4578,71 +5458,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,010"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,215"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,003"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,016"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "06,00 ± 0,10"
+    "specified": "06,00 ± 0,10",
+    "found": "06,00 à 06,05"
    },
    {
     "name": "Espessura",
-    "specified": "0,75 ± 0,10"
+    "specified": "0,75 ± 0,10",
+    "found": "0,74 à 0,77"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": null
    }
   ]
  },
@@ -4661,71 +5557,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,004"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,630"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "9,52 ± 0,10"
+    "specified": "9,52 ± 0,10",
+    "found": "9,50 à 9,53"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,91 à 0,92"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ]
  },
@@ -4744,71 +5656,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,074"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,348"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,011"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "9,52 ± 0,10"
+    "specified": "9,52 ± 0,10",
+    "found": "9,50 à 9,53"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,10"
+    "specified": "1,20 ± 0,10",
+    "found": "1,28 à 1,29"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ]
  },
@@ -4827,71 +5755,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,064"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,362"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,0055"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,011"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "06,35 ± 0,10"
+    "specified": "06,35 ± 0,10",
+    "found": "6,33 á 6,37"
    },
    {
     "name": "Espessura",
-    "specified": "1,90 ± 0,10"
+    "specified": "1,90 ± 0,10",
+    "found": "1,90 à 1,98"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": null
    }
   ]
  },
@@ -4910,71 +5854,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,004"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,630"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,017"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "08,00 ± 0,10"
+    "specified": "08,00 ± 0,10",
+    "found": "8,00 à 8,05"
    },
    {
     "name": "Espessura",
-    "specified": "1,00 ± 0,10"
+    "specified": "1,00 ± 0,10",
+    "found": "0,90 à 0,91"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "361"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "270"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "33%"
    }
   ]
  },
@@ -4993,71 +5953,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,170"
+    "specified": "Máx. 0,170",
+    "found": "0,004"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,200"
+    "specified": "Máx. 1,200",
+    "found": "0,630"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "7,94 ± 0,10"
+    "specified": "7,94 ± 0,10",
+    "found": "7,94 à 7,96"
    },
    {
     "name": "Espessura",
-    "specified": "1,06 ± 0,10"
+    "specified": "1,06 ± 0,10",
+    "found": "1,06 à 1,12"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 + 30"
+    "specified": "3000 + 30",
+    "found": "3000 à 3030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": null
    }
   ]
  },
@@ -5076,67 +6052,82 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,064"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,362"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,006"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,011"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "11,25 ± 0,01"
+    "specified": "11,25 ± 0,01",
+    "found": "11,25 à 11,30"
    },
    {
     "name": "Espessura",
-    "specified": "1,90 ± 0,05"
+    "specified": "1,90 ± 0,05",
+    "found": "1,90 à 1,95"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3020 à 3030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290 MPa mín."
+    "specified": "290 MPa mín.",
+    "found": "410Mpa"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "30%"
    }
   ]
  },
@@ -5155,71 +6146,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,120"
+    "specified": "Máx. 0,120",
+    "found": "0,072"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,600"
+    "specified": "Máx. 0,600",
+    "found": "0,377"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,400"
+    "specified": "Máx. 0,400",
+    "found": "0,017"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,410"
+    "specified": "Máx. 0,410",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,006"
    },
    {
     "name": "Al",
-    "specified": "Mín. 0,015"
+    "specified": "Mín. 0,015",
+    "found": "0,039"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "09,52 ± 0,10"
+    "specified": "09,52 ± 0,10",
+    "found": "09,55 à 09,56"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,10"
+    "specified": "1,50 ± 0,10",
+    "found": "1,50 à 1,51"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3020 à 3030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290 Mpa mín."
+    "specified": "290 Mpa mín.",
+    "found": "410Mpa"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "205 Mpa"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "31%"
    }
   ]
  },
@@ -5238,71 +6245,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,051"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,241"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,018"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,019"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,014"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "9,52 ± 0,10"
+    "specified": "9,52 ± 0,10",
+    "found": "9,50 à 9,55"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,10"
+    "specified": "1,50 ± 0,10",
+    "found": "1,49 à 1,50"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "-"
    }
   ]
  },
@@ -5321,71 +6344,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,010"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,215"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,003"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,016"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "06,00 ± 0,10"
+    "specified": "06,00 ± 0,10",
+    "found": "06,00 à 06,05"
    },
    {
     "name": "Espessura",
-    "specified": "0,75 ± 0,10"
+    "specified": "0,75 ± 0,10",
+    "found": "0,74 à 0,77"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3000 à 3020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": null
    }
   ]
  },
@@ -5404,71 +6443,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,002"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,600"
+    "specified": "Máx. 0,600",
+    "found": "0,540"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,017"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "6,35 ± 0,10"
+    "specified": "6,35 ± 0,10",
+    "found": "6,33 - 6,37"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,91 à 0,92"
    },
    {
     "name": "Comprimento",
-    "specified": "3100 ± 30"
+    "specified": "3100 ± 30",
+    "found": "3100à 3120"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": null
+    "specified": null,
+    "found": null
    },
    {
     "name": "LE",
-    "specified": null
+    "specified": null,
+    "found": null
    },
    {
     "name": "LA",
-    "specified": null
+    "specified": null,
+    "found": null
    }
   ]
  },
@@ -5487,71 +6542,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,004"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,630"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "10,00 ± 0,05"
+    "specified": "10,00 ± 0,05",
+    "found": "10,00 à 10,04"
    },
    {
     "name": "Espessura",
-    "specified": "1,00 ± 0,10"
+    "specified": "1,00 ± 0,10",
+    "found": "0,98 à 0,99"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 20"
+    "specified": "6000 ± 20",
+    "found": "6020 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "-"
    }
   ]
  },
@@ -5570,71 +6641,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,004"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,630"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,017"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "4,75 ± 0,10"
+    "specified": "4,75 ± 0,10",
+    "found": "4,73 - 4,85"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,90 à 0,91"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "361"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "270"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "33%"
    }
   ]
  },
@@ -5653,67 +6740,82 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,002"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,540"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,039"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "6,00 ± 0,10"
+    "specified": "6,00 ± 0,10",
+    "found": "6,03 - 6,07"
    },
    {
     "name": "Espessura",
-    "specified": "1,00 ± 0,10"
+    "specified": "1,00 ± 0,10",
+    "found": "1,01 à 1,06"
    },
    {
     "name": "Comprimento",
-    "specified": "3100 ± 30"
+    "specified": "3100 ± 30",
+    "found": "3100à 3130"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290 MPa mín."
+    "specified": "290 MPa mín.",
+    "found": "410Mpa"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "31%"
    }
   ]
  },
@@ -5732,67 +6834,82 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,074"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,348"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,011"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "12,00 ± 0,10"
+    "specified": "12,00 ± 0,10",
+    "found": "11,98 à 12,05"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,10"
+    "specified": "1,50 ± 0,10",
+    "found": "1,48 à 1,49"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "Teste Destrutivo",
-    "specified": "Achatamento"
+    "specified": "Achatamento",
+    "found": "ok"
    },
    {
     "name": "Teste Destrutivo",
-    "specified": "Espansão"
+    "specified": "Espansão",
+    "found": "ok"
    }
   ]
  },
@@ -5811,71 +6928,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,010"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,215"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,003"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,016"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "06,70 ± 0,10"
+    "specified": "06,70 ± 0,10",
+    "found": "06,70 à 06,80"
    },
    {
     "name": "Espessura",
-    "specified": "0,75 ± 0,10"
+    "specified": "0,75 ± 0,10",
+    "found": "0,74 à 0,77"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3000 à 3020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": null
    }
   ]
  },
@@ -5894,67 +7027,82 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,004"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,630"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,017"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "4,75 ± 0,10"
+    "specified": "4,75 ± 0,10",
+    "found": "4,73 - 4,85"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,90 à 0,91"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3000 à 3030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290 MPa mín."
+    "specified": "290 MPa mín.",
+    "found": "410Mpa"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "30%"
    }
   ]
  },
@@ -5973,71 +7121,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,004"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,630"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "10,00 ± 0,05"
+    "specified": "10,00 ± 0,05",
+    "found": "10,00 à 10,04"
    },
    {
     "name": "Espessura",
-    "specified": "1,00 ± 0,10"
+    "specified": "1,00 ± 0,10",
+    "found": "0,98 à 0,99"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 20"
+    "specified": "6000 ± 20",
+    "found": "6020 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "-"
    }
   ]
  },
@@ -6056,71 +7220,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,002"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,540"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "8,00 ± 0,10"
+    "specified": "8,00 ± 0,10",
+    "found": "8,00 à 8,05"
    },
    {
     "name": "Espessura",
-    "specified": "0,90 ± 0,10"
+    "specified": "0,90 ± 0,10",
+    "found": "0,90 à 0,91"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3020 à 3030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195Mpa/min"
+    "specified": "195Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "28%Min"
+    "specified": "28%Min",
+    "found": null
    }
   ]
  },
@@ -6139,71 +7319,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,051"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,241"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,018"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,019"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,014"
    },
    {
     "name": "Al",
-    "specified": "Máx.0,0370"
+    "specified": "Máx.0,0370",
+    "found": "0,018"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "09,56 ± 0,10"
+    "specified": "09,56 ± 0,10",
+    "found": "09,52 à 09,55"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,10"
+    "specified": "1,50 ± 0,10",
+    "found": "1,51 à 1,53"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 20"
+    "specified": "6000 ± 20",
+    "found": "6000 à 6020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "353"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "205"
    },
    {
     "name": "AL",
-    "specified": "15% Minimo"
+    "specified": "15% Minimo",
+    "found": "20%"
    }
   ]
  },
@@ -6222,71 +7418,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,070"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,950"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,010"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,014"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,020"
    },
    {
     "name": "Al",
-    "specified": "Máx.0,0370"
+    "specified": "Máx.0,0370",
+    "found": "0,018"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "09,56 ± 0,10"
+    "specified": "09,56 ± 0,10",
+    "found": "09,52 à 09,55"
    },
    {
     "name": "Espessura",
-    "specified": "1,50 ± 0,10"
+    "specified": "1,50 ± 0,10",
+    "found": "1,51 à 1,53"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 20"
+    "specified": "6000 ± 20",
+    "found": "6000 à 6020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290Mpa Min"
+    "specified": "290Mpa Min",
+    "found": "531"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "437"
    },
    {
     "name": "AL",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "34%"
    }
   ]
  },
@@ -6305,71 +7517,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,010"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,215"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,003"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,016"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "06,00 ± 0,10"
+    "specified": "06,00 ± 0,10",
+    "found": "06,00 à 06,05"
    },
    {
     "name": "Espessura",
-    "specified": "0,75 ± 0,10"
+    "specified": "0,75 ± 0,10",
+    "found": "0,75 à 0,80"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 5020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ]
  },
@@ -6388,71 +7616,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,010"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,215"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,023"
+    "specified": "Máx. 0,023",
+    "found": "0,003"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,005"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,016"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "06,00 ± 0,10"
+    "specified": "06,00 ± 0,10",
+    "found": "06,00 à 06,05"
    },
    {
     "name": "Espessura",
-    "specified": "0,75 ± 0,10"
+    "specified": "0,75 ± 0,10",
+    "found": "0,74 à 0,77"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3000 à 3020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": null
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": null
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": null
    }
   ]
  },
@@ -6471,67 +7715,82 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,004"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,630"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,017"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,010"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "8,00 ± 0,10"
+    "specified": "8,00 ± 0,10",
+    "found": "8,03 - 6,07"
    },
    {
     "name": "Espessura",
-    "specified": "1,00 ± 0,10"
+    "specified": "1,00 ± 0,10",
+    "found": "1,01 à 1,06"
    },
    {
     "name": "Comprimento",
-    "specified": "3000 ± 30"
+    "specified": "3000 ± 30",
+    "found": "3000à 3010"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "290 MPa mín."
+    "specified": "290 MPa mín.",
+    "found": "410Mpa"
    },
    {
     "name": "LA",
-    "specified": "28% Minimo"
+    "specified": "28% Minimo",
+    "found": "31%"
    }
   ]
  },
@@ -6550,71 +7809,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,150"
+    "specified": "Máx. 0,150",
+    "found": "0,074"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 0,700"
+    "specified": "Máx. 0,700",
+    "found": "0,348"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,007"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,350"
+    "specified": "Máx. 0,350",
+    "found": "0,011"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "9,52 ± 0,10"
+    "specified": "9,52 ± 0,10",
+    "found": "9,50 à 9,55"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,10"
+    "specified": "1,20 ± 0,10",
+    "found": "1,19 à 1,20"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 30"
+    "specified": "6000 ± 30",
+    "found": "6000 à 6030"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": "195 Mpa/min"
+    "specified": "195 Mpa/min",
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": "6% Minimo"
+    "specified": "6% Minimo",
+    "found": "-"
    }
   ]
  },
@@ -6633,71 +7908,87 @@
   "chemical": [
    {
     "name": "C",
-    "specified": "Máx. 0,20"
+    "specified": "Máx. 0,20",
+    "found": "0,038"
    },
    {
     "name": "Mn",
-    "specified": "Máx. 1,40"
+    "specified": "Máx. 1,40",
+    "found": "0,228"
    },
    {
     "name": "P",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,012"
    },
    {
     "name": "S",
-    "specified": "Máx. 0,025"
+    "specified": "Máx. 0,025",
+    "found": "0,008"
    },
    {
     "name": "Si",
-    "specified": "Máx. 0,35"
+    "specified": "Máx. 0,35",
+    "found": "0,013"
    },
    {
     "name": "Al",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Nb",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cr",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "Cu",
-    "specified": null
+    "specified": null,
+    "found": "-"
    },
    {
     "name": "V",
-    "specified": null
+    "specified": null,
+    "found": "-"
    }
   ],
   "dimensional": [
    {
     "name": "Diâmetro",
-    "specified": "08,00 ± 0,01"
+    "specified": "08,00 ± 0,01",
+    "found": "8,00 à 8,00"
    },
    {
     "name": "Espessura",
-    "specified": "1,20 ± 0,10"
+    "specified": "1,20 ± 0,10",
+    "found": "1,20 à 1,32"
    },
    {
     "name": "Comprimento",
-    "specified": "6000 ± 20"
+    "specified": "6000 ± 20",
+    "found": "6000 à 6020"
    }
   ],
   "mechanical": [
    {
     "name": "LR",
-    "specified": "300 à 440Mpa"
+    "specified": "300 à 440Mpa",
+    "found": "-"
    },
    {
     "name": "LE",
-    "specified": "195Mpa/min"
+    "specified": "195Mpa/min",
+    "found": "-"
    },
    {
     "name": "LA",
-    "specified": "28%Min"
+    "specified": "28%Min",
+    "found": "-"
    }
   ]
  }

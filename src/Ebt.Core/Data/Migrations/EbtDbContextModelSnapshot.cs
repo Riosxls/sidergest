@@ -479,6 +479,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("finish");
 
+                    b.Property<string>("Hardness")
+                        .HasColumnType("text")
+                        .HasColumnName("hardness");
+
                     b.Property<string>("LearnedFrom")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
@@ -526,6 +530,10 @@ namespace Ebt.Core.Data.Migrations
                         .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Found")
+                        .HasColumnType("text")
+                        .HasColumnName("found");
 
                     b.Property<int>("Kind")
                         .HasColumnType("integer")

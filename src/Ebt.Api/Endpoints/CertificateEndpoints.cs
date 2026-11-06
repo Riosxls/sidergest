@@ -107,7 +107,7 @@ public static class CertificateEndpoints
         {
             var line = orderLineId is { } lid ? await db.SalesOrderLines.AsNoTracking().Where(l => l.Id == lid).Select(l => new { l.ProductId, l.Order!.CustomerId, l.Product }).FirstOrDefaultAsync(ct) : null;
             var t = line is null ? null : await svc.TemplateAsync(line.ProductId, line.CustomerId, ct);
-            if (t is not null) return Results.Ok(t.Measures.OrderBy(m => m.Kind).ThenBy(m => m.Sequence).Select(m => new CertificateMeasureOut(m.Kind, m.Sequence, m.Name, m.Specified, null)));
+            if (t is not null) return Results.Ok(t.Measures.OrderBy(m => m.Kind).ThenBy(m => m.Sequence).Select(m => new CertificateMeasureOut(m.Kind, m.Sequence, m.Name, m.Specified, m.Found)));
             return Results.Ok(CertificateService.TemplateMeasures(line?.Product).Select((m, n) => new CertificateMeasureOut(m.Kind, n + 1, m.Name, m.Specified, m.Found)));
         });
 
@@ -133,7 +133,7 @@ public static class CertificateEndpoints
             }
             var items = await x.OrderBy(t => t.Customer!.Name).ThenBy(t => t.Product!.Code).Take(500)
                 .Select(t => new CertificateTemplateOut(t.Id, t.ProductId, t.Product!.Code, t.Product.Name, t.CustomerId, t.Customer!.Name, t.Title, t.Finish, t.Notes, t.LearnedFrom, t.UpdatedAt,
-                    t.Measures.OrderBy(m => m.Kind).ThenBy(m => m.Sequence).Select(m => new CertificateMeasureOut(m.Kind, m.Sequence, m.Name, m.Specified, null)).ToList())).ToListAsync(ct);
+                    t.Measures.OrderBy(m => m.Kind).ThenBy(m => m.Sequence).Select(m => new CertificateMeasureOut(m.Kind, m.Sequence, m.Name, m.Specified, m.Found)).ToList())).ToListAsync(ct);
             return Results.Ok(items);
         });
         // Loads the specifications of the old Excel certificates as templates (existing templates are kept).

@@ -1223,7 +1223,7 @@ class _CertificateTemplatesScreenState extends State<CertificateTemplatesScreen>
               padding: const EdgeInsets.all(16),
               children: [
                 const Text(
-                  'Cada certificado emitido ensina o próximo do mesmo cliente e produto: limites especificados, título, acabamento e observações fixas. Os valores encontrados nunca são copiados.',
+                  'Cada certificado emitido ensina o próximo do mesmo cliente e produto: limites especificados, valores encontrados, título, acabamento e observações fixas. O lote da matéria-prima não é copiado.',
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -1268,11 +1268,12 @@ class _TemplateEditor extends StatefulWidget {
 }
 
 class _TemplateRow {
-  _TemplateRow(this.kind, String name, String? specified) : name = TextEditingController(text: name), specified = TextEditingController(text: specified ?? '');
+  _TemplateRow(this.kind, String name, String? specified, [String? found]) : name = TextEditingController(text: name), specified = TextEditingController(text: specified ?? ''), found = TextEditingController(text: found ?? '');
 
   String kind;
   final TextEditingController name;
   final TextEditingController specified;
+  final TextEditingController found;
 }
 
 class _TemplateEditorState extends State<_TemplateEditor> {
@@ -1280,7 +1281,7 @@ class _TemplateEditorState extends State<_TemplateEditor> {
   late final TextEditingController _finish = TextEditingController(text: '${widget.template['finish'] ?? ''}');
   late final TextEditingController _notes = TextEditingController(text: '${widget.template['notes'] ?? ''}');
   late final List<_TemplateRow> _rows = [
-    for (final m in (widget.template['measures'] as List).cast<Map<String, dynamic>>()) _TemplateRow('${m['kind']}', '${m['name']}', m['specified'] as String?),
+    for (final m in (widget.template['measures'] as List).cast<Map<String, dynamic>>()) _TemplateRow('${m['kind']}', '${m['name']}', m['specified'] as String?, m['found'] as String?),
   ];
   String? _error;
   bool _busy = false;
@@ -1290,7 +1291,7 @@ class _TemplateEditorState extends State<_TemplateEditor> {
     _title.text,
     _finish.text,
     _notes.text,
-    for (final r in _rows) '${r.kind}|${r.name.text}|${r.specified.text}',
+    for (final r in _rows) '${r.kind}|${r.name.text}|${r.specified.text}|${r.found.text}',
   ].join('\u0001');
 
   @override
@@ -1309,6 +1310,7 @@ class _TemplateEditorState extends State<_TemplateEditor> {
     for (final r in _rows) {
       r.name.dispose();
       r.specified.dispose();
+      r.found.dispose();
     }
     super.dispose();
   }
@@ -1328,7 +1330,7 @@ class _TemplateEditorState extends State<_TemplateEditor> {
         'finish': _finish.text.trim(),
         'notes': _notes.text.trim(),
         'measures': [
-          for (final r in _rows) {'kind': r.kind, 'name': r.name.text.trim(), 'specified': r.specified.text.trim()},
+          for (final r in _rows) {'kind': r.kind, 'name': r.name.text.trim(), 'specified': r.specified.text.trim(), 'found': r.found.text.trim()},
         ],
       });
       if (mounted) Navigator.pop(context, true);
@@ -1349,6 +1351,7 @@ class _TemplateEditorState extends State<_TemplateEditor> {
     );
     final name = TextField(key: ValueKey('template-name-$i'), controller: r.name, textInputAction: TextInputAction.next, decoration: dec.copyWith(labelText: 'Nome'));
     final spec = TextField(key: ValueKey('template-spec-$i'), controller: r.specified, textInputAction: TextInputAction.next, decoration: dec.copyWith(labelText: 'Especificado'));
+    final found = TextField(key: ValueKey('template-found-$i'), controller: r.found, textInputAction: TextInputAction.next, decoration: dec.copyWith(labelText: 'Encontrado'));
     final remove = IconButton(
       tooltip: 'Remover',
       constraints: const BoxConstraints(minWidth: kMinTouchTarget, minHeight: kMinTouchTarget),
@@ -1368,6 +1371,8 @@ class _TemplateEditorState extends State<_TemplateEditor> {
                   name,
                   const SizedBox(height: AppSpacing.sm),
                   spec,
+                  const SizedBox(height: AppSpacing.sm),
+                  found,
                 ],
               )
             : Row(
@@ -1377,6 +1382,8 @@ class _TemplateEditorState extends State<_TemplateEditor> {
                   Expanded(child: name),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(child: spec),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(child: found),
                   remove,
                 ],
               ),

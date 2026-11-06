@@ -387,7 +387,7 @@ public class SalesTests(ApiFixture api)
         Assert.Equal(s.Tube.Id, template.ProductId);
         Assert.Equal(one.Reference, template.LearnedFrom);
         Assert.Equal("MATERIAL RECOZIDO", template.Notes);
-        Assert.All(template.Measures, m => Assert.Null(m.Found));
+        Assert.Equal("0,070", template.Measures.First(m => m.Name == "C").Found); // same product, same results: the next certificate repeats them
 
         var second = await ReleasedOrder(admin, s, 5m);
         var next = await (await admin.Post("/api/sales/certificates", new CertificateInput(second.Id))).Read<CertificateOut>();
@@ -397,7 +397,7 @@ public class SalesTests(ApiFixture api)
         Assert.Equal(["C", "Mn", "Diâmetro", "LR", "Alongamento longitudinal"], next.Measures.Select(m => m.Name));
         Assert.Equal("Máx. 0,150", next.Measures.First(m => m.Name == "C").Specified);
         Assert.Equal("25,40± 0,15", next.Measures.First(m => m.Name == "Diâmetro").Specified);
-        Assert.All(next.Measures, m => Assert.Null(m.Found));
+        Assert.Equal(measures.Select(m => m.Found), next.Measures.Select(m => m.Found));
         var blank = await (await admin.GetAsync($"/api/sales/certificates/template?orderLineId={second.Lines[0].Id}")).Read<List<CertificateMeasureOut>>();
         Assert.Equal(5, blank.Count);
 

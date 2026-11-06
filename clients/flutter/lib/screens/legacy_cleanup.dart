@@ -65,7 +65,7 @@ class _LegacyCleanupState extends State<_LegacyCleanup> {
   Future<void> _previewComplete() => _call('/api/production/orders/bulk/complete-requirements', {'apply': false}, (r) => setState(() => _completePreview = r));
 
   Future<void> _applyComplete() async {
-    final n = _completePreview?['candidates'];
+    final n = _completePreview?['matched'];
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
@@ -82,7 +82,7 @@ class _LegacyCleanupState extends State<_LegacyCleanup> {
       final skipped = (r['skipped'] as num?) ?? 0;
       setState(() {
         _completePreview = null;
-        _message = '${r['changed']} OFs completadas (${r['operationsFilled'] ?? 0} operações preenchidas)${skipped > 0 ? ' · $skipped puladas' : ''}.';
+        _message = '${r['done']} OFs completadas (${r['operationsFilled'] ?? 0} operações preenchidas)${skipped > 0 ? ' · $skipped puladas' : ''}.';
       });
     });
   }
@@ -271,13 +271,13 @@ class _LegacyCleanupState extends State<_LegacyCleanup> {
                 children: [
                   OutlinedButton(key: const ValueKey('legacy-complete-preview'), onPressed: _busy ? null : _previewComplete, child: const Text('Ver quantas')),
                   if (cp != null)
-                    if ((cp['candidates'] as num?) == 0)
+                    if ((cp['matched'] as num?) == 0)
                       const Text('Nenhuma OF precisa de complemento.')
                     else
-                      FilledButton(key: const ValueKey('legacy-complete-apply'), onPressed: _busy ? null : _applyComplete, child: Text('Completar ${cp['candidates']} OFs')),
+                      FilledButton(key: const ValueKey('legacy-complete-apply'), onPressed: _busy ? null : _applyComplete, child: Text('Completar ${cp['matched']} OFs')),
                 ],
               ),
-              if (cp != null && (cp['candidates'] as num? ?? 0) > 0) ...[
+              if (cp != null && (cp['matched'] as num? ?? 0) > 0) ...[
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text('${cp['operationsFilled'] ?? 0} operações a preencher.', key: const ValueKey('legacy-complete-ops'), style: theme.textTheme.bodySmall),
